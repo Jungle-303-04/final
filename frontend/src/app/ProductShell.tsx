@@ -86,6 +86,7 @@ import { ProductNotificationsProvider } from "../features/notifications/ProductN
 import { ProductNotificationCenter } from "./ProductNotificationCenter";
 import { useClusterScope } from "../features/cluster-scope/ClusterScopeProvider";
 import { ProductPrimarySidebar } from "./ProductPrimarySidebar";
+import { useProductSidebarController } from "./productShellLayout";
 
 const ProductCommandPalette = lazy(async () => ({
   default: (await import("./ProductCommandPalette")).ProductCommandPalette,
@@ -118,10 +119,11 @@ export function ProductShell({
   runtimeStatusPort = EMPTY_RUNTIME_STATUS_PORT,
   portForwardSessions = EMPTY_PORT_FORWARD_SESSION_PORT,
 }: ProductShellProps) {
+  const sidebar = useProductSidebarController(defaultSidebarCollapsed);
   return (
     <ProductSessionProvider session={auth.session}>
       <TooltipProvider>
-        <SidebarProvider defaultOpen={!defaultSidebarCollapsed}>
+        <SidebarProvider onOpenChange={sidebar.setOpen} open={sidebar.open}>
           <PortForwardSessionsProvider port={portForwardSessions}>
             <ShellSessionsProvider>
               <BottomDockProvider port={logStreamPort}>
@@ -274,7 +276,7 @@ function ProductShellFrame({
 
       <SidebarInset className="flex h-svh max-h-svh min-h-0 flex-col overflow-hidden bg-background text-foreground">
         <header
-          className="sticky top-0 z-[74] flex min-h-(--product-shell-header-height) min-w-0 items-center gap-2.5 border-b border-border bg-card px-[1.125rem] py-3"
+          className="sticky top-0 z-[74] flex h-(--product-shell-header-height) max-h-(--product-shell-header-height) min-h-(--product-shell-header-height) min-w-0 shrink-0 flex-nowrap items-center gap-[0.78125rem] overflow-hidden border-b border-border bg-card px-[1.40625rem] py-[0.9375rem]"
           data-slot="product-header"
         >
           <div className="flex min-w-0 shrink-0 items-center gap-1 pl-[0.28125rem] lg:w-[8.25rem]" data-slot="product-header-workspace">
@@ -282,7 +284,10 @@ function ProductShellFrame({
             <ProductHeaderWorkspaceSwitcher auth={auth} />
             <h1 className="sr-only">{currentRouteLabel}</h1>
           </div>
-          <div className="min-w-0 flex-1 lg:mx-auto lg:w-(--product-global-search-width) lg:flex-initial">
+          <div className={activeSurfaceId === "resources"
+            ? "min-w-0 flex-1"
+            : "min-w-0 flex-1 lg:mx-auto lg:w-(--product-global-search-width) lg:flex-initial"}
+          >
             <ProductHeaderFilter
               activeSurfaceId={activeSurfaceId ?? ""}
               port={globalFilterPort ?? EMPTY_GLOBAL_FILTER_PORT}
@@ -290,7 +295,7 @@ function ProductShellFrame({
             />
           </div>
           <div
-            className="flex min-w-0 shrink-0 flex-wrap items-center justify-end gap-3 lg:flex-nowrap"
+            className="flex min-w-0 shrink-0 flex-nowrap items-center justify-end gap-3 overflow-hidden whitespace-nowrap"
             data-slot="product-header-account"
           >
             <ProductHeaderRefreshStatus
@@ -371,7 +376,7 @@ function ProductHeaderRefreshStatus({ refreshing }: { refreshing: boolean }) {
   return (
     <span
       aria-live="polite"
-      className="hidden shrink-0 items-center gap-1.5 text-label text-muted-foreground xl:flex"
+      className="hidden w-(--product-refresh-status-width) shrink-0 items-center justify-end gap-1.5 overflow-hidden whitespace-nowrap text-label text-muted-foreground xl:flex"
       data-refreshing={refreshing || undefined}
       data-slot="product-auto-refresh"
     >
@@ -380,7 +385,9 @@ function ProductHeaderRefreshStatus({ refreshing }: { refreshing: boolean }) {
         className="size-2 rounded-full bg-status-healthy motion-safe:data-[refreshing=true]:animate-pulse motion-reduce:animate-none"
         data-refreshing={refreshing || undefined}
       />
-      {refreshing ? t("shell.refresh.refreshing") : t("shell.refresh.auto")}
+      <span className="min-w-0 truncate">
+        {refreshing ? t("shell.refresh.refreshing") : t("shell.refresh.auto")}
+      </span>
     </span>
   );
 }

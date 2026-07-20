@@ -32,13 +32,14 @@ export function DeployPage({
       (current) => ({ ...current, surfaceTab: value }),
       "surface-tab",
     );
+    requestAnimationFrame(() => document.querySelector("main")?.scrollTo(0, 0));
   };
 
   return (
-    <section aria-labelledby="deploy-title" className="relative grid min-w-0 gap-4">
-      <header className="grid gap-5 bg-background px-(--product-page-inline) pt-(--product-page-block-start)">
+    <section aria-labelledby="deploy-title" className="relative grid min-w-0 gap-5">
+      <header className="grid min-w-0 gap-[1.375rem] bg-background px-(--product-page-inline) pt-(--product-page-block-start)">
         <ProductSurfaceTitle icon={Rocket} id="deploy-title" title={t("shell.deploy.title")} />
-        <Tabs onValueChange={changeTab} value={tab}>
+        <Tabs className="min-w-0 overflow-x-auto pb-px" onValueChange={changeTab} value={tab}>
           <TabsList
             aria-label={t("shell.deploy.tabs")}
             className="gap-[0.15625rem] rounded-[0.703125rem] bg-muted p-[0.15625rem] data-[orientation=horizontal]:h-[2.55859375rem]"

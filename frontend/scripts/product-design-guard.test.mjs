@@ -75,6 +75,33 @@ describe("product-design-guard Motion literal ownership", () => {
 });
 
 describe("product-design-guard debt ceilings", () => {
+  it("rejects the retired public brand while preserving lowercase internal identifiers", async () => {
+    const result = await runGuard({
+      "features/BrandContract.ts": [
+        "export const heading = 'Opsia AI';",
+        "export const legacyWordmark = 'OPSIA';",
+        "export const storageKey = 'opsia:notifications:v1';",
+      ].join("\n"),
+    });
+
+    expect(result.exitCode).toBe(1);
+    expect(result.output).toContain("[retired-brand]");
+    expect(result.output.match(/\[retired-brand\]/g)).toHaveLength(2);
+    expect(result.output).not.toContain("opsia:notifications:v1");
+  });
+
+  it("accepts Kyro display copy with lowercase internal identifiers", async () => {
+    const result = await runGuard({
+      "features/BrandContract.ts": [
+        "export const heading = 'Kyro AI';",
+        "export const storageKey = 'opsia:notifications:v1';",
+      ].join("\n"),
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.output).not.toContain("retired-brand");
+  });
+
   it("still rejects a new TypeScript file above the line limit", async () => {
     const result = await runGuard({
       "features/Oversized.ts": Array.from(

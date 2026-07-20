@@ -34,7 +34,7 @@ export function createAlertChannelsAdapter(
       const response = await endpoints.testAlertChannel({
         channel_id: channel.id,
         kind: "webhook",
-        message: "Opsia alert channel delivery test",
+        message: "Kyro alert channel delivery test",
         min_severity: channel.minimumSeverity,
         name: channel.name,
         severity: channel.minimumSeverity,

@@ -81,11 +81,11 @@ describe("ResourceTable", () => {
 
   it("highlights the global query without changing the source text", () => {
     const { container } = render(
-      <ResourceTableHighlight query="SIA" text="Opsia cluster" />,
+      <ResourceTableHighlight query="YRO" text="Kyro cluster" />,
     );
 
-    expect(screen.getByText("sia").tagName).toBe("MARK");
-    expect(container.firstElementChild?.textContent).toBe("Opsia cluster");
+    expect(screen.getByText("yro").tagName).toBe("MARK");
+    expect(container.firstElementChild?.textContent).toBe("Kyro cluster");
   });
 });
 

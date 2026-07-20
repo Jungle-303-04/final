@@ -1,6 +1,5 @@
 import {
   createContext,
-  startTransition,
   useCallback,
   useContext,
   useEffect,
@@ -55,11 +54,10 @@ export function I18nProvider({
 
   const setLocale = useCallback((nextLocale: SupportedLocale) => {
     persistLocale(nextLocale, resolvedStorage);
-    startTransition(() => {
-      setLocaleState((currentLocale) => (
-        currentLocale === nextLocale ? currentLocale : nextLocale
-      ));
-    });
+    if (typeof document !== "undefined") document.documentElement.lang = nextLocale;
+    setLocaleState((currentLocale) => (
+      currentLocale === nextLocale ? currentLocale : nextLocale
+    ));
   }, [resolvedStorage]);
   const t = useCallback<TranslationFunction>(
     (key, params) => translate(locale, key, params),

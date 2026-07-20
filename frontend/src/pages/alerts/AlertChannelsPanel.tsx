@@ -1,5 +1,5 @@
 import { BellPlus, Pencil, Plus, RefreshCw, Send, Trash2, Webhook } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import type {
   AlertChannel,
@@ -32,6 +32,7 @@ export function AlertChannelsPanel({
   const [draft, setDraft] = useState<AlertChannelInput | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<AlertChannel | null>(null);
   const [verifiedUrl, setVerifiedUrl] = useState<string | null>(null);
+  const editorOpenerRef = useRef<HTMLElement | null>(null);
 
   const load = useCallback(async (signal?: AbortSignal) => {
     setFailure(false);
@@ -80,12 +81,25 @@ export function AlertChannelsPanel({
   };
 
   const beginCreate = () => {
+    editorOpenerRef.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
     setVerifiedUrl(null);
     setDraft({ enabled: false, id: null, kind: "webhook", minimumSeverity: "warning", name: "", url: "" });
   };
   const beginEdit = (channel: AlertChannel) => {
+    editorOpenerRef.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
     setVerifiedUrl(channel.lastTestStatus?.toLowerCase() === "passed" ? channel.url : null);
     setDraft({ enabled: channel.enabled, id: channel.id, kind: "webhook", minimumSeverity: channel.minimumSeverity, name: channel.name, url: channel.url });
+  };
+  const closeEditor = () => {
+    const opener = editorOpenerRef.current;
+    setDraft(null);
+    requestAnimationFrame(() => {
+      if (opener?.isConnected) opener.focus();
+    });
   };
   const save = async () => {
     if (!draft || pendingId !== null) return;
@@ -96,7 +110,7 @@ export function AlertChannelsPanel({
       const saved = await port.save(draft);
       setChannels((current) => draft.id === null ? [saved, ...current] : current.map((channel) => channel.id === saved.id ? saved : channel));
       setFeedback(t(draft.id === null ? "alerts.channels.created" : "alerts.channels.saved"));
-      setDraft(null);
+      closeEditor();
     } catch { setFeedback(t("alerts.channels.saveFailure")); } finally { setPendingId(null); setPendingOperation(null); }
   };
   const remove = async () => {
@@ -152,7 +166,7 @@ export function AlertChannelsPanel({
           ))
         )}
       </div>
-      <AlertChannelEditorDialog canEnable={draft !== null && draft.url === verifiedUrl} draft={draft} onChange={setDraft} onClose={() => setDraft(null)} onSave={() => void save()} pending={pendingOperation === "save"} />
+      <AlertChannelEditorDialog canEnable={draft !== null && draft.url === verifiedUrl} draft={draft} onChange={setDraft} onClose={closeEditor} onSave={() => void save()} pending={pendingOperation === "save"} />
       <ConfirmationDialog cancelLabel={t("alerts.rules.cancel")} confirmLabel={t("alerts.channels.delete")} description={t("alerts.channels.deleteDescription")} onConfirm={() => void remove()} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }} open={deleteTarget !== null} pending={pendingOperation === "delete"} title={t("alerts.channels.deleteTitle")} />
     </section>
   );

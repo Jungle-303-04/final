@@ -69,7 +69,7 @@ describe("ResourceDetailActions operation handoff", () => {
         </ProductSessionProvider>
       </I18nProvider>,
     );
-    await user.click(screen.getByRole("button", { name: "Opsia AI" }));
+    await user.click(screen.getByRole("button", { name: "Kyro AI" }));
 
     await waitFor(() => expect(diagnose.startResourceRun).toHaveBeenCalledWith(
       {

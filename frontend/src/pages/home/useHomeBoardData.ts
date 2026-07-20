@@ -28,8 +28,8 @@ import {
   latestObservedAt,
   summarizeRepositorySync,
 } from "./homeBoardDataProjection";
+import { homeBoardScopeRequestKey } from "./homeBoardRequestIdentity";
 import { useHomeBoardResource as useAsyncResource } from "./useHomeBoardResource";
-
 export type {
   HomeBoardData,
   HomeBoardPorts,
@@ -41,7 +41,6 @@ export type {
   HomeSyncSummary,
 } from "./homeBoardDataContract";
 export type { HomeBoardResource } from "./useHomeBoardResource";
-
 export function useHomeBoardData({
   filterState,
   period,
@@ -63,6 +62,7 @@ export function useHomeBoardData({
   wantsNamespaces: boolean;
   wantsTimeline: boolean;
 }): HomeBoardData {
+  const scopeRequestKey = homeBoardScopeRequestKey(scope);
   const clusterIds = useMemo(
     () => scope.clusters.map((cluster) => cluster.clusterId),
     [scope.clusters],
@@ -81,6 +81,7 @@ export function useHomeBoardData({
     ))].sort((left, right) => left.localeCompare(right)),
     [scope.clusters],
   );
+  const namespaceReferencesKey = JSON.stringify(namespaceReferences);
   const activityQuery = useMemo(
     () => {
       const window = activityWindowForPeriod(period, windowAnchorMs);
@@ -99,6 +100,10 @@ export function useHomeBoardData({
       windowAnchorMs,
     ],
   );
+  const activityQueryKey = JSON.stringify(activityQuery);
+  const criticalFilterRequestKey = JSON.stringify(
+    criticalResourceFilterState(filterState, clusterIds),
+  );
   const incidents = useAsyncResource(
     async (signal) => {
       requireSupportedApplicationScope(scope);
@@ -108,7 +113,10 @@ export function useHomeBoardData({
         categories: [],
       });
     },
-    [namespaceReferences, ports.issues, refreshKey, scope],
+    {
+      key: `incidents:${scopeRequestKey}:${namespaceReferencesKey}:r${refreshKey}`,
+      owner: ports.issues,
+    },
   );
   const sync = useAsyncResource(
     async (signal) => {
@@ -137,7 +145,10 @@ export function useHomeBoardData({
         unknown: repositorySummary.unknown,
       };
     },
-    [clusterIds, namespaceReferences, ports.gitops, refreshKey, scope.applications],
+    {
+      key: `sync:${scopeRequestKey}:r${refreshKey}`,
+      owner: ports.gitops,
+    },
   );
   const activity = useAsyncResource(
     async (signal) => {
@@ -145,7 +156,10 @@ export function useHomeBoardData({
       if (activityQuery === null) throw new Error("activity window unavailable");
       return ports.activity.loadOverview(activityQuery, signal);
     },
-    [activityQuery, ports.activity, refreshKey, scope.applications],
+    {
+      key: `activity:${scopeRequestKey}:${activityQueryKey}:r${refreshKey}`,
+      owner: ports.activity,
+    },
   );
   const namespacePods = useAsyncResource(
     async (signal) => {
@@ -187,7 +201,10 @@ export function useHomeBoardData({
           ),
       };
     },
-    [clusterIds, ports.inventory, refreshKey, scope.applications, scope.clusters, wantsNamespaces],
+    {
+      key: `namespaces:${scopeRequestKey}:enabled:${wantsNamespaces}:r${refreshKey}`,
+      owner: ports.inventory,
+    },
   );
   const criticalResources = useAsyncResource(
     async (signal) => {
@@ -204,7 +221,10 @@ export function useHomeBoardData({
         items: [...response.items].sort(compareAttentionResourceHealth).slice(0, 5),
       };
     },
-    [clusterIds, filterState, ports.resources, refreshKey, scope.applications],
+    {
+      key: `critical:${scopeRequestKey}:${criticalFilterRequestKey}:r${refreshKey}`,
+      owner: ports.resources,
+    },
   );
   const cost = useAsyncResource(
     async (signal) => {
@@ -221,16 +241,10 @@ export function useHomeBoardData({
       }, signal);
       return projectHomeCost(overview, activityQuery.fromMs, activityQuery.toMs);
     },
-    [
-      activityQuery,
-      clusterIds,
-      namespaceReferences,
-      period,
-      ports.cost,
-      refreshKey,
-      scope.applications,
-      wantsCost,
-    ],
+    {
+      key: `cost:${scopeRequestKey}:${activityQueryKey}:${period}:enabled:${wantsCost}:r${refreshKey}`,
+      owner: ports.cost,
+    },
   );
   const timeline = useAsyncResource(
     async (signal) => {
@@ -249,13 +263,10 @@ export function useHomeBoardData({
         signal,
       );
     },
-    [
-      activityQuery,
-      ports.timeline,
-      refreshKey,
-      scope,
-      wantsTimeline,
-    ],
+    {
+      key: `timeline:${scopeRequestKey}:${activityQueryKey}:enabled:${wantsTimeline}:r${refreshKey}`,
+      owner: ports.timeline,
+    },
   );
   return {
     activity,

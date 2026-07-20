@@ -1,5 +1,6 @@
 import type {
   HomeClusterChoice,
+  HomeClusterDataCoverage,
   HomeClusterChoices,
   HomeClusterOverview,
   HomeDataQualityWarning,
@@ -14,6 +15,7 @@ import type {
 } from "./homeContract";
 import type {
   HomeEndpointClusterList,
+  HomeEndpointClusterDataCoverage,
   HomeEndpointClusterOverview,
   HomeEndpointClusterSummary,
   HomeEndpointFleetSummary,
@@ -69,6 +71,7 @@ export function toFleetSummary(wire: HomeEndpointFleetSummary): HomeFleetSummary
     cpuPercent: cluster.cpu_pct === null ? null : percentage(cluster.cpu_pct),
     memoryPercent: cluster.mem_pct === null ? null : percentage(cluster.mem_pct),
     observedAt: canonicalTimestamp(cluster.last_seen_at),
+    ...(cluster.coverage ? { coverage: toClusterDataCoverage(cluster.coverage) } : {}),
   }));
   assertUnique(clusters.map(({ clusterId }) => clusterId));
   for (const cluster of clusters) {
@@ -168,7 +171,36 @@ export function toNodeCollection(
   assertSameIdentity(wire.cluster_id, clusterId);
   const nodes = wire.nodes.map((node) => toNode(clusterId, node));
   assertUnique(nodes.map(({ id }) => id));
-  return { clusterId, completeness: "unknown", nodes };
+  return {
+    clusterId,
+    completeness: wire.coverage?.inventory.availability === "available" ? "exact" : "unknown",
+    nodes,
+    ...(wire.coverage ? { coverage: toClusterDataCoverage(wire.coverage) } : {}),
+  };
+}
+
+function toClusterDataCoverage(
+  coverage: HomeEndpointClusterDataCoverage,
+): HomeClusterDataCoverage {
+  return {
+    inventory: toClusterObservationCoverage(coverage.inventory),
+    cpu: toClusterObservationCoverage(coverage.cpu),
+    memory: toClusterObservationCoverage(coverage.memory),
+  };
+}
+
+function toClusterObservationCoverage(
+  coverage: HomeEndpointClusterDataCoverage["inventory"],
+) {
+  const reasonCodes = coverage.reason_codes.map(canonicalIdentity);
+  assertUnique(reasonCodes);
+  if (coverage.availability === "available" && reasonCodes.length > 0) invalidResponse();
+  if (coverage.availability !== "available" && reasonCodes.length === 0) invalidResponse();
+  return {
+    availability: coverage.availability,
+    observedAt: canonicalTimestamp(coverage.observed_at),
+    reasonCodes: [...reasonCodes].sort((left, right) => left.localeCompare(right)),
+  };
 }
 
 function toNode(clusterId: string, wire: HomeEndpointNode): HomeNodeSummary {

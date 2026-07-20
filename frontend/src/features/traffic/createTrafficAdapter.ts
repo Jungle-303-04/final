@@ -172,6 +172,18 @@ function toOverview(value: Awaited<ReturnType<TrafficEndpointDependencies["getTr
       },
       reasonCodes: value.relationships.reason_codes,
     },
+    serviceMetrics: value.service_metrics.map((metric) => ({
+      availability: metric.availability,
+      clusterId: metric.cluster_id,
+      namespace: metric.namespace,
+      service: metric.service,
+      ratePerSecond: metric.rate_per_second,
+      rateUnit: metric.rate_unit,
+      errorRatePercent: metric.error_rate_pct,
+      observedAt: metric.observed_at,
+      sourceKeys: metric.source_keys,
+      reasonCodes: metric.reason_codes,
+    })),
     refreshAfterSeconds: value.refresh_after_seconds,
   };
 }

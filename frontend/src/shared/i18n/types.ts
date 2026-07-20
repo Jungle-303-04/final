@@ -18,7 +18,7 @@ import type { HelmMessageKey } from "./keys/helm";
 import type { WorkloadDetailMessageKey } from "./keys/workloadDetail";
 import type { DiagnoseMessageKey } from "./keys/diagnose";
 import type { ConnectionsMessageKey } from "./keys/connections";
-
+import type { ResourcePanelsMessageKey } from "./keys/resourcePanels";
 export type SupportedLocale = "en" | "ko";
 
 /**
@@ -394,7 +394,7 @@ export type MessageKey =
   | ClustersMessageKey
   | IssuesMessageKey
   | MetricsMessageKey
-  | ResourcesMessageKey
+  | ResourcesMessageKey | ResourcePanelsMessageKey
   | TimelineMessageKey
   | TrafficMessageKey
   | CompareMessageKey

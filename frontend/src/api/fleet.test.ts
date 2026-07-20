@@ -18,6 +18,23 @@ const FLEET_SUMMARY = {
       cpu_pct: 41.5,
       mem_pct: 68.2,
       last_seen_at: "2026-07-12T00:00:00Z",
+      coverage: {
+        inventory: {
+          availability: "available",
+          observed_at: "2026-07-12T00:00:00Z",
+          reason_codes: [],
+        },
+        cpu: {
+          availability: "available",
+          observed_at: "2026-07-12T00:00:00Z",
+          reason_codes: [],
+        },
+        memory: {
+          availability: "available",
+          observed_at: "2026-07-12T00:00:00Z",
+          reason_codes: [],
+        },
+      },
     },
     {
       cluster_id: "dev-seoul-01",
@@ -86,6 +103,21 @@ describe("fleet summary API", () => {
       mem_pct: null,
       last_seen_at: null,
     });
+  });
+
+  it("rejects coverage that aliases an unavailable observation to no reason", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({
+      ...FLEET_SUMMARY,
+      clusters: [{
+        ...FLEET_SUMMARY.clusters[0],
+        coverage: {
+          ...FLEET_SUMMARY.clusters[0].coverage,
+          cpu: { availability: "unavailable", observed_at: null, reason_codes: [] },
+        },
+      }],
+    }));
+
+    await expect(getFleetSummary()).rejects.toMatchObject({ kind: "invalid-payload" });
   });
 
   it("rejects an unknown health value", async () => {

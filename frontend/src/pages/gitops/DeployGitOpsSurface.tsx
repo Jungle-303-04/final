@@ -9,6 +9,7 @@ import { gitOpsSyncCategory } from "../../features/gitops/gitOpsPresentation";
 import type { BrowserRefreshPolicyRegistry } from "../../shared/data/browserRefreshPolicyRegistry";
 import { EMPTY_RCA_CONTEXT_PORT, type RcaContextPort } from "../../features/issues/rcaContextContract";
 import { useI18n } from "../../shared/i18n";
+import { acquireSharedRequest } from "../../shared/data/sharedRequest";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
 import { GitOpsSyncTableView } from "./GitOpsSyncTableView";
@@ -38,7 +39,7 @@ export function DeployGitOpsSurface({
   const summaryOnly = tab === "applications" || tab === "helm";
 
   return (
-    <ProductPageFrame className={summaryOnly ? "gap-0 pt-0 pb-0" : "gap-4 pt-0"}>
+    <ProductPageFrame className={summaryOnly ? "gap-0 pt-0 pb-0" : "gap-5 pt-0"}>
       <DeploySummary overview={overview} />
       {tab === "repositories" ? (
         overview.loading ? <ProductStateScreen kind="loading" placement="content" /> : (
@@ -73,7 +74,6 @@ function DeploySummary({ overview }: { overview: DeployOverview }) {
       />
       <DeploySummaryMetric
         label={t("workflows.sync.status.synced")}
-        tone="healthy"
         value={summary?.synced ?? null}
       />
       <DeploySummaryMetric
@@ -95,18 +95,16 @@ function DeploySummaryMetric({
   value,
 }: {
   label: string;
-  tone?: "healthy" | "warning" | "neutral";
+  tone?: "warning" | "neutral";
   value: number | null;
 }) {
-  const toneClass = tone === "healthy"
-    ? "border-tint-ok-border bg-tint-ok-bg text-tint-ok-fg"
-    : tone === "warning"
-      ? "border-tint-warn-border bg-tint-warn-bg text-tint-warn-fg"
-      : "border-border bg-card text-foreground";
+  const toneClass = tone === "warning"
+    ? "border-tint-warn-border bg-tint-warn-bg text-tint-warn-fg"
+    : "border-border bg-card text-muted-foreground";
   return (
     <span className={`inline-flex min-h-9 items-center gap-1.5 rounded-full border px-3 text-label font-semibold ${toneClass}`}>
-      <span className="text-muted-foreground">{label}</span>
-      <strong className="font-mono text-body-strong font-bold tabular-nums">
+      <span>{label}</span>
+      <strong className="font-mono text-body-strong font-bold text-foreground tabular-nums">
         {value ?? "—"}
       </strong>
     </span>
@@ -160,20 +158,34 @@ function useDeployOverview(port: GitOpsPort): DeployOverview {
   });
 
   useEffect(() => {
-    const controller = new AbortController();
+    let active = true;
+    const applicationsRequest = acquireSharedRequest(
+      port,
+      "gitops:applications:0",
+      (signal) => port.listApplications(signal),
+    );
+    const syncTargetsRequest = acquireSharedRequest(
+      port,
+      "gitops:sync-targets:0",
+      (signal) => port.listSyncTargets(signal),
+    );
     void Promise.all([
-      port.listApplications(controller.signal),
-      port.listSyncTargets(controller.signal),
+      applicationsRequest.promise,
+      syncTargetsRequest.promise,
     ]).then(([applications, rows]) => {
-      if (!controller.signal.aborted) {
+      if (active) {
         setState({ applications, rows, failed: false, loading: false });
       }
     }).catch((error: unknown) => {
-      if (!controller.signal.aborted && !isAbortError(error)) {
+      if (active && !isAbortError(error)) {
         setState({ applications: [], rows: [], failed: true, loading: false });
       }
     });
-    return () => controller.abort();
+    return () => {
+      active = false;
+      applicationsRequest.release();
+      syncTargetsRequest.release();
+    };
   }, [port]);
 
   return state;

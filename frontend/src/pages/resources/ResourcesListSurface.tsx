@@ -6,20 +6,16 @@ import type { ResourceTopologyView } from "../../features/filters/resourceTopolo
 import type { TimelineRange } from "../../features/filters/filterContract";
 import type { ResourcesFilterResourcePage } from "../../features/resources/resourcesFilterContract";
 import type { ResourceSummary } from "../../features/resources/resourcesContract";
-import {
-  exactRelationNodeId,
-  exactRelationResourceIdentity,
-} from "../../features/resources/relationTopologyGraphModel";
 import type { ResourceMetricsHistoryFrame } from "./useResourceMetricsHistoryDataFrame";
 import { captureRouteMorph } from "../../motion/useCameraMorph";
 import { useMotionAwareScrollIntoView } from "../../motion/scrollIntoView";
 import { useI18n } from "../../shared/i18n";
+import { cn } from "../../shared/lib/cn";
 import { humanizeFilterValue } from "../../shared/presentation/humanizeFilterValue";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
 import { Surface } from "../../shared/ui/Surface";
 import { Button } from "../../shared/ui/primitives/button";
 import { ResourcesGraphShell } from "./ResourcesGraphShell";
-import { ResourcesCatalog } from "./ResourcesCatalog";
 import { ResourcesListLoadingPreview } from "./ResourcesLoadingPreview";
 import { ResourcesListScopeStatus } from "./ResourcesListScopeStatus";
 import {
@@ -36,8 +32,11 @@ import type { PhysicalTopologyReplayState } from "./usePhysicalTopologyRealtime"
 import type { PhysicalPodOpenTarget } from "./physicalTopologyGraphTypes";
 import { ResourcesViewSwitcher } from "./ResourcesViewSwitcher";
 import { ResourcesToolbar } from "./ResourcesToolbar";
+import { ResourcesListRail } from "./ResourcesListRail";
+import { useResourcesRelationshipFocus } from "./useResourcesRelationshipFocus";
 
 export function ResourcesListSurface({
+  connectionTopology,
   filterList,
   listFallback,
   metricHistory,
@@ -54,6 +53,7 @@ export function ResourcesListSurface({
   onTopologyViewChange,
   timelineFrame,
 }: {
+  connectionTopology: RelationTopologyFrame;
   filterList: ResourcesFilterPageState<ResourcesFilterResourcePage>;
   listFallback: ReactNode;
   metricHistory: ResourceMetricsHistoryFrame;
@@ -172,29 +172,29 @@ export function ResourcesListSurface({
   const listedResources = filterList.phase === "ready" && filterList.data
     ? filterList.data.items.map((item) => item.resource)
     : [];
-  const selectRelationResource = (resourceId: string) => {
-    const identity = exactRelationResourceIdentity(resourceId, listedResources);
-    if (identity === null) return false;
-    state.openDetail(identity);
-    return true;
-  };
-  const selectedRelationResourceId = exactRelationNodeId(
-    state.detailIdentity,
+  const relationshipFocus = useResourcesRelationshipFocus({
+    connectionTopology,
+    detailIdentity: state.detailIdentity,
     listedResources,
-  );
+    onOpenDetail: state.openDetail,
+    onTopologyViewChange,
+    relationTopology,
+  });
   return (
     <div className="grid min-w-0 gap-4" data-slot="resources-view-surface">
       <ResourcesViewSwitcher onChange={state.setView} view={state.view} />
-      <div className="grid min-w-0 items-start gap-4 lg:grid-cols-[minmax(0,1fr)_16rem]">
-        <aside className="min-w-0 lg:sticky lg:top-4 lg:col-start-2 lg:row-start-1" data-slot="resources-catalog-rail">
-          <ResourcesCatalog
-            discovery={state.catalog.phase === "ready" ? state.catalog.data.apiDiscovery : undefined}
-            items={state.catalog.phase === "ready" ? state.catalog.data.items : []}
-            onSelect={state.selectResourceType}
-            selectedResourceType={state.selectedResourceType}
-          />
-        </aside>
-        <div className="grid min-w-0 gap-4 overflow-x-hidden lg:col-start-1 lg:row-start-1">
+      <div className="grid min-w-0 items-start gap-4 lg:grid-cols-[minmax(0,1fr)_15.5rem]">
+        <ResourcesListRail
+          connectionTopology={connectionTopology}
+          focusedNodeId={relationshipFocus.selectedResourceId}
+          onFocus={relationshipFocus.focusNode}
+          repositoryHref={relationshipFocus.repositoryHref}
+          state={state}
+        />
+        <div className={cn(
+          "grid min-w-0 gap-4 overflow-x-hidden lg:col-start-1 lg:row-start-1",
+          state.view === "map" && "min-h-0",
+        )}>
           {state.view === "map" ? (
             <Surface aria-labelledby="resources-graph-title" className="min-w-0 overflow-hidden">
               <ResourcesGraphShell
@@ -202,9 +202,9 @@ export function ResourcesListSurface({
                 clusterId={state.selectedClusterId ?? "unknown"}
                 frame={physicalTopology}
                 includeDeleted={state.includeDeleted}
-                relationFrame={relationTopology}
-                onSelectRelationResource={selectRelationResource}
-                selectedRelationResourceId={selectedRelationResourceId}
+                relationFrame={relationshipFocus.displayedTopology}
+                onSelectRelationResource={relationshipFocus.selectResource}
+                selectedRelationResourceId={relationshipFocus.selectedResourceId}
                 onOpenPod={openPod}
                 nodePodsPort={nodePodsPort}
                 onNodePodsUnauthorized={onNodePodsUnauthorized}

@@ -1,12 +1,4 @@
-import {
-  AppWindow,
-  Boxes,
-  Braces,
-  Search,
-  Server,
-  Tags,
-  X,
-} from "lucide-react";
+import { Search, X } from "lucide-react";
 import {
   forwardRef,
   useCallback,
@@ -15,11 +7,12 @@ import {
   useMemo,
   useRef,
   useState,
+  type RefObject,
 } from "react";
 import { useNavigate } from "react-router-dom";
 import { useUnifiedFilter } from "../filters/UnifiedFilterProvider";
 import { useClusterScope } from "../cluster-scope/ClusterScopeProvider";
-import { useI18n, type MessageKey } from "../../shared/i18n";
+import { useI18n } from "../../shared/i18n";
 import { clusterDisplayLabel } from "../../shared/ui/ClusterConnectionStatus";
 import {
   Command,
@@ -44,57 +37,46 @@ import {
   removeChip,
   selectedChips,
 } from "./globalFilterSelection";
-import { useOptionalShellSessions, type ShellSessionCounts } from "../shell-sessions/ShellSessionsProvider";
-import { Button } from "../../shared/ui/primitives/button";
+import { useOptionalShellSessions } from "../shell-sessions/ShellSessionsProvider";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "../../shared/ui/primitives/dialog";
+  AnchoredScopeFilterCommand,
+  handleAnchoredScopeFilterKeyDown,
+  ScopeSelectionConfirmationDialog,
+  type PendingScopeSelection,
+} from "./AnchoredScopeFilterCommand";
 import { GlobalFilterClusterConnectionMark } from "./GlobalFilterClusterConnectionMark";
+import {
+  buildSuggestionGroups,
+  findSelectedScopeSuggestionChip,
+  formatSuggestionCount,
+  isAbortError,
+  pillIdentity,
+  suggestionGroupKey,
+  type GlobalFilterSearchPhase,
+} from "./globalFilterCommandModel";
 
-type SearchPhase = "idle" | "loading" | "ready" | "failed";
 type SuggestionType = GlobalFilterSuggestion["type"];
 
-const groupOrder: readonly SuggestionType[] = [
-  "cluster",
-  "namespace",
-  "application",
-  "resourceType",
-  "label",
-  "resource",
-];
-
-const groupKeys: Record<SuggestionType, MessageKey> = {
-  cluster: "shell.filter.group.cluster",
-  namespace: "shell.filter.group.namespace",
-  application: "shell.filter.group.application",
-  resourceType: "shell.filter.group.resourceType",
-  label: "shell.filter.group.label",
-  resource: "shell.filter.group.resource",
-};
-
-const groupIcons = {
-  cluster: Server,
-  namespace: Braces,
-  application: AppWindow,
-  resourceType: Boxes,
-  label: Tags,
-  resource: Boxes,
-} satisfies Record<SuggestionType, typeof Server>;
-
 export interface UnifiedFilterBarHandle {
+  closeGroup: () => void;
   focus: () => void;
   openGroup: (type: "cluster" | "namespace") => void;
 }
 
 export const UnifiedFilterBar = forwardRef<
   UnifiedFilterBarHandle,
-  { port: GlobalFilterPort }
->(function UnifiedFilterBar({ port }, ref) {
+  {
+    groupAnchor?: RefObject<Element | null>;
+    hiddenChipTypes?: readonly SuggestionType[];
+    onGroupOpenChange?: (type: "cluster" | "namespace" | null) => void;
+    port: GlobalFilterPort;
+  }
+>(function UnifiedFilterBar({
+  groupAnchor,
+  hiddenChipTypes = [],
+  onGroupOpenChange,
+  port,
+}, ref) {
   const filter = useUnifiedFilter();
   const clusterScope = useClusterScope();
   const shellSessions = useOptionalShellSessions();
@@ -102,13 +84,11 @@ export const UnifiedFilterBar = forwardRef<
   const { formatNumber, t } = useI18n();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [phase, setPhase] = useState<SearchPhase>("idle");
+  const [phase, setPhase] = useState<GlobalFilterSearchPhase>("idle");
   const [suggestions, setSuggestions] = useState<readonly GlobalFilterSuggestion[]>([]);
   const [groupFilter, setGroupFilter] = useState<"cluster" | "namespace" | null>(null);
-  const [pendingSelection, setPendingSelection] = useState<{
-    counts: ShellSessionCounts;
-    suggestion: GlobalFilterSuggestion;
-  } | null>(null);
+  const [groupCommandValue, setGroupCommandValue] = useState("");
+  const [pendingSelection, setPendingSelection] = useState<PendingScopeSelection | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const shortcutFocusRef = useRef(false);
   const selection = useMemo(() => ({
@@ -120,6 +100,10 @@ export const UnifiedFilterBar = forwardRef<
     resourceTypes: filter.state.resources.types,
     labels: filter.state.common.labels.map((label) => `${label.key}=${label.value}`),
   }), [filter.state.common, filter.state.resources.types]);
+
+  useEffect(() => {
+    onGroupOpenChange?.(open ? groupFilter : null);
+  }, [groupFilter, onGroupOpenChange, open]);
 
   useEffect(() => {
     if (!open) return;
@@ -147,11 +131,10 @@ export const UnifiedFilterBar = forwardRef<
     };
   }, [open, port, query, selection]);
 
-  const groups = groupOrder.filter((type) => groupFilter === null || type === groupFilter).map((type) => ({
-    type,
-    items: suggestions.filter((item) => item.type === type),
-  })).filter((group) => group.items.length > 0);
-  const chips = selectedChips(filter.state);
+  const groups = buildSuggestionGroups(suggestions);
+  const chips = selectedChips(filter.state).filter(
+    (chip) => !hiddenChipTypes.includes(chip.type),
+  );
   const clusterChoices = useMemo(() => new Map(
     clusterScope.collection.phase === "ready"
       ? clusterScope.collection.data.clusters.map((cluster) => [cluster.id, cluster] as const)
@@ -161,11 +144,30 @@ export const UnifiedFilterBar = forwardRef<
     const cluster = chip.type === "cluster" ? clusterChoices.get(chip.id) : null;
     return {
       key: chip.type,
-      keyLabel: t(groupKeys[chip.type]),
+      keyLabel: t(suggestionGroupKey(chip.type)),
       label: cluster ? clusterDisplayLabel(cluster) : chip.label,
       value: chip.id,
     };
   });
+
+  const closeGroup = useCallback(() => {
+    setGroupFilter(null);
+    setOpen(false);
+    setQuery("");
+    queueMicrotask(() => {
+      groupAnchor?.current?.querySelector<HTMLElement>("button")?.focus();
+    });
+  }, [groupAnchor]);
+  useEffect(() => {
+    if (!open || groupFilter === null) return;
+    const dismiss = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      closeGroup();
+    };
+    document.addEventListener("keydown", dismiss, true);
+    return () => document.removeEventListener("keydown", dismiss, true);
+  }, [closeGroup, groupFilter, open]);
 
   const applySuggestion = (suggestion: GlobalFilterSuggestion) => {
     if (suggestion.type === "resource") {
@@ -204,6 +206,23 @@ export const UnifiedFilterBar = forwardRef<
     }
     filter.updateFilters((current) => addSuggestion(current, suggestion), "chip-add");
     setQuery("");
+    if (groupFilter !== null) {
+      closeGroup();
+    }
+  };
+
+  const clearGroup = (type: "cluster" | "namespace") => {
+    filter.updateFilters((current) => ({
+      ...current,
+      common: type === "cluster"
+        ? { ...current.common, clusters: [], namespaces: [] }
+        : { ...current.common, namespaces: [] },
+    }), "chip-remove");
+    closeGroup();
+  };
+
+  const findSelectedScopeSelection = (suggestion: GlobalFilterSuggestion) => {
+    return findSelectedScopeSuggestionChip(suggestion, filter.state.common);
   };
 
   const selectSuggestion = (suggestion: GlobalFilterSuggestion) => {
@@ -223,6 +242,23 @@ export const UnifiedFilterBar = forwardRef<
     }
     applySuggestion(suggestion);
   };
+
+  const toggleGroupSuggestion = (suggestion: GlobalFilterSuggestion) => {
+    const selectedChip = findSelectedScopeSelection(suggestion);
+    if (selectedChip !== null) {
+      filter.updateFilters(
+        (current) => removeChip(current, selectedChip),
+        "chip-remove",
+      );
+      closeGroup();
+      return;
+    }
+    selectSuggestion(suggestion);
+  };
+
+  const groupSuggestions = groupFilter === null
+    ? []
+    : suggestions.filter((item) => item.type === groupFilter);
 
   const changeSearch = (next: { text: string; pills: SearchModifier[] }) => {
     setQuery(next.text);
@@ -247,11 +283,16 @@ export const UnifiedFilterBar = forwardRef<
     );
   };
 
-  const changePopoverOpen = (nextOpen: boolean) => {
+  const changePopoverOpen = (
+    nextOpen: boolean,
+    eventDetails: { reason?: string },
+  ) => {
     if (
       !nextOpen &&
       typeof document !== "undefined" &&
-      document.activeElement === inputRef.current
+      document.activeElement === inputRef.current &&
+      eventDetails.reason !== "escape-key" &&
+      eventDetails.reason != null
     ) {
       return;
     }
@@ -260,20 +301,32 @@ export const UnifiedFilterBar = forwardRef<
   const openGroup = useCallback((type: "cluster" | "namespace") => {
     shortcutFocusRef.current = true;
     setGroupFilter(type);
+    setGroupCommandValue(type === "cluster"
+      ? `${type}:${filter.state.common.clusters[0] ?? "__all__"}`
+      : `${type}:${filter.state.common.namespaces[0]
+        ? namespaceId(
+            filter.state.common.namespaces[0].clusterId,
+            filter.state.common.namespaces[0].namespace,
+          )
+        : "__all__"}`);
     setQuery("");
     setOpen(true);
     queueMicrotask(() => {
       inputRef.current?.focus();
       shortcutFocusRef.current = false;
     });
-  }, []);
+  }, [filter.state.common.clusters, filter.state.common.namespaces]);
   const focus = useCallback(() => {
     setGroupFilter(null);
     setOpen(true);
     queueMicrotask(() => inputRef.current?.focus());
   }, []);
 
-  useImperativeHandle(ref, () => ({ focus, openGroup }), [focus, openGroup]);
+  useImperativeHandle(
+    ref,
+    () => ({ closeGroup, focus, openGroup }),
+    [closeGroup, focus, openGroup],
+  );
 
   return (
     <>
@@ -309,6 +362,18 @@ export const UnifiedFilterBar = forwardRef<
             setOpen(true);
           }}
           onKeyDown={(event) => {
+            if (groupFilter !== null) {
+              const handled = handleAnchoredScopeFilterKeyDown(event, {
+                commandValue: groupCommandValue,
+                onClear: () => clearGroup(groupFilter),
+                onClose: closeGroup,
+                onToggle: toggleGroupSuggestion,
+                onValueChange: setGroupCommandValue,
+                suggestions: groupSuggestions,
+                type: groupFilter,
+              });
+              if (handled) return;
+            }
             if (event.key === "Escape") setOpen(false);
           }}
           pills={pills}
@@ -347,133 +412,81 @@ export const UnifiedFilterBar = forwardRef<
           )}
           text={query}
         />
-        <PopoverContent
-          align="start"
-          className="w-[min(34rem,calc(100vw-2rem))]"
-          initialFocus={false}
-        >
-          <Command label={t("shell.filter.placeholder")} shouldFilter={false}>
-            <CommandList>
-              {phase === "failed" ? (
-                <CommandEmpty>{t("shell.filter.failed")}</CommandEmpty>
-              ) : groups.length === 0 && phase !== "loading" ? (
-                <CommandEmpty>{t("shell.filter.empty")}</CommandEmpty>
-              ) : null}
-              {groups.map(({ items, type }) => {
-                const Icon = groupIcons[type];
-                return (
-                  <CommandGroup heading={t(groupKeys[type])} key={type}>
-                    {items.map((item) => (
-                      <CommandItem
-                        key={`${item.type}:${item.id}`}
-                        onSelect={() => selectSuggestion(item)}
-                        value={`${item.type}:${item.id}`}
-                      >
-                        <Icon aria-hidden="true" />
-                        <span className="min-w-0 flex-1 truncate">{item.label}</span>
-                        {item.type === "resource" ? (
-                          <span className="text-xs text-muted-foreground">
-                            {item.resource.kind}
+        {groupFilter !== null ? (
+          <AnchoredScopeFilterCommand
+            anchor={groupAnchor}
+            commandValue={groupCommandValue}
+            hasSelection={groupFilter === "cluster"
+              ? filter.state.common.clusters.length > 0
+              : filter.state.common.namespaces.length > 0}
+            isSelected={(item) => findSelectedScopeSelection(item) !== null}
+            onClear={() => clearGroup(groupFilter)}
+            onCommandValueChange={setGroupCommandValue}
+            onToggle={toggleGroupSuggestion}
+            phase={phase}
+            suggestions={groupSuggestions}
+            t={t}
+            type={groupFilter}
+          />
+        ) : (
+          <PopoverContent
+            align="start"
+            className="w-[min(34rem,calc(100vw-2rem))]"
+            initialFocus={false}
+            sideOffset={6}
+          >
+            <Command label={t("shell.filter.placeholder")} shouldFilter={false}>
+              <CommandList>
+                {phase === "failed" ? (
+                  <CommandEmpty>{t("shell.filter.failed")}</CommandEmpty>
+                ) : groups.length === 0 && phase !== "loading" ? (
+                  <CommandEmpty>{t("shell.filter.empty")}</CommandEmpty>
+                ) : null}
+                {groups.map(({ Icon, items, key, type }) => {
+                  return (
+                    <CommandGroup heading={t(key)} key={type}>
+                      {items.map((item) => (
+                        <CommandItem
+                          key={`${item.type}:${item.id}`}
+                          onSelect={() => selectSuggestion(item)}
+                          value={`${item.type}:${item.id}`}
+                        >
+                          <Icon aria-hidden="true" />
+                          <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                          {item.type === "resource" ? (
+                            <span className="text-xs text-muted-foreground">
+                              {item.resource.kind}
+                            </span>
+                          ) : null}
+                          <span className="text-xs tabular-nums text-muted-foreground">
+                            {formatSuggestionCount(item, formatNumber, t)}
                           </span>
-                        ) : null}
-                        <span className="text-xs tabular-nums text-muted-foreground">
-                          {formatCount(item, formatNumber, t)}
-                        </span>
-                      </CommandItem>
-                    ))}
-                  </CommandGroup>
-                );
-              })}
-              {phase === "loading" ? (
-                <div className="flex items-center justify-center gap-2 py-4 text-sm text-muted-foreground" role="status">
-                  <Spinner className="size-4" decorative />
-                  {t("common.state.loading")}
-                </div>
-              ) : null}
-            </CommandList>
-            <p className="border-t px-3 py-2 text-xs text-muted-foreground">
-              {t("shell.filter.rule")}
-            </p>
-          </Command>
-        </PopoverContent>
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  );
+                })}
+                {phase === "loading" ? (
+                  <div className="flex items-center justify-center gap-2 py-4 text-sm text-muted-foreground" role="status">
+                    <Spinner className="size-4" decorative />
+                    {t("common.state.loading")}
+                  </div>
+                ) : null}
+              </CommandList>
+              <p className="border-t px-3 py-2 text-xs text-muted-foreground">
+                {t("shell.filter.rule")}
+              </p>
+            </Command>
+          </PopoverContent>
+        )}
       </Popover>
       </div>
-      <Dialog
-        onOpenChange={(nextOpen) => {
-          if (!nextOpen) setPendingSelection(null);
-        }}
-        open={pendingSelection !== null}
-      >
-        <DialogContent closeLabel={t("shell.sessions.cancel")}>
-          <DialogHeader>
-            <DialogTitle>{t("shell.sessions.confirmTitle")}</DialogTitle>
-            <DialogDescription>{t("shell.sessions.confirmDescription")}</DialogDescription>
-          </DialogHeader>
-          {pendingSelection ? (
-            <dl className="grid grid-cols-3 gap-2 text-center text-sm">
-              <SessionCount
-                label={t("shell.sessions.portForwards", { count: pendingSelection.counts.portForwards })}
-                value={pendingSelection.counts.portForwards}
-              />
-              <SessionCount
-                label={t("shell.sessions.exec", { count: pendingSelection.counts.execSessions })}
-                value={pendingSelection.counts.execSessions}
-              />
-              <SessionCount
-                label={t("shell.sessions.localTerminals", { count: pendingSelection.counts.localTerminals })}
-                value={pendingSelection.counts.localTerminals}
-              />
-            </dl>
-          ) : null}
-          <DialogFooter>
-            <Button onClick={() => setPendingSelection(null)} type="button" variant="outline">
-              {t("shell.sessions.cancel")}
-            </Button>
-            <Button
-              onClick={() => {
-                const next = pendingSelection?.suggestion;
-                setPendingSelection(null);
-                if (next) applySuggestion(next);
-              }}
-              type="button"
-            >
-              {t("shell.sessions.confirm")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ScopeSelectionConfirmationDialog
+        onCancel={() => setPendingSelection(null)}
+        onConfirm={applySuggestion}
+        selection={pendingSelection}
+        t={t}
+      />
     </>
   );
 });
-
-function SessionCount({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="min-w-0 rounded-lg border bg-muted/40 p-2">
-      <dt className="truncate text-xs text-muted-foreground">{label}</dt>
-      <dd className="mt-1 font-semibold tabular-nums">{value}</dd>
-    </div>
-  );
-}
-
-function pillIdentity(pill: Pick<SearchModifier, "key" | "value">): string {
-  return `${pill.key}:${pill.value}`;
-}
-
-function isAbortError(error: unknown): boolean {
-  return typeof error === "object" && error !== null && "name" in error &&
-    error.name === "AbortError";
-}
-
-function formatCount(
-  item: GlobalFilterSuggestion,
-  formatNumber: (value: number | bigint) => string,
-  t: ReturnType<typeof useI18n>["t"],
-): string {
-  if (item.count === null || item.count_completeness === "unavailable") {
-    return t("shell.filter.count.unknown");
-  }
-  const count = formatNumber(item.count);
-  return item.count_completeness === "partial"
-    ? t("shell.filter.count.partial", { count })
-    : count;
-}

@@ -128,6 +128,7 @@ function endpoint() {
     observation: unavailable(),
     summary: { ...unavailable(), total_flow_count: null, denied_flow_count: null, external_flow_count: null },
     relationships: { ...unavailable(), edges: null },
+    service_metrics: [],
     refresh_after_seconds: 60,
   };
 }

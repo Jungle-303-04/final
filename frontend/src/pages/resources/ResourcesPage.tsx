@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { cn } from "@/shared/lib/cn";
 import {
   isProductContextShortcutId,
   PRODUCT_SHORTCUT_EVENT,
@@ -23,17 +22,11 @@ import type {
   ResourceActionsPort,
   ResourceCapabilitiesPort,
 } from "../../features/resources/resourceCapabilitiesContract";
-import type {
-  ResourceManifestCreatePort,
-  ResourceManifestPort,
-} from "../../features/resources/resourceManifestContract";
+import type { ResourceManifestPort } from "../../features/resources/resourceManifestContract";
 import type { ResourceIssuesPort } from "../../features/issues/resourceIssuesContract";
 import type { ChecksPort } from "../../features/checks/checksContract";
-import { useI18n } from "../../shared/i18n";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
-import { Badge } from "../../shared/ui/primitives/badge";
-import { PollingFreshness } from "../PollingFreshness";
 import { ResourceDetailWorkspace } from "./ResourceDetailWorkspace";
 import { ResourcesSurfaceLoadingPreview } from "./ResourcesLoadingPreview";
 import {
@@ -58,8 +51,6 @@ import { useRelationTopologyDataFrame } from "./useRelationTopologyDataFrame";
 import { useResourceTopologyViewController } from "./useResourceTopologyViewController";
 import { useChangeTimelineDataFrame } from "./useChangeTimelineDataFrame";
 import { usePhysicalTopologyRealtime } from "./usePhysicalTopologyRealtime";
-import { ResourcesLiveStatus } from "./ResourcesLiveStatus";
-import { ResourceManifestCreateDialog } from "./ResourceManifestCreateDialog";
 import { selectResourceMetricIds } from "./resourceMetricSelection";
 import {
   EMPTY_POD_TERMINAL_PORT,
@@ -74,6 +65,7 @@ import type { TrafficPort } from "../../features/traffic/trafficContract";
 import { ResourcesTrafficFlowSurface } from "./ResourcesTrafficFlowSurface";
 import { useAiAssistantLayout } from "../../features/ai-assistant/AiAssistantLayoutContext";
 import { ResourceDetailOverlay } from "./ResourceDetailOverlay";
+import { ResourcesStatusHeader } from "./ResourcesStatusHeader";
 export function ResourcesPage({
   filterPort,
   physicalTopologyPort,
@@ -117,7 +109,6 @@ export function ResourcesPage({
   trafficPort?: TrafficPort;
   port: ResourcesPort;
 }) {
-  const { t } = useI18n();
   const { reportUnauthorized } = useAuthSessionGate();
   const session = useOptionalProductSession();
   const filter = useUnifiedFilter();
@@ -142,8 +133,30 @@ export function ResourcesPage({
     active:
       state.selectedClusterExists &&
       filter.state.common.clusters.length === 1 &&
-      topology.view === "relations",
+      topology.view === "relations" &&
+      (filter.state.resources.types.length > 0 ||
+        filter.state.resources.health.length > 0 ||
+        filter.state.resources.query.trim().length > 0),
     filterState: filter.state,
+    port: relationTopologyPort,
+    reportUnauthorized,
+    revision: state.revision,
+  });
+  const connectionTopologyFilterState = useMemo(() => ({
+    ...filter.state,
+    resources: {
+      ...filter.state.resources,
+      health: [],
+      query: "",
+      types: [],
+    },
+  }), [filter.state]);
+  const connectionTopology = useRelationTopologyDataFrame({
+    active:
+      state.selectedClusterExists &&
+      filter.state.common.clusters.length === 1 &&
+      state.view === "map",
+    filterState: connectionTopologyFilterState,
     port: relationTopologyPort,
     reportUnauthorized,
     revision: state.revision,
@@ -288,6 +301,7 @@ export function ResourcesPage({
     : null;
   const detailFull = state.detailFull || aiLayout.open;
   const detailInset = aiLayout.open ? aiLayout.width : 0;
+  const fleetView = filter.detail.resourceSurfaceView ?? "map";
   return (
     <div
       className="relative flex h-[calc(100svh-3.5rem)] min-w-0 overflow-hidden"
@@ -304,52 +318,22 @@ export function ResourcesPage({
         inert={detailFull}
       >
         <ProductPageFrame>
-          <header className="flex min-w-0 justify-end">
-            <div
-              className="flex h-8 w-full min-w-0 flex-nowrap items-center justify-end gap-2"
-              data-slot="resources-status-row"
-            >
-              {isResourceManifestCreatePort(resourceManifestPort)
-                && state.selectedClusterExists
-                && state.selectedClusterId !== null
-                && createNamespace !== null ? (
-                  <ResourceManifestCreateDialog
-                    clusterId={state.selectedClusterId}
-                    namespace={createNamespace}
-                    onInvalidate={state.refresh}
-                    onUnauthorized={reportUnauthorized}
-                    port={resourceManifestPort}
-                  />
-                ) : null}
-              {state.automaticRefreshPaused ? (
-                <Badge variant="outline">{t("resources.refresh.paused")}</Badge>
-              ) : null}
-              <ResourcesLiveStatus state={physicalRealtime.live} />
-              {state.refreshAfterSeconds === null ? null : (
-                <div
-                  aria-hidden={physicalRealtime.live.status === "connected" || undefined}
-                  className={cn(
-                    "flex h-8 shrink-0 items-center",
-                    physicalRealtime.live.status === "connected" && "invisible",
-                  )}
-                  data-slot="resources-polling-fallback"
-                  inert={physicalRealtime.live.status === "connected"}
-                >
-                  <PollingFreshness
-                    connectionState={
-                      physicalTopology.phase === "ready" && physicalTopology.refreshFailure
-                        ? "disconnected"
-                        : "connected"
-                    }
-                    dataUpdatedAt={Math.max(state.updatedAt, physicalTopology.updatedAt)}
-                    intervalSeconds={state.refreshAfterSeconds}
-                    isFetching={refreshing || physicalTopology.refreshing}
-                    onRefresh={state.refresh}
-                  />
-                </div>
-              )}
-            </div>
-          </header>
+          {state.selectedClusterExists ? (
+            <ResourcesStatusHeader
+              automaticRefreshPaused={state.automaticRefreshPaused}
+              clusterId={state.selectedClusterId}
+              createNamespace={createNamespace}
+              live={physicalRealtime.live}
+              manifestPort={resourceManifestPort}
+              onInvalidate={state.refresh}
+              onRefresh={state.refresh}
+              onUnauthorized={reportUnauthorized}
+              pollingDisconnected={physicalTopology.phase === "ready" && Boolean(physicalTopology.refreshFailure)}
+              pollingUpdatedAt={Math.max(state.updatedAt, physicalTopology.updatedAt)}
+              refreshAfterSeconds={state.refreshAfterSeconds}
+              refreshing={refreshing || physicalTopology.refreshing}
+            />
+          ) : null}
 
           {state.view === "flow" && trafficPort ? (
             <ResourcesTrafficFlowSurface onOpenService={state.openDetailTarget} port={trafficPort} setView={state.setView} />
@@ -357,7 +341,12 @@ export function ResourcesPage({
             state.clusterSelection.kind === "unknown" ? (
               <UnknownSelection value={state.selectedClusterId} variant="cluster" />
             ) : state.clusterSelection.kind === "unfiltered" ? (
-              <ResourcesFleetZoom clusters={state.choices.data.clusters} />
+              <ResourcesFleetZoom
+                clusters={state.choices.data.clusters}
+                completeness={state.choices.data.completeness}
+                onViewChange={state.setView}
+                view={fleetView}
+              />
             ) : state.clusterSelection.kind === "multiple" ? (
               <ResourcesClusterBoundary variant="multiple" />
             ) : (
@@ -393,6 +382,7 @@ export function ResourcesPage({
               />
               <CatalogFreshness observedAt={state.catalog.data.observedAt} />
               <ResourcesListSurface
+                connectionTopology={connectionTopology}
                 filterList={filtered.list}
                 listFallback={state.resourceTypeInvalid ? (
                   <UnknownSelection
@@ -453,10 +443,3 @@ export function ResourcesPage({
 const INACTIVE_RESOURCE_ISSUES_PORT: ResourceIssuesPort = {
   loadResourceIssues: () => Promise.reject(new Error("resource issue port is inactive")),
 };
-function isResourceManifestCreatePort(
-  port: ResourceManifestPort | undefined,
-): port is ResourceManifestPort & ResourceManifestCreatePort {
-  return typeof port?.loadCreateCapability === "function"
-    && typeof port.dryRunCreate === "function"
-    && typeof port.createResources === "function";
-}

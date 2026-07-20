@@ -1,38 +1,73 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useEffectEvent, useState } from "react";
+
+import { acquireSharedRequest } from "../../shared/data/sharedRequest";
 
 export type HomeBoardResource<T> =
   | { phase: "loading" }
   | { phase: "failed"; retry: () => void }
-  | { data: T; phase: "ready"; retry: () => void };
+  | {
+      data: T;
+      phase: "ready";
+      refreshFailed: boolean;
+      refreshing: boolean;
+      retry: () => void;
+    };
+
+export interface HomeBoardRequestIdentity {
+  key: string;
+  owner: object;
+}
 
 export function useHomeBoardResource<T>(
   load: (signal: AbortSignal) => Promise<T>,
-  dependencies: readonly unknown[],
+  requestIdentity: HomeBoardRequestIdentity,
 ): HomeBoardResource<T> {
+  const runLoad = useEffectEvent(load);
   const [retryRevision, setRetryRevision] = useState(0);
   const retry = useCallback(() => setRetryRevision((current) => current + 1), []);
   const [state, setState] = useState<HomeBoardResource<T>>({ phase: "loading" });
   useEffect(() => {
-    const controller = new AbortController();
     let active = true;
+    const request = acquireSharedRequest(
+      requestIdentity.owner,
+      `${requestIdentity.key}:retry:${retryRevision}`,
+      (signal) => runLoad(signal),
+    );
     queueMicrotask(() => {
-      if (active) setState({ phase: "loading" });
+      if (!active) return;
+      setState((current) => current.phase === "ready"
+        ? { ...current, refreshFailed: false, refreshing: true }
+        : { phase: "loading" });
     });
-    void load(controller.signal).then(
+    void request.promise.then(
       (data) => {
-        if (active) setState({ data, phase: "ready", retry });
+        if (active) {
+          setState({
+            data,
+            phase: "ready",
+            refreshFailed: false,
+            refreshing: false,
+            retry,
+          });
+        }
       },
       (error: unknown) => {
-        if (active && !isAbortError(error)) setState({ phase: "failed", retry });
+        if (!active || isAbortError(error)) return;
+        setState((current) => current.phase === "ready"
+          ? { ...current, refreshFailed: true, refreshing: false }
+          : { phase: "failed", retry });
       },
     );
     return () => {
       active = false;
-      controller.abort();
+      request.release();
     };
-    // Each caller supplies the complete request identity.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [...dependencies, retryRevision]);
+  }, [
+    requestIdentity.key,
+    requestIdentity.owner,
+    retry,
+    retryRevision,
+  ]);
   return state;
 }
 

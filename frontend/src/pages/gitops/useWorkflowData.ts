@@ -6,6 +6,7 @@ import type {
   ReleasePlan,
   ReleaseRun,
 } from "../../features/gitops/gitOpsContract";
+import { acquireSharedRequest } from "../../shared/data/sharedRequest";
 
 export interface WorkflowDataState {
   applications: ReleaseApplication[];
@@ -33,46 +34,78 @@ export function useWorkflowData(port: GitOpsPort, selectedPlanId?: string): Work
   const refresh = useCallback(() => setRevision((current) => current + 1), []);
 
   useEffect(() => {
-    const controller = new AbortController();
+    let active = true;
+    const applicationsRequest = acquireSharedRequest(
+      port,
+      `gitops:applications:${revision}`,
+      (signal) => port.listApplications(signal),
+    );
+    const clustersRequest = acquireSharedRequest(
+      port,
+      `gitops:clusters:${revision}`,
+      (signal) => port.listClusters(signal),
+    );
+    const plansRequest = acquireSharedRequest(
+      port,
+      `gitops:plans:${revision}`,
+      (signal) => port.listPlans(signal),
+    );
     queueMicrotask(() => {
-      if (!controller.signal.aborted) {
+      if (active) {
         setLoading(true);
         setError(null);
       }
     });
     void Promise.all([
-      port.listApplications(controller.signal),
-      port.listClusters(controller.signal).catch((clusterError: unknown) => {
+      applicationsRequest.promise,
+      clustersRequest.promise.catch((clusterError: unknown) => {
         if (isAbortError(clusterError)) throw clusterError;
         return [];
       }),
-      port.listPlans(controller.signal),
+      plansRequest.promise,
     ]).then(([nextApplications, nextClusters, nextPlans]) => {
-      setApplications(nextApplications);
-      setClusters(nextClusters);
-      setPlans(nextPlans);
+      if (active) {
+        setApplications(nextApplications);
+        setClusters(nextClusters);
+        setPlans(nextPlans);
+      }
     }).catch((nextError: unknown) => {
-      if (!isAbortError(nextError)) setError(nextError);
+      if (active && !isAbortError(nextError)) setError(nextError);
     }).finally(() => {
-      if (!controller.signal.aborted) setLoading(false);
+      if (active) setLoading(false);
     });
-    return () => controller.abort();
+    return () => {
+      active = false;
+      applicationsRequest.release();
+      clustersRequest.release();
+      plansRequest.release();
+    };
   }, [port, revision]);
 
   useEffect(() => {
     if (!selectedPlanId) {
       return undefined;
     }
-    const controller = new AbortController();
+    let active = true;
+    const request = acquireSharedRequest(
+      port,
+      `gitops:runs:${selectedPlanId}:r${revision}`,
+      (signal) => port.listRuns(selectedPlanId, signal),
+    );
     queueMicrotask(() => {
-      if (!controller.signal.aborted) setRunsLoading(true);
+      if (active) setRunsLoading(true);
     });
-    void port.listRuns(selectedPlanId, controller.signal).then(setRuns).catch((nextError: unknown) => {
-      if (!isAbortError(nextError)) setError(nextError);
+    void request.promise.then((nextRuns) => {
+      if (active) setRuns(nextRuns);
+    }).catch((nextError: unknown) => {
+      if (active && !isAbortError(nextError)) setError(nextError);
     }).finally(() => {
-      if (!controller.signal.aborted) setRunsLoading(false);
+      if (active) setRunsLoading(false);
     });
-    return () => controller.abort();
+    return () => {
+      active = false;
+      request.release();
+    };
   }, [port, revision, selectedPlanId]);
 
   const replacePlan = useCallback((plan: ReleasePlan) => {

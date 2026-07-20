@@ -108,7 +108,7 @@ describe("ProductShell bottom log dock", () => {
       { type: "connected", streamId: "stream-checkout", containers: ["app"] },
     ));
     await waitFor(() => expect(screen.getByText("실시간")).toBeTruthy());
-    await user.click(screen.getByRole("button", { name: "현재 로그를 Opsia AI에 질문" }));
+    await user.click(screen.getByRole("button", { name: "현재 로그를 Kyro AI에 질문" }));
 
     await waitFor(() => expect(loadSuggestions).toHaveBeenCalledWith(
       expect.objectContaining({ logStreamId: "stream-checkout" }),

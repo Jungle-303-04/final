@@ -33,14 +33,14 @@ describe("ProductShell AI panel", () => {
     expect(closedPanel?.className).toContain("border-l-0");
     expect(closedPanel?.className).toContain("data-[open=true]:border-l");
     expect(closedPanel?.className).not.toMatch(/(?:^|\s)border-l(?:\s|$)/u);
-    const trigger = screen.getByRole("button", { name: "Opsia AI 열기" });
+    const trigger = screen.getByRole("button", { name: "Kyro AI 열기" });
     expect(trigger.className).toContain("fixed");
     expect(trigger.className).toContain("right-[var(--product-floating-action-inline-inset)]");
     expect(trigger.className).toContain("bottom-[var(--product-floating-action-block-end)]");
     expect(trigger.className).toContain("size-[var(--product-floating-action-size)]");
 
     await user.click(trigger);
-    const panel = screen.getByRole("complementary", { name: "Opsia AI" });
+    const panel = screen.getByRole("complementary", { name: "Kyro AI" });
     const inner = panel.querySelector('[data-slot="ai-assistant-inner"]');
     expect(panel.getAttribute("data-side")).toBe("right");
     expect(panel.getAttribute("aria-hidden")).toBe("false");
@@ -49,8 +49,8 @@ describe("ProductShell AI panel", () => {
     expect(panel.getAttribute("data-width")).toBe("550");
     expect(inner?.getAttribute("data-inner-width")).toBe("550");
     expect(panel.previousElementSibling?.id).toBe("product-main");
-    expect(screen.queryByRole("button", { name: "Opsia AI 열기" })).toBeNull();
-    expect(screen.getAllByRole("button", { name: "Opsia AI 닫기" })).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: "Kyro AI 열기" })).toBeNull();
+    expect(screen.getAllByRole("button", { name: "Kyro AI 닫기" })).toHaveLength(1);
     expect(await screen.findByRole("button", { name: "이 파드는 왜 재시작하나요?" }))
       .toBeTruthy();
     expect(screen.queryByRole("button", { name: "재시작 원인" })).toBeNull();
@@ -63,8 +63,8 @@ describe("ProductShell AI panel", () => {
     expect(panel.getAttribute("data-width")).toBe("575");
     expect(inner?.getAttribute("data-inner-width")).toBe("575");
 
-    await user.click(screen.getByRole("button", { name: "Opsia AI 닫기" }));
-    const restoredTrigger = await screen.findByRole("button", { name: "Opsia AI 열기" });
+    await user.click(screen.getByRole("button", { name: "Kyro AI 닫기" }));
+    const restoredTrigger = await screen.findByRole("button", { name: "Kyro AI 열기" });
     await waitFor(() => expect(document.activeElement).toBe(restoredTrigger));
   });
 
@@ -82,7 +82,7 @@ describe("ProductShell AI panel", () => {
         }],
       });
     renderShell({ aiAssistantPort: assistantPort({ ask }) });
-    await user.click(screen.getByRole("button", { name: "Opsia AI 열기" }));
+    await user.click(screen.getByRole("button", { name: "Kyro AI 열기" }));
     const input = screen.getByRole("textbox", { name: "지금 보고 있는 것에 대해 질문하세요…" });
 
     await user.type(input, "첫 질문");
@@ -110,7 +110,7 @@ describe("ProductShell AI panel", () => {
         }),
       }),
     });
-    await user.click(screen.getByRole("button", { name: "Opsia AI 열기" }));
+    await user.click(screen.getByRole("button", { name: "Kyro AI 열기" }));
     const input = screen.getByRole("textbox", { name: "지금 보고 있는 것에 대해 질문하세요…" });
 
     await user.type(input, "넌 뭘 할 수 있니?");
@@ -124,7 +124,7 @@ describe("ProductShell AI panel", () => {
     const user = userEvent.setup();
     const ask = vi.fn().mockRejectedValue(new Error("transport failed"));
     const { container } = renderShell({ aiAssistantPort: assistantPort({ ask }) });
-    await user.click(screen.getByRole("button", { name: "Opsia AI 열기" }));
+    await user.click(screen.getByRole("button", { name: "Kyro AI 열기" }));
     const input = screen.getByRole("textbox", { name: "지금 보고 있는 것에 대해 질문하세요…" });
 
     await user.type(input, "아주 긴 리소스 이름의 실패 원인을 분석해줘");
@@ -146,7 +146,7 @@ describe("ProductShell AI panel", () => {
         ask: vi.fn(() => new Promise<never>(() => undefined)),
       }),
     });
-    await user.click(screen.getByRole("button", { name: "Opsia AI 열기" }));
+    await user.click(screen.getByRole("button", { name: "Kyro AI 열기" }));
     expect(screen.getByRole("log", { name: "AI 대화" })).toBeTruthy();
 
     await user.click(screen.getByRole("button", { name: /프로필 메뉴 열기$/u }));
@@ -175,7 +175,7 @@ describe("ProductShell AI panel", () => {
       });
     });
     renderShell({ aiAssistantPort: assistantPort({ ask }) });
-    await user.click(screen.getByRole("button", { name: "Opsia AI 열기" }));
+    await user.click(screen.getByRole("button", { name: "Kyro AI 열기" }));
     const input = screen.getByRole("textbox", { name: "지금 보고 있는 것에 대해 질문하세요…" });
 
     await user.type(input, "첫 줄");
@@ -207,8 +207,8 @@ describe("ProductShell AI panel", () => {
     const sidebar = screen.getByRole("complementary", { name: "제품 메뉴" });
     expect(sidebar.getAttribute("data-state")).toBe("expanded");
 
-    await user.click(screen.getByRole("button", { name: "Opsia AI 열기" }));
-    const panel = screen.getByRole("complementary", { name: "Opsia AI" });
+    await user.click(screen.getByRole("button", { name: "Kyro AI 열기" }));
+    const panel = screen.getByRole("complementary", { name: "Kyro AI" });
     expect(panel.previousElementSibling?.id).toBe("product-main");
     expect(sidebar.getAttribute("data-state")).toBe("expanded");
     expect(screen.getByTestId("resources-shortcut")).toBeTruthy();
@@ -225,15 +225,15 @@ describe("ProductShell AI panel", () => {
     });
     expect(container.querySelectorAll('[data-slot="unified-filter-bar"]')).toHaveLength(1);
 
-    await user.click(screen.getByRole("button", { name: "Opsia AI 열기" }));
-    const panel = screen.getByRole("complementary", { name: "Opsia AI" });
+    await user.click(screen.getByRole("button", { name: "Kyro AI 열기" }));
+    const panel = screen.getByRole("complementary", { name: "Kyro AI" });
     await waitFor(() => expect(container.querySelectorAll('[data-slot="unified-filter-bar"]')).toHaveLength(1));
     expect(panel.className).toContain("max-w-dvw");
     expect(panel.querySelector('[data-slot="ai-assistant-inner"]')?.className)
       .toContain("max-w-dvw");
-    expect(screen.queryByRole("button", { name: "Opsia AI 열기" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Kyro AI 열기" })).toBeNull();
     expect(await screen.findByText(
-      "Opsia AI 공간을 확보하기 위해 리소스 상세를 닫았습니다.",
+      "Kyro AI 공간을 확보하기 위해 리소스 상세를 닫았습니다.",
     )).toBeTruthy();
   });
 });

@@ -1,5 +1,9 @@
 import { z } from "zod";
 import { recentChangeItemSchema } from "./recent-changes-schemas";
+import {
+  clusterDataCoverageSchema,
+  clusterObservationCoverageSchema,
+} from "./cluster-observation-schemas";
 import type { AuthEndpointSession } from "../features/auth/authEndpointContract";
 import type { AuthEndpointWorkspaceList } from "../features/auth/authEndpointContract";
 
@@ -62,6 +66,8 @@ export const fleetHealthSchema = z.enum([
   "unknown",
 ]);
 
+export { clusterDataCoverageSchema, clusterObservationCoverageSchema };
+
 export const fleetClusterSummarySchema = z.strictObject({
   cluster_id: z.string(),
   name: z.string(),
@@ -75,6 +81,7 @@ export const fleetClusterSummarySchema = z.strictObject({
   cpu_pct: z.number().nullable(),
   mem_pct: z.number().nullable(),
   last_seen_at: nullableStringSchema,
+  coverage: clusterDataCoverageSchema.nullable().optional(),
 });
 
 export const fleetTotalsSchema = z.strictObject({

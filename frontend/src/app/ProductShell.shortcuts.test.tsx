@@ -161,10 +161,11 @@ describe("ProductShell keyboard and help interaction", () => {
       expect(await screen.findByText("네임스페이스")).toBeTruthy();
       expect(screen.queryByText("클러스터")).toBeNull();
       await user.keyboard("{Escape}");
-      await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+      await waitFor(() => expect(screen.getByRole("dialog").hasAttribute("data-closed")).toBe(true));
       document.getElementById("product-main")?.focus();
 
       await user.keyboard("c");
+      await waitFor(() => expect(screen.getByRole("dialog").hasAttribute("data-open")).toBe(true));
       expect(await screen.findByText("클러스터")).toBeTruthy();
       expect(screen.queryByText("네임스페이스")).toBeNull();
     } finally {

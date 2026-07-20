@@ -62,9 +62,11 @@ describe("GitOpsSyncTableView", () => {
 
     await user.click(within(checkout).getByRole("button", { name: "Details: team/checkout" }));
     expect(screen.getByText("Checkout")).toBeTruthy();
+    expect(screen.getByText("abcdef123456")).toBeTruthy();
     expect(screen.queryByText("Inventory")).toBeNull();
     await user.click(within(inventory).getByRole("button", { name: "Details: team/inventory" }));
     expect(screen.getByText("Inventory")).toBeTruthy();
+    expect(screen.getByText("abcdef123456")).toBeTruthy();
     expect(screen.queryByText("Checkout")).toBeNull();
   });
 

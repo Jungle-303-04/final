@@ -145,11 +145,53 @@ export const trafficRelationshipsSchema = z.union([
   trafficUnavailableRelationshipsSchema,
 ]);
 
+export const trafficServiceMetricSchema = z.strictObject({
+  availability: availabilitySchema,
+  cluster_id: z.string().min(1),
+  namespace: z.string().max(253).nullable(),
+  service: z.string().min(1).max(512),
+  rate_per_second: z.number().nonnegative().nullable(),
+  rate_unit: z.enum(["requests", "flows"]).nullable(),
+  error_rate_pct: z.number().min(0).max(100).nullable(),
+  observed_at: z.string().min(1),
+  source_keys: z.array(z.string().min(1)).min(1).max(16),
+  reason_codes: z.array(z.string().min(1)),
+}).superRefine((metric, context) => {
+  if ((metric.rate_per_second === null) !== (metric.rate_unit === null)) {
+    context.addIssue({
+      code: "custom",
+      message: "traffic service rate requires its semantic unit",
+      path: ["rate_unit"],
+    });
+  }
+  if (metric.availability === "available") {
+    if (
+      metric.rate_per_second === null
+      || metric.error_rate_pct === null
+      || metric.reason_codes.length > 0
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "available traffic service metrics require complete evidence",
+      });
+    }
+  } else if (metric.reason_codes.length === 0) {
+    context.addIssue({
+      code: "custom",
+      message: "incomplete traffic service metrics require a reason",
+      path: ["reason_codes"],
+    });
+  }
+});
+
 export const trafficOverviewSchema: z.ZodType<TrafficOverviewEndpoint> = z.strictObject({
   scope_coverage: trafficScopeCoverageSchema,
   observation: trafficObservationStatusSchema,
   summary: trafficObservationSummarySchema,
   relationships: trafficRelationshipsSchema,
+  // The console rolls before/after API workers during a release. Keep the new
+  // evidence projection additive so either revision remains readable in that window.
+  service_metrics: z.array(trafficServiceMetricSchema).default([]),
   refresh_after_seconds: z.number().int().min(1).max(3_600),
 });
 

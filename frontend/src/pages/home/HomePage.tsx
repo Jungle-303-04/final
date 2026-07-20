@@ -143,6 +143,7 @@ export function HomePage({
         clusters={boardClusters}
         disconnectClusterId={disconnectCluster?.id}
         disconnectPhase={disconnectPhase}
+        onConnect={canManageClusters ? () => setConnectOpen(true) : undefined}
         onDisconnect={canManageClusters ? (cluster) => {
           setDisconnectCluster(cluster);
           setDisconnectOpen(true);

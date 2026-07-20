@@ -5,6 +5,7 @@ import {
   type HelmPort,
   HelmPortFailure,
 } from "../../features/helm/helmContract";
+import { acquireSharedRequest } from "../../shared/data/sharedRequest";
 import { isAbortError, toHelmFailure } from "./helmChartSourceUi";
 
 export type HelmChartSourceListState =
@@ -27,15 +28,19 @@ export function useHelmChartSources(port: HelmPort) {
   const loadMoreRequestRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    const controller = new AbortController();
     let active = true;
+    const request = acquireSharedRequest(
+      port,
+      `helm:chart-sources:${revision}`,
+      (signal) => port.listChartSources({}, signal),
+    );
     queueMicrotask(() => {
       if (!active) return;
       setState((current) => current.phase === "ready"
         ? { ...current, refreshing: true, loadMoreFailure: null }
         : { phase: "loading" });
     });
-    void port.listChartSources({}, controller.signal).then(
+    void request.promise.then(
       (page) => {
         if (!active) return;
         setState({
@@ -56,7 +61,7 @@ export function useHelmChartSources(port: HelmPort) {
     );
     return () => {
       active = false;
-      controller.abort();
+      request.release();
     };
   }, [port, revision]);
 

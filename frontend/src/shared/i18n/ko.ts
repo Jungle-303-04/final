@@ -18,9 +18,9 @@ import { helmKo } from "./catalogs/ko/helm";
 import { workloadDetailKo } from "./catalogs/ko/workloadDetail";
 import { diagnoseKo } from "./catalogs/ko/diagnose";
 import { connectionsKo } from "./catalogs/ko/connections";
-
+import { resourcePanelsKo } from "./catalogs/ko/resourcePanels";
 export const ko = {
-  "product.name": "Opsia",
+  "product.name": "Kyro",
   "shell.brand.landing": "{route} 화면 열기",
   "common.action.back": "뒤로",
   "common.action.cancel": "취소",
@@ -103,7 +103,7 @@ export const ko = {
   "shell.dock.expand": "로그 독 펼치기",
   "shell.dock.closeTab": "{name} 로그 닫기",
   "shell.dock.resize": "로그 독 높이 조절",
-  "shell.dock.askAi": "현재 로그를 Opsia AI에 질문",
+  "shell.dock.askAi": "현재 로그를 Kyro AI에 질문",
   "shell.dock.logs": "{name} 로그 스트림",
   "shell.dock.connecting": "연결 중",
   "shell.dock.streaming": "실시간",
@@ -273,7 +273,7 @@ export const ko = {
   "auth.login.pending": "로그인 중",
   "auth.login.submit": "로그인",
   "auth.login.subtitle": "계속하려면 계정 정보를 입력하세요.",
-  "auth.login.title": "Opsia에 로그인",
+  "auth.login.title": "Kyro에 로그인",
   "auth.logout.action": "로그아웃",
   "auth.logout.error.message": "로그아웃 요청을 완료하지 못했습니다. 연결을 확인한 뒤 다시 시도하세요.",
   "auth.logout.error.title": "세션 종료 오류",
@@ -439,7 +439,7 @@ export const ko = {
   ...diagnoseKo,
   ...connectionsKo,
   ...clustersKo,
-  ...resourcesKo,
+  ...resourcesKo, ...resourcePanelsKo,
   ...issuesKo,
   ...metricsKo,
   ...workflowsKo,

@@ -115,16 +115,15 @@ export function SettingsPage({
   };
 
   return (
-    <ProductPageFrame className="gap-6">
-      <header className="max-w-3xl">
-        <h2 className="text-2xl font-semibold tracking-tight">{t("settings.title")}</h2>
-        <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-          {t("settings.description")}
-        </p>
+    <ProductPageFrame className="gap-4">
+      <header className="flex min-w-0 items-center gap-2.5">
+        <Building2 aria-hidden="true" className="size-[1.0625rem] shrink-0 text-primary" />
+        <h2 className="min-w-0 truncate font-heading text-heading font-extrabold tracking-[-0.02em]">{t("settings.title")}</h2>
+        <p className="sr-only">{t("settings.description")}</p>
       </header>
 
       <Tabs
-        className="min-w-0 gap-4"
+        className="min-w-0 gap-3"
         onValueChange={(value) => {
           if (isSettingsSection(value)) selectSection(value);
         }}
@@ -132,7 +131,7 @@ export function SettingsPage({
       >
         <TabsList
           aria-label={t("settings.navigation")}
-          className="max-w-full justify-start overflow-x-auto"
+          className="max-w-full justify-start overflow-x-auto rounded-lg bg-muted/70 p-0.5"
         >
           <TabsTrigger value="overview">{t("settings.section.overview")}</TabsTrigger>
           <TabsTrigger value="access">{t("settings.section.access")}</TabsTrigger>

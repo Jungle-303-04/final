@@ -28,7 +28,7 @@ export function GitOpsRepositoryApplications({
   const applications = group.applicationIds.map((applicationId) => ({
     application: group.applications.find((candidate) => candidate.id === applicationId),
     applicationId,
-    rows: group.rows.filter((row) => row.applicationId === applicationId),
+    rows: group.rows.filter((row) => applicationIdsForRow(row).includes(applicationId)),
   }));
   return (
     <ul className="m-0 grid animate-in list-none divide-y divide-border-subtle p-0 fade-in-0 slide-in-from-top-1 duration-(--motion-soft) ease-(--ease-soft) motion-reduce:animate-none">
@@ -38,19 +38,20 @@ export function GitOpsRepositoryApplications({
         const name = application?.name ?? primary?.applicationName ?? applicationId;
         return (
           <li className="grid min-w-0" key={applicationId}>
-            <div className="grid min-w-0 items-center gap-2 px-4 py-2.5 sm:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_auto_auto]">
+            <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-4 py-3 sm:grid-cols-[minmax(0,1.3fr)_minmax(6rem,.8fr)_minmax(6rem,.8fr)_minmax(0,.8fr)_auto]">
               <span className="grid min-w-0 gap-0.5">
                 <strong className="truncate text-label-2">{name}</strong>
                 <span className="truncate font-mono text-caption text-caption-foreground">
                   {targetIdentity(rows, application?.clusterId, t("common.value.unavailable"))}
                 </span>
               </span>
-              <span className="truncate font-mono text-caption-2 text-caption-foreground">
-                {revisionSummary(rows, t("common.value.unavailable"))}
-              </span>
-              <span className="flex items-center gap-2">
-                <TargetStatus category={aggregateStatus(rows)} />
-                <span className="font-mono text-caption text-caption-foreground">
+              <span className="hidden min-w-0 sm:flex"><TargetStatus category={aggregateStatus(rows)} /></span>
+              <span className="hidden min-w-0 sm:flex"><HealthStatus value={aggregateHealth(rows)} /></span>
+              <span className="hidden min-w-0 sm:grid">
+                <span className="truncate font-mono text-caption-2 text-foreground">
+                  {revisionSummary(rows, t("common.value.unavailable"))}
+                </span>
+                <span className="truncate font-mono text-caption text-caption-foreground">
                   {formatObserved(primary?.observedAt ?? null, formatDate, t("common.value.unavailable"))}
                 </span>
               </span>
@@ -86,6 +87,10 @@ export function GitOpsRepositoryApplications({
       })}
     </ul>
   );
+}
+
+function applicationIdsForRow(row: GitOpsSyncTarget): readonly string[] {
+  return row.applicationIds?.length ? row.applicationIds : [row.applicationId];
 }
 
 function TargetEvidence({
@@ -141,10 +146,38 @@ function TargetStatus({ category }: { category: GitOpsSyncCategory }) {
   return <StatusPill label={label} tone={statusTone(category)} />;
 }
 
+function HealthStatus({ value }: { value: string | null }) {
+  const { t } = useI18n();
+  return (
+    <StatusPill
+      label={value ?? t("common.value.unavailable")}
+      tone={healthTone(value)}
+    />
+  );
+}
+
 function statusTone(category: GitOpsSyncCategory): StatusTone {
   if (category === "synced") return "healthy";
   if (category === "out-of-sync" || category === "checking") return "warning";
   if (category === "failed") return "critical";
+  return "unknown";
+}
+
+function aggregateHealth(rows: GitOpsSyncTarget[]): string | null {
+  const values = rows.map((row) => row.health?.trim()).filter((value): value is string => Boolean(value));
+  if (!values.length) return null;
+  const critical = values.find((value) => healthTone(value) === "critical");
+  if (critical) return critical;
+  const warning = values.find((value) => healthTone(value) === "warning");
+  if (warning) return warning;
+  return values[0] ?? null;
+}
+
+function healthTone(value: string | null): StatusTone {
+  const normalized = value?.trim().toLowerCase().replace(/[\s-]+/g, "_") ?? "";
+  if (["healthy", "ready", "active", "available"].includes(normalized)) return "healthy";
+  if (["degraded", "unhealthy", "failed", "error", "missing"].includes(normalized)) return "critical";
+  if (["progressing", "pending", "suspended", "warning"].includes(normalized)) return "warning";
   return "unknown";
 }
 

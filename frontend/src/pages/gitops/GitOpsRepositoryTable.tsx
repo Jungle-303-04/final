@@ -55,14 +55,14 @@ export function GitOpsRepositoryWorkspace({
   }
   return (
     <Surface aria-label={t("workflows.target.repository")} className="min-w-0 overflow-hidden">
-      <Table scrollAreaLabel={t("workflows.target.repository")}>
+      <Table className="min-w-[54rem] table-fixed" scrollAreaLabel={t("workflows.target.repository")}>
         <TableHeader>
           <TableRow>
-            <TableHead>{t("workflows.target.repository")}</TableHead>
-            <TableHead>{t("metrics.meta.source")}</TableHead>
-            <TableHead>{t("workflows.sync.table.revision")}</TableHead>
-            <TableHead>{t("workflows.sync.table.status")}</TableHead>
-            <TableHead>{t("workflows.sync.table.application")}</TableHead>
+            <TableHead className="w-[34%] px-4 text-micro font-semibold tracking-[0.05em] text-caption-foreground">{t("workflows.target.repository")}</TableHead>
+            <TableHead className="w-[14%] px-4 text-micro font-semibold tracking-[0.05em] text-caption-foreground">{t("metrics.meta.source")}</TableHead>
+            <TableHead className="w-[18%] px-4 text-micro font-semibold tracking-[0.05em] text-caption-foreground">{t("workflows.sync.table.revision")}</TableHead>
+            <TableHead className="w-[18%] px-4 text-micro font-semibold tracking-[0.05em] text-caption-foreground">{t("workflows.sync.table.status")}</TableHead>
+            <TableHead className="w-[10%] px-4 text-micro font-semibold tracking-[0.05em] text-caption-foreground">{t("workflows.sync.table.application")}</TableHead>
             <TableHead className="w-14"><span className="sr-only">{t("common.action.details")}</span></TableHead>
           </TableRow>
         </TableHeader>
@@ -71,8 +71,8 @@ export function GitOpsRepositoryWorkspace({
             const selected = group.key === selectedKey;
             return (
               <Fragment key={group.key}>
-                <TableRow data-state={selected ? "selected" : undefined}>
-                  <TableCell className="max-w-96 truncate font-mono font-semibold">
+                <TableRow className="animate-in fade-in-0 slide-in-from-bottom-1 duration-(--motion-soft) ease-(--ease-soft) motion-reduce:animate-none" data-state={selected ? "selected" : undefined}>
+                  <TableCell className="max-w-96 truncate px-4 py-3 font-mono font-semibold">
                     <span className="flex min-w-0 items-center gap-2">
                       <GitHubBrandIcon
                         className="size-3.5 shrink-0 text-caption-foreground"
@@ -81,15 +81,15 @@ export function GitOpsRepositoryWorkspace({
                       <span className="truncate">{group.repository ?? t("common.value.unavailable")}</span>
                     </span>
                   </TableCell>
-                  <TableCell className="text-caption-foreground">{providerText(group.providers, t)}</TableCell>
+                  <TableCell className="truncate px-4 py-3 text-caption-foreground">{providerText(group.providers, t)}</TableCell>
                   <TableCell
-                    className="max-w-56 truncate font-mono text-caption-2"
+                    className="max-w-56 truncate px-4 py-3 font-mono text-caption-2"
                     title={group.revisions.join(" · ") || undefined}
                   >
                     {revisionText(group.revisions, t)}
                   </TableCell>
-                  <TableCell><RepositoryStatus category={group.status} /></TableCell>
-                  <TableCell className="font-mono font-semibold tabular-nums">{group.applicationIds.length}</TableCell>
+                  <TableCell className="px-4 py-3"><RepositoryStatus category={group.status} /></TableCell>
+                  <TableCell className="px-4 py-3 font-mono font-semibold tabular-nums">{group.applicationIds.length}</TableCell>
                   <TableCell className="text-right">
                     <Button
                       aria-expanded={selected}
@@ -142,7 +142,7 @@ function RepositoryStatus({ category }: { category: GitOpsSyncCategory }) {
 function providerText(providers: RepositoryGroup["providers"], t: TranslationFunction): string {
   if (!providers.length) return t("common.value.unavailable");
   return providers.map((provider) => (
-    provider === "argo" ? "Argo CD" : provider === "flux" ? "Flux" : "Opsia"
+    provider === "argo" ? "Argo CD" : provider === "flux" ? "Flux" : "Kyro"
   )).join(" · ");
 }
 

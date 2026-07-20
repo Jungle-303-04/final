@@ -64,7 +64,7 @@ export function TimelineStrip({
   };
 
   return (
-    <section aria-label={t("timeline.strip.aria")} className="grid min-w-0 gap-3 rounded-xl border bg-card p-3 shadow-sm" data-slot="timeline-strip">
+    <section aria-label={t("timeline.strip.aria")} className="grid min-w-0 gap-2.5 rounded-card border bg-card p-3" data-slot="timeline-strip">
       <div className="flex min-w-0 flex-wrap items-end gap-2">
         <fieldset className="flex w-full min-w-0 flex-wrap gap-1 sm:w-auto sm:flex-1" aria-label={t("timeline.strip.range")}>
           <legend className="sr-only">{t("timeline.strip.range")}</legend>

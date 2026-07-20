@@ -125,15 +125,16 @@
 :root {
   color-scheme: light;
   --product-sidebar-width: 16.25rem;
-  --product-sidebar-width-collapsed: 3.5rem;
+  --product-sidebar-width-collapsed: 4.6875rem;
   --product-sidebar-width-mobile: 17rem;
-  --product-shell-header-height: 4.5625rem;
-  --product-navigation-row-height: 2.75rem;
+  --product-shell-header-height: 4.453125rem;
+  --product-navigation-row-height: 2.5rem;
   --product-global-search-height: 2.625rem;
   --product-global-search-width: 40.625rem;
   --product-cluster-select-width: 24rem;
   --product-toolbar-compact-control-width: 6rem;
   --product-toolbar-identity-width: 10rem;
+  --product-refresh-status-width: 7.5rem;
   --product-graph-height: 45rem;
   --product-graph-height-mobile: 25rem;
   --product-floating-action-size: 3.5rem;

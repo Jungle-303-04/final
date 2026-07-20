@@ -10,6 +10,7 @@ import {
 } from "react";
 import { useNavigate } from "react-router-dom";
 
+import { acquireSharedRequest } from "../../shared/data/sharedRequest";
 import { toast } from "../../shared/ui/primitives/sonner";
 import { useI18n } from "../../shared/i18n";
 import { alertEventResourceHref } from "../filters/alertEventResourceHref";
@@ -52,14 +53,20 @@ export function AlertEventsProvider({
   useEffect(() => {
     let active = true;
     let inFlight = false;
-    let controller: AbortController | null = null;
+    let pollSequence = 0;
+    let currentRequest: { release(): void } | null = null;
 
-    const load = async () => {
+    const load = async (requestKey: string) => {
       if (inFlight || document.visibilityState === "hidden") return;
       inFlight = true;
-      controller = new AbortController();
+      const request = acquireSharedRequest(
+        port,
+        requestKey,
+        (signal) => port.list(signal),
+      );
+      currentRequest = request;
       try {
-        const response = sortNewest(await port.list(controller.signal));
+        const response = sortNewest(await request.promise);
         if (!active) return;
         const currentIds = new Set(response.map((event) => event.event_id));
         if (seen.current !== null) {
@@ -84,19 +91,27 @@ export function AlertEventsProvider({
           : new Error(translationRef.current("alerts.list.failure")));
       } finally {
         if (active) setInitialLoading(false);
+        request.release();
+        if (currentRequest === request) currentRequest = null;
         inFlight = false;
       }
     };
 
-    void load();
-    const interval = window.setInterval(() => void load(), POLL_INTERVAL_MS);
+    void load(`alert-events:list:${refreshKey}:initial`);
+    const interval = window.setInterval(() => {
+      pollSequence += 1;
+      void load(`alert-events:list:${refreshKey}:poll:${pollSequence}`);
+    }, POLL_INTERVAL_MS);
     const handleVisibility = () => {
-      if (document.visibilityState === "visible") void load();
+      if (document.visibilityState === "visible") {
+        pollSequence += 1;
+        void load(`alert-events:list:${refreshKey}:visible:${pollSequence}`);
+      }
     };
     document.addEventListener("visibilitychange", handleVisibility);
     return () => {
       active = false;
-      controller?.abort();
+      currentRequest?.release();
       window.clearInterval(interval);
       document.removeEventListener("visibilitychange", handleVisibility);
     };

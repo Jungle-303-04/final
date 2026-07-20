@@ -75,7 +75,7 @@ describe("AuthBarrier", () => {
 
     renderBarrier(port);
 
-    expect(await screen.findByRole("heading", { name: "Opsia에 로그인" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Kyro에 로그인" })).toBeTruthy();
     const email = screen.getByRole("textbox", { name: "아이디 또는 이메일" });
     const password = screen.getByLabelText("비밀번호");
     expect(email.getAttribute("type")).toBe("text");
@@ -179,7 +179,7 @@ describe("AuthBarrier", () => {
     expect(loadSession).toHaveBeenCalledOnce();
 
     await user.click(screen.getByRole("button", { name: "세션 다시 확인" }));
-    expect(await screen.findByRole("heading", { name: "Opsia에 로그인" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Kyro에 로그인" })).toBeTruthy();
     expect(loadSession).toHaveBeenCalledTimes(2);
   });
 
@@ -198,7 +198,7 @@ describe("AuthBarrier", () => {
     expect(screen.getByText("로그아웃 처리 중")).toBeTruthy();
 
     signOutResult.resolve();
-    expect(await screen.findByRole("heading", { name: "Opsia에 로그인" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Kyro에 로그인" })).toBeTruthy();
   });
 
   it("installs switched session authority without another bootstrap read", async () => {

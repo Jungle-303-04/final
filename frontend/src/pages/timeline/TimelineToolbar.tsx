@@ -110,7 +110,7 @@ export function TimelineToolbar({
   return (
     <section
       aria-label={t("timeline.toolbar.aria")}
-      className="grid min-w-0 gap-3 rounded-xl border bg-card p-3 shadow-sm"
+      className="grid min-w-0 gap-2.5 rounded-card border bg-card p-3"
       data-slot="timeline-toolbar"
     >
       <div className="flex min-w-0 flex-wrap items-end gap-2">
@@ -189,7 +189,7 @@ export function TimelineToolbar({
         />
       </div>
 
-      <div className="flex min-w-0 flex-wrap items-end gap-2 border-t pt-3">
+      <div className="flex min-w-0 flex-wrap items-end gap-2 border-t border-border-subtle pt-2.5">
         <fieldset className="flex min-w-0 flex-wrap gap-1" aria-label={t("timeline.view")} ref={viewGroupRef}>
           <legend className="sr-only">{t("timeline.view")}</legend>
           {controls.views.map((option) => {

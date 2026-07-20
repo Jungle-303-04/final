@@ -112,6 +112,7 @@ export function renderShell({
                         alertEventsPort={alertEventsPort}
                         aiAssistantPort={aiAssistantPort}
                         auth={testAuth}
+                        defaultSidebarCollapsed={false}
                         globalFilterPort={globalFilterPort}
                         logStreamPort={logStreamPort}
                         portForwardSessions={portForwardSessions}

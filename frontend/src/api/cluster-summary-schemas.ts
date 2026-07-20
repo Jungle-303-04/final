@@ -1,8 +1,7 @@
 import { z } from "zod";
-
+import { clusterDataCoverageSchema } from "./cluster-observation-schemas";
 const nullableStringSchema = z.string().nullable();
 const nullableNumberSchema = z.number().nullable();
-
 export const clusterWorkloadHealthItemSchema = z.strictObject({
   name: z.string(),
   kind: z.string(),
@@ -287,6 +286,7 @@ export const nodeSummaryItemSchema = z.strictObject({
 export const clusterNodesSummarySchema = z.strictObject({
   cluster_id: z.string(),
   nodes: z.array(nodeSummaryItemSchema),
+  coverage: clusterDataCoverageSchema.nullable().optional(),
 });
 
 export const podSummaryItemSchema = z.strictObject({

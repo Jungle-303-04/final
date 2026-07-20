@@ -326,6 +326,7 @@ describe("cluster summary API", () => {
   it("loads node summaries and preserves unavailable metrics as null", async () => {
     const payload = {
       cluster_id: "cluster-1",
+      coverage: { inventory: { availability: "available", observed_at: "2026-07-12T00:00:00Z", reason_codes: [] }, cpu: { availability: "unavailable", observed_at: null, reason_codes: ["cpu_observation_unavailable"] }, memory: { availability: "unavailable", observed_at: null, reason_codes: ["memory_observation_unavailable"] } },
       nodes: [
         {
           name: "worker-1",
@@ -349,7 +350,6 @@ describe("cluster summary API", () => {
       expect.objectContaining({ method: "GET" }),
     );
   });
-
   it("loads pods for an encoded node name", async () => {
     const payload = {
       cluster_id: "cluster-1",

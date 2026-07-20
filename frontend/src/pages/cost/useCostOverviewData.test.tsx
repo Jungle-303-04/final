@@ -52,7 +52,9 @@ describe("useCostOverview", () => {
     expect(port.loadRefreshPolicy).toHaveBeenCalledOnce();
 
     rendered.unmount();
-    await act(async () => Promise.resolve());
+    await act(async () => {
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+    });
     expect(policySignal?.aborted).toBe(true);
   });
 

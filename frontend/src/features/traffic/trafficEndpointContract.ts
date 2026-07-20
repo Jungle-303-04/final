@@ -101,6 +101,19 @@ export interface TrafficRelationshipEndpoint {
   observed_at: string;
 }
 
+export interface TrafficServiceMetricEndpoint {
+  availability: TrafficAvailability;
+  cluster_id: string;
+  namespace: string | null;
+  service: string;
+  rate_per_second: number | null;
+  rate_unit: "requests" | "flows" | null;
+  error_rate_pct: number | null;
+  observed_at: string;
+  source_keys: string[];
+  reason_codes: string[];
+}
+
 interface TrafficUnavailableRelationshipsEndpoint {
   availability: "unavailable";
   edges: null;
@@ -125,6 +138,7 @@ export interface TrafficOverviewEndpoint {
   observation: TrafficObservedObservationEndpoint | TrafficUnavailableObservationEndpoint;
   summary: TrafficObservedSummaryEndpoint | TrafficUnavailableSummaryEndpoint;
   relationships: TrafficObservedRelationshipsEndpoint | TrafficUnavailableRelationshipsEndpoint;
+  service_metrics: TrafficServiceMetricEndpoint[];
   refresh_after_seconds: number;
 }
 

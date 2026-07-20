@@ -32,8 +32,8 @@
   --stagger-node: 70ms;
   --stagger-pod: 32ms;
   --stagger-row: 18ms;
-  --stagger-list: 45ms;
-  --stagger-list-cap: 360ms;
+  --stagger-list: 40ms;
+  --stagger-list-cap: 320ms;
   --stagger-max: 520ms;
 }
 

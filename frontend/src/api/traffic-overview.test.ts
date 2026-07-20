@@ -54,6 +54,13 @@ describe("Traffic overview API", () => {
 
     await expect(getTrafficOverview()).rejects.toMatchObject({ kind: "invalid-payload" });
   });
+
+  it("keeps the console readable while pre-evidence API workers are still rolling", async () => {
+    const { service_metrics: _serviceMetrics, ...preEvidenceOverview } = overview();
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse(preEvidenceOverview));
+
+    await expect(getTrafficOverview()).resolves.toMatchObject({ service_metrics: [] });
+  });
 });
 
 function overview() {
@@ -86,6 +93,7 @@ function overview() {
       edges: null,
       reason_codes: ["traffic_observation_not_integrated"],
     },
+    service_metrics: [],
     refresh_after_seconds: 60,
   };
 }
@@ -131,6 +139,18 @@ function observedOverview() {
       },
       reason_codes: [],
     },
+    service_metrics: [{
+      availability: "available",
+      cluster_id: "cluster-a",
+      namespace: "storefront",
+      service: "web",
+      rate_per_second: 17.5,
+      rate_unit: "requests",
+      error_rate_pct: 0.2,
+      observed_at: "2026-07-18T01:00:00Z",
+      source_keys: ["istio"],
+      reason_codes: [],
+    }],
   };
 }
 

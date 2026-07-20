@@ -54,9 +54,9 @@ describe("TimelineSurface", () => {
   it("shares initial overview, snapshot, and pins reads in StrictMode without waiting for the SSE session to finish", async () => {
     const overviewRequest = deferred<ReturnType<typeof timelineOverview>>();
     const snapshotRequest = deferred<TimelineSnapshot>();
-    const pinsRequest = deferred<TimelinePinSet>();
+    const pinsRequest = deferred<TimelinePinSet>(); let snapshotSignal: AbortSignal | undefined;
     const readTimelineOverview = vi.fn(() => overviewRequest.promise);
-    const readTimeline = vi.fn(() => snapshotRequest.promise);
+    const readTimeline = vi.fn((...args: Parameters<TimelinePort["readTimeline"]>) => { snapshotSignal = args[1]; return snapshotRequest.promise; });
     const readTimelinePins = vi.fn(() => pinsRequest.promise);
     const subscribeTimeline = vi.fn(idleStream);
     const port = timelinePort({
@@ -72,8 +72,7 @@ describe("TimelineSurface", () => {
       expect(readTimelineOverview).toHaveBeenCalledTimes(1);
       expect(readTimeline).toHaveBeenCalledTimes(1);
       expect(readTimelinePins).toHaveBeenCalledTimes(1);
-    });
-
+    }); expect(snapshotSignal?.aborted).toBe(false);
     await act(async () => {
       overviewRequest.resolve(timelineOverview());
       snapshotRequest.resolve(snapshot({ events: [event()] }));

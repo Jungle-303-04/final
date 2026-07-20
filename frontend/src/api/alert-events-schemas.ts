@@ -67,7 +67,7 @@ export const alertEventSchema = z.strictObject({
   ) return;
   context.addIssue({
     code: "custom",
-    message: "Opsia alert events require measured rule evidence",
+    message: "Kyro alert events require measured rule evidence",
   });
 });
 

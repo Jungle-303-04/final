@@ -46,7 +46,7 @@ export const MOTION_TWEEN = Object.freeze({
 
 export const LIST_STAGGER = Object.freeze({
   maxItems: 8,
-  seconds: 0.045,
+  seconds: 0.04,
 });
 
 export function listStaggerDelay(index: number, reducedMotion = false): number {

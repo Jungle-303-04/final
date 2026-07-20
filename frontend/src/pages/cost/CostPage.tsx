@@ -1,4 +1,4 @@
-import { Activity } from "lucide-react";
+import { Activity, Coins } from "lucide-react";
 
 import { useClusterScope } from "../../features/cluster-scope/ClusterScopeProvider";
 import {
@@ -95,9 +95,9 @@ function CostReadyPage({
   const { t } = useI18n();
   return (
     <ProductPageFrame className="gap-4">
-      <header className="grid min-w-0 gap-1">
-        <h1 className="text-2xl font-semibold tracking-tight">{t("cost.title")}</h1>
-        <p className="max-w-3xl text-sm leading-6 text-muted-foreground">{t("cost.description")}</p>
+      <header className="flex min-w-0 items-center gap-2.5">
+        <Coins aria-hidden="true" className="size-[1.0625rem] shrink-0 text-primary" /><h1 className="min-w-0 truncate font-heading text-heading font-extrabold tracking-[-0.02em]">{t("cost.title")}</h1>
+        <p className="sr-only">{t("cost.description")}</p>
       </header>
       <CostViewTabs onSelect={onViewChange} value={view} />
       {view === "rightsizing" ? (
@@ -177,10 +177,10 @@ function CostContent({
   const overview = frame.data;
   return (
     <section aria-labelledby="cost-overview-title" className="grid min-w-0 gap-4">
-      <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
         <h2 className="sr-only" id="cost-overview-title">{t("cost.title")}</h2>
-        <p className="min-w-0 break-words text-sm text-muted-foreground">{scopeDescription(overview, t("cost.value.notObserved"))}</p>
-        <RefreshAction
+        <p className="min-w-0 truncate text-caption text-muted-foreground" title={scopeDescription(overview, t("cost.value.notObserved"))}>{scopeDescription(overview, t("cost.value.notObserved"))}</p>
+        <span className="ml-auto" /><RefreshAction
           hasFailed={frame.refreshFailure !== null}
           isRefreshing={frame.refreshing}
           label={t("common.action.refresh")}
@@ -205,7 +205,7 @@ function CostContent({
       ) : (
         <div aria-labelledby="cost-tab-overview" className="grid min-w-0 gap-4" id="cost-panel-overview" role="tabpanel">
           <ObservationNotice overview={overview} />
-          <section className="grid min-w-0 gap-3 md:grid-cols-2 xl:grid-cols-3" aria-label={t("cost.summary.title")}>
+          <section className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-3" aria-label={t("cost.summary.title")}>
             <SummaryCard currency={overview.observation.currency} label={t("cost.summary.hourly")} value={overview.summary.hourlyCost} />
             <SummaryCard currency={overview.observation.currency} label={t("cost.summary.monthly")} value={overview.summary.monthlyProjection} />
             <SummaryCard currency={overview.observation.currency} label={t("cost.summary.storage")} value={overview.summary.storageCost} />
@@ -258,9 +258,9 @@ function SummaryCard({
           style: "currency",
         });
   return (
-    <Card size="sm">
+    <Card className="min-h-28 justify-between transition-[border-color,box-shadow] hover:border-border-hover hover:shadow-product-hover motion-reduce:transition-none" size="sm">
       <CardHeader><CardTitle>{label}</CardTitle></CardHeader>
-      <CardContent><p className="break-words text-lg font-semibold tabular-nums">{rendered}</p></CardContent>
+      <CardContent><p className="truncate font-mono text-title-2 font-semibold tabular-nums" title={rendered}>{rendered}</p></CardContent>
     </Card>
   );
 }

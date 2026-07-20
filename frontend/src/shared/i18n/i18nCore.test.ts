@@ -47,6 +47,19 @@ describe("i18n catalogs", () => {
     expect(translate("ko", "connections.launcher.description"))
       .toBe("무엇을 연결할까요?");
   });
+
+  it("uses the demo-v3 three-view resource vocabulary", () => {
+    expect([
+      translate("ko", "resources.surface.view.map"),
+      translate("ko", "resources.surface.view.list"),
+      translate("ko", "resources.surface.view.flow"),
+    ]).toEqual(["인프라", "쿠버네티스", "트래픽"]);
+    expect([
+      translate("en", "resources.surface.view.map"),
+      translate("en", "resources.surface.view.list"),
+      translate("en", "resources.surface.view.flow"),
+    ]).toEqual(["Infrastructure", "Kubernetes", "Traffic"]);
+  });
 });
 
 describe("locale resolution", () => {

@@ -182,7 +182,7 @@ export function useHomeClusterFrame(input: HomeClusterFrameInput) {
       request.release();
     };
   }, [
-    clusterId, nodes, podRefreshRevision, port, refreshRevision, reportUnauthorized, scopeKey,
+    clusterId, nodes.phase, podRefreshRevision, port, refreshRevision, reportUnauthorized, scopeKey,
     selectedNodeName, validNode,
   ]);
 

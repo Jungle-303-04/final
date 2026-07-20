@@ -18,9 +18,9 @@ import { helmEn } from "./catalogs/en/helm";
 import { workloadDetailEn } from "./catalogs/en/workloadDetail";
 import { diagnoseEn } from "./catalogs/en/diagnose";
 import { connectionsEn } from "./catalogs/en/connections";
-
+import { resourcePanelsEn } from "./catalogs/en/resourcePanels";
 export const en = {
-  "product.name": "Opsia",
+  "product.name": "Kyro",
   "shell.brand.landing": "Go to {route}",
   "common.action.back": "Back",
   "common.action.cancel": "Cancel",
@@ -103,7 +103,7 @@ export const en = {
   "shell.dock.expand": "Expand log dock",
   "shell.dock.closeTab": "Close logs for {name}",
   "shell.dock.resize": "Resize log dock",
-  "shell.dock.askAi": "Ask Opsia AI about the current logs",
+  "shell.dock.askAi": "Ask Kyro AI about the current logs",
   "shell.dock.logs": "Log stream for {name}",
   "shell.dock.connecting": "Connecting",
   "shell.dock.streaming": "Live",
@@ -273,7 +273,7 @@ export const en = {
   "auth.login.pending": "Signing in",
   "auth.login.submit": "Sign in",
   "auth.login.subtitle": "Enter your account details to continue.",
-  "auth.login.title": "Sign in to Opsia",
+  "auth.login.title": "Sign in to Kyro",
   "auth.logout.action": "Sign out",
   "auth.logout.error.message": "We could not complete the sign-out request. Check the connection and try again.",
   "auth.logout.error.title": "Session sign-out error",
@@ -439,7 +439,7 @@ export const en = {
   ...diagnoseEn,
   ...connectionsEn,
   ...clustersEn,
-  ...resourcesEn,
+  ...resourcesEn, ...resourcePanelsEn,
   ...issuesEn,
   ...metricsEn,
   ...workflowsEn,

@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 
 import { cleanup, render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { HomeClusterChoice } from "../../features/home/homeContract";
 import { UnifiedFilterProvider } from "../../features/filters/UnifiedFilterProvider";
 import { I18nProvider } from "../../shared/i18n";
@@ -44,17 +45,38 @@ describe("HomeClusterGrid", () => {
       .getAttribute("href")).toBe("/resources?clusters=cluster-production");
   });
 
-  it("keeps the grid free of a connect card so the header button stays the single entry (D22)", () => {
+  it("fills an odd grid cell with the existing cluster connection action", async () => {
+    const onConnect = vi.fn();
+    const user = userEvent.setup();
     render(
       <I18nProvider navigatorLanguage="en-US" storage={null}>
         <MemoryRouter initialEntries={["/home"]}>
           <UnifiedFilterProvider>
-            <HomeClusterGrid clusters={clusters} />
+            <HomeClusterGrid clusters={clusters} onConnect={onConnect} />
           </UnifiedFilterProvider>
         </MemoryRouter>
       </I18nProvider>,
     );
 
-    expect(screen.queryByRole("button", { name: "Connect cluster" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: /Connect cluster/u }));
+    expect(onConnect).toHaveBeenCalledOnce();
+  });
+
+  it("keeps a single scoped cluster on the fixed v3 two-column track", () => {
+    render(
+      <I18nProvider navigatorLanguage="en-US" storage={null}>
+        <MemoryRouter initialEntries={["/home?clusters=cluster-production"]}>
+          <UnifiedFilterProvider>
+            <HomeClusterGrid clusters={clusters} onConnect={() => undefined} />
+          </UnifiedFilterProvider>
+        </MemoryRouter>
+      </I18nProvider>,
+    );
+
+    const grid = document.querySelector('[data-slot="home-cluster-grid"]');
+    expect(grid?.className).toContain("md:grid-cols-2");
+    expect(document.querySelector('[data-slot="home-cluster-cell"]')?.className)
+      .not.toContain("col-span");
+    expect(document.querySelector('[data-slot="home-cluster-connect-cell"]')).not.toBeNull();
   });
 });

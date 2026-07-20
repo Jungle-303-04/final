@@ -90,6 +90,10 @@ const rawColorPatterns = [
   { label: 'oklch', pattern: /\boklch\s*\(/giu },
 ]
 
+// Public product copy has moved to Kyro. Lowercase `opsia` remains a stable
+// wire/storage identifier, so this intentionally targets display-name casing.
+const retiredBrandPattern = /\b(?:Opsia|OPSIA)\b/gu
+
 const sharedVisualComponentPattern = /(?:Card|Chip|Table|Gauge|Chart|Progress)$/u
 
 const motionClassLiteralPattern =
@@ -138,7 +142,7 @@ const allowedStandaloneUiTerms = new Set([
   'Ingress',
   'Job',
   'JSON',
-  'Opsia',
+  'Kyro',
   'Kubernetes',
   'KiB',
   'MiB',
@@ -280,6 +284,18 @@ function addTextViolation(filePath, source, position, rule, message) {
     ts.ScriptKind.Unknown,
   )
   addViolation(filePath, sourceFile, position, rule, message)
+}
+
+function inspectRetiredBrand(filePath, source) {
+  for (const match of source.matchAll(retiredBrandPattern)) {
+    addTextViolation(
+      filePath,
+      source,
+      match.index,
+      'retired-brand',
+      'Retired public brand name is forbidden; use Kyro for display copy and keep lowercase opsia only for stable internal identifiers.',
+    )
+  }
 }
 
 async function collectProductFiles(directory) {
@@ -1403,6 +1419,7 @@ async function inspectReleaseRules(files) {
     const source = await readFile(filePath, 'utf8')
     const extension = extname(filePath).toLowerCase()
 
+    inspectRetiredBrand(filePath, source)
     inspectReleaseRawColors(filePath, source)
     if (scriptExtensions.has(extension)) {
       inspectReleaseMotionDurations(filePath, source)
@@ -1484,6 +1501,12 @@ async function run() {
     throw error
   }
 
+  const productDocumentFile = resolve(projectRoot, 'index.html')
+  inspectRetiredBrand(
+    productDocumentFile,
+    await readFile(productDocumentFile, 'utf8'),
+  )
+
   if (releaseGate) {
     try {
       await inspectReleaseRules(files)
@@ -1499,6 +1522,7 @@ async function run() {
       const source = await readFile(filePath, 'utf8')
       const extension = extname(filePath).toLowerCase()
 
+      inspectRetiredBrand(filePath, source)
       inspectFileLength(filePath, source, extension)
       inspectRawColors(filePath, source)
       inspectImportant(filePath, source)

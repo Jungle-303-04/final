@@ -85,6 +85,18 @@ export interface HomeUsageSnapshot {
   memoryPercent: number | null;
 }
 
+export interface HomeClusterObservationCoverage {
+  availability: "available" | "partial" | "unavailable";
+  observedAt: string | null;
+  reasonCodes: readonly string[];
+}
+
+export interface HomeClusterDataCoverage {
+  inventory: HomeClusterObservationCoverage;
+  cpu: HomeClusterObservationCoverage;
+  memory: HomeClusterObservationCoverage;
+}
+
 /** Canonical projection of the fleet summary used by the home cluster cards. */
 export interface HomeFleetClusterSummary {
   clusterId: string;
@@ -99,6 +111,7 @@ export interface HomeFleetClusterSummary {
   cpuPercent: number | null;
   memoryPercent: number | null;
   observedAt: string | null;
+  coverage?: HomeClusterDataCoverage;
 }
 
 export interface HomeFleetSummary {
@@ -185,6 +198,7 @@ export interface HomeNodeCollection {
   clusterId: string;
   completeness: HomeCollectionCompleteness;
   nodes: HomeNodeSummary[];
+  coverage?: HomeClusterDataCoverage;
 }
 
 export interface HomePodReadiness {

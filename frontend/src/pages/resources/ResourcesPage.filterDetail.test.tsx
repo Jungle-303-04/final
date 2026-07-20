@@ -95,14 +95,15 @@ describe("ResourcesPage unified-filter detail identity", () => {
     expect(screen.getByRole("dialog", { name: "checkout-api-0 details" })).toBeTruthy();
     expectDetailQueryPreserved(readResourcesQuery());
     expect(port.loadResourceDetail).toHaveBeenCalledTimes(1);
-    await waitFor(() => expect(filterPort.listResourcePage).toHaveBeenCalled());
-    const forwarded = lastFilterState(vi.mocked(filterPort.listResourcePage));
-    if (key === "resources.q") expect(forwarded.resources.query).toBe(value);
-    if (key === "namespaces") {
-      expect(forwarded.common.namespaces).toEqual([
-        { clusterId: "cluster-1", namespace: "ops" },
-      ]);
-    }
+    await waitFor(() => {
+      const forwarded = lastFilterState(vi.mocked(filterPort.listResourcePage));
+      if (key === "resources.q") expect(forwarded.resources.query).toBe(value);
+      if (key === "namespaces") {
+        expect(forwarded.common.namespaces).toEqual([
+          { clusterId: "cluster-1", namespace: "ops" },
+        ]);
+      }
+    });
   }, 15_000);
 
   it("keeps collection controls in the list column and out of the detail panel", async () => {

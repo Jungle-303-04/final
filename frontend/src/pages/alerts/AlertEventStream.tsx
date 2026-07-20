@@ -10,6 +10,11 @@ import type {
   AlertSurfaceTone,
 } from "../../features/alerts/alertSurfaceModel";
 import { alertEventResourceHref } from "../../features/filters/alertEventResourceHref";
+import {
+  SurfaceRowMotion,
+  SurfaceRowMotionProvider,
+  SurfaceRowPresence,
+} from "../../motion/SurfaceRowMotion";
 import { useI18n, type TranslationFunction } from "../../shared/i18n";
 import type { AlertsMessageKey } from "../../shared/i18n/keys/alerts";
 import { cn } from "../../shared/lib/cn";
@@ -54,26 +59,30 @@ export function AlertEventStream({ acknowledge, data, events, pending, promote }
     event,
   ])), [events]);
   return (
-    <Surface aria-label={t("alerts.list.aria")} className="min-w-0 overflow-hidden rounded-card">
-        <div aria-hidden="true" className="grid min-w-0 grid-cols-[88px_minmax(0,1.8fr)_minmax(70px,0.5fr)_minmax(76px,0.5fr)] gap-3 border-b bg-muted/35 px-3.5 py-2">
+    <SurfaceRowMotionProvider>
+      <Surface aria-label={t("alerts.list.aria")} className="min-w-0 overflow-hidden rounded-card">
+        <div aria-hidden="true" className="grid h-[2.54296875rem] min-w-0 grid-cols-[6.875rem_minmax(15rem,1.8fr)_minmax(5.46875rem,0.5fr)_minmax(5.9375rem,0.5fr)] items-center gap-[0.9375rem] border-b bg-muted/35 px-[1.09375rem] py-[0.625rem]">
           <ColumnLabel>{t("alerts.table.status")}</ColumnLabel>
           <ColumnLabel>{t("alerts.table.content")}</ColumnLabel>
           <ColumnLabel>{t("alerts.table.category")}</ColumnLabel>
           <ColumnLabel>{t("alerts.table.time")}</ColumnLabel>
         </div>
         <div role="list">
-          {data.rows.slice(0, visibleRows).map((row) => (
-            <AlertEventRow
-              acknowledge={acknowledge}
-              event={eventsById.get(row.id)}
-              key={row.id}
-              locale={locale}
-              pending={pending[row.id.replace(/^alert:/u, "")]}
-              promote={promote}
-              row={row}
-              t={t}
-            />
-          ))}
+          <SurfaceRowPresence>
+            {data.rows.slice(0, visibleRows).map((row, index) => (
+              <AlertEventRow
+                acknowledge={acknowledge}
+                event={eventsById.get(row.id)}
+                index={index}
+                key={row.id}
+                locale={locale}
+                pending={pending[row.id.replace(/^alert:/u, "")]}
+                promote={promote}
+                row={row}
+                t={t}
+              />
+            ))}
+          </SurfaceRowPresence>
         </div>
         {visibleRows < data.rows.length ? (
           <div className="flex justify-center border-t px-3 py-2">
@@ -82,7 +91,8 @@ export function AlertEventStream({ acknowledge, data, events, pending, promote }
             </Button>
           </div>
         ) : null}
-    </Surface>
+      </Surface>
+    </SurfaceRowMotionProvider>
   );
 }
 
@@ -91,20 +101,21 @@ export function AlertActiveOperation({ item, t }: { item: AlertSurfaceProgressIt
     ? t("alerts.progress.stage", { completed: item.completed, total: item.total })
     : item.description ?? t("alerts.progress.observing");
   return (
-    <Surface aria-label={t("alerts.progress.aria")} className="rounded-card px-4 py-[15px]">
-      <div className="flex min-w-0 items-center gap-2.5">
-        <span aria-hidden="true" className="motion-live-dot size-[7px] shrink-0 rounded-full bg-primary" />
+    <Surface aria-label={t("alerts.progress.aria")} className="min-h-[3.984375rem] rounded-card px-[1.171875rem] py-[1.171875rem]">
+      <div className="flex min-w-0 items-center gap-[0.78125rem]">
+        <span aria-hidden="true" className="motion-live-dot size-[0.546875rem] shrink-0 rounded-full bg-primary" />
         <Link className="min-w-0 truncate text-body font-bold hover:underline" to={item.href}>{item.title}</Link>
         <span className="min-w-0 truncate font-mono text-label text-caption-foreground tabular-nums">{stage}</span>
-        <ProgressFill ariaLabel={t("alerts.progress.value", { title: item.title })} className="ml-auto h-1.5 w-40 shrink-0" value={item.progress} />
+        <ProgressFill ariaLabel={t("alerts.progress.value", { title: item.title })} className="ml-auto h-[0.46875rem] w-[12.5rem] shrink-0" value={item.progress} />
       </div>
     </Surface>
   );
 }
 
-function AlertEventRow({ acknowledge, event, locale, pending, promote, row, t }: {
+function AlertEventRow({ acknowledge, event, index, locale, pending, promote, row, t }: {
   acknowledge(eventId: string): Promise<void>;
   event: AlertEvent | undefined;
+  index: number;
   locale: "en" | "ko";
   pending: "ack" | "promote" | undefined;
   promote(eventId: string): Promise<void>;
@@ -114,17 +125,17 @@ function AlertEventRow({ acknowledge, event, locale, pending, promote, row, t }:
   const navigate = useNavigate();
   const rowLabel = t("alerts.table.row", { category: categoryLabel(row.category, t), status: toneLabel(row.tone, t), title: row.title });
   return (
-    <div className={cn(
-      "group relative grid min-w-0 grid-cols-[88px_minmax(0,1.8fr)_minmax(70px,0.5fr)_minmax(76px,0.5fr)] items-center gap-3 border-b border-border-subtle px-3.5 py-2.5 last:border-b-0",
+    <SurfaceRowMotion className={cn(
+      "group relative grid min-h-[3.5078125rem] min-w-0 grid-cols-[6.875rem_minmax(15rem,1.8fr)_minmax(5.46875rem,0.5fr)_minmax(5.9375rem,0.5fr)] items-center gap-[0.9375rem] border-b border-border-subtle px-[1.09375rem] py-[0.78125rem] last:border-b-0",
       "transition-[background-color] duration-(--motion-micro) hover:bg-muted/35 focus-within:bg-muted/35 motion-reduce:transition-none",
-    )} role="listitem">
+    )} index={index} role="listitem">
       <button aria-label={rowLabel} className="absolute inset-0 z-0 cursor-pointer rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/60" onClick={() => navigate(row.href)} type="button" />
-      <span className="pointer-events-none relative z-1 min-w-0"><StatusPill className="gap-[5px] px-[9px] py-[3px] text-micro [&>span:first-child]:size-[5px]" label={toneLabel(row.tone, t)} tone={row.tone} /></span>
+      <span className="pointer-events-none relative z-1 min-w-0"><StatusPill className="gap-[0.390625rem] px-[0.703125rem] py-[0.234375rem] text-micro [&>span:first-child]:size-[0.390625rem]" label={toneLabel(row.tone, t)} tone={row.tone} /></span>
       <span className="pointer-events-none relative z-1 min-w-0 truncate text-label-2 text-foreground">{row.title}</span>
       <span className="pointer-events-none relative z-1 min-w-0 truncate text-label text-caption-foreground">{categoryLabel(row.category, t)}</span>
-      <time className="pointer-events-none relative z-1 min-w-0 truncate font-mono text-label text-caption-foreground tabular-nums" dateTime={row.occurredAt}>{relativeTime(row.occurredAt, locale)}</time>
+      <time className="pointer-events-none relative z-1 min-w-0 truncate pr-9 font-mono text-label text-caption-foreground tabular-nums" dateTime={row.occurredAt}>{relativeTime(row.occurredAt, locale)}</time>
       {event ? <EventActions acknowledge={acknowledge} event={event} pending={pending} promote={promote} t={t} /> : null}
-    </div>
+    </SurfaceRowMotion>
   );
 }
 

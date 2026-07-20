@@ -82,7 +82,7 @@ describe("ProductApp root recovery", () => {
     );
 
     expect(
-      await screen.findByRole("heading", { name: "Sign in to Opsia" }),
+      await screen.findByRole("heading", { name: "Sign in to Kyro" }),
     ).toBeTruthy();
     expect(fetchMock).toHaveBeenCalledOnce();
     expect(fetchMock).toHaveBeenCalledWith(

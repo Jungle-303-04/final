@@ -97,6 +97,16 @@ export interface HomeEndpointFleetClusterSummary {
   cpu_pct: number | null;
   mem_pct: number | null;
   last_seen_at: string | null;
+  coverage?: HomeEndpointClusterDataCoverage | null;
+}
+
+export interface HomeEndpointClusterObservationCoverage {
+  availability: "available" | "partial" | "unavailable";
+  observed_at: string | null; reason_codes: string[];
+}
+export interface HomeEndpointClusterDataCoverage {
+  inventory: HomeEndpointClusterObservationCoverage; cpu: HomeEndpointClusterObservationCoverage;
+  memory: HomeEndpointClusterObservationCoverage;
 }
 
 export interface HomeEndpointFleetSummary {
@@ -131,6 +141,7 @@ export interface HomeEndpointNode {
 export interface HomeEndpointNodeCollection {
   cluster_id: string;
   nodes: HomeEndpointNode[];
+  coverage?: HomeEndpointClusterDataCoverage | null;
 }
 
 export interface HomeEndpointInsightCoverage {

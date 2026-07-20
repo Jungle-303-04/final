@@ -20,10 +20,10 @@ import {
 } from "../../features/ai-assistant/aiConversationSession";
 import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
 import {
-  AiAssistantHistoryPresence,
-  AiAssistantHistoryRowMotion,
-  AiAssistantMotionProvider,
-} from "../../motion/AiAssistantMotion";
+  SurfaceRowMotion,
+  SurfaceRowMotionProvider,
+  SurfaceRowPresence,
+} from "../../motion/SurfaceRowMotion";
 import { useI18n, type TranslationFunction } from "../../shared/i18n";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
 import { ProductSurfaceTitle } from "../../shared/ui/ProductSurfaceTitle";
@@ -78,8 +78,16 @@ export function AiHistoryPage({ port }: { port: AiConversationHistoryPort }) {
     <ProductPageFrame>
       <header className="flex min-w-0 items-center gap-2.5">
         <ProductSurfaceTitle icon={Sparkles} title={t("shell.ai.history.title")} />
+        {frame.phase === "ready" && frame.page.completeness === "partial" ? (
+          <TintChip
+            className="max-w-[min(38vw,22rem)] rounded-full px-2.5 py-1 text-caption font-bold"
+            icon={<AlertTriangle className="size-3.5" />}
+            label={t("shell.ai.history.partial")}
+            tone="warning"
+          />
+        ) : null}
         <Button
-          className="ml-auto"
+          className="ml-auto shrink-0"
           onClick={createNew}
           size="page-action"
           type="button"
@@ -97,21 +105,10 @@ export function AiHistoryPage({ port }: { port: AiConversationHistoryPort }) {
           <HistoryEmpty onCreate={createNew} />
         ) : null}
         {frame.phase === "ready" && frame.page.items.length > 0 ? (
-          <>
-            {frame.page.completeness === "partial" ? (
-              <div
-                className="mb-2 flex min-w-0 items-center gap-2 rounded-lg border border-tint-warn-border bg-tint-warn-bg px-3 py-2 text-label text-tint-warn-fg"
-                role="status"
-              >
-                <AlertTriangle aria-hidden="true" className="size-3.5 shrink-0" />
-                <span className="min-w-0 truncate">{t("shell.ai.history.partial")}</span>
-              </div>
-            ) : null}
-            <HistoryData
-              activeConversationId={session.mode === "resume" ? session.conversationId : null}
-              items={frame.page.items}
-            />
-          </>
+          <HistoryData
+            activeConversationId={session.mode === "resume" ? session.conversationId : null}
+            items={frame.page.items}
+          />
         ) : null}
       </section>
     </ProductPageFrame>
@@ -128,30 +125,36 @@ function HistoryData({
   const { t } = useI18n();
   const [renderedAt] = useState(() => Date.now());
   return (
-    <AiAssistantMotionProvider>
-      <div className="overflow-hidden rounded-card border bg-card">
-        <Table scrollAreaLabel={t("shell.ai.history.title")}>
+    <SurfaceRowMotionProvider>
+      <div className="min-h-[16.375rem] overflow-hidden rounded-card border bg-card">
+        <Table className="table-fixed" scrollAreaLabel={t("shell.ai.history.title")}>
+          <colgroup>
+            <col className="w-2/3" />
+            <col className="w-1/6" />
+            <col className="w-1/6" />
+          </colgroup>
           <TableHeader className="bg-background-subtle">
             <TableRow className="hover:bg-transparent">
-              <TableHead className="w-[64%] px-3.5 text-micro font-semibold tracking-[0.05em] text-caption-foreground">
+              <TableHead className="px-3.5 text-micro font-semibold tracking-[0.05em] text-caption-foreground">
                 {t("shell.ai.history.columns.conversation")}
               </TableHead>
-              <TableHead className="w-[17%] px-3.5 text-micro font-semibold tracking-[0.05em] text-caption-foreground">
+              <TableHead className="px-3.5 text-micro font-semibold tracking-[0.05em] text-caption-foreground">
                 {t("shell.ai.history.columns.context")}
               </TableHead>
-              <TableHead className="w-[19%] px-3.5 text-micro font-semibold tracking-[0.05em] text-caption-foreground">
+              <TableHead className="px-3.5 text-micro font-semibold tracking-[0.05em] text-caption-foreground">
                 {t("shell.ai.history.columns.time")}
               </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            <AiAssistantHistoryPresence>
+            <SurfaceRowPresence>
               {items.map((item, index) => (
-                <AiAssistantHistoryRowMotion
+                <SurfaceRowMotion
                   aria-selected={activeConversationId === item.id}
                   className="group relative h-[4.625rem] border-b border-border-subtle transition-colors last:border-b-0 hover:bg-muted/50 aria-selected:bg-tint-blue-bg motion-reduce:transition-none"
                   index={index}
                   key={item.id}
+                  as="tr"
                 >
                   <TableCell className="max-w-0 px-3.5 py-2.5 whitespace-normal">
                     <button
@@ -174,13 +177,13 @@ function HistoryData({
                   <TableCell className="px-3.5 py-2.5 font-mono text-label-2 tabular-nums text-caption-foreground">
                     {relativeTime(item.updatedAt, renderedAt, t)}
                   </TableCell>
-                </AiAssistantHistoryRowMotion>
+                </SurfaceRowMotion>
               ))}
-            </AiAssistantHistoryPresence>
+            </SurfaceRowPresence>
           </TableBody>
         </Table>
       </div>
-    </AiAssistantMotionProvider>
+    </SurfaceRowMotionProvider>
   );
 }
 
@@ -198,14 +201,14 @@ function ContextTint({ kind }: { kind: AiConversationContextKind }) {
 
 function HistoryLoading() {
   return (
-    <div aria-busy="true" className="overflow-hidden rounded-card border bg-card">
-      <div className="grid h-10 grid-cols-[minmax(0,64fr)_17fr_19fr] items-center border-b bg-background-subtle px-4">
+    <div aria-busy="true" className="min-h-[16.375rem] overflow-hidden rounded-card border bg-card">
+      <div className="grid h-10 grid-cols-[minmax(0,2fr)_minmax(0,0.5fr)_minmax(0,0.5fr)] items-center border-b bg-background-subtle px-4">
         <Skeleton className="h-3 w-16" />
         <Skeleton className="h-3 w-14" />
         <Skeleton className="h-3 w-10" />
       </div>
       {Array.from({ length: 3 }, (_, index) => (
-        <div className="grid h-[4.625rem] grid-cols-[minmax(0,64fr)_17fr_19fr] items-center border-b px-4 last:border-b-0" key={index}>
+        <div className="grid h-[4.625rem] grid-cols-[minmax(0,2fr)_minmax(0,0.5fr)_minmax(0,0.5fr)] items-center border-b px-4 last:border-b-0" key={index}>
           <div className="grid gap-2 pr-5">
             <Skeleton className="h-3.5 w-2/5" />
             <Skeleton className="h-3 w-4/5" />
@@ -221,7 +224,7 @@ function HistoryLoading() {
 function HistoryFailure({ onRetry }: { onRetry: () => void }) {
   const { t } = useI18n();
   return (
-    <div className="grid min-h-64 place-items-center rounded-card border bg-card px-6 py-10 text-center">
+    <div className="grid min-h-[16.375rem] place-items-center overflow-hidden rounded-card border bg-card px-6 py-10 text-center">
       <div className="grid max-w-md justify-items-center gap-3">
         <span className="grid size-11 place-items-center rounded-full bg-tint-crit-bg text-tint-crit-fg">
           <AlertTriangle aria-hidden="true" className="size-5" />
@@ -243,7 +246,7 @@ function HistoryFailure({ onRetry }: { onRetry: () => void }) {
 function HistoryEmpty({ onCreate }: { onCreate: () => void }) {
   const { t } = useI18n();
   return (
-    <div className="grid min-h-64 place-items-center rounded-card border bg-card px-6 py-10 text-center">
+    <div className="grid min-h-[16.375rem] place-items-center overflow-hidden rounded-card border bg-card px-6 py-10 text-center">
       <div className="grid max-w-md justify-items-center gap-3">
         <span className="grid size-11 place-items-center rounded-full bg-tint-blue-bg text-tint-blue-fg">
           <MessageSquareText aria-hidden="true" className="size-5" />

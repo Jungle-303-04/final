@@ -141,13 +141,13 @@ describe("ResourcesPage S9 relationship topology", () => {
     );
 
     expect(await screen.findByRole("article", { name: "Server worker-a" })).toBeTruthy();
-    expect(relationPort.loadRelationTopology).not.toHaveBeenCalled();
+    await waitFor(() => expect(relationPort.loadRelationTopology).toHaveBeenCalledOnce());
     await act(async () => {
       await rendered.router.navigate(
         "/resources?clusters=cluster-1&applications=checkout&view=map",
       );
     });
-    await waitFor(() => expect(relationPort.loadRelationTopology).toHaveBeenCalledOnce());
+    await waitFor(() => expect(relationPort.loadRelationTopology).toHaveBeenCalledTimes(2));
     expect(physicalPort.loadPhysicalTopology).toHaveBeenCalledTimes(2);
     expect(document.querySelector('[data-morph-id="pod:pod:shop/checkout-api-0"]'))
       .toBeTruthy();

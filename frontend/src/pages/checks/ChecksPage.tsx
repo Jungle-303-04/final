@@ -1,19 +1,16 @@
-import { CircleAlert, Settings } from "lucide-react";
+import { CircleAlert, Settings, ShieldCheck } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
-import { Link } from "react-router-dom";
 
 import { useClusterScope } from "../../features/cluster-scope/ClusterScopeProvider";
 import {
   ChecksPortFailure,
   type ChecksClusterScope,
   type ChecksDetailResponse,
-  type ChecksFinding,
   type ChecksOverview,
   type ChecksPort,
   type ChecksScopeCoverage,
 } from "../../features/checks/checksContract";
 import { checksCopy, type ChecksCopy } from "../../features/checks/checksCopy";
-import { alertEventResourceHref } from "../../features/filters/alertEventResourceHref";
 import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
 import { RefreshAction } from "../../motion/RefreshAction";
 import { namespaceSelector, normalizeNamespaceRefs } from "../../features/filters/filterUrlSyntax";
@@ -26,6 +23,8 @@ import { Badge } from "../../shared/ui/primitives/badge";
 import { Button } from "../../shared/ui/primitives/button";
 import { useChecksDetail, useChecksOverview } from "./useChecksData";
 import { ChecksSettingsDialog } from "./ChecksSettingsDialog";
+import { ChecksAvailabilityReasons as AvailabilityReasons } from "./ChecksAvailabilityReasons";
+import { CatalogSection, ChecksSummaryChips, FindingsList, FindingsSection } from "./ChecksOverviewSections";
 
 export function ChecksPage({ port }: { port: ChecksPort }) {
   const copy = useChecksCopy();
@@ -65,12 +64,13 @@ function ChecksReadyPage({
     : [];
   return (
     <ProductPageFrame className="gap-4">
-      <header className="flex min-w-0 flex-wrap items-start justify-between gap-3">
-        <div className="grid min-w-0 gap-1">
-          <h1 className="text-2xl font-semibold tracking-tight">{copy.title}</h1>
-          <p className="max-w-3xl text-sm leading-6 text-muted-foreground">{copy.description}</p>
+      <header className="flex min-w-0 items-center gap-2.5">
+        <ShieldCheck aria-hidden="true" className="size-[1.0625rem] shrink-0 text-primary" />
+        <div className="min-w-0">
+          <h1 className="truncate font-heading text-heading font-extrabold tracking-[-0.02em]">{copy.title}</h1>
+          <p className="sr-only">{copy.description}</p>
         </div>
-        <Button aria-label={copy.settingsAction} onClick={() => setSettingsOpen(true)} variant="outline">
+        <Button aria-label={copy.settingsAction} className="ml-auto shrink-0" onClick={() => setSettingsOpen(true)} size="sm" variant="outline">
           <Settings aria-hidden="true" />{copy.settingsAction}
         </Button>
       </header>
@@ -103,10 +103,14 @@ function ChecksOverviewContent({
   if (frame.phase === "failed") return <ChecksFailureScreen failure={frame.failure} onRefresh={onRefresh} />;
   const overview = frame.data;
   return (
-    <div className="grid min-w-0 gap-4">
-      <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+    <div className="grid min-w-0 gap-3">
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
         <h2 className="sr-only" id="checks-overview-title">{copy.title}</h2>
-        <p className="min-w-0 break-words text-sm text-muted-foreground">{overview.scopeCoverage.observedAt ?? copy.notObserved}</p>
+        <ChecksSummaryChips overview={overview} />
+        <p className="min-w-0 truncate text-caption text-muted-foreground" title={overview.scopeCoverage.observedAt ?? copy.notObserved}>
+          {overview.scopeCoverage.observedAt ?? copy.notObserved}
+        </p>
+        <span className="ml-auto" />
         <RefreshAction
           hasFailed={frame.refreshFailure !== null}
           isRefreshing={frame.refreshing}
@@ -121,7 +125,7 @@ function ChecksOverviewContent({
           }}
         />
       </div>
-      <Surface aria-labelledby="checks-overview-title" className="min-w-0">
+      <Surface aria-labelledby="checks-overview-title" className="min-w-0 overflow-hidden rounded-card">
         {overview.resultSet.availability === "unavailable" ? (
           <UnavailableSection
             icon={<CircleAlert aria-hidden="true" />}
@@ -191,68 +195,6 @@ function ChecksDetailSection({ response }: { response: ChecksDetailResponse }) {
       <FindingsList findings={response.detail.findings} />
       <AvailabilityReasons reasons={response.detail.reasonCodes} />
     </section>
-  );
-}
-
-function FindingsSection({ resultSet }: { resultSet: Extract<ChecksOverview["resultSet"], { availability: "available" | "partial" }> }) {
-  const copy = useChecksCopy();
-  return (
-    <SurfaceSection className="grid min-w-0 gap-3 p-4">
-      <div className="grid min-w-0 gap-1">
-        <h3 className="text-base font-semibold">{copy.resultStatus}</h3>
-        <p className="text-sm text-muted-foreground">{copy.findingCount}: {resultSet.totalFindingCount}</p>
-      </div>
-      {resultSet.checks.length === 0
-        ? <p className="text-sm text-muted-foreground">{copy.noFindings}</p>
-        : <FindingsList findings={resultSet.checks} />}
-      <AvailabilityReasons reasons={resultSet.reasonCodes} />
-    </SurfaceSection>
-  );
-}
-
-function FindingsList({ findings }: { findings: readonly ChecksFinding[] }) {
-  const copy = useChecksCopy();
-  return (
-    <ul className="min-w-0 divide-y" aria-label={copy.resultStatus}>
-      {findings.map((finding) => (
-        <li className="grid min-w-0 gap-2 py-3 first:pt-0 last:pb-0" key={`${finding.clusterId}:${finding.findingId}`}>
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <Badge variant={finding.severity === "danger" ? "destructive" : "secondary"}>{finding.severity}</Badge>
-            <Link
-              className="min-w-0 break-words text-sm font-medium underline-offset-4 hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              to={alertEventResourceHref({
-                cluster: finding.clusterId,
-                kind: finding.resource.kind,
-                name: finding.resource.name,
-                namespace: finding.resource.namespace,
-              })}
-            >
-              {finding.resource.kind}/{finding.resource.name}
-            </Link>
-          </div>
-          <p className="break-words text-sm">{finding.message}</p>
-          <p className="break-words text-xs text-muted-foreground">{finding.clusterId} · {finding.resource.namespace ?? copy.noNamespaces}</p>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function CatalogSection({ catalog }: { catalog: Extract<ChecksOverview["catalog"], { availability: "available" | "partial" }> }) {
-  const copy = useChecksCopy();
-  return (
-    <SurfaceSection className="grid min-w-0 gap-3 p-4">
-      <h3 className="text-base font-semibold">{copy.catalogStatus}</h3>
-      <ul className="min-w-0 divide-y" aria-label={copy.catalogStatus}>
-        {catalog.entries.map((entry) => (
-          <li className="grid min-w-0 gap-1 py-3 first:pt-0 last:pb-0" key={entry.checkId}>
-            <p className="break-words text-sm font-medium">{entry.title}</p>
-            <p className="break-words text-xs text-muted-foreground">{entry.description}</p>
-          </li>
-        ))}
-      </ul>
-      <AvailabilityReasons reasons={catalog.reasonCodes} />
-    </SurfaceSection>
   );
 }
 
@@ -351,29 +293,6 @@ function ScopeRow({ scope }: { scope: ChecksClusterScope }) {
       <Badge variant={scope.freshness === "live" ? "secondary" : "outline"}>{scope.freshness}</Badge>
     </li>
   );
-}
-
-function AvailabilityReasons({ reasons }: { reasons: readonly string[] }) {
-  const copy = useChecksCopy();
-  if (reasons.length === 0) return null;
-  return (
-    <ul className="grid gap-1 pt-1 text-xs text-muted-foreground" aria-label={copy.reasonsLabel}>
-      {humanAvailabilityReasons(reasons, copy).map((reason) => <li key={reason}>{reason}</li>)}
-    </ul>
-  );
-}
-
-function humanAvailabilityReasons(reasons: readonly string[], copy: ChecksCopy): readonly string[] {
-  const messages = new Set<string>();
-  for (const reason of reasons) {
-    if (reason === "authorization_scope_empty") messages.add(copy.scopeReasonAuthorization);
-    else if (reason.startsWith("inventory_snapshot_unavailable:")) messages.add(copy.scopeReasonUnavailable);
-    else if (reason.startsWith("inventory_snapshot_incomplete:") || reason === "agent_snapshot_truncated") messages.add(copy.scopeReasonPartial);
-    else if (reason !== "checks_result_projection_not_integrated" && reason !== "checks_catalog_not_integrated") {
-      messages.add(copy.scopeReasonGeneric);
-    }
-  }
-  return [...messages];
 }
 
 function ChecksFailureScreen({

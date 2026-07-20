@@ -19,6 +19,7 @@ import {
   toHomeFailure,
   type HomeResourceState,
 } from "./homePageStateModel";
+import { acquireHomeRequest } from "./homeRequest";
 
 export interface HomeFleetUsageSummary {
   nodesReady: number;
@@ -50,8 +51,16 @@ export function useHomeClusterCardsData({
   const [fleet, setFleet] = useState<HomeResourceState<HomeFleetSummary>>(HOME_IDLE);
 
   useEffect(() => {
-    const controller = new AbortController();
     let active = true;
+    const sharedRequest = acquireHomeRequest(
+      port,
+      `fleet-summary:r${refreshRevision}`,
+      (signal) => {
+        const loadFleetSummary = port.loadFleetSummary;
+        if (!loadFleetSummary) return Promise.reject(new HomePortFailure("error"));
+        return loadFleetSummary(signal);
+      },
+    );
 
     queueMicrotask(() => {
       if (active) setFleet((current) => startResource(current));
@@ -59,10 +68,8 @@ export function useHomeClusterCardsData({
 
     void (async () => {
       try {
-        const loadFleetSummary = port.loadFleetSummary;
-        if (!loadFleetSummary) throw new HomePortFailure("error");
-        const summary = await loadFleetSummary(controller.signal);
-        if (!active || controller.signal.aborted) return;
+        const summary = await sharedRequest.promise;
+        if (!active) return;
         setFleet(resourceSuccess(summary));
       } catch (error) {
         if (!active || isAbortError(error)) return;
@@ -74,7 +81,7 @@ export function useHomeClusterCardsData({
 
     return () => {
       active = false;
-      controller.abort();
+      sharedRequest.release();
     };
   }, [port, refreshRevision, reportUnauthorized]);
 
@@ -86,8 +93,13 @@ export function useHomeClusterCardsData({
     for (const clusterId of clusterIds) {
       overviews[clusterId] = fleetOverviewState(fleet, summaries[clusterId]);
     }
+    const coverageIncomplete = clusterIds.some((clusterId) => {
+      const coverage = summaries[clusterId]?.coverage;
+      return coverage !== undefined && [coverage.inventory, coverage.cpu, coverage.memory]
+        .some((dimension) => dimension.availability !== "available");
+    });
     return {
-      hasPartialData: Object.values(overviews).some((state) =>
+      hasPartialData: coverageIncomplete || Object.values(overviews).some((state) =>
         state.phase === "failed" ||
         (state.phase === "ready" && (
           state.data.usage === null || state.refreshFailure !== null
@@ -105,14 +117,17 @@ export function projectHomeFleetClusters(
 ): HomeClusterChoice[] {
   return clusters.map((cluster) => {
     const summary = summaries[cluster.id];
+    const inventoryObserved = summary === undefined ||
+      summary.coverage === undefined ||
+      summary.coverage.inventory.availability !== "unavailable";
     return {
       ...cluster,
       health: summary?.health ?? null,
       incidentCount: summary?.openIncidents ?? null,
       lastObservedAt: summary?.observedAt ?? null,
-      nodeCount: summary?.nodesTotal ?? null,
+      nodeCount: inventoryObserved ? summary?.nodesTotal ?? null : null,
       openIncidentCount: summary?.openIncidents ?? null,
-      podCount: summary?.podsTotal ?? null,
+      podCount: inventoryObserved ? summary?.podsTotal ?? null : null,
     };
   });
 }
@@ -153,6 +168,8 @@ function fleetOverviewState(
       new HomePortFailure("invalid-response"),
     );
   }
+  const coverage = summary.coverage;
+  const inventoryObserved = coverage === undefined || coverage.inventory.availability !== "unavailable";
   return {
     phase: "ready",
     data: {
@@ -161,16 +178,20 @@ function fleetOverviewState(
       health: summary.health,
       incidents: [],
       name: summary.name,
-      usage: {
-        cpuPercent: summary.cpuPercent,
-        memoryPercent: summary.memoryPercent,
+      usage: inventoryObserved ? {
+        cpuPercent: coverage === undefined || coverage.cpu.availability !== "unavailable"
+          ? summary.cpuPercent
+          : null,
+        memoryPercent: coverage === undefined || coverage.memory.availability !== "unavailable"
+          ? summary.memoryPercent
+          : null,
         nodesReady: summary.nodesReady,
         nodesTotal: summary.nodesTotal,
         observedAt: summary.observedAt,
         podsRunning: summary.podsRunning,
         podsTotal: summary.podsTotal,
         restartCount: summary.restartCount,
-      },
+      } : null,
       warnings: [],
       workloads: [],
     },

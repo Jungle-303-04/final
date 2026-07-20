@@ -153,7 +153,7 @@ describe("S10 Applications surface", () => {
     });
     await user.click(screen.getByRole("button", { name: "Refresh" }));
     view.unmount();
-    await Promise.resolve();
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
     expect(refreshSignal?.aborted).toBe(true);
   });
 

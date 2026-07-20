@@ -47,6 +47,15 @@ export function AlertEventsPanel({
           tone={data.criticalCount > 0 ? "critical" : "healthy"}
           value={data.criticalCount}
         />
+        {error && data.rows.length > 0 ? (
+          <span className="min-w-0" role="status">
+            <TintChip
+              className="max-w-[min(42vw,24rem)] rounded-full px-[11px] py-[5px] text-label font-semibold"
+              label={t("alerts.list.stale")}
+              tone="warning"
+            />
+          </span>
+        ) : null}
         <span className="ml-auto">
           <RefreshAction
             hasFailed={error !== null}
@@ -67,15 +76,6 @@ export function AlertEventsPanel({
       </div>
 
       {data.inProgress[0] ? <AlertActiveOperation item={data.inProgress[0]} t={t} /> : null}
-
-      {error && data.rows.length > 0 ? (
-        <p
-          className="rounded-card border border-tint-warn-border bg-tint-warn-bg px-3 py-2 text-body text-tint-warn-fg"
-          role="status"
-        >
-          {t("alerts.list.stale")}
-        </p>
-      ) : null}
 
       {error && data.rows.length === 0 ? (
         <FailureState refresh={refresh} />
@@ -102,7 +102,7 @@ function SummaryMetric({ label, tone = "neutral", value }: {
   const { formatNumber } = useI18n();
   return (
     <TintChip
-      className="gap-[5px] rounded-full px-[11px] py-[5px] text-label font-semibold"
+      className="gap-[0.390625rem] rounded-full px-[0.859375rem] py-[0.390625rem] text-label font-semibold"
       label={(
         <span className="inline-flex items-baseline gap-1">
           <span>{label}</span>
@@ -119,7 +119,7 @@ function SummaryMetric({ label, tone = "neutral", value }: {
 function EmptyState({ onRulesSelect }: { onRulesSelect(): void }) {
   const { t } = useI18n();
   return (
-    <Surface aria-label={t("alerts.empty.title")} className="grid min-h-52 place-items-center rounded-card p-8 text-center">
+    <Surface aria-label={t("alerts.empty.title")} className="grid min-h-80 place-items-center rounded-card p-8 text-center">
       <div className="grid max-w-md justify-items-center gap-2">
         <BellRing aria-hidden="true" className="size-6 text-caption-foreground" />
         <p className="font-semibold">{t("alerts.empty.title")}</p>
@@ -135,7 +135,7 @@ function EmptyState({ onRulesSelect }: { onRulesSelect(): void }) {
 function FailureState({ refresh }: { refresh(): void }) {
   const { t } = useI18n();
   return (
-    <Surface aria-label={t("alerts.list.failure")} className="grid min-h-52 place-items-center rounded-card p-8 text-center">
+    <Surface aria-label={t("alerts.list.failure")} className="grid min-h-80 place-items-center rounded-card p-8 text-center">
       <div className="grid max-w-md justify-items-center gap-2">
         <BellRing aria-hidden="true" className="size-6 text-destructive" />
         <p className="font-semibold">{t("alerts.list.failure")}</p>
@@ -151,7 +151,7 @@ function FailureState({ refresh }: { refresh(): void }) {
 function AlertEventsLoading() {
   return (
     <div aria-busy="true" className="grid min-w-0 gap-4">
-      <div className="flex gap-2"><Skeleton className="h-7 w-24 rounded-full" /><Skeleton className="h-7 w-20 rounded-full" /><Skeleton className="h-7 w-20 rounded-full" /></div>
+      <div className="flex gap-2"><Skeleton className="h-9 w-24 rounded-full" /><Skeleton className="h-9 w-20 rounded-full" /><Skeleton className="h-9 w-20 rounded-full" /></div>
       <Skeleton className="h-16 w-full rounded-card" />
       <Skeleton className="h-80 w-full rounded-card" />
     </div>

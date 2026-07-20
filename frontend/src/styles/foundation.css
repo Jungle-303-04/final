@@ -43,6 +43,17 @@
     -webkit-font-smoothing: antialiased;
   }
 
+  [data-slot="product-header"] {
+    contain: layout;
+  }
+
+  [data-slot="product-header-workspace"],
+  [data-slot="product-header-account"],
+  [data-slot="workspace-switcher-trigger"],
+  [data-slot="sidebar-text"] {
+    white-space: nowrap;
+  }
+
   button,
   input,
   select,
@@ -60,6 +71,31 @@
   ::selection {
     color: var(--primary-foreground);
     background: var(--primary);
+  }
+}
+
+@media (min-width: 768px) {
+  html[data-product-sidebar-state="collapsed"] [data-slot="product-shell-loading"] {
+    grid-template-columns: var(--product-sidebar-width-collapsed) minmax(0, 1fr);
+  }
+
+  html[data-product-sidebar-state="expanded"] [data-slot="product-shell-loading"] {
+    grid-template-columns: var(--product-sidebar-width) minmax(0, 1fr);
+  }
+
+  [data-slot="product-shell-loading"] > div > header {
+    height: var(--product-shell-header-height);
+    min-height: var(--product-shell-header-height);
+    flex-wrap: nowrap;
+    overflow: hidden;
+  }
+
+  html[data-product-sidebar-state="collapsed"] [data-slot="product-shell-loading"] > aside {
+    padding-inline: 0.625rem;
+  }
+
+  html[data-product-sidebar-state="collapsed"] [data-slot="product-shell-loading"] > aside > div:first-child > :last-child {
+    display: none;
   }
 }
 

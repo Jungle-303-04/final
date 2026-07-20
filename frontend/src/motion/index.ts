@@ -43,3 +43,8 @@ export {
   RECHARTS_EASE_DRAW,
   listStaggerDelay,
 } from "./transitions";
+export {
+  SurfaceRowMotion,
+  SurfaceRowMotionProvider,
+  SurfaceRowPresence,
+} from "./SurfaceRowMotion";

@@ -148,7 +148,7 @@ export const resourcesKo = {
   "resources.graph.relations.freshness.refreshFailed": "갱신에 실패해 마지막 검증 관측을 표시함",
   "resources.graph.view.aria": "리소스 보기 방식",
   "resources.graph.view.physical": "서버 배치",
-  "resources.graph.view.relations": "관계", "resources.surface.view.aria": "리소스 관점", "resources.surface.view.map": "지도", "resources.surface.view.list": "목록", "resources.surface.view.flow": "흐름", "resources.surface.flow.scope": "서비스 호출 관점 — 전체 클러스터",
+  "resources.graph.view.relations": "관계", "resources.surface.view.aria": "리소스 관점", "resources.surface.view.map": "인프라", "resources.surface.view.list": "쿠버네티스", "resources.surface.view.flow": "트래픽", "resources.surface.flow.scope": "서비스 호출 관점 — 전체 클러스터",
   "resources.graph.collapse": "그래프 접기",
   "resources.graph.expand": "그래프 펼치기",
   "resources.graph.resize": "그래프 높이 조절",

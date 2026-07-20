@@ -13,6 +13,7 @@ import {
   ResourcesPortFailure,
   type ResourcesPortFailure as ResourcesPortFailureType,
 } from "../../features/resources/resourcesContract";
+import { acquireSharedRequest } from "../../shared/data/sharedRequest";
 
 export type RelationTopologyFrame =
   | { phase: "idle"; data: null; failure: null; refreshFailure: null; refreshing: false; updatedAt: 0 }
@@ -29,6 +30,7 @@ export function useRelationTopologyDataFrame(input: {
 }): RelationTopologyFrame {
   const { active, filterState, port, reportUnauthorized, revision } = input;
   const requestSequence = useRef(0);
+  const reportUnauthorizedRef = useRef(reportUnauthorized);
   const [refreshTick, setRefreshTick] = useState(0);
   const filterKey = useMemo(
     () => serializeProductFilterUrl(filterState),
@@ -39,23 +41,35 @@ export function useRelationTopologyDataFrame(input: {
     [filterKey],
   );
   const scope = active ? filterKey : null;
+  const requestKey = scope === null
+    ? null
+    : JSON.stringify([scope, revision, refreshTick]);
   const [record, setRecord] = useState<{
     scope: string | null;
     frame: RelationTopologyFrame;
   }>({ scope: null, frame: idleFrame() });
 
   useEffect(() => {
+    reportUnauthorizedRef.current = reportUnauthorized;
+  }, [reportUnauthorized]);
+
+  useEffect(() => {
     const requestId = ++requestSequence.current;
-    if (scope === null) return undefined;
-    const controller = new AbortController();
+    if (scope === null || requestKey === null) return undefined;
+    let activeRequest = true;
+    const request = acquireSharedRequest(
+      port,
+      `relation-topology:${requestKey}`,
+      (signal) => port.loadRelationTopology(requestState, {}, signal),
+    );
     queueMicrotask(() => {
-      if (controller.signal.aborted || requestSequence.current !== requestId) return;
+      if (!activeRequest || requestSequence.current !== requestId) return;
       setRecord((current) => current.scope === scope && current.frame.phase === "ready"
         ? { scope, frame: { ...current.frame, refreshFailure: null, refreshing: true } }
         : { scope, frame: loadingFrame() });
     });
-    void port.loadRelationTopology(requestState, {}, controller.signal).then((data) => {
-      if (controller.signal.aborted || requestSequence.current !== requestId) return;
+    void request.promise.then((data) => {
+      if (!activeRequest || requestSequence.current !== requestId) return;
       setRecord({
         scope,
         frame: {
@@ -68,11 +82,11 @@ export function useRelationTopologyDataFrame(input: {
         },
       });
     }).catch((error: unknown) => {
-      if (controller.signal.aborted || requestSequence.current !== requestId) return;
+      if (!activeRequest || requestSequence.current !== requestId || isAbortError(error)) return;
       const failure = error instanceof ResourcesPortFailure
         ? error
         : new ResourcesPortFailure("error");
-      if (failure.code === "unauthorized") reportUnauthorized();
+      if (failure.code === "unauthorized") reportUnauthorizedRef.current();
       setRecord((current) => current.scope === scope && current.frame.phase === "ready"
         ? { scope, frame: { ...current.frame, refreshFailure: failure, refreshing: false } }
         : {
@@ -87,8 +101,11 @@ export function useRelationTopologyDataFrame(input: {
           },
         });
     });
-    return () => controller.abort();
-  }, [port, refreshTick, reportUnauthorized, requestState, revision, scope]);
+    return () => {
+      activeRequest = false;
+      request.release();
+    };
+  }, [port, requestKey, requestState, scope]);
 
   const refreshAfterSeconds = record.scope === scope && record.frame.phase === "ready"
     ? record.frame.data.refreshAfterSeconds
@@ -130,4 +147,8 @@ function loadingFrame(): RelationTopologyFrame {
     refreshing: false,
     updatedAt: 0,
   };
+}
+
+function isAbortError(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "name" in error && error.name === "AbortError";
 }

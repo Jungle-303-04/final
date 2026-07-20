@@ -31,12 +31,12 @@ describe("ResourcesPage view contract", () => {
     expect(await screen.findByRole("table", { name: "Resource list" })).toBeTruthy();
     expect(document.querySelector('[data-slot="resources-graph-shell"]')).toBeNull();
 
-    await user.click(screen.getByRole("button", { name: "Map" }));
+    await user.click(screen.getByRole("button", { name: "Infrastructure" }));
     expect(await screen.findByRole("button", { name: "Include inactive resources" })).toBeTruthy();
     expect(screen.queryByRole("table", { name: "Resource list" })).toBeNull();
     expect(rendered.router.state.location.search).toContain("view=map");
 
-    await user.click(screen.getByRole("button", { name: "List" }));
+    await user.click(screen.getByRole("button", { name: "Kubernetes" }));
     expect(await screen.findByRole("table", { name: "Resource list" })).toBeTruthy();
     expect(document.querySelector('[data-slot="resources-graph-shell"]')).toBeNull();
     expect(rendered.router.state.location.search).not.toContain("resources.view");
@@ -70,6 +70,7 @@ describe("ResourcesPage view contract", () => {
     expect(await screen.findByRole("region", { name: "Flow map" })).toBeTruthy();
     expect(screen.queryByRole("table", { name: "Resource list" })).toBeNull();
     expect(document.querySelector('[data-slot="resources-graph-shell"]')).toBeNull();
+    expect(document.querySelector('[data-slot="resources-traffic-relationship-panel"]')).not.toBeNull();
     await waitFor(() => {
       expect(trafficPort.getOverview).toHaveBeenCalledWith(
         expect.objectContaining({ clusterIds: [], namespaces: [] }),
@@ -82,6 +83,7 @@ describe("ResourcesPage view contract", () => {
     });
     expect(rendered.router.state.location.search).toContain("clusters=cluster-1");
     expect(rendered.router.state.location.search).toContain("namespaces=cluster-1%2Fshop");
+    await user.click(screen.getByText("Traffic sources", { selector: "summary span" }));
     expect(await screen.findByText("Hubble")).toBeTruthy();
 
     await user.click(screen.getByRole("button", { name: "Connect Hubble" }));
@@ -171,6 +173,7 @@ function trafficFlowPort(): TrafficPort {
         facets: { protocols: [], verdicts: [] },
         reasonCodes: [],
       },
+      serviceMetrics: [],
       refreshAfterSeconds: 30,
     }),
     getSources: vi.fn().mockResolvedValue({

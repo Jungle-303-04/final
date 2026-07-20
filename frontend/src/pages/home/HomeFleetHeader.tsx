@@ -59,11 +59,14 @@ export function HomeFleetHeader({
   );
 
   return (
-    <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-6 2xl:flex-nowrap 2xl:gap-y-2">
+    <div
+      className="-mb-0.5 grid min-w-0 grid-cols-1 items-center gap-x-3 gap-y-6 min-[1600px]:mb-0.5 min-[1600px]:grid-cols-[minmax(0,1fr)_auto] min-[1600px]:gap-y-2"
+      data-slot="home-fleet-header"
+    >
       <h1 className="sr-only">{t("home.cluster.available")}</h1>
       <div
         aria-label={t("home.cluster.grid.aria")}
-        className="flex min-w-0 flex-wrap items-center gap-2 2xl:flex-nowrap"
+        className="scrollbar-thin flex min-w-0 flex-nowrap items-center gap-2 overflow-x-auto overscroll-x-contain pb-0.5"
         role="group"
       >
         <FleetMetric
@@ -101,7 +104,7 @@ export function HomeFleetHeader({
           criticalChip
         )}
       </div>
-      <div className="ml-auto flex w-full min-w-0 flex-wrap items-center justify-end gap-2 2xl:w-auto 2xl:flex-nowrap">
+      <div className="flex min-w-0 flex-nowrap items-center justify-end gap-2 overflow-x-auto overscroll-x-contain">
         {freshness ? <div className="shrink-0">{freshness}</div> : null}
         {period && onPeriodChange ? (
           <ButtonGroup aria-label={t("timeline.strip.range")} className="rounded-lg bg-muted p-0.5">
@@ -162,7 +165,7 @@ function FleetMetric({ icon, label, tone = "neutral", value }: {
 }) {
   return (
     <TintChip
-      className="gap-[5px] rounded-full px-[11px] py-[5px] text-label font-semibold"
+      className="shrink-0 gap-[5px] whitespace-nowrap rounded-full px-[11px] py-[5px] text-label font-semibold"
       icon={<span className="text-caption-foreground [&_svg]:size-[11px]">{icon}</span>}
       label={<span className="inline-flex items-baseline gap-1"><span>{label}</span><strong className="font-mono text-label font-bold tabular-nums text-foreground">{value}</strong></span>}
       tone={tone}

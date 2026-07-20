@@ -39,16 +39,16 @@ export function ProductPrimarySidebar({
   return (
     <Sidebar
       aria-label={t("shell.menu.label")}
-      className="gap-0 px-[0.625rem] pb-3 pt-3.5"
+      className="gap-0 px-[0.78125rem] pb-[0.9375rem] pt-[1.09375rem]"
       id="product-sidebar"
       mobileCloseLabel={t("shell.menu.mobileClose")}
       mobileDescription={t("shell.menu.mobileDescription")}
       mobileTitle={t("shell.menu.mobileTitle")}
     >
-      <SidebarHeader className="h-14 flex-row items-start gap-2 border-b-0 px-[0.15625rem] pb-4 pt-[0.21875rem]">
+      <SidebarHeader className="h-[3.28125rem] flex-row items-start gap-2 border-b-0 px-0 pb-5 pt-0">
         <Link
           aria-label={t("shell.brand.landing", { route: t(navLabelKeys[landingRoute.id]) })}
-          className="flex min-w-0 flex-1 items-center gap-[0.6875rem] rounded-[var(--product-radius-md)] px-[0.3125rem] outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring group-data-[state=collapsed]/sidebar:justify-center group-data-[state=collapsed]/sidebar:px-0"
+          className="flex min-w-0 flex-1 items-center gap-[0.859375rem] rounded-[var(--product-radius-md)] px-[0.3125rem] outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring group-data-[state=collapsed]/sidebar:justify-center group-data-[state=collapsed]/sidebar:px-0"
           to={filter.navigationHref(landingRoute.path)}
         >
           <span className="grid size-[2.03125rem] shrink-0 place-items-center rounded-[0.625rem] bg-gradient-to-br from-primary to-brand-accent text-sidebar-primary-foreground">
@@ -66,13 +66,14 @@ export function ProductPrimarySidebar({
           className="flex-1 px-[0.15625rem] py-0"
           id="product-primary-navigation"
         >
-          <SidebarMenu>
+          <SidebarMenu className="gap-px">
             {primaryNavigationRoutes.map((routeDefinition) => {
               const Icon = routeIcons[routeDefinition.icon];
               const label = t(navLabelKeys[routeDefinition.id]);
               return (
                 <SidebarMenuItem key={routeDefinition.id}>
                   <SidebarMenuLink
+                    className="h-[2.7734375rem]"
                     isActive={currentRouteId === routeDefinition.id}
                     to={filter.navigationHref(routeDefinition.path)}
                     tooltip={label}
@@ -93,9 +94,10 @@ export function ProductPrimarySidebar({
             aria-label={t("shell.nav.settings")}
             className="flex-none overflow-visible p-0"
           >
-            <SidebarMenu>
+            <SidebarMenu className="gap-px">
               <SidebarMenuItem>
                 <SidebarMenuLink
+                  className="h-[2.7734375rem]"
                   isActive={currentRouteId === settingsRoute.id}
                   to={filter.navigationHref(settingsRoute.path)}
                   tooltip={t(navLabelKeys[settingsRoute.id])}
@@ -109,7 +111,7 @@ export function ProductPrimarySidebar({
         ) : null}
         {!isMobile ? (
           <ProductSidebarTrigger
-            className="h-(--product-navigation-row-height) gap-[0.859375rem] rounded-[var(--product-radius-md)] px-[0.796875rem] text-[length:var(--type-body)] leading-[var(--type-body-line)] font-semibold text-muted-foreground aria-expanded:bg-transparent aria-expanded:text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            className="h-[2.7734375rem] gap-[0.859375rem] rounded-[var(--product-radius-md)] px-[0.796875rem] text-[length:var(--type-body)] leading-[var(--type-body-line)] font-semibold text-muted-foreground aria-expanded:bg-transparent aria-expanded:text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
           />
         ) : null}
       </SidebarFooter>

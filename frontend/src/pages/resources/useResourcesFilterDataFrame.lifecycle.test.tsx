@@ -55,7 +55,9 @@ describe("useResourcesFilterDataFrame lifecycle", () => {
     rendered.rerender({ current: { ...rendered.input, filterState: FILTER_STATE_B } });
     await waitFor(() => expect(signals).toHaveLength(6));
     await act(flushEffects);
-    expect(signals.slice(0, 3).every((signal) => signal.aborted)).toBe(true);
+    await waitFor(() => {
+      expect(signals.slice(0, 3).every((signal) => signal.aborted)).toBe(true);
+    });
     expect(rendered.result.current.list.phase).toBe("ready");
     expect(rendered.result.current.list.data?.items[0]?.resource.name).toBe("orders-api-0");
 
@@ -96,7 +98,7 @@ describe("useResourcesFilterDataFrame lifecycle", () => {
     rendered.unmount();
     await flushEffects();
 
-    expect(signals.every((signal) => signal.aborted)).toBe(true);
+    await waitFor(() => expect(signals.every((signal) => signal.aborted)).toBe(true));
     expect(port.listResourcePage).toHaveBeenCalledOnce();
     expect(port.listFacetPage).toHaveBeenCalledOnce();
     expect(port.listLabelFacetPage).toHaveBeenCalledOnce();

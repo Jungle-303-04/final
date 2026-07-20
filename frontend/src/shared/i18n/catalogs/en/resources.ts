@@ -148,7 +148,7 @@ export const resourcesEn = {
   "resources.graph.relations.freshness.refreshFailed": "Refresh failed; showing last verified observation",
   "resources.graph.view.aria": "Topology view",
   "resources.graph.view.physical": "Physical",
-  "resources.graph.view.relations": "Relations", "resources.surface.view.aria": "Resource view", "resources.surface.view.map": "Map", "resources.surface.view.list": "List", "resources.surface.view.flow": "Flow", "resources.surface.flow.scope": "Service calls — all clusters",
+  "resources.graph.view.relations": "Relations", "resources.surface.view.aria": "Resource view", "resources.surface.view.map": "Infrastructure", "resources.surface.view.list": "Kubernetes", "resources.surface.view.flow": "Traffic", "resources.surface.flow.scope": "Service calls — all clusters",
   "resources.graph.collapse": "Collapse graph",
   "resources.graph.expand": "Expand graph",
   "resources.graph.resize": "Resize graph height",

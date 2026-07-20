@@ -58,7 +58,7 @@ describe("ProductApp authenticated runtime boundary", () => {
       </StrictMode>,
     );
 
-    expect(await screen.findByRole("heading", { name: "Sign in to Opsia" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Sign in to Kyro" })).toBeTruthy();
     expect(authenticatedRuntimeMock.evaluations).toBe(0);
   });
 });

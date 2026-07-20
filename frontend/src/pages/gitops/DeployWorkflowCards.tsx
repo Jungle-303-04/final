@@ -45,7 +45,10 @@ export function WorkflowPreview({
   const { formatDate, t } = useI18n();
   const repositories = repositoriesForPlan(plan, applications);
   return (
-    <Surface aria-label={t("workflows.plan.open", { name: plan.name })} className="min-w-0 p-4">
+    <Surface
+      aria-label={t("workflows.plan.open", { name: plan.name })}
+      className="min-w-0 animate-in p-[1.171875rem] fade-in-0 slide-in-from-bottom-1 duration-(--motion-soft) ease-(--ease-soft) motion-reduce:animate-none"
+    >
       <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
         <GitBranch aria-hidden="true" className="size-4 shrink-0 text-primary" />
         <strong className="min-w-0 truncate text-body-strong font-bold">{plan.name}</strong>
@@ -110,7 +113,7 @@ export function WorkflowEditor({
     return application;
   };
   return (
-    <Surface aria-label={t("workflows.editor.title")} className="min-w-0 p-4">
+    <Surface aria-label={t("workflows.editor.title")} className="min-w-0 p-[1.171875rem]">
       <div className="flex min-w-0 flex-wrap items-center gap-2.5">
         <GitBranch aria-hidden="true" className="size-4 shrink-0 text-primary" />
         <Input
@@ -166,7 +169,7 @@ export function WorkflowCreation({ page }: { page: ReturnType<typeof useGitOpsPa
     return application;
   };
   return (
-    <Surface aria-label={t("workflows.plan.new")} className="min-w-0 p-4">
+    <Surface aria-label={t("workflows.plan.new")} className="min-w-0 p-[1.171875rem]">
       <div className="flex min-w-0 flex-wrap items-center gap-2.5">
         <GitBranch aria-hidden="true" className="size-4 shrink-0 text-primary" />
         <Input

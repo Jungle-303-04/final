@@ -96,11 +96,25 @@ export interface TrafficObservedRelationships {
   reasonCodes: readonly string[];
 }
 
+export interface TrafficServiceMetric {
+  availability: TrafficAvailability;
+  clusterId: string;
+  namespace: string | null;
+  service: string;
+  ratePerSecond: number | null;
+  rateUnit: "requests" | "flows" | null;
+  errorRatePercent: number | null;
+  observedAt: string;
+  sourceKeys: readonly string[];
+  reasonCodes: readonly string[];
+}
+
 export interface TrafficOverview {
   scopeCoverage: TrafficScopeCoverage;
   observation: TrafficObservedObservation | TrafficUnavailableObservation;
   summary: TrafficObservedSummary | TrafficUnavailableSummary;
   relationships: TrafficObservedRelationships | TrafficUnavailableRelationships;
+  serviceMetrics: readonly TrafficServiceMetric[];
   refreshAfterSeconds: number;
 }
 

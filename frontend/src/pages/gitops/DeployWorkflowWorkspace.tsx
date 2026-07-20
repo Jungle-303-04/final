@@ -88,7 +88,7 @@ export function DeployWorkflowWorkspace({ port }: { port: GitOpsPort }) {
         />
       ))}
       <button
-        className="flex min-h-14 min-w-0 items-center justify-center gap-2 rounded-card border border-dashed bg-transparent px-4 text-label-2 font-bold text-primary transition-[border-color,background-color] duration-(--motion-fade) hover:border-primary/50 hover:bg-tint-blue-bg focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none motion-reduce:transition-none"
+        className="flex min-h-[4.0625rem] min-w-0 items-center justify-center gap-2 rounded-card border border-dashed bg-transparent px-4 text-label-2 font-bold text-primary transition-[border-color,background-color] duration-(--motion-fade) hover:border-primary/50 hover:bg-tint-blue-bg focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none motion-reduce:transition-none"
         onClick={page.beginCreate}
         type="button"
       >

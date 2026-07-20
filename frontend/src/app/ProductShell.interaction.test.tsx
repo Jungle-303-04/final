@@ -15,6 +15,7 @@ import {
   testAuth,
   testClusterScope,
 } from "./__tests__/ProductShellInteractionSupport";
+import { PRODUCT_SIDEBAR_STORAGE_KEY } from "./productShellLayout";
 
 const testAuthPort: AuthPort = {
   listWorkspaces: async () => ({ currentWorkspaceId: "test", items: [] }),
@@ -26,11 +27,17 @@ const testAuthPort: AuthPort = {
 
 beforeEach(() => {
   installMatchMedia(false);
+  vi.stubGlobal("ResizeObserver", class {
+    disconnect() {}
+    observe() {}
+    unobserve() {}
+  });
 });
 
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
+  vi.unstubAllGlobals();
   document.documentElement.className = "";
   window.localStorage.clear();
 });
@@ -44,6 +51,8 @@ describe("ProductShell shell layout and release boundary interaction", () => {
     const collapse = screen.getByRole("button", { name: "사이드바 접기" });
 
     expect(sidebar.getAttribute("data-state")).toBe("expanded");
+    expect(home.className).toContain("h-[2.7734375rem]");
+    expect(collapse.className).toContain("h-[2.7734375rem]");
     await user.hover(home);
     expect(screen.queryByRole("tooltip")).toBeNull();
     await user.click(collapse);
@@ -53,6 +62,7 @@ describe("ProductShell shell layout and release boundary interaction", () => {
     expect(document.activeElement).toBe(expand);
     expect(expand.getAttribute("aria-expanded")).toBe("false");
     expect(sidebar.getAttribute("data-state")).toBe("collapsed");
+    expect(window.localStorage.getItem(PRODUCT_SIDEBAR_STORAGE_KEY)).toBe("collapsed");
     expect(screen.getByRole("link", { name: "홈" })).toBe(home);
     expect(container.querySelectorAll("[data-slot='sidebar-menu-link']")).toHaveLength(2);
 
@@ -100,7 +110,7 @@ describe("ProductShell shell layout and release boundary interaction", () => {
     expect(screen.getByRole("link", { name: "홈" })).toBeTruthy();
     expect(container.querySelectorAll("[data-slot='unified-filter-bar']")).toHaveLength(1);
     expect(sidebar.className).toContain("--motion-layout");
-    expect(screen.getByText("Opsia").className.split(/\s+/u)).not.toContain("w-0");
+    expect(screen.getByText("Kyro").className.split(/\s+/u)).not.toContain("w-0");
 
     await user.click(screen.getByRole("link", { name: "홈" }));
     expect(sidebar.getAttribute("data-state")).toBe("expanded");
@@ -152,6 +162,49 @@ describe("ProductShell shell layout and release boundary interaction", () => {
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+
+  it("toggles the resource namespace selector and restores its focus with Escape", async () => {
+    const user = userEvent.setup();
+    renderShell({
+      globalFilterPort: { search: vi.fn().mockResolvedValue([]) },
+      initialEntry: "/resources?clusters=cluster-1&namespaces=cluster-1%2Fshop&view=map",
+      releasedSurfaceIds: new Set(["home", "resources"]),
+    });
+    const namespace = screen.getByRole("button", { name: "shop" });
+
+    await user.click(namespace);
+    expect(await screen.findByRole("dialog")).toBeTruthy();
+    expect(namespace.getAttribute("aria-expanded")).toBe("true");
+
+    await user.click(namespace);
+    await waitFor(() => expect(screen.getByRole("dialog").hasAttribute("data-closed")).toBe(true));
+    expect(namespace.getAttribute("aria-expanded")).toBe("false");
+
+    await user.click(namespace);
+    await waitFor(() => expect(screen.getByRole("dialog").hasAttribute("data-open")).toBe(true));
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.getByRole("dialog").hasAttribute("data-closed")).toBe(true));
+    expect(document.activeElement).toBe(namespace);
+  });
+
+  it("clears dependent namespaces when the resource cluster selector chooses all", async () => {
+    const user = userEvent.setup();
+    renderShell({
+      globalFilterPort: { search: vi.fn().mockResolvedValue([]) },
+      initialEntry: "/resources?clusters=cluster-1&namespaces=cluster-1%2Fshop&view=map",
+      releasedSurfaceIds: new Set(["home", "resources"]),
+    });
+
+    await user.click(screen.getByRole("button", { name: "cluster-1" }));
+    expect(await screen.findByRole("dialog")).toBeTruthy();
+    await user.keyboard("{Home}{Enter}");
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "전체 클러스터" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "모든 네임스페이스" })).toBeTruthy();
+    });
+    expect(screen.queryByRole("button", { name: "shop" })).toBeNull();
   });
 
   it("keeps the narrow header tab order aligned with its visual menu, controls, and filter rows", () => {

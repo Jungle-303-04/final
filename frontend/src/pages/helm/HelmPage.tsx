@@ -48,6 +48,7 @@ import {
 import { RefreshAction } from "../../motion/RefreshAction";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
+import { Surface } from "../../shared/ui/Surface";
 import { useI18n } from "../../shared/i18n";
 import { UnifiedDiff } from "../../shared/ui/UnifiedDiff";
 import { Badge } from "../../shared/ui/primitives/badge";
@@ -283,28 +284,30 @@ function HelmReleaseTable({
     return <EmptyReleaseList />;
   }
   return (
-    <Table scrollAreaLabel={copy.title}>
-      <TableHeader>
-        <TableRow>
-          <TableHead>{copy.releaseName}</TableHead>
-          <TableHead>{copy.chart}</TableHead>
-          <TableHead>{copy.chart} {t("applications.version")}</TableHead>
-          <TableHead>{t("applications.applicationScope")} {t("applications.version")}</TableHead>
-          <TableHead>{copy.namespace}</TableHead>
-          <TableHead>{copy.status}</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {releases.map((release) => (
-          <ReleaseRow
-            key={`${release.scope.clusterId}:${release.storageNamespace}:${release.name}:${release.storage.uid}`}
-            onOpen={() => onOpen(release)}
-            release={release}
-            upgrade={upgrades[releaseUpgradeKey(release)] ?? null}
-          />
-        ))}
-      </TableBody>
-    </Table>
+    <Surface aria-label={copy.title} className="min-w-0 overflow-hidden">
+      <Table className="min-w-[58rem] table-fixed" scrollAreaLabel={copy.title}>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="w-[18%] px-4 text-micro font-semibold tracking-[0.05em] text-caption-foreground">{copy.releaseName}</TableHead>
+            <TableHead className="w-[24%] px-4 text-micro font-semibold tracking-[0.05em] text-caption-foreground">{copy.chart}</TableHead>
+            <TableHead className="w-[16%] px-4 text-micro font-semibold tracking-[0.05em] text-caption-foreground">{copy.chart} {t("applications.version")}</TableHead>
+            <TableHead className="w-[14%] px-4 text-micro font-semibold tracking-[0.05em] text-caption-foreground">{t("applications.applicationScope")} {t("applications.version")}</TableHead>
+            <TableHead className="w-[16%] px-4 text-micro font-semibold tracking-[0.05em] text-caption-foreground">{copy.namespace}</TableHead>
+            <TableHead className="w-[12%] px-4 text-micro font-semibold tracking-[0.05em] text-caption-foreground">{copy.status}</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {releases.map((release) => (
+            <ReleaseRow
+              key={`${release.scope.clusterId}:${release.storageNamespace}:${release.name}:${release.storage.uid}`}
+              onOpen={() => onOpen(release)}
+              release={release}
+              upgrade={upgrades[releaseUpgradeKey(release)] ?? null}
+            />
+          ))}
+        </TableBody>
+      </Table>
+    </Surface>
   );
 }
 
@@ -328,14 +331,15 @@ function ReleaseRow({
   return (
     <TableRow
       aria-label={t("helm.ui.openRelease", { name: release.name })}
+      className="cursor-pointer animate-in fade-in-0 slide-in-from-bottom-1 duration-(--motion-soft) ease-(--ease-soft) focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none motion-reduce:animate-none"
       onClick={onOpen}
       onKeyDown={onKeyDown}
       role="button"
       tabIndex={0}
     >
-      <TableCell className="max-w-56 truncate font-medium">{release.name}</TableCell>
-      <TableCell className="max-w-48 truncate text-muted-foreground">{release.chart ?? copy.unavailableValue}</TableCell>
-      <TableCell>
+      <TableCell className="max-w-56 truncate px-4 py-3 font-mono font-semibold">{release.name}</TableCell>
+      <TableCell className="max-w-48 truncate px-4 py-3 font-mono text-caption-foreground">{release.chart ?? copy.unavailableValue}</TableCell>
+      <TableCell className="px-4 py-3">
         <span className="flex min-w-0 flex-wrap items-center gap-1.5">
           <span className="font-mono text-caption-2 text-muted-foreground">
             {release.chartVersion ?? copy.unavailableValue}
@@ -343,9 +347,9 @@ function ReleaseRow({
           <UpgradeAvailability info={upgrade} />
         </span>
       </TableCell>
-      <TableCell className="font-mono text-caption-2 text-muted-foreground">{release.appVersion ?? copy.unavailableValue}</TableCell>
-      <TableCell className="max-w-40 truncate text-muted-foreground">{release.storageNamespace}</TableCell>
-      <TableCell><StatusBadge status={release.status} /></TableCell>
+      <TableCell className="px-4 py-3 font-mono text-caption-2 text-caption-foreground">{release.appVersion ?? copy.unavailableValue}</TableCell>
+      <TableCell className="max-w-40 truncate px-4 py-3 font-mono text-caption-foreground">{release.storageNamespace}</TableCell>
+      <TableCell className="px-4 py-3"><StatusBadge status={release.status} /></TableCell>
     </TableRow>
   );
 }

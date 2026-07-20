@@ -4,6 +4,7 @@ import {
   useMemo,
   useRef,
 } from "react";
+import { Clock } from "lucide-react";
 import { useI18n, type I18nController } from "../../shared/i18n";
 import type { MessageKey } from "../../shared/i18n/types";
 import { ProductFloatingActionAvoidance } from "../../shared/ui/ProductFloatingActionAvoidance";
@@ -121,12 +122,11 @@ export function TimelineSurface({
   const timeline = useTimelineDataFrame(port, query);
 
   return (
-    <ProductPageFrame>
-      <header className="grid min-w-0 gap-1">
-        <h2 className="text-2xl font-semibold tracking-tight">{t("timeline.title")}</h2>
-        <p className="max-w-2xl text-sm text-muted-foreground">
-          {t("timeline.description")}
-        </p>
+    <ProductPageFrame className="gap-4">
+      <header className="flex min-w-0 items-center gap-2.5">
+        <Clock aria-hidden="true" className="size-[1.0625rem] shrink-0 text-primary" />
+        <h2 className="min-w-0 truncate font-heading text-heading font-extrabold tracking-[-0.02em]">{t("timeline.title")}</h2>
+        <p className="sr-only">{t("timeline.description")}</p>
       </header>
       <TimelineToolbar
         capabilities={capabilities}
@@ -260,11 +260,11 @@ function TimelineDataBoundary({
   viewMode: TimelineViewMode;
 }) {
   if (frame.phase === "loading") {
-    return <p aria-live="polite" className="rounded-xl border bg-card p-6 text-sm text-muted-foreground" role="status">{t("timeline.loading")}</p>;
+    return <p aria-live="polite" className="grid min-h-64 place-items-center rounded-card border bg-card p-6 text-sm text-muted-foreground" role="status">{t("timeline.loading")}</p>;
   }
   if (frame.phase === "failed") {
     return (
-      <section className="grid gap-3 rounded-xl border border-destructive/40 bg-destructive/5 p-6" role="alert">
+      <section className="grid min-h-64 content-center gap-3 rounded-card border border-destructive/40 bg-destructive/5 p-6" role="alert">
         <div>
           <h3 className="font-semibold">{t("timeline.error.title")}</h3>
           <p className="mt-1 text-sm text-muted-foreground">{t("timeline.error.description")}</p>
@@ -480,7 +480,7 @@ function TimelineEmptyState({
     : hasAppliedFilters(filters)
       ? "timeline.empty.filtered"
       : "timeline.empty.quiet";
-  return <p className="rounded-xl border bg-card p-6 text-sm text-muted-foreground">{t(key)}</p>;
+  return <p className="grid min-h-64 place-items-center rounded-card border bg-card p-6 text-center text-sm text-muted-foreground">{t(key)}</p>;
 }
 
 function hasAppliedFilters(filters: TimelineQuery["filters"]): boolean {

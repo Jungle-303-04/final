@@ -9,6 +9,7 @@ export function PopoverTrigger(props: PopoverPrimitive.Trigger.Props) {
 
 export function PopoverContent({
   align = "center",
+  anchor,
   children,
   className,
   keepMounted = false,
@@ -17,7 +18,7 @@ export function PopoverContent({
   ...props
 }: PopoverPrimitive.Popup.Props & Pick<
   PopoverPrimitive.Positioner.Props,
-  "align" | "side" | "sideOffset"
+  "align" | "anchor" | "side" | "sideOffset"
 > & {
   keepMounted?: boolean;
 }) {
@@ -25,6 +26,7 @@ export function PopoverContent({
     <PopoverPrimitive.Portal keepMounted={keepMounted}>
       <PopoverPrimitive.Positioner
         align={align}
+        anchor={anchor}
         className="isolate z-50"
         side={side}
         sideOffset={sideOffset}
