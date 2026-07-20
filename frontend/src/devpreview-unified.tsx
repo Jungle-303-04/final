@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { OpsiaMap, HomeClusterSection, podInventory, nodeInventory, repoInventory, svcCatalog } from "./devpreview-opsia";
 import { WidgetFrame, KpiValue, RatioBar, MiniBars, Donut, RankList, MultiLine, MiniTimeline, RingGauge } from "./devpreview/widgets";
-import { DeploySurface, IssuesSurface, TimelineSurface, ChecksSurface, CostSurface, SettingsSurface, AlertsSurface, AiHistorySurface, costModel, timelineItems } from "./devpreview-surfaces";
+import { DeploySurface, IssuesSurface, TimelineSurface, ChecksSurface, CostSurface, SettingsSurface, AlertsSurface, AiHistorySurface, IssueDetail, costModel, timelineItems, type RcaIncident } from "./devpreview-surfaces";
 import { AiPanel } from "./devpreview-ai";
 import { onAction, type DemoAction } from "./devpreview/bus";
 import { ConnectWizard } from "./devpreview-connect";
@@ -1471,6 +1471,7 @@ function App() {
   const [nsOpen, setNsOpen] = useState(false);
   const [meOpen, setMeOpen] = useState(false); // 계정 메뉴 (헤더 맨 오른쪽, D20)
   const [detail, setDetail] = useState<{ kind: Kind; row: Row } | null>(null);
+  const [rcaIncident, setRcaIncident] = useState<RcaIncident | null>(null); // 이슈 RCA 사이드바 — 셸 레벨 렌더(transform 조상 밖)
   const [navCollapsed, setNavCollapsed] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const [aiW, setAiW] = useState(440);                 // 실제 제품처럼 리사이즈 가능한 도킹 폭
@@ -1776,7 +1777,7 @@ function App() {
       ) : surface === "deploy" ? (
         <DeploySurface pendingRepos={pendingRepo} onOpenRef={openRef} onAddRepo={() => setConnectModal("repo")} />
       ) : surface === "issues" ? (
-        <IssuesSurface sessionRules={notes.filter((n) => n.icon === "rule").map((n) => n.body.split(" · ")[0])} onOpenRef={openRef} onAskAi={() => setAiOpen(true)} />
+        <IssuesSurface sessionRules={notes.filter((n) => n.icon === "rule").map((n) => n.body.split(" · ")[0])} onOpenRef={openRef} onAskAi={() => setAiOpen(true)} onOpenRca={setRcaIncident} />
       ) : surface === "timeline" ? (
         <TimelineSurface onOpenRef={openRef} />
       ) : surface === "checks" ? (
@@ -1925,6 +1926,13 @@ function App() {
       {/* 상세 — 최상위 레이어 오버레이 (Esc로 닫힘) */}
       <AnimatePresence>
         {detail && <DetailOverlay key={`${detail.kind.id}-${String(detail.row.name)}`} kind={detail.kind} row={detail.row} onClose={() => setDetail(null)} onToast={pushToast} onOpenRef={openRef} onShowPods={(b) => { setDetail(null); setSurface("resources"); setResView("list"); setKindId("Pod"); setQ(b); }} forceFull={aiOpen} rightInset={aiOpen ? aiW : 0} leftInset={navCollapsed ? 60 : 208} topInset={topH} viewportW={vwCss} />}
+      </AnimatePresence>
+      {/* 이슈 RCA 사이드바 — 셸 레벨 렌더(서피스 transform 밖) */}
+      <AnimatePresence>
+        {rcaIncident && <IssueDetail key={rcaIncident.name} {...rcaIncident} topInset={topH} leftInset={navCollapsed ? 60 : 208}
+          onClose={() => setRcaIncident(null)}
+          onOpenRef={(k, n) => { setRcaIncident(null); openRef(k, n); }}
+          onAskAi={() => { setRcaIncident(null); setAiOpen(true); }} />}
       </AnimatePresence>
 
       {/* 작업 토스트 — 우측 상단 스택 */}

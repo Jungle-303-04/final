@@ -299,8 +299,8 @@ function RcaSection({ title, children }: { title: string; children: React.ReactN
     </div>
   );
 }
-function IssueDetail({ name, symptom, cluster, svc, ns, onClose, onOpenRef, onAskAi, onRecovered }: {
-  name: string; symptom: string; cluster: string; svc: string; ns: string; onClose: () => void; onOpenRef: (kind: string, n: string) => void; onAskAi: () => void; onRecovered?: (svc: string) => void;
+export function IssueDetail({ name, symptom, cluster, svc, ns, onClose, onOpenRef, onAskAi, onRecovered, topInset = 0, leftInset = 0 }: {
+  name: string; symptom: string; cluster: string; svc: string; ns: string; onClose: () => void; onOpenRef: (kind: string, n: string) => void; onAskAi: () => void; onRecovered?: (svc: string) => void; topInset?: number; leftInset?: number;
 }) {
   const m = useMemo(() => rcaModel(name, symptom, cluster, svc, ns), [name, symptom, cluster, svc, ns]);
   const conf = Math.round(m.confidence * 100);
@@ -310,12 +310,12 @@ function IssueDetail({ name, symptom, cluster, svc, ns, onClose, onOpenRef, onAs
     <>
       {/* 스크림 — 사이드바 밖 클릭 시 닫기 */}
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: DUR.fade }}
-        onClick={onClose} style={{ position: "fixed", inset: 0, background: inkA(0.22), zIndex: 55 }} />
-      {/* RCA 보고서 — 우측 사이드바(드로어) */}
-      <motion.div initial={{ x: 480 }} animate={{ x: 0 }} exit={{ x: 480 }} transition={{ type: "spring", bounce: 0.06, visualDuration: 0.34 }}
-        style={{ position: "fixed", top: 0, right: 0, bottom: 0, width: `calc(480px / ${PRESENT_SCALE})`, maxWidth: "94vw", background: UI.card, borderLeft: `1px solid ${UI.line}`, boxShadow: `-24px 0 70px -30px ${inkA(0.4)}`, zIndex: 56, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+        onClick={onClose} style={{ position: "fixed", top: topInset, left: leftInset, right: 0, bottom: 0, background: inkA(0.22), zIndex: 55 }} />
+      {/* RCA 보고서 — 우측 사이드바(드로어). 셸 레벨 렌더 전제(transform 조상 밖) */}
+      <motion.div initial={{ x: 500 }} animate={{ x: 0 }} exit={{ x: 500 }} transition={{ type: "spring", bounce: 0.06, visualDuration: 0.34 }}
+        style={{ position: "fixed", top: topInset, right: 0, bottom: 0, width: `calc(480px / ${PRESENT_SCALE})`, maxWidth: "94vw", background: UI.card, borderLeft: `1px solid ${UI.line}`, boxShadow: `-24px 0 70px -30px ${inkA(0.4)}`, zIndex: 56, display: "flex", flexDirection: "column", overflow: "hidden" }}>
         {recover
-          ? <RecoveryFlow action={recover} podName={name} svc={svc} onBack={() => setRecover(null)} onDone={() => { onRecovered?.(svc); onClose(); }} />
+          ? <RecoveryFlow action={recover} podName={name} svc={svc} onBack={() => setRecover(null)} onClose={onClose} onDone={() => { onRecovered?.(svc); onClose(); }} />
           : <>
           {/* 헤더 */}
           <div style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "18px 20px", borderBottom: `1px solid ${UI.line}` }}>
@@ -439,8 +439,8 @@ function IssueDetail({ name, symptom, cluster, svc, ns, onClose, onOpenRef, onAs
 
 // ── 복구 액션 흐름 — AI 진단 스트리밍 → 매니페스트 diff → 승인 → Git 동기화 → 복구 완료 ──
 type RecStep = "diagnose" | "diff" | "applying" | "syncing" | "done";
-function RecoveryFlow({ action, podName, svc, onBack, onDone }: {
-  action: RecoveryAction; podName: string; svc: string; onBack: () => void; onDone: () => void;
+function RecoveryFlow({ action, podName, svc, onBack, onClose, onDone }: {
+  action: RecoveryAction; podName: string; svc: string; onBack: () => void; onClose: () => void; onDone: () => void;
 }) {
   const oom = action.title.includes("한도");
   const line = oom ? "CPU·메모리 한도를 늘려보겠습니다" : "누락된 구성 키를 복원하겠습니다";
@@ -467,6 +467,7 @@ function RecoveryFlow({ action, podName, svc, onBack, onDone }: {
       <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "16px 20px", borderBottom: `1px solid ${UI.line}` }}>
         <button onClick={onBack} disabled={busy} style={{ border: "none", background: "transparent", color: busy ? UI.ink3 : UI.ink2, cursor: busy ? "default" : "pointer", fontSize: TYPE.label2, display: "flex", alignItems: "center", gap: 4, padding: 0 }}>← RCA</button>
         <span style={{ fontSize: TYPE.body, fontWeight: 700, color: UI.ink, marginLeft: 4 }}>복구 · {action.title}</span>
+        <button onClick={onClose} style={{ marginLeft: "auto", width: 30, height: 30, borderRadius: 999, border: "none", background: inkA(0.06), color: UI.ink2, cursor: "pointer", flexShrink: 0, display: "grid", placeItems: "center" }}><X size={15} /></button>
       </div>
       <div style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: 18, padding: "18px 20px" }}>
         {/* AI 진단 */}
@@ -527,13 +528,14 @@ function RecoveryFlow({ action, podName, svc, onBack, onDone }: {
 }
 
 // ── 이슈 /issues — 탭: 이슈 | 알림 규칙 (5.8) ──
-export function IssuesSurface({ sessionRules = [], onOpenRef, onAskAi }: {
-  sessionRules?: string[]; onOpenRef: (kind: string, name: string) => void; onAskAi: () => void;
+export type RcaIncident = { name: string; symptom: string; cluster: string; svc: string; ns: string };
+export function IssuesSurface({ sessionRules = [], onOpenRef, onAskAi, onOpenRca }: {
+  sessionRules?: string[]; onOpenRef: (kind: string, name: string) => void; onAskAi: () => void; onOpenRca?: (i: RcaIncident) => void;
 }) {
   const [tab, setTab] = useState("이슈");
   const pods = useMemo(() => podInventory(), []);
   const crit = pods.filter((p) => p.bad);
-  const [rca, setRca] = useState<{ name: string; symptom: string; cluster: string; svc: string; ns: string } | null>(null);
+  const setRca = (i: RcaIncident) => onOpenRca?.(i);
   const [rules, setRules] = useState(() => [
     { name: "파드 재시작 급증", cond: "restarts > 3 / 10m", sev: "장애", on: true, ai: false },
     { name: "노드 디스크 압박", cond: "disk > 85%", sev: "주의", on: true, ai: false },
@@ -589,7 +591,6 @@ export function IssuesSurface({ sessionRules = [], onOpenRef, onAskAi }: {
           ))}
         </Card>
       )}
-      {rca && <IssueDetail {...rca} onClose={() => setRca(null)} onOpenRef={(k, n) => { setRca(null); onOpenRef(k, n); }} onAskAi={() => { setRca(null); onAskAi(); }} />}
     </Page>
   );
 }
