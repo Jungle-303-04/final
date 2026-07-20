@@ -10,3 +10,4 @@ G7 · 배포 완주 · 07527f0b89da4376fd55bfd549f0be1b0c343285 · Dev Gate 2969
 G7 · 배포 완주 · 723ab27aa9e4e596cf76d21a5116d10f49b8beaf · Dev Gate 29692859664 + Dev Deploy 29692918077 success(5m50s), console·인증 browser smoke 통과, rollback 미실행; demo-freeze-v3 consumer cutover 감사 기준 G4 부분 유지
 G7 · 배포 완주 · fd58268d5210be92896a90f8ecd1a2ee4130fcb5 · Dev Gate 29693357340 + Dev Deploy 29693439823 success, 홈 W2~W8 내부 1:1 콘텐츠 문법 라이브 반영; 동일 SHA demo 1440 검수 전 G4 부분 유지
 G7 · 배포 완주 · e84748b06ded3450ca3693efb5863ccbfc30eb68 · Dev Gate 29694437337 + Dev Deploy 29694651904 success; exact demo adcf92130 1440 대조에서 selected scope·헤더 숫자·W2~W8 편집/시각 델타 확인으로 G4 Home 부분 유지
+G7 · 배포 완주 · 61deed8340b7d9fe699359a507a84f9b02e201cb · Dev Gate 29712271375 + Dev Deploy 29712347044 success(11m08s), Kyro 전면 서피스 라이브 반영 + post-deploy API/authenticated browser route smoke 통과, rollback 미실행; 동일 SHA 자동 시각 캡처 미완료로 G4 부분 유지

@@ -1,21 +1,39 @@
 # 실행 상태 자기 진단
 
-기준 시각은 2026-07-20 10:08 KST다. 원격 `dev`와 라이브 console은 `8f90bac560427f523808e4d36e0456072f687be5`로 일치하며, 화면 변경의 제품 부모 SHA는 `28a45c974d7f52b337fd2c5e69fa86a0aab1f9a9`다. demo 기준은 `demo-freeze-v3`의 `adcf92130`이다. 코드·자동 게이트·API 계약·라이브 상태·브라우저 증거가 같은 digest를 가리키지 않는 항목은 완료로 판정하지 않는다.
+기준 시각은 2026-07-20 11:27 KST다. 원격 `dev`와 라이브 console은 `61deed8340b7d9fe699359a507a84f9b02e201cb`로 일치하며, 전면 서피스 제품 배치는 부모 `1b9c6e9c31075ba1c5ab093fff36978bb07b211c`다. demo 기준은 `demo-freeze-v3`의 `adcf92130`이다. 코드·자동 게이트·API 계약·라이브 상태·브라우저 증거가 같은 digest를 가리키지 않는 항목은 완료로 판정하지 않는다.
 
 ## 이전 보고 대비 델타 — 10줄 요약
 
-1. 화면 배치 `28a45c974`는 Kyro 셸과 Home·Resources·Deploy/GitOps/Workflow·Alerts·AI·Timeline·Checks·Cost·Settings의 demo-freeze-v3 소비 구조를 한 제품 SHA에 고정했다.
-2. 로컬 결정적 계약 70/70, changed Vitest 1,057/1,057, full Vitest 2,297/2,297, typecheck, ESLint, 디자인 가드, production build, `gate-fast`, governance 41/41이 저부하·worker 2 규칙에서 성공했다.
-3. `28a45c974` Dev Gate `29709438336`은 성공했지만 자동 Deploy `29709590850`과 수동 Deploy `29709761226`·`29709890857`은 GitHub Actions/API 503으로 제품 빌드 전에 실패했다.
-4. 배포 검증 `8f90bac56`은 SHA 조상 관계와 성공 Gate 증명을 약화하지 않고 429/5xx만 최대 12회 지수 백오프로 재시도하며, 기존 계약 테스트 34/34를 통과했다.
-5. `8f90bac56` Dev Gate `29710022968`은 proof/backend/frontend/full gate 전부 성공했고 총 6분38초가 걸렸다.
-6. 자동 Deploy `29710176338`은 artifact `8448805112`를 찾은 뒤 GitHub 다운로드 503으로 실패했으며 build·cluster access·rollout은 모두 생략됐다.
-7. 수동 Deploy `29710204808`은 compare API의 연속 503 세 번을 2초·4초·8초 백오프로 흡수하고 7분11초에 성공했다.
-8. 같은 run에서 console image build 1분32초, immutable console rollout 14초, post-deploy console smoke 25초, 인증 browser route smoke 1분14초가 모두 성공했다.
-9. G4는 기능 배포와 인증 라우트 계약은 통과했지만, 현재 Chrome enterprise policy가 라이브 도메인의 자동 화면 캡처를 차단해 같은 SHA 1280·1440·1920 나란히 증거가 미완료이므로 **부분**을 유지한다.
-10. 다음 3수는 라이브 시각 증거 회수 → 보존 game stack의 P0 계약 충돌 5개 해소 → 실제 2노드·부하/HPA·로그·GitOps·release-run 시나리오 검증이다.
+1. 전면 UI 배치 `1b9c6e9c3`는 Kyro 셸과 Home·Resources·Deploy/GitOps/Workflow·Alerts·AI·Issues·Timeline·Checks·Cost·Settings를 demo-freeze-v3 문법으로 한 제품 계보에 수렴했다.
+2. 로컬 영향 계약 142/142, Issues 29/29, Cost 8/8, typecheck, ESLint, 디자인 가드 1,446파일, production build, governance 41/41이 저부하·worker 2 규칙에서 성공했다.
+3. 첫 Dev Gate `29711958000`은 Frontend 2,298/2,299 통과 후 `WidgetFrame`이 Router 밖 테스트에서 `<Link>`를 사용한 단일 경계 결함으로 실패했고 Deploy `29712157175`는 정상 skipped됐다.
+4. `61deed834`는 실제 `href`와 새 탭 의미를 보존하면서 일반 클릭만 History API로 전환했고 표적 계약 2/2와 ESLint를 통과했다.
+5. Dev Gate `29712271375`는 proof 16초, backend 35초, frontend 1분53초, full gate 전부 성공했다.
+6. Dev Deploy `29712347044`는 같은 SHA를 11분08초에 배포했고 service·console immutable rollout과 rollback 미실행을 확인했다.
+7. 같은 Deploy에서 post-deploy API smoke와 인증 browser route smoke가 모두 성공했으며 성공 service/console SHA가 클러스터에 기록됐다.
+8. 알림/RCA 발표 감사에서 RCA 자동 시작, 규칙 웹훅 전달, 워크플로우 동적 상태, ack/resolved 집계, 클러스터 연결 완료 표현의 P0 5건을 확인했다.
+9. G4는 기능·라우트·라이브 digest는 일치하지만 Chrome enterprise policy가 라이브 자동 캡처를 차단해 같은 SHA 1280·1440·1920 나란히 증거가 미완료이므로 **부분**을 유지한다.
+10. 다음 3수는 RCA 자동 시작과 웹훅 전달 해소 → 워크플로우·알림 동적 상태 통합 → 실제 2노드 부하/HPA·로그·GitOps·release-run 발표 스모크다.
+
+## 클로드 인계 요약
+
+- 보고 SHA: 이 보고를 담는 후속 docs 커밋을 `dev`에 push한 뒤 채팅 인계 블록에 확정 SHA를 기록한다.
+- 완료: `61deed834` Gate `29712271375`와 Deploy `29712347044` 성공, 전면 Kyro UI 라이브 반영, API·인증 브라우저 스모크 성공.
+- 진행: demo-freeze-v3와 동일 SHA 3-viewport 시각 증거 및 발표용 RCA/알림/워크플로우 동적 경로 보강.
+- 신규 블로커: 외부 사람 필요 0건. 제품 내부 P0는 RCA 자동 시작·규칙 웹훅·워크플로우 동적 상태·알림 상태 집계·클러스터 연결 완료 표현 5건.
+- 판단 요청: 없음. A안(확인된 P0를 작은 배치로 순차 배포)이 B안(다음 대규모 UI 배치)보다 실패 원인 분리와 발표 안정성에 유리해 A안으로 자율 진행한다.
+- 다음 3수: RCA 자동 시작/웹훅 → 워크플로우·알림 상태 → 실제 발표 시나리오 스모크.
 
 ## 현재 상세 근거
+
+### 발표 RCA 실데이터 사전감사
+
+- Deploy `29712347044` 완주 뒤 API Gateway 2/2, RCA 관련 worker 전부 Ready/Available, `game-server` cluster-agent 1/1 Ready를 확인했다.
+- 최신 대표 correlation `6642e906-3bc2-48c7-8c65-9608bddc8a47`은 `StatefulSet/game · Readiness probe response failure`이며 evidence 수집→bundle→후보 분석→복구 계획→승인 추천까지 실제 파이프라인이 진행됐다.
+- 이 correlation은 `logs:related_logs` 부족으로 `rca.analysis_blocked/insufficient_evidence` 상태다. 확정 RCA로 과장하지 않고 “증거 부족 감지와 안전한 후속 조치”로만 발표할 수 있다.
+- 라이브 `RCA_TEST_RUNS_ENABLED=0`이라 검증된 `image.wrong-tag` 완주 시나리오는 현재 fail-closed 404다. 활성화 여부와 GitOps snapshot/repository/application binding을 배포 전 preflight하는 작업을 진행 중이다.
+- Resources 이슈 링크의 `detail` 손실, 존재하지 않는 `incident.resolved` 완료 신호, 선택 후 incident 상태 미재조회는 제품 내부 P0이며 별도 작은 배치로 해소 중이다.
+- Alertmanager webhook token은 현재 비어 외부 Alertmanager ingress가 503 fail-closed지만 cluster-agent evidence ingress는 정상이다. 비밀값을 임의 생성하지 않는다.
 
 ### 파이프라인과 배포
 
@@ -40,6 +58,8 @@
 | `fd58268d5` | Gate `29693357340`, Deploy `29693439823` | Gate/Deploy success, 홈 위젯 내부 1:1 콘텐츠 문법 반영 | 이전 기준점 |
 | `e84748b06` | Gate `29694437337`, Deploy `29694651904` | Gate/Deploy success, Home foundation과 fleet 단일 원장 소비 1차 반영 | 현재 원격·라이브 기준점; exact 대조 결과 G4 부분 |
 | `5252a85ec` | Gate `29704105721`, Deploy `29704305166` | Gate success, Deploy는 빌드 전 unknown destination 11건으로 실패 | 로컬 후보 index 정합 후 governance 41/41·unknown 0; 재push 대기 |
+| `1b9c6e9c3` | Gate `29711958000`, Deploy `29712157175` | Frontend 2,298/2,299 후 Router 밖 `<Link>` 단일 결함, Deploy skipped | 제품 링크 경계 결함을 `61deed834`로 해소 |
+| `61deed834` | Gate `29712271375`, Deploy `29712347044` | Gate 전부 success, Deploy success(11m08s), API·인증 browser route smoke success | 현재 원격·라이브 전면 Kyro UI 기준점 |
 | 로컬 후보(커밋 전) | full Vitest·gate-fast·build·governance | full Vitest 443파일·2,271/2,271, gate-fast changed Vitest 210파일·1,190/1,190, typecheck/lint/design 1,414파일/build, governance 41/41 모두 success | 배포와 동일 SHA 증거 전; 완료 아님 |
 
 현재 확인된 성공 기준점에서 원격 `dev`와 라이브는 `e84748b06`으로 일치한다. exact demo `adcf92130`과의 1440 대조에서 Home scope·숫자·편집·차트 델타가 남았으므로 G4 완료를 선언하지 않는다. 다음 push도 소배치 단일 SHA로 만들고 Gate→Deploy 종료까지 추가 push를 금지한다.
