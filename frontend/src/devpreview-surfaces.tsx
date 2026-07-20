@@ -213,6 +213,226 @@ export function DeploySurface({ pendingRepos = [], onOpenRef, onAddRepo }: {
   );
 }
 
+// ── RCA 상세 모델 — 실제 dev 계약(RcaReportSummaryItem·RecoveryActionCandidateItem) 구조를 데모로 재현 ──
+// 필드: 근본원인·확신도·부증상·후보가설(점수)·근거 트레일(충족/미충족)·서술 보고서·복구 후보(위험/폭발반경/롤백/검증/승인)
+type RcaCandidate = { id: string; title: string; score: number; summary: string; picked: boolean };
+type RcaEvidence = { id: string; source: string; query: string; got: boolean; note: string };
+type RecoveryAction = { id: string; title: string; desc: string; route: string; risk: "낮음" | "보통" | "높음"; blast: string; approval: boolean; prereq: string[]; checks: string[]; rollback: string; picked: boolean };
+type RcaModel = {
+  symptom: string; severity: "장애" | "주의"; status: "분석 완료" | "복구 대기" | "관찰 중"; confidence: number;
+  rootCause: string; reason: string; secondary: string[];
+  candidates: RcaCandidate[]; evidence: RcaEvidence[]; missing: { check: string; reason: string }[];
+  narrative: { summary: string; impact: string; reasoning: string; recommend: string; prevention: string[]; limits: string[] };
+  recovery: RecoveryAction[];
+};
+function rcaModel(name: string, symptom: string, cluster: string, svc: string, ns: string): RcaModel {
+  const oom = symptom === "OOMKilled";
+  return oom ? {
+    symptom: "OOMKilled — 컨테이너가 메모리 한도 초과로 반복 종료", severity: "장애", status: "복구 대기", confidence: 0.92,
+    rootCause: `${name} 컨테이너의 워킹셋이 메모리 한도(512Mi)를 반복 초과 — 캐시 미방출로 RSS가 한도에 수렴 후 OOM 종료`,
+    reason: "최근 6회 재시작 모두 종료 코드 137(OOM), 종료 직전 RSS가 매번 한도의 98~100%에서 관측됨",
+    secondary: ["재시작 간격이 점점 짧아짐(9분→3분)", "동일 노드의 이웃 파드 지연 증가"],
+    candidates: [
+      { id: "h1", title: "메모리 한도 부족 / 캐시 미방출", score: 0.92, summary: "RSS가 한도에서 수렴, GC/eviction 흔적 없음 — 한도 대비 워킹셋 초과", picked: true },
+      { id: "h2", title: "메모리 누수(코드)", score: 0.34, summary: "재시작 후 baseline은 정상 복귀 — 단조 증가 누수 패턴과 불일치", picked: false },
+      { id: "h3", title: "노드 메모리 압박", score: 0.18, summary: "노드 여유 42% — 노드 레벨 eviction 아님", picked: false },
+    ],
+    evidence: [
+      { id: "e1", source: "kube-state-metrics", query: "container_last_terminated_reason{pod=\"" + name + "\"}", got: true, note: "OOMKilled · exit 137 (6/6회)" },
+      { id: "e2", source: "cAdvisor", query: "container_memory_rss / spec.memory.limit", got: true, note: "종료 직전 0.98~1.00" },
+      { id: "e3", source: "kube events", query: "reason=OOMKilling · " + ns, got: true, note: "6건 · 최근 2분 전" },
+      { id: "e4", source: "app logs", query: "level=error · " + name, got: true, note: "eviction 로그 없음 — 캐시 TTL 미설정 추정" },
+    ],
+    missing: [
+      { check: "heap/allocation 프로파일", reason: "프로파일러 미부착 — 누수(h2) 완전 배제 불가" },
+      { check: "요청 트래픽 상관", reason: "요청량 메트릭 스크레이프 간격 밖 — 부하 유발 여부 미확정" },
+    ],
+    narrative: {
+      summary: `${name}이(가) 메모리 한도 초과로 6회 OOM 재시작됨. 한도 상향 또는 캐시 TTL 도입으로 즉시 완화 가능.`,
+      impact: `${svc} 서비스 ${cluster} 클러스터에서 요청 처리 지연 및 간헐 5xx — 재시작 창마다 수 초 단위 가용성 저하.`,
+      reasoning: "종료 코드 137과 종료 직전 RSS 포화가 6/6회 일치. GC·노드 eviction 흔적 부재로 '한도 대비 워킹셋 초과'가 지배 가설(0.92).",
+      recommend: "메모리 한도 512Mi→768Mi 상향과 캐시 TTL 300s 도입을 함께 적용. 한도만 올리면 누수 시 재발하므로 TTL 병행 권장.",
+      prevention: ["requests/limits를 P95 워킹셋 기준으로 재산정", "캐시 항목 TTL·최대 크기 상한 설정", "OOMKill 알림 규칙 유지(restarts>3/10m)"],
+      limits: ["heap 프로파일 부재로 코드 누수 가능성 완전 배제 불가", "요청 트래픽 상관은 다음 스크레이프 후 확정"],
+    },
+    recovery: [
+      { id: "r1", title: "메모리 한도 상향 + 캐시 TTL", desc: "limit 512Mi→768Mi, 캐시 TTL 300s 매니페스트 패치", route: "PR 초안 생성", risk: "낮음", blast: `${svc} 파드 롤링(무중단)`, approval: true, prereq: ["매니페스트 저장소 연결됨", "롤링 업데이트 여유 replica ≥1"], checks: ["패치 후 RSS < 한도 80% 확인", "5분 무OOM 관찰"], rollback: "이전 리비전으로 kubectl rollout undo(자동 준비됨)", picked: true },
+      { id: "r2", title: "즉시 재시작(임시 완화)", desc: "파드 롤아웃 재시작으로 메모리 baseline 초기화", route: "명령 실행", risk: "보통", blast: `${svc} 파드 재생성`, approval: false, prereq: ["복구 아님 — 재발 예상"], checks: ["파드 Ready 복귀"], rollback: "불필요(무상태 재시작)", picked: false },
+    ],
+  } : {
+    symptom: "CrashLoopBackOff — 시작 직후 반복 크래시", severity: "장애", status: "분석 완료", confidence: 0.86,
+    rootCause: `${name}이(가) 시작 시 의존성(구성/시크릿) 해석 실패로 부팅 중 종료 — 백오프 누적으로 CrashLoopBackOff 진입`,
+    reason: "재시작 7회 모두 준비성 프로브 전 종료, 컨테이너 로그에 설정 키 부재 오류 반복",
+    secondary: ["백오프 지연이 최대(5분)에 도달", "Ready 도달 이력 없음"],
+    candidates: [
+      { id: "h1", title: "구성/시크릿 누락", score: 0.86, summary: "부팅 로그에 필수 키 부재 오류 · 프로브 전 종료 — 시작 의존성 실패", picked: true },
+      { id: "h2", title: "이미지 결함", score: 0.29, summary: "동일 이미지가 타 환경 정상 — 이미지 자체 결함 가능성 낮음", picked: false },
+      { id: "h3", title: "리소스 부족", score: 0.12, summary: "OOM·throttle 흔적 없음", picked: false },
+    ],
+    evidence: [
+      { id: "e1", source: "kube events", query: "reason=BackOff · " + name, got: true, note: "7건 · 백오프 5분 도달" },
+      { id: "e2", source: "container logs", query: "level=fatal · config", got: true, note: "필수 키 부재 오류 반복" },
+      { id: "e3", source: "kube-state-metrics", query: "container_status.ready", got: true, note: "Ready 도달 0회" },
+    ],
+    missing: [{ check: "구성 diff 스냅샷", reason: "직전 정상 리비전의 ConfigMap 스냅샷 미보관 — 어떤 키가 빠졌는지 자동 확정 불가" }],
+    narrative: {
+      summary: `${name}이(가) 시작 의존성 실패로 CrashLoopBackOff. 누락된 구성/시크릿 키 복원으로 해소.`,
+      impact: `${svc} 배포가 ${cluster}에서 롤아웃 실패 — 신규 리비전 미가동, 구 리비전으로 트래픽 유지 중.`,
+      reasoning: "7/7회 프로브 전 종료 + 부팅 로그의 설정 키 부재 오류로 '구성 의존성 실패'가 지배 가설(0.86). 이미지·리소스 가설은 근거 부재.",
+      recommend: "직전 정상 리비전과 ConfigMap/Secret을 대조해 누락 키 복원 후 재배포. 복원 전 롤아웃 일시정지 권장.",
+      prevention: ["배포 파이프라인에 구성 스키마 검증 단계 추가", "필수 키 부재 시 롤아웃 자동 차단", "ConfigMap 리비전 스냅샷 보관"],
+      limits: ["구성 스냅샷 부재로 누락 키 자동 지목 불가 — 수동 대조 필요"],
+    },
+    recovery: [
+      { id: "r1", title: "구성 복원 후 재배포", desc: "직전 정상 리비전 기준 누락 키 복원 · 롤아웃 재개", route: "PR 초안 생성", risk: "보통", blast: `${svc} 롤아웃 재개`, approval: true, prereq: ["직전 정상 리비전 식별", "매니페스트 저장소 연결됨"], checks: ["신규 파드 Ready 도달", "부팅 로그 오류 0"], rollback: "롤아웃 일시정지 상태 유지 — 구 리비전 트래픽 보존", picked: true },
+      { id: "r2", title: "롤아웃 중단(안정화)", desc: "실패 롤아웃 중단하고 구 리비전 고정", route: "명령 실행", risk: "낮음", blast: "신규 리비전 폐기", approval: false, prereq: ["구 리비전 정상 확인"], checks: ["트래픽 구 리비전 100%"], rollback: "불필요", picked: false },
+    ],
+  };
+}
+
+// ── RCA 상세 모달 — 자체 백드롭·중앙정렬·스크롤(연결 모달과 동일 문법) ──
+function RcaSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
+      <span style={{ fontSize: TYPE.caption, fontWeight: 700, letterSpacing: "0.04em", color: UI.ink3, textTransform: "uppercase" }}>{title}</span>
+      {children}
+    </div>
+  );
+}
+function IssueDetail({ name, symptom, cluster, svc, ns, onClose, onOpenRef, onAskAi }: {
+  name: string; symptom: string; cluster: string; svc: string; ns: string; onClose: () => void; onOpenRef: (kind: string, n: string) => void; onAskAi: () => void;
+}) {
+  const m = useMemo(() => rcaModel(name, symptom, cluster, svc, ns), [name, symptom, cluster, svc, ns]);
+  const conf = Math.round(m.confidence * 100);
+  const riskTone = (r: RecoveryAction["risk"]) => r === "높음" ? TINT.crit : r === "보통" ? TINT.warn : TINT.ok;
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: DUR.fade }}
+      onClick={onClose} style={{ position: "absolute", inset: 0, background: inkA(0.28), backdropFilter: "blur(5px)", zIndex: 40, overflowY: "auto" }}>
+      <div style={{ display: "flex", minHeight: "100%", justifyContent: "center", padding: "6vh 24px" }}>
+        <motion.div initial={{ opacity: 0, y: 22, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 16 }} transition={SOFT}
+          onClick={(e) => e.stopPropagation()} style={{ width: 720, maxWidth: "100%", alignSelf: "flex-start", background: UI.card, borderRadius: 20, boxShadow: `0 44px 100px -30px ${inkA(0.4)}`, overflow: "hidden" }}>
+          {/* 헤더 */}
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "18px 20px", borderBottom: `1px solid ${UI.line}` }}>
+            <span style={{ width: 38, height: 38, borderRadius: 11, background: critA(0.1), display: "grid", placeItems: "center", flexShrink: 0 }}><AlertTriangle size={19} style={{ color: TINT.crit.fg }} /></span>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <Mono>{name}</Mono>
+                <Pill tone="crit" label={m.severity} />
+                <span style={{ fontSize: TYPE.caption, fontWeight: 700, color: UI.ink2, background: inkA(0.05), borderRadius: 999, padding: "2px 9px" }}>{m.status}</span>
+              </div>
+              <div style={{ fontSize: TYPE.label2, color: UI.ink2, marginTop: 4 }}>{m.symptom}</div>
+              <div style={{ fontSize: TYPE.caption2, color: UI.ink3, marginTop: 3, fontFamily: MONO }}>{svc} · {ns} · {cluster}</div>
+            </div>
+            <button onClick={onClose} style={{ width: 30, height: 30, borderRadius: 999, border: "none", background: inkA(0.06), color: UI.ink2, cursor: "pointer", flexShrink: 0 }}><X size={15} /></button>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 20, padding: "18px 20px" }}>
+            {/* 근본 원인 + 확신도 */}
+            <RcaSection title="근본 원인">
+              <div style={{ background: UI.bg2, border: `1px solid ${UI.line}`, borderRadius: 12, padding: 14 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                  <span style={{ fontSize: TYPE.label2, fontWeight: 700, color: UI.ink }}>확신도</span>
+                  <span style={{ flex: 1, height: 6, borderRadius: 999, background: inkA(0.08), overflow: "hidden" }}>
+                    <motion.span initial={{ width: 0 }} animate={{ width: `${conf}%` }} transition={{ duration: DUR.meter, ease: "easeInOut" }} style={{ display: "block", height: "100%", borderRadius: 999, background: conf >= 80 ? HP.ok : conf >= 50 ? HP.warn : HP.crit }} />
+                  </span>
+                  <span style={{ fontFamily: MONO, fontSize: TYPE.label2, fontWeight: 700, color: UI.ink }}>{conf}%</span>
+                </div>
+                <div style={{ fontSize: TYPE.body, color: UI.ink, lineHeight: 1.55 }}>{m.rootCause}</div>
+                <div style={{ fontSize: TYPE.label, color: UI.ink3, marginTop: 6 }}>판단 근거: {m.reason}</div>
+                {m.secondary.length > 0 && <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 9 }}>{m.secondary.map((s) => <span key={s} style={{ fontSize: TYPE.caption, color: UI.ink2, background: inkA(0.05), borderRadius: 999, padding: "2px 9px" }}>부증상 · {s}</span>)}</div>}
+              </div>
+            </RcaSection>
+            {/* 후보 가설 */}
+            <RcaSection title="후보 가설 (결정론적 점수)">
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {m.candidates.map((c) => (
+                  <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 10, border: `1px solid ${c.picked ? blueA(0.35) : UI.line}`, background: c.picked ? blueA(0.04) : UI.card, borderRadius: 10, padding: "10px 12px" }}>
+                    <span style={{ minWidth: 0, flex: 1 }}>
+                      <span style={{ display: "flex", alignItems: "center", gap: 7 }}><span style={{ fontSize: TYPE.label2, fontWeight: 700, color: UI.ink }}>{c.title}</span>{c.picked && <span style={{ fontSize: TYPE.micro, fontWeight: 800, color: BLUE, background: blueA(0.1), borderRadius: 4, padding: "1px 6px" }}>채택</span>}</span>
+                      <span style={{ display: "block", fontSize: TYPE.caption2, color: UI.ink3, marginTop: 2 }}>{c.summary}</span>
+                    </span>
+                    <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3, flexShrink: 0 }}>
+                      <span style={{ fontFamily: MONO, fontSize: TYPE.label2, fontWeight: 700, color: c.picked ? BLUE : UI.ink2 }}>{c.score.toFixed(2)}</span>
+                      <span style={{ width: 56, height: 4, borderRadius: 999, background: inkA(0.08), overflow: "hidden" }}><span style={{ display: "block", height: "100%", width: `${c.score * 100}%`, borderRadius: 999, background: c.picked ? BLUE : inkA(0.25) }} /></span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </RcaSection>
+            {/* 근거 트레일 */}
+            <RcaSection title="근거 (수집 트레일)">
+              <div style={{ border: `1px solid ${UI.line}`, borderRadius: 12, overflow: "hidden" }}>
+                {m.evidence.map((e, i) => (
+                  <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", borderTop: i > 0 ? `1px solid ${UI.line2}` : "none" }}>
+                    <Check size={14} style={{ color: TINT.ok.fg, flexShrink: 0 }} />
+                    <span style={{ minWidth: 0, flex: 1 }}>
+                      <span style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}><span style={{ fontSize: TYPE.caption, fontWeight: 700, color: UI.ink2 }}>{e.source}</span><Mono dim>{e.query}</Mono></span>
+                      <span style={{ display: "block", fontSize: TYPE.caption2, color: UI.ink3, marginTop: 1 }}>{e.note}</span>
+                    </span>
+                  </div>
+                ))}
+                {m.missing.map((mi) => (
+                  <div key={mi.check} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "9px 12px", borderTop: `1px solid ${UI.line2}`, background: TINT.warn.bg }}>
+                    <span style={{ width: 14, height: 14, borderRadius: 999, border: `1.5px dashed ${TINT.warn.fg}`, flexShrink: 0, marginTop: 1 }} />
+                    <span style={{ minWidth: 0, flex: 1 }}>
+                      <span style={{ fontSize: TYPE.caption, fontWeight: 700, color: TINT.warn.fg }}>미충족 · {mi.check}</span>
+                      <span style={{ display: "block", fontSize: TYPE.caption2, color: UI.ink2, marginTop: 1 }}>{mi.reason}</span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </RcaSection>
+            {/* 서술 보고서 */}
+            <RcaSection title="보고서">
+              <div style={{ display: "flex", flexDirection: "column", gap: 11, fontSize: TYPE.label2, color: UI.ink, lineHeight: 1.6 }}>
+                {([["요약", m.narrative.summary], ["영향", m.narrative.impact], ["추론", m.narrative.reasoning], ["권고", m.narrative.recommend]] as const).map(([k, v]) => (
+                  <div key={k}><span style={{ fontWeight: 700, color: UI.ink2 }}>{k} · </span>{v}</div>
+                ))}
+                <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+                  <div style={{ flex: "1 1 260px", minWidth: 0 }}><span style={{ fontSize: TYPE.caption, fontWeight: 700, color: UI.ink3 }}>재발 방지</span><ul style={{ margin: "5px 0 0", paddingLeft: 16, display: "flex", flexDirection: "column", gap: 3 }}>{m.narrative.prevention.map((p) => <li key={p} style={{ fontSize: TYPE.label, color: UI.ink2 }}>{p}</li>)}</ul></div>
+                  <div style={{ flex: "1 1 220px", minWidth: 0 }}><span style={{ fontSize: TYPE.caption, fontWeight: 700, color: UI.ink3 }}>한계</span><ul style={{ margin: "5px 0 0", paddingLeft: 16, display: "flex", flexDirection: "column", gap: 3 }}>{m.narrative.limits.map((l) => <li key={l} style={{ fontSize: TYPE.label, color: UI.ink3 }}>{l}</li>)}</ul></div>
+                </div>
+              </div>
+            </RcaSection>
+            {/* 복구 계획 */}
+            <RcaSection title="복구 계획">
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {m.recovery.map((r) => { const rt = riskTone(r.risk); return (
+                  <div key={r.id} style={{ border: `1px solid ${r.picked ? blueA(0.35) : UI.line}`, background: r.picked ? blueA(0.03) : UI.card, borderRadius: 12, padding: 13 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 6 }}>
+                      <span style={{ fontSize: TYPE.body, fontWeight: 700, color: UI.ink }}>{r.title}</span>
+                      {r.picked && <span style={{ fontSize: TYPE.micro, fontWeight: 800, color: BLUE, background: blueA(0.1), borderRadius: 4, padding: "1px 6px" }}>권고</span>}
+                      <span style={{ marginLeft: "auto", fontSize: TYPE.caption, fontWeight: 700, color: rt.fg, background: rt.bg, border: `1px solid ${rt.bd}`, borderRadius: 999, padding: "2px 9px" }}>위험 {r.risk}</span>
+                      {r.approval && <span style={{ fontSize: TYPE.caption, fontWeight: 700, color: TINT.warn.fg, background: TINT.warn.bg, border: `1px solid ${TINT.warn.bd}`, borderRadius: 999, padding: "2px 9px" }}>승인 필요</span>}
+                    </div>
+                    <div style={{ fontSize: TYPE.label2, color: UI.ink2, lineHeight: 1.5 }}>{r.desc}</div>
+                    <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginTop: 10 }}>
+                      <span style={{ fontSize: TYPE.caption, color: UI.ink3 }}>폭발 반경 · <b style={{ color: UI.ink2, fontWeight: 600 }}>{r.blast}</b></span>
+                      <span style={{ fontSize: TYPE.caption, color: UI.ink3 }}>롤백 · <b style={{ color: UI.ink2, fontWeight: 600 }}>{r.rollback}</b></span>
+                    </div>
+                    {(r.prereq.length > 0 || r.checks.length > 0) && (
+                      <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginTop: 8 }}>
+                        {r.prereq.length > 0 && <span style={{ flex: "1 1 200px", minWidth: 0 }}><span style={{ fontSize: TYPE.caption, fontWeight: 700, color: UI.ink3 }}>전제조건</span><ul style={{ margin: "4px 0 0", paddingLeft: 15 }}>{r.prereq.map((p) => <li key={p} style={{ fontSize: TYPE.caption2, color: UI.ink2 }}>{p}</li>)}</ul></span>}
+                        {r.checks.length > 0 && <span style={{ flex: "1 1 200px", minWidth: 0 }}><span style={{ fontSize: TYPE.caption, fontWeight: 700, color: UI.ink3 }}>검증</span><ul style={{ margin: "4px 0 0", paddingLeft: 15 }}>{r.checks.map((c) => <li key={c} style={{ fontSize: TYPE.caption2, color: UI.ink2 }}>{c}</li>)}</ul></span>}
+                      </div>
+                    )}
+                    {r.picked && (
+                      <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                        <button onClick={onClose} style={{ display: "flex", alignItems: "center", gap: 6, border: "none", background: BLUE, color: UI.card, borderRadius: 9, padding: "7px 14px", fontSize: TYPE.label2, fontWeight: 700, cursor: "pointer" }}>{r.route} <ArrowRight size={14} /></button>
+                        <button onClick={onAskAi} style={{ border: `1px solid ${blueA(0.4)}`, background: blueA(0.06), color: BLUE, borderRadius: 9, padding: "7px 14px", fontSize: TYPE.label2, fontWeight: 700, cursor: "pointer" }}>AI에게 계속 질문</button>
+                      </div>
+                    )}
+                  </div>
+                ); })}
+              </div>
+            </RcaSection>
+            <button onClick={() => onOpenRef("Pod", name)} style={{ alignSelf: "flex-start", border: "none", background: "transparent", color: BLUE, fontSize: TYPE.label2, fontWeight: 700, cursor: "pointer", padding: 0 }}>대상 리소스 스펙 보기 →</button>
+          </div>
+        </motion.div>
+      </div>
+    </motion.div>
+  );
+}
+
 // ── 이슈 /issues — 탭: 이슈 | 알림 규칙 (5.8) ──
 export function IssuesSurface({ sessionRules = [], onOpenRef, onAskAi }: {
   sessionRules?: string[]; onOpenRef: (kind: string, name: string) => void; onAskAi: () => void;
@@ -220,6 +440,7 @@ export function IssuesSurface({ sessionRules = [], onOpenRef, onAskAi }: {
   const [tab, setTab] = useState("이슈");
   const pods = useMemo(() => podInventory(), []);
   const crit = pods.filter((p) => p.bad);
+  const [rca, setRca] = useState<{ name: string; symptom: string; cluster: string; svc: string; ns: string } | null>(null);
   const [rules, setRules] = useState(() => [
     { name: "파드 재시작 급증", cond: "restarts > 3 / 10m", sev: "장애", on: true, ai: false },
     { name: "노드 디스크 압박", cond: "disk > 85%", sev: "주의", on: true, ai: false },
@@ -240,7 +461,7 @@ export function IssuesSurface({ sessionRules = [], onOpenRef, onAskAi }: {
         <Card pad={0}>
           <THead cols={incCols} />
           {crit.map((p, i) => (
-            <TRow key={p.name} cols={incCols} i={i} onClick={() => onOpenRef("Pod", p.name)} cells={[
+            <TRow key={p.name} cols={incCols} i={i} onClick={() => setRca({ name: p.name, symptom: p.status, cluster: p.cluster, svc: p.svc, ns: p.ns })} cells={[
               <Pill key="s" tone="crit" label="장애" />,
               <span key="t"><Mono>{p.name}</Mono><span style={{ fontSize: TYPE.label, color: UI.ink2 }}> · {p.status} — 컨테이너가 반복 종료됨</span></span>,
               <Mono key="d" dim>{p.svc} · {p.cluster}</Mono>,
@@ -249,7 +470,7 @@ export function IssuesSurface({ sessionRules = [], onOpenRef, onAskAi }: {
             ]} />
           ))}
           {pods.filter((p) => !p.bad && p.restarts >= 2).slice(0, 2).map((p, i) => (
-            <TRow key={p.name} cols={incCols} i={crit.length + i} onClick={() => onOpenRef("Pod", p.name)} cells={[
+            <TRow key={p.name} cols={incCols} i={crit.length + i} onClick={() => setRca({ name: p.name, symptom: "CrashLoopBackOff", cluster: p.cluster, svc: p.svc, ns: p.ns })} cells={[
               <Pill key="s" tone="warn" label="주의" />,
               <span key="t"><Mono>{p.name}</Mono><span style={{ fontSize: TYPE.label, color: UI.ink2 }}> · 재시작 반복 — 관찰 중</span></span>,
               <Mono key="d" dim>{p.svc} · {p.cluster}</Mono>,
@@ -275,6 +496,7 @@ export function IssuesSurface({ sessionRules = [], onOpenRef, onAskAi }: {
           ))}
         </Card>
       )}
+      {rca && <IssueDetail {...rca} onClose={() => setRca(null)} onOpenRef={(k, n) => { setRca(null); onOpenRef(k, n); }} onAskAi={() => { setRca(null); onAskAi(); }} />}
     </Page>
   );
 }
