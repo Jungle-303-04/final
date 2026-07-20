@@ -1,28 +1,28 @@
 # 실행 상태 자기 진단
 
-기준 시각은 2026-07-20 17:08 KST다. 원격 `dev`와 라이브 service/console은 `f5e43d76d5773d90998a548e5fd687e7e0be762a`로 일치한다. demo 기준은 `demo-freeze-v3`의 `adcf92130`이다. 코드·자동 게이트·API 계약·라이브 상태·브라우저 증거가 같은 digest를 가리키지 않는 항목은 완료로 판정하지 않는다.
+기준 시각은 2026-07-20 18:48 KST다. 원격 `dev`와 라이브 service/console은 `359e80927d00f24ed0ce0615b1eb5aeef9631e6a`로 일치하며 Gate `29731587650`과 Deploy `29732007275`가 성공했다. 로컬 다음 후보 `d51b805c2`는 팀 공용 실백엔드 진입점과 포트별 Vite 캐시 격리를 담고 `gate-fast` 및 동시 포트 실제 브라우저 검증을 통과했다. demo 기준은 `demo-freeze-v3`의 `adcf92130`이다. 코드·자동 게이트·API 계약·라이브 상태·브라우저 증거가 같은 digest를 가리키지 않는 항목은 완료로 판정하지 않는다.
 
 ## 이전 보고 대비 델타 — 10줄 요약
 
-1. `e5d49f80a`에서 실행 참조 0인 흡수 파생물·폐기 스크립트를 정리했다: 484파일, +4/-115,442이며 upstream/provenance와 현행 구현은 보존했다.
-2. `4bf34cd92`에서 계약·회귀 방지가 아닌 형식 단언을 삭제했다: 6파일, +1/-199이며 동작 계약은 유지했다.
-3. `b037911cd`에서 실사용 0인 프론트 좀비 구현·테스트를 삭제하고 계보 원장을 현행 목적지로 이관했다: 27파일, +107/-2,309.
-4. 세 정리 커밋 합계는 517파일, +112/-117,950이며 최종 Gate 기준 Backend 3,734 pass/3 skip·Frontend 441파일/2,261 pass로 필수 계약이 유지됐다.
-5. `17794575c` Gate `29723401159`의 결정적 실패 2건은 현행 DB pool 50을 16으로 기대한 단언과 Home 인프라 진입의 `view=map`을 누락한 낡은 URL 단언이었다.
-6. 두 단언은 `27805aa3d`·`5cf5c6dd1`로 정합화했지만 Gate `29723983464`는 `5cf5c6dd1` 제목의 필수 ` / ` 누락으로 Commit proof에서 실패했다.
-7. 후속 `5bd0dc347` Gate `29724205163`은 성공했으나 Deploy `29724528898`은 `/cost`의 `GET /api/cost/nodes`가 무경계 윈도 정렬로 PostgreSQL `pgsql_tmp`를 순간 소진해 500을 반환했고 롤백됐다.
-8. `f5e43d76d`는 클러스터별 인덱스 역방향 조회를 먼저 상한 처리하고 작은 집합만 윈도 처리하며 3클러스터·limit 1과 limit 999→288 회귀를 고정했다.
-9. 같은 SHA의 Gate `29725862657`은 Backend 3,734/3 skip·Frontend 2,261 전부 성공했고 Deploy `29726217807`도 11분 7초에 성공했다.
-10. 라이브 `/api/cost/nodes`는 post-deploy 3.050초·인증 direct 2.233초·SPA 2.209초 모두 HTTP 200이고 10라우트 스모크·rollback 미실행까지 같은 SHA로 일치한다. G4는 별도 시각 대조가 남아 **부분**이다.
+1. 문서 전용 `1031ffd0d`가 원격 `dev`에 push됐지만 기존 CI는 이를 제품 변경으로 분류했다.
+2. `1031ffd0d` Gate `29727037520`은 Backend/Frontend 풀 게이트를 다시 실행해 6분 44초 뒤 성공했다.
+3. Deploy `29727437693`도 제품 변경이 없는데 이미지·롤아웃·인증 라우트 스모크 전체를 11분 39초 실행한 후 성공했다.
+4. 이 실측으로 운영 보고 3파일만의 변경이 약 18분의 무의미한 풀 Gate→Deploy를 일으키는 파이프라인 낭비를 확정했다.
+5. `311b0dcc6`는 `STATUS-REPORT.md`·`GOAL-LOG.md`·`BLOCKERS.md` 정확 집합만 `DOCS/NONE`으로, 혼합·기타 docs·미지 경로는 `FULL`로 fail-closed 분류한다.
+6. `DOCS`는 커밋 규약·세 보고서의 diff 건전성·제품명 경계만 확인하고, `NONE`은 AWS/EKS·이미지·롤아웃을 시작하기 전 privileged deploy job 전체를 건너뛴다.
+7. 수동 배포는 계속 `FULL/CONSOLE`로 제한하고 `NONE`을 금지했으며, `cancel-in-progress: false`·lease·rollback·fail-fast를 유지했다.
+8. 로컬 ShellCheck·Actionlint·CI 계약 66건·`gate-fast`·manifest 67/31·governance 41/41이 통과했고, 실제 `f5e43d76d..1031ffd0d`를 `DOCS/NONE`으로 재현했다.
+9. `c72589442` Gate `29730968155`와 Deploy `29731314210`이 성공(11m09s)했고, 후속 `359e80927`도 Gate `29731587650`·Deploy `29732007275` success(10m55s)로 라이브에 도달했다.
+10. 팀원 로컬 실패는 README/npm 진입점이 로컬 8000과 라이브 5175로 갈린 문제와 다중 Vite 서버가 공용 optimizer cache를 공유해 React 모듈을 혼합한 문제였다. `359e80927`의 React dedupe와 `d51b805c2`의 단일 live 진입·5173 strict port·포트별 cacheDir로 해소했고 5181/5183 동시 브라우저에서 HTTP 200·Kyro·실데이터·console/page error 0을 확인했다. G4는 **부분**이다.
 
 ## 클로드 인계 요약
 
 - 보고 SHA: 이 보고를 담은 문서 전용 커밋은 `dev` push 후 채팅 인계 블록에서 확정한다.
-- 완료: 삭제·테스트 다이어트·좀비 소거 517파일(+112/-117,950), 비용 이력 무경계 정렬 제거, Gate `29725862657`과 Deploy `29726217807` 완주.
-- 진행: G4 demo-freeze-v3 동일 SHA 시각·숫자·클릭 대조와 잔여 중복 코드의 소비자 단위 소거.
-- 신규 블로커: 이번 `/cost` 배포 블로커는 해소됐다. 새 외부 사람 필요 항목은 0개이며 G4는 증거 미완료로 부분이다.
-- 판단 요청: 없음. A안(계약 소비자가 있는 작은 삭제 배치)을 유지하고 B안(테스트 수만 목표로 일괄 삭제)은 사용하지 않는다.
-- 다음 3수: 라이브 비용·홈 숫자 재확인 → G4 3-viewport 대조 → 중복군 한 묶음씩 대체 경로 증명 후 소거.
+- 완료: `c72589442` Deploy `29731314210` success(11m09s), `359e80927` Gate `29731587650`·Deploy `29732007275` success(10m55s), 실백엔드 로컬 브라우저 동시 포트 검증 완료.
+- 진행: `d51b805c2`를 origin/dev에 push해 누구나 `make frontend-live` 또는 `npm run dev`로 localhost:5173을 여는 단일 경로를 배포하는 중이다.
+- 신규 블로커: 없음. 로컬 진입 실패와 Vite React cache 혼합은 해소됐고 G4는 시각·숫자·클릭 증거 미완료로 부분이다.
+- 판단 요청: 없음. A안(실백엔드 단일 기본 진입)을 적용했고 B안(팀원별 ignored `.env.local`)은 재현 불가능하므로 폐기했다.
+- 다음 3수: `d51b805c2` push·Gate→Deploy → fresh checkout 명령 재확인 → 동일 라이브 SHA G4 3-viewport 대조.
 
 ## 현재 상세 근거
 
@@ -68,12 +68,16 @@
 | `5cf5c6dd1` | Gate `29723983464`, Deploy `29724007126` | 제목의 필수 ` / ` 누락으로 Commit proof 실패, 제품 검증 skipped | 원격 이력 재작성 없이 후속 정상 제목으로 재기동 |
 | `5bd0dc347` | Gate `29724205163`, Deploy `29724528898` | Gate 성공; `/cost`→`/api/cost/nodes` 500·PostgreSQL `DiskFull`, rollback 성공 | 전체 이력 window sort의 임시 파일 순간 소진 결함 |
 | `f5e43d76d` | Gate `29725862657`, Deploy `29726217807` | Backend 3,734/3 skip·Frontend 2,261 성공, Deploy 11m07s, 인증 10라우트 및 `/cost` direct/SPA 200 | 현재 원격·라이브 기준점; rollback 미실행, G4 시각 증거는 별도 부분 |
+| `1031ffd0d` | Gate `29727037520`, Deploy `29727437693` | 보고서 3파일만 변경했지만 풀 Gate 6m44s·풀 Deploy 11m39s 성공 | 운영 문서 변경의 파이프라인 낭비 확정 |
+| `311b0dcc6` | Gate `29728487959`, Deploy `29728837938` attempts 1·2·3 | Gate 성공. attempts 1(6m04s)·2(5m52s)는 PostgreSQL PVC full 연쇄로 pre-deploy status 000; 20→40Gi 확장 후 attempt 3 success(11m10s) | service/console configmap SHA 일치, API·인증 10라우트 통과, rollback 미실행; G4 부분 |
+| `c72589442` | Gate `29730968155`, Deploy `29731314210` | 둘 다 success, Deploy 11m09s | 라이브 반영 완료 |
+| `359e80927` | Gate `29731587650`, Deploy `29732007275` | 둘 다 success, Deploy 10m55s, 인증 브라우저 라우트 통과 | 현재 원격·라이브 기준점 |
 
-현재 확인된 성공 기준점에서 원격 `dev`와 라이브는 `f5e43d76d`로 일치한다. exact demo `adcf92130`과의 동일 SHA 3-viewport 대조가 남았으므로 G4 완료를 선언하지 않는다. 다음 push도 소배치 단일 SHA로 만들고 Gate→Deploy 종료까지 추가 push를 금지한다.
+현재 원격 `dev`와 라이브 service/console은 `359e80927`로 일치한다. Gate `29731587650`과 Deploy `29732007275`가 성공했고 post-deploy 및 인증 브라우저 라우트 스모크를 통과했다. 로컬 후보 `d51b805c2`는 5181·5183 동시 실행에서 각각 HTTP 200, title Kyro, 실클러스터 데이터, console/page error 0을 확인했지만 아직 원격·라이브 SHA가 아니므로 배포 완료로 판정하지 않는다. exact demo `adcf92130`과의 동일 SHA 3-viewport 대조는 남았으므로 G4는 **부분**이다.
 
 ### G4 홈과 가시 변화
 
-- 라이브 digest는 `e84748b06ded3450ca3693efb5863ccbfc30eb68`이며 Dev Gate `29694437337`와 Dev Deploy `29694651904`가 모두 성공했다.
+- 기존 G4 Home 시각 대조 기준 digest는 `e84748b06ded3450ca3693efb5863ccbfc30eb68`이며 Dev Gate `29694437337`와 Dev Deploy `29694651904`가 모두 성공했다. 현재 라이브 `311b0dcc6`의 동일 viewport 증거는 다시 채집해야 한다.
 - exact demo `adcf92130`과 제품을 1440 viewport로 대조했다. 대조 자체는 수행했지만 동일 후보 SHA의 최종 숫자·클릭·1280~1920 증거는 아직 없다.
 - 대조 결과 selected cluster를 골라도 전체 fleet 카드가 남는 scope 모순, 헤더·카드 장애 숫자 불일치, W2~W8 편집 및 차트 문법 델타가 확인됐다.
 - 현재 로컬 후보는 선택된 scope만 카드에 반영하고 헤더 장애 수를 같은 카드 원장에서 계산하며, exact 위젯 제목·`전체 보기`·편집 tray·차트 legend/labels를 재구현한다.
@@ -142,11 +146,11 @@
 
 ### 현재 블로커와 다음 3수
 
-activity bigint 배포 블로커는 `333c65734`와 Deploy `29690120559`로 해소됐다. IN-4는 발행자 결정에 따른 의도된 보류이며 canonical hostname의 trusted service-admin identity 주입 위험은 BLOCKERS에 유지한다. D-1~D-4도 같은 SHA의 완료 증거가 생기기 전까지 유지한다. 새로 확인된 **외부 사람 필요 블로커는 0개**다.
+activity bigint·비용 query·PostgreSQL PVC 소진 배포 블로커는 모두 해소됐다. IN-4는 발행자 결정에 따른 의도된 보류이며 canonical hostname의 trusted service-admin identity 주입 위험은 BLOCKERS에 유지한다. D-1~D-4도 같은 SHA의 완료 증거가 생기기 전까지 유지한다. 새로 확인된 **외부 사람 필요 블로커는 0개**다.
 
-1. **단일 배포·rollout 계측**: 검증된 후보 하나만 push하고 Gate→Deploy 완주까지 추가 push를 금지하며 console/service 시간을 이전 17~22초/102~130초와 비교한다.
-2. **동일 SHA 증거**: 라이브에서 exact demo `adcf92130`과 1440 나란히 캡처하고 W3/W6/W7 실데이터·편집 클릭·1280~1920 overflow를 확인한 뒤 Home을 재판정한다.
-3. **알림 동등화**: 독립 주 내비·진행 중 카드·분류/페이지 목록·벨 배지를 기존 alert-events 원장에 연결하고 demo 문법으로 다음 소배치를 만든다.
+1. **로컬 진입 배포**: `d51b805c2`를 push하고 Gate→Deploy 완주까지 추가 push를 금지한다.
+2. **fresh checkout 확인**: 별도 `.env.local` 없이 `make frontend-live`와 `npm run dev`가 같은 실백엔드·5173·격리 cacheDir을 쓰는지 재확인한다.
+3. **G4 증거 재개**: 다음 라이브 SHA에서 exact demo `adcf92130`과 1440·1280·1920 대조·숫자·클릭·overflow를 확인한다.
 
 ## 이전 보고 상세 — 2026-07-19 17:35 KST
 
