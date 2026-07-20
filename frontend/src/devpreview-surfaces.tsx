@@ -311,9 +311,9 @@ export function IssueDetail({ name, symptom, cluster, svc, ns, onClose, onOpenRe
       {/* 스크림 — 사이드바 밖 클릭 시 닫기 */}
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: DUR.fade }}
         onClick={onClose} style={{ position: "fixed", top: topInset, left: leftInset, right: 0, bottom: 0, background: inkA(0.22), zIndex: 55 }} />
-      {/* RCA 보고서 — 우측 사이드바(드로어). 셸 레벨 렌더 전제(transform 조상 밖) */}
-      <motion.div initial={{ x: 500 }} animate={{ x: 0 }} exit={{ x: 500 }} transition={{ type: "spring", bounce: 0.06, visualDuration: 0.34 }}
-        style={{ position: "fixed", top: topInset, right: 0, bottom: 0, width: `calc(480px / ${PRESENT_SCALE})`, maxWidth: "94vw", background: UI.card, borderLeft: `1px solid ${UI.line}`, boxShadow: `-24px 0 70px -30px ${inkA(0.4)}`, zIndex: 56, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+      {/* RCA 보고서 — 우측 사이드바(드로어). 리소스 상세 시트(DetailOverlay)와 폭·레이아웃 통일(560px) */}
+      <motion.div initial={{ x: 580 }} animate={{ x: 0 }} exit={{ x: 580 }} transition={{ type: "spring", bounce: 0.06, visualDuration: 0.34 }}
+        style={{ position: "fixed", top: topInset, right: 0, bottom: 0, width: 560, maxWidth: `calc(100vw / ${PRESENT_SCALE} - ${leftInset}px)`, background: UI.card, borderLeft: `1px solid ${UI.line}`, boxShadow: `-24px 0 60px -30px ${inkA(0.3)}`, zIndex: 56, display: "flex", flexDirection: "column", overflow: "hidden" }}>
         {recover
           ? <RecoveryFlow action={recover} podName={name} svc={svc} onBack={() => setRecover(null)} onClose={onClose} onDone={() => { onRecovered?.(svc); onClose(); }} />
           : <>

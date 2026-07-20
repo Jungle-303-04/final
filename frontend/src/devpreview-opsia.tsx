@@ -665,11 +665,13 @@ export function HomeClusterSection({ meta, onOpen, pending = [] }: {
 // ── 앱 ─────────────────────────────
 // embedded: 셸(통합 리소스)에 내장될 때 자체 헤더·내비를 숨기고 스코프 변화를 알림
 export type MapScope = View;
-export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource , lensTab, onAddCluster, onAddRepo, stickyTop, clusterMeta, onOpenKind, initialCluster, pendingClusters, pendingRepos }: {
+export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOpenRca, lensTab, onAddCluster, onAddRepo, stickyTop, clusterMeta, onOpenKind, initialCluster, pendingClusters, pendingRepos }: {
   embedded?: boolean;
   onScopeChange?: (v: View) => void;
   /** 임베드 모드: 파드 클릭 시 셸의 통합 상세 오버레이를 연다 (내부 패널 대신) */
   onOpenResource?: (kind: "Pod", data: Record<string, unknown>) => void;
+  /** 장애 파드 클릭 시 RCA 상세 사이드바를 연다 (리소스 스펙 시트 대신 — 자연스러운 진입) */
+  onOpenRca?: (incident: { name: string; symptom: string; cluster: string; svc: string; ns: string }) => void;
   /** 셸의 종류 선택과 연결 보기 탭 동기화 (Service→서비스, ConfigMap·Secret→구성, Argo 앱→저장소) — 탭명은 D16(서피스명과 중복 금지) */
   lensTab?: "svc" | "cfg" | "git" | null;
   /** 우측 패널 '리소스' 탭 내용 — 셸의 종류 탐색이 여기로 통합된다 (보조 사이드바 대체) */
@@ -730,6 +732,11 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource , len
   // 임베드에서 상세는 셸 오버레이 하나로 일원화 — 내부 미니 상세(focusPod 패널)를 두 번째 상세로 쓰지 않는다
   const openNodeById = (id: string) => { const n = nodes.find((x) => x.id === id); if (n) go({ level: "pods", cluster: n.cluster, node: n.id }, 1); };
   const selectPod = (p: Pod) => {
+    // 장애 파드는 RCA 상세로 — 스펙 시트가 아니라 원인·복구 보고서로 진입하는 게 자연스럽다
+    if (embedded && isCrit(p) && onOpenRca) {
+      onOpenRca({ name: p.name, symptom: p.status, cluster: p.cluster, svc: p.svc, ns: SVC[p.svc].ns });
+      return;
+    }
     // 임베드 모드에서는 상세를 셸의 최상위 오버레이 하나로 일원화한다 (내부 패널과 이원화 금지)
     if (embedded && onOpenResource) {
       onOpenResource("Pod", {

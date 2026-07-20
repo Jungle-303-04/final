@@ -1267,11 +1267,11 @@ const readBoard = (): BoardState => {
   return defaultBoard();
 };
 
-function HomeSurface({ clusterMeta, onDrillCluster, onConnect, onOpenPod, onPickNs, onWidgetDeepLink, pendingCl = [], pendingRepo = [] }: {
+function HomeSurface({ clusterMeta, onDrillCluster, onConnect, onOpenPod, onPickNs, onWidgetDeepLink, onOpenIssues, pendingCl = [], pendingRepo = [] }: {
   clusterMeta: Record<string, Record<string, number>>;
   onDrillCluster: (clId: string) => void; onConnect: () => void;
   onOpenPod: (name: string) => void; onPickNs: (ns: string) => void;
-  pendingCl?: string[]; pendingRepo?: string[]; onWidgetDeepLink?: (id: string) => void;
+  pendingCl?: string[]; pendingRepo?: string[]; onWidgetDeepLink?: (id: string) => void; onOpenIssues?: () => void;
 }) {
   const pods = useMemo(() => podInventory(), []);
   const nodes = useMemo(() => nodeInventory(), []);
@@ -1383,7 +1383,7 @@ function HomeSurface({ clusterMeta, onDrillCluster, onConnect, onOpenPod, onPick
                 </span>
               )}
               {crit.length > 0 && (
-                <button onClick={() => onDrillCluster(crit[0].cluster)} title="인프라 지도에서 장애 위치 보기"
+                <button onClick={() => (onOpenIssues ? onOpenIssues() : onDrillCluster(crit[0].cluster))} title="이슈 목록에서 원인·복구 보기"
                   style={{ ...seg, borderColor: TINT.crit.bd, background: TINT.crit.bg, color: HP.crit, fontWeight: 700, cursor: "pointer" }}>
                   <Activity size={12} />장애 {crit.length}
                 </button>
@@ -1801,6 +1801,7 @@ function App() {
             else { setSurface("resources"); setResView("list"); setKindId("Pod"); }
           }}
           onDrillCluster={(cl) => { setDrillCl(cl); setSurface("resources"); setResView("map"); }}
+          onOpenIssues={() => setSurface("issues")}
           onConnect={() => setConnectModal("cluster")}
           onOpenPod={(name) => openRef("Pod", name)}
           onPickNs={(n) => { if ((NS_OPTIONS as readonly string[]).includes(n)) setNs(n as (typeof NS_OPTIONS)[number]); setKindId("Pod"); setSurface("resources"); setResView("list"); }} />
@@ -1828,7 +1829,7 @@ function App() {
             /* 지도 — 드릴 전체 높이. 종류 선택은 목록 관점의 것: 패널·스트립에서 종류를 고르면 목록으로 전환 */
             <>
               <OpsiaMap key={drillCl ?? "root"} initialCluster={drillCl ?? undefined} pendingClusters={pendingCl} pendingRepos={pendingRepo}
-                embedded onScopeChange={setScope} onOpenResource={openFromMap} lensTab={lensTabFor(kindId)}
+                embedded onScopeChange={setScope} onOpenResource={openFromMap} onOpenRca={setRcaIncident} lensTab={lensTabFor(kindId)}
                 onAddCluster={() => setConnectModal("cluster")}
                 onAddRepo={() => setConnectModal("repo")}
                 stickyTop={topH + 12}
