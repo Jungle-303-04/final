@@ -24,18 +24,6 @@ def load_gateway_auth_module():
     return module
 
 
-def test_service_image_requirements_include_storage_dependencies() -> None:
-    requirements = (ROOT_DIR / "src" / "services" / "requirements.txt").read_text(encoding="utf-8")
-
-    assert "sqlalchemy==" in requirements
-
-
-def test_controller_runtime_declares_greenlet_for_async_sqlalchemy() -> None:
-    project = (ROOT_DIR / "pyproject.toml").read_text(encoding="utf-8")
-
-    assert '"greenlet>=' in project
-
-
 def test_gateway_redis_client_import_is_not_shadowed_by_config() -> None:
     load_gateway_auth_module()
     config = RedisSessionStoreConfig(

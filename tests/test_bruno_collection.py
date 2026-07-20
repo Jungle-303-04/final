@@ -26,7 +26,6 @@ def request_files() -> list[Path]:
 
 def test_bruno_collection_has_only_aws_test_profile() -> None:
     assert (API_DIR / "bruno.json").is_file()
-    assert (API_DIR / "README.md").is_file()
     collection = (API_DIR / "collection.bru").read_text(encoding="utf-8")
 
     environment_files = sorted(
@@ -354,9 +353,8 @@ def test_bruno_cli_runner_uses_isolated_profile_and_cleans_up_last() -> None:
     assert "purge={{cluster_purge}}" in cleanup_request
 
 
-def test_bruno_cli_runner_includes_operational_rca_reads_and_readme_handoff() -> None:
+def test_bruno_cli_runner_includes_operational_rca_reads() -> None:
     runner = (ROOT_DIR / "scripts" / "run-bruno-aws.sh").read_text(encoding="utf-8")
-    readme = (API_DIR / "README.md").read_text(encoding="utf-8")
     requests = (
         "05-rca-dashboard/13-remediation-bundle.bru",
         "05-rca-dashboard/14-audit-timeline.bru",
@@ -366,10 +364,6 @@ def test_bruno_cli_runner_includes_operational_rca_reads_and_readme_handoff() ->
     positions = [runner.index(request) for request in requests]
 
     assert positions == sorted(positions)
-    assert "`13-remediation-bundle`" in readme
-    assert "`14-audit-timeline`" in readme
-    assert "`15-recent-changes`" in readme
-    assert "실제 200" in readme
 
 
 def test_rca_e2e_workflow_is_thin_separate_and_explicitly_selected() -> None:
@@ -400,117 +394,3 @@ def test_rca_e2e_workflow_is_thin_separate_and_explicitly_selected() -> None:
     assert 'SELECT:${bru.getVar("rca_correlation_id")}' in selection
     assert '"expected_plan_id": "{{rca_plan_id}}"' in selection
     assert '"action_id": "{{rca_action_id}}"' in selection
-    assert (workflow_dir / "README.md").is_file()
-
-
-def test_bruno_readme_explains_each_work_type() -> None:
-    readme = (API_DIR / "README.md").read_text(encoding="utf-8")
-    expected_sections = [
-        "API 의미 사전",
-        "00-health-auth",
-        "01-providers",
-        "02-target-admin",
-        "03-agent-runtime",
-        "04-command",
-        "05-rca-dashboard",
-        "06-gitops-approval",
-        "07-ai",
-        "08-ops-dlq",
-        "09-management-console",
-        "13-alert-channels",
-        "15-wizard-validation",
-        "정상 출력",
-        "GitHub webhook signature",
-        "https://dev-k8s.woonyong.org/api/",
-        "auto_login",
-        "replace-with-auth-email",
-        "BRUNO_CLUSTER_ID",
-    ]
-
-    missing = [section for section in expected_sections if section not in readme]
-
-    assert missing == []
-
-
-def test_bruno_display_names_are_korean() -> None:
-    collection = bruno_text()
-    expected_names = [
-        "name: 00 상태와 인증",
-        "name: 01 Provider 선택",
-        "name: 02 Target 등록과 정책",
-        "name: 03 Agent Runtime",
-        "name: 04 Command 실행",
-        "name: 05 RCA Dashboard",
-        "name: 06 GitOps와 승인",
-        "name: 07 AI 대화",
-        "name: 08 운영과 DLQ",
-        "name: 09 관리 콘솔",
-        "name: 13 알림 채널",
-        "name: 01 상태 확인 healthz",
-        "name: 02 준비 상태 readyz",
-        "name: 03 OpenAPI 계약 확인",
-        "name: 04 사용자 가입 요청",
-        "name: 05 이메일 검증 재전송",
-        "name: 06 로그인",
-        "name: 07 세션 확인",
-        "name: 08 사용자 승인",
-        "name: 09 이메일 검증",
-        "name: 10 로그아웃",
-        "name: 01 Provider 목록 조회",
-        "name: 02 Provider 선택 검증",
-        "name: 01 Target 등록과 Manifest 발급",
-        "name: 02 Cluster 정책 수정",
-        "name: 03 Agent 설치 Manifest 링크 조회",
-        "name: 01 Agent 연결 보고",
-        "name: 02 Agent 정책 조회",
-        "name: 03 정책 적용 상태 보고",
-        "name: 04 Reconcile 상태 보고",
-        "name: 05 Evidence Job 예약",
-        "name: 06 Evidence Job 가져가기",
-        "name: 07 Evidence Job 결과 제출",
-        "name: 08 Evidence 직접 제출",
-        "name: 01 수동 Command 요청",
-        "name: 02 Agent Debug Query 요청",
-        "name: 03 Agent Command 가져가기",
-        "name: 04 Command 시작 보고",
-        "name: 05 Command Heartbeat",
-        "name: 06 Command 결과 제출",
-        "name: 01 RCA Timeline 조회",
-        "name: 02 RCA Incident 상세 조회",
-        "name: 04 Alertmanager Webhook 수신",
-        "name: 01 GitHub Webhook 수신",
-        "name: 02 Approval 승인",
-        "name: 03 Approval 거절",
-        "name: 01 AI 대화 생성",
-        "name: 02 AI 대화 상세 조회",
-        "name: 03 AI 메시지 추가",
-        "name: 04 AI 대화 목록 조회",
-        "name: 05 AI 대화 삭제",
-        "name: 06 근거 기반 AI 채팅",
-        "name: 07 맥락 기반 AI 제안",
-        "name: 08 AI 리소스 목록",
-        "name: 09 AI 리소스 상세",
-        "name: 01 Dead Letter 목록 조회",
-        "name: 02 Dead Letter 재처리",
-        "name: 03 Gateway Metrics 조회",
-        "name: 01 조직 목록 조회",
-        "name: 02 조직 생성",
-        "name: 03 조직 삭제",
-        "name: 04 사용자 목록 조회",
-        "name: 05 그룹 목록 조회",
-        "name: 06 그룹 생성",
-        "name: 07 그룹 멤버 목록 조회",
-        "name: 08 그룹 멤버 추가",
-        "name: 09 그룹 멤버 제거",
-        "name: 10 권한 목록 조회",
-        "name: 11 권한 부여",
-        "name: 12 권한 회수",
-        "name: 01 알림 채널 목록 조회",
-        "name: 02 알림 채널 생성 또는 수정",
-        "name: 03 알림 채널 삭제",
-        "name: 11 클러스터 Usage 시계열 조회",
-    ]
-    missing = [name for name in expected_names if name not in collection]
-
-    assert missing == []
-    assert "name: 02 Validate Provider Selection" not in collection

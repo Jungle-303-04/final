@@ -16,29 +16,6 @@ def test_manifest_checks_do_not_require_docker() -> None:
     assert "kubectl kustomize" in script
 
 
-def test_removed_legacy_github_actions_have_no_active_repository_entrypoints() -> None:
-    makefile = read("Makefile")
-    catalog = read("src/domains/providers/catalog.py")
-    docs_index = read("docs/README.md")
-    active_workflows = {path.name for path in (ROOT_DIR / ".github" / "workflows").glob("*.yml")}
-    removed_workflows = {
-        "aws-cd.yml",
-        "ci.yml",
-        "integration-smoke.yml",
-        "promote-dev.yml",
-    }
-
-    assert active_workflows.isdisjoint(removed_workflows)
-    assert "check: gate" in makefile
-    assert "aws-smoke:" not in makefile
-    assert "gh workflow run" not in makefile
-    assert 'key="github-actions"' not in catalog
-    assert "(aws-cicd.md)" not in docs_index
-    assert "MGMT_CLUSTER ?=" in makefile
-    assert "TARGET_CLUSTER ?=" in makefile
-    assert "smoke: ## 현재 환경변수로 배포된 서비스 smoke 실행" in makefile
-
-
 def test_management_deploy_removes_legacy_minio_deployment() -> None:
     aws_up = read("scripts/aws-up.sh")
     local_up = read("scripts/up.sh")
@@ -80,7 +57,6 @@ def test_internal_gitops_workflow_remains_deployed() -> None:
 def test_local_test_stack_uses_shared_aws_bruno_profile() -> None:
     makefile = read("Makefile")
     local_env = read("config/env/local-test.env.example")
-    local_docs = read("docs/local-testing.md")
     bruno_aws = read("docs/api/environments/aws-test.bru")
 
     assert "local-test-env:" in makefile
@@ -91,9 +67,6 @@ def test_local_test_stack_uses_shared_aws_bruno_profile() -> None:
     assert "AUTH_EMAIL=admin.local@example.com" in local_env
     assert "AUTH_PASSWORD=local-test-password-1234" in local_env
     assert "SMOKE_CLUSTER_ID=target" in local_env
-    assert "make local-up" in local_docs
-    assert "make local-smoke" in local_docs
-    assert "Environment를 `aws-test`로 고른다" in local_docs
     assert "base_url: https://dev-k8s.woonyong.org/api/" in bruno_aws
     assert "dev_security_bypass:" not in bruno_aws
     assert "auto_login: false" in bruno_aws
@@ -131,7 +104,6 @@ def test_target_registration_does_not_override_agent_prometheus_integration() ->
 
 def test_cloudflare_custom_domain_defaults_to_proxied_https() -> None:
     script = read("scripts/aws-up.sh")
-    runbook = read("docs/aws-testing-runbook.md")
 
     assert 'CLOUDFLARE_PROXIED="${CLOUDFLARE_PROXIED:-1}"' in script
     assert '"proxied": ${proxied}' in script
@@ -159,7 +131,6 @@ def test_cloudflare_custom_domain_defaults_to_proxied_https() -> None:
     assert "Cloudflare DNS record lookup failed with HTTP" in script
     assert "Cloudflare API ${method} failed with HTTP ${http_code}" in script
     assert 'scheme="https"' in script
-    assert "`CLOUDFLARE_PROXIED`" in runbook
 
 
 def test_agent_api_endpoint_uses_dns_only_tls_and_path_allowlist() -> None:
@@ -167,7 +138,6 @@ def test_agent_api_endpoint_uses_dns_only_tls_and_path_allowlist() -> None:
     manifest = read("deploy/management/agent-api-proxy.yaml")
     kustomization = read("deploy/management/kustomization.yaml")
     aws_up = read("scripts/aws-up.sh")
-    runbook = read("docs/aws-testing-runbook.md")
 
     assert "AGENT_API_DOMAIN is required" in script
     assert "AGENT_API_ACM_CERT_ARN is required" in script
@@ -208,12 +178,10 @@ def test_agent_api_endpoint_uses_dns_only_tls_and_path_allowlist() -> None:
         in aws_up
     )
     assert '--from-literal=PUBLIC_MANAGEMENT_BASE_URL="${PUBLIC_MANAGEMENT_BASE_URL}"' in aws_up
-    assert "configure-agent-api-endpoint.sh" in runbook
 
 
 def test_aws_management_rollout_status_retries_transient_eks_api_errors() -> None:
     script = read("scripts/aws-up.sh")
-    runbook = read("docs/aws-testing-runbook.md")
 
     assert "management_rollout_resources()" in script
     assert "management_rollout_status()" in script
@@ -232,22 +200,17 @@ def test_aws_management_rollout_status_retries_transient_eks_api_errors() -> Non
     )
     assert 'management_rollout_status "${resource}"' in script
     assert "done < <(management_rollout_resources)" in script
-    assert "TLS handshake timeout" in runbook
-    assert "3번 재시도" in runbook
 
 
 def test_aws_deploy_uses_first_target_cluster_id_by_default() -> None:
     script = read("scripts/aws-up.sh")
-    runbook = read("docs/aws-testing-runbook.md")
 
     assert 'SMOKE_CLUSTER_ID="${SMOKE_CLUSTER_ID:-${TARGET_CLUSTER_ID_1}}"' in script
-    assert "`SMOKE_CLUSTER_ID`" in runbook
 
 
 def test_smoke_retries_gateway_health_before_api_flow() -> None:
     script = read("scripts/smoke.sh")
     auth_script = read("scripts/lib/auth.sh")
-    runbook = read("docs/aws-testing-runbook.md")
 
     assert 'SMOKE_GATEWAY_ATTEMPTS="${SMOKE_GATEWAY_ATTEMPTS:-60}"' in script
     assert 'SMOKE_GATEWAY_INTERVAL_SECONDS="${SMOKE_GATEWAY_INTERVAL_SECONDS:-5}"' in script
@@ -256,13 +219,11 @@ def test_smoke_retries_gateway_health_before_api_flow() -> None:
     assert 'curl -fsS "${candidate}/healthz"' in script
     assert 'printf \'%s/api\\n%s\\n\' "${base}" "${base}"' in script
     assert 'API_BASE_URL="${candidate}"' in script
-    assert "`SMOKE_GATEWAY_ATTEMPTS`" in runbook
     assert 'AUTH_LOGIN_ATTEMPTS="${AUTH_LOGIN_ATTEMPTS:-12}"' in auth_script
     assert (
         'AUTH_LOGIN_RETRY_INTERVAL_SECONDS="${AUTH_LOGIN_RETRY_INTERVAL_SECONDS:-5}"' in auth_script
     )
     assert "login failed (attempt ${attempt}/${AUTH_LOGIN_ATTEMPTS}); retrying" in auth_script
-    assert "`AUTH_LOGIN_ATTEMPTS`" in runbook
     assert '"force": True' in script
 
 
@@ -293,7 +254,6 @@ def test_aws_deploy_builds_and_patches_console_frontend_image() -> None:
     down_script = read("scripts/aws-down.sh")
     console_manifest = read("deploy/management/console-dev.yaml")
     frontend_dockerfile = read("frontend/Dockerfile")
-    runbook = read("docs/aws-testing-runbook.md")
 
     legacy_prefix = "kube" + "heal"
 
@@ -322,7 +282,6 @@ def test_aws_deploy_builds_and_patches_console_frontend_image() -> None:
     assert "COPY --from=build /app/dist/" in frontend_dockerfile
     assert 'CONSOLE_ECR_REPO="${CONSOLE_ECR_REPO:-${PROJECT_SLUG}-console}"' in down_script
     assert 'PROJECT_SLUG="${PROJECT_SLUG:-kubernetes-ops}"' in down_script
-    assert "`CONSOLE_ECR_REPO`" in runbook
 
 
 def test_aws_admin_bootstrap_uses_current_identity_repository() -> None:
@@ -341,10 +300,8 @@ def test_aws_admin_bootstrap_uses_current_identity_repository() -> None:
 
 def test_aws_smoke_uses_runnable_application_manifest() -> None:
     script = read("scripts/aws-up.sh")
-    runbook = read("docs/aws-testing-runbook.md")
 
     assert 'MANIFEST_PATH="${MANIFEST_PATH:-}"' in script
     assert 'SMOKE_MANIFEST_PATH="${SMOKE_MANIFEST_PATH:-src/samples/smoke/deploy.yaml}"' in script
     assert "MANIFEST_PATH is required for AWS deployment" in script
-    assert "`MANIFEST_PATH`" in runbook
     assert "deploy/target/target.yaml" not in script

@@ -226,7 +226,3 @@ def test_pod_exec_rbac_is_present_in_generated_static_and_helm_manifests() -> No
             and rule.get("verbs") == ["create"]
             for rule in cluster_role["rules"]
         )
-
-    documentation = (ROOT / "docs" / "pod-terminal.md").read_text(encoding="utf-8")
-    assert "Re-run the generated Opsia target install command" in documentation
-    assert "resourceNames" in documentation

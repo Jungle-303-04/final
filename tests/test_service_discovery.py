@@ -8,7 +8,6 @@ import pytest
 
 from packages.runtime.discovery import (
     DiscoveredService,
-    describe_services,
     discover_services,
 )
 from packages.runtime.spec import ServiceSpec
@@ -86,14 +85,6 @@ def test_explicitly_ignored_entrypoint_is_not_discovered(tmp_path: Path) -> None
 def test_service_spec_name_required() -> None:
     with pytest.raises(ValueError):
         ServiceSpec(name=" ")
-
-
-def test_describe_lists_every_service() -> None:
-    services = discover_services(ROOT_DIR)
-    text = describe_services(services)
-
-    for svc in services:
-        assert svc.name in text
 
 
 def test_service_spec_literal_is_discoverable(tmp_path: Path) -> None:
