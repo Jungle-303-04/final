@@ -26,7 +26,7 @@ const POD_FACTS = {
 } satisfies Extract<ResourceFacts, { type: "pod" }>;
 
 describe("ResourceFactsPanel", () => {
-  it("renders the Pod fact whitelist with localized numbers and omits unavailable fields", () => {
+  it("renders the Pod contract facts with localized numbers and omits unavailable fields", () => {
     renderFacts(POD_FACTS, "en-US");
     const facts = screen.getByRole("region", { name: "Observed facts" });
 
@@ -35,10 +35,15 @@ describe("ResourceFactsPanel", () => {
     expect(within(facts).getByText("1,234")).toBeTruthy();
     expect(within(facts).getByText("1,250 m")).toBeTruthy();
     expect(within(facts).getByText("2,048 MiB")).toBeTruthy();
+    // 계약에 값이 있는 필드는 렌더된다
+    expect(within(facts).getByText("1/2")).toBeTruthy();
+    expect(within(facts).getByText("10.42.0.17")).toBeTruthy();
+    expect(within(facts).getByText("10.0.0.8")).toBeTruthy();
+    expect(within(facts).getByText("CrashLoopBackOff")).toBeTruthy();
+    // nodeName null, terminated·containers 빈 값은 생략된다(가짜값 금지)
     expect(within(facts).queryByText("Node")).toBeNull();
-    expect(within(facts).queryByText("Ready")).toBeNull();
-    expect(within(facts).queryByText("10.42.0.17")).toBeNull();
-    expect(within(facts).queryByText("CrashLoopBackOff")).toBeNull();
+    expect(within(facts).queryByText("Terminated")).toBeNull();
+    expect(within(facts).queryByText("Containers")).toBeNull();
   });
 
   it("keeps Node readiness true, false, and unavailable as distinct states", () => {

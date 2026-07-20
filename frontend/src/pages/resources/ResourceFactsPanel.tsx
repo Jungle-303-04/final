@@ -1,4 +1,9 @@
-import type { ResourceFacts } from "../../features/resources/resourcesContract";
+import type {
+  ResourceFacts,
+  ResourceMetadataEntry,
+  ResourcePortFact,
+  ResourceReadinessFact,
+} from "../../features/resources/resourcesContract";
 import {
   useI18n,
   type I18nController,
@@ -50,6 +55,12 @@ function factsEntries(
     [t("resources.detail.fact.restarts"), numberText(facts.restartCount, formatNumber)],
     [t("resources.detail.fact.cpu"), unitText(facts.cpuMillicores, "m", formatNumber)],
     [t("resources.detail.fact.memory"), unitText(facts.memoryMebibytes, "MiB", formatNumber)],
+    [t("resources.detail.fact.readiness"), readinessText(facts.readiness)],
+    [t("resources.detail.fact.podIp"), facts.podIp],
+    [t("resources.detail.fact.hostIp"), facts.hostIp],
+    [t("resources.detail.fact.waiting"), listText(facts.waitingReasons)],
+    [t("resources.detail.fact.terminated"), listText(facts.terminatedReasons)],
+    [t("resources.detail.fact.containers"), listText(facts.containerNames ?? [])],
   ]);
   if (facts.type === "node") return compact([
     [t("resources.detail.fact.ready"), facts.ready === null
@@ -60,17 +71,25 @@ function factsEntries(
     [t("resources.detail.fact.podCapacity"), numberText(facts.podCapacity, formatNumber)],
     [t("resources.detail.fact.cpu"), unitText(facts.cpuMillicores, "m", formatNumber)],
     [t("resources.detail.fact.memory"), unitText(facts.memoryMebibytes, "MiB", formatNumber)],
+    [t("resources.detail.fact.cpuUsage"), percentText(facts.cpuRatio, formatNumber)],
+    [t("resources.detail.fact.memoryUsage"), percentText(facts.memoryRatio, formatNumber)],
   ]);
   if (facts.type === "workload") return compact([
     [t("resources.detail.fact.desired"), numberText(facts.desiredReplicas, formatNumber)],
     [t("resources.detail.fact.ready"), numberText(facts.readyReplicas, formatNumber)],
     [t("resources.detail.fact.available"), numberText(facts.availableReplicas, formatNumber)],
     [t("resources.detail.fact.updated"), numberText(facts.updatedReplicas, formatNumber)],
+    [t("resources.detail.fact.unavailable"), numberText(facts.unavailableReplicas, formatNumber)],
+    [t("resources.detail.fact.generation"), numberText(facts.generation, formatNumber)],
+    [t("resources.detail.fact.observedGeneration"), numberText(facts.observedGeneration, formatNumber)],
   ]);
   if (facts.type === "service") return compact([
     [t("resources.detail.fact.type"), facts.serviceType],
     [t("resources.detail.fact.clusterIp"), facts.clusterIp],
     [t("resources.detail.fact.externalUrl"), facts.externalUrl],
+    [t("resources.detail.fact.externalHosts"), listText(facts.externalHosts)],
+    [t("resources.detail.fact.selector"), selectorText(facts.selector)],
+    [t("resources.detail.fact.ports"), portsText(facts.ports)],
   ]);
   if (facts.type === "event") return compact([
     [t("resources.detail.fact.type"), facts.eventType],
@@ -108,4 +127,39 @@ function unitText(
   formatNumber: I18nController["formatNumber"],
 ): string | null {
   return value === null ? null : `${formatNumber(value)} ${unit}`;
+}
+
+function percentText(
+  ratio: number | null,
+  formatNumber: I18nController["formatNumber"],
+): string | null {
+  return ratio === null ? null : `${formatNumber(Math.round(ratio * 100))}%`;
+}
+
+function readinessText(readiness: ResourceReadinessFact | null): string | null {
+  return readiness === null ? null : `${readiness.ready}/${readiness.total}`;
+}
+
+function listText(values: readonly string[] | undefined): string | null {
+  return values && values.length > 0 ? values.join(", ") : null;
+}
+
+function selectorText(entries: readonly ResourceMetadataEntry[]): string | null {
+  return entries.length > 0
+    ? entries.map(({ key, value }) => `${key}=${value}`).join(", ")
+    : null;
+}
+
+function portsText(ports: readonly ResourcePortFact[]): string | null {
+  if (ports.length === 0) return null;
+  return ports.map(formatPort).join(", ");
+}
+
+function formatPort(port: ResourcePortFact): string {
+  const name = port.name ? `${port.name}: ` : "";
+  const protocol = port.protocol ? `${port.protocol} ` : "";
+  const value = port.port === null ? "?" : String(port.port);
+  const target = port.targetPort ? `→${port.targetPort}` : "";
+  const node = port.nodePort === null ? "" : ` (node ${port.nodePort})`;
+  return `${name}${protocol}${value}${target}${node}`;
 }

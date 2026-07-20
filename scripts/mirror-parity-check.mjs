@@ -41,7 +41,7 @@ function hasToken(text, token) {
 function topLevelFields(schemaText) {
   // `  field: z...` 형태의 top-level 필드명(휴리스틱)
   const fields = new Set();
-  for (const m of schemaText.matchAll(/^\s{2,}([a-z_][a-z0-9_]*)\s*:/gm)) {
+  for (const m of schemaText.matchAll(/^\s{2,}([a-zA-Z_][a-zA-Z0-9_]*)\s*:/gm)) {
     fields.add(m[1]);
   }
   return fields;
@@ -62,7 +62,11 @@ const schemaCache = new Map();
 const referencedBySchema = new Map(); // schema -> Set(field)
 function schemaText(schemaFile) {
   if (!schemaCache.has(schemaFile)) {
-    schemaCache.set(schemaFile, readText(join(apiDir, schemaFile)));
+    // backendSchema 는 파일명(api/ 아래) 또는 srcDir 기준 상대경로 둘 다 허용한다.
+    // (예: "recovery-schemas.ts" 또는 "features/resources/resourcesContract.ts")
+    const text =
+      readText(join(apiDir, schemaFile)) ?? readText(join(srcDir, schemaFile));
+    schemaCache.set(schemaFile, text);
   }
   return schemaCache.get(schemaFile);
 }

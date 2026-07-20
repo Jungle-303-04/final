@@ -169,6 +169,127 @@
       "backendEndpoint": "/api/rca/incidents/{id}/recent-changes",
       "status": "A",
       "action": "bind"
+    },
+    {
+      "surface": "resources",
+      "element": "pod.detail.podIp",
+      "demoRef": "devpreview-unified.tsx#detail-overview",
+      "devRef": "pages/resources/ResourceFactsPanel.tsx",
+      "backendSchema": "features/resources/resourcesContract.ts",
+      "backendField": "podIp",
+      "backendEndpoint": "/api/clusters/{id}/inventory/resource-detail",
+      "status": "A",
+      "action": "bind"
+    },
+    {
+      "surface": "resources",
+      "element": "pod.detail.hostIp",
+      "demoRef": "devpreview-unified.tsx#detail-overview",
+      "devRef": "pages/resources/ResourceFactsPanel.tsx",
+      "backendSchema": "features/resources/resourcesContract.ts",
+      "backendField": "hostIp",
+      "backendEndpoint": "/api/clusters/{id}/inventory/resource-detail",
+      "status": "A",
+      "action": "bind"
+    },
+    {
+      "surface": "resources",
+      "element": "pod.detail.readiness",
+      "demoRef": "devpreview-unified.tsx#detail-overview",
+      "devRef": "pages/resources/ResourceFactsPanel.tsx",
+      "backendSchema": "features/resources/resourcesContract.ts",
+      "backendField": "readiness",
+      "backendEndpoint": "/api/clusters/{id}/inventory/resource-detail",
+      "status": "A",
+      "action": "bind"
+    },
+    {
+      "surface": "resources",
+      "element": "pod.detail.waitingReasons",
+      "demoRef": "devpreview-unified.tsx#detail-overview",
+      "devRef": "pages/resources/ResourceFactsPanel.tsx",
+      "backendSchema": "features/resources/resourcesContract.ts",
+      "backendField": "waitingReasons",
+      "backendEndpoint": "/api/clusters/{id}/inventory/resource-detail",
+      "status": "A",
+      "action": "bind"
+    },
+    {
+      "surface": "resources",
+      "element": "pod.detail.containerNames",
+      "demoRef": "devpreview-unified.tsx#detail-overview",
+      "devRef": "pages/resources/ResourceFactsPanel.tsx",
+      "backendSchema": "features/resources/resourcesContract.ts",
+      "backendField": "containerNames",
+      "backendEndpoint": "/api/clusters/{id}/inventory/resource-detail",
+      "status": "A",
+      "action": "bind"
+    },
+    {
+      "surface": "resources",
+      "element": "node.detail.cpuRatio",
+      "demoRef": "devpreview-unified.tsx#detail-overview",
+      "devRef": "pages/resources/ResourceFactsPanel.tsx",
+      "backendSchema": "features/resources/resourcesContract.ts",
+      "backendField": "cpuRatio",
+      "backendEndpoint": "/api/clusters/{id}/inventory/resource-detail",
+      "status": "A",
+      "action": "bind"
+    },
+    {
+      "surface": "resources",
+      "element": "node.detail.memoryRatio",
+      "demoRef": "devpreview-unified.tsx#detail-overview",
+      "devRef": "pages/resources/ResourceFactsPanel.tsx",
+      "backendSchema": "features/resources/resourcesContract.ts",
+      "backendField": "memoryRatio",
+      "backendEndpoint": "/api/clusters/{id}/inventory/resource-detail",
+      "status": "A",
+      "action": "bind"
+    },
+    {
+      "surface": "resources",
+      "element": "workload.detail.unavailableReplicas",
+      "demoRef": "devpreview-unified.tsx#detail-overview",
+      "devRef": "pages/resources/ResourceFactsPanel.tsx",
+      "backendSchema": "features/resources/resourcesContract.ts",
+      "backendField": "unavailableReplicas",
+      "backendEndpoint": "/api/clusters/{id}/inventory/resource-detail",
+      "status": "A",
+      "action": "bind"
+    },
+    {
+      "surface": "resources",
+      "element": "workload.detail.generation",
+      "demoRef": "devpreview-unified.tsx#detail-overview",
+      "devRef": "pages/resources/ResourceFactsPanel.tsx",
+      "backendSchema": "features/resources/resourcesContract.ts",
+      "backendField": "observedGeneration",
+      "backendEndpoint": "/api/clusters/{id}/inventory/resource-detail",
+      "status": "A",
+      "action": "bind"
+    },
+    {
+      "surface": "resources",
+      "element": "service.detail.selector",
+      "demoRef": "devpreview-unified.tsx#detail-overview",
+      "devRef": "pages/resources/ResourceFactsPanel.tsx",
+      "backendSchema": "features/resources/resourcesContract.ts",
+      "backendField": "selector",
+      "backendEndpoint": "/api/clusters/{id}/inventory/resource-detail",
+      "status": "A",
+      "action": "bind"
+    },
+    {
+      "surface": "resources",
+      "element": "service.detail.ports",
+      "demoRef": "devpreview-unified.tsx#detail-overview",
+      "devRef": "pages/resources/ResourceFactsPanel.tsx",
+      "backendSchema": "features/resources/resourcesContract.ts",
+      "backendField": "ports",
+      "backendEndpoint": "/api/clusters/{id}/inventory/resource-detail",
+      "status": "A",
+      "action": "bind"
     }
   ]
 }
