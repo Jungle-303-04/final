@@ -104,7 +104,10 @@ make clean
 `references/upstream/`에서만 추적하며, 출처·라이선스 고지는 루트 `NOTICE`를 따른다.
 
 ```bash
-# 웹 개발 서버
+# 웹 개발 서버 + 실제 dev 백엔드 (http://localhost:5173)
+make frontend-live
+
+# frontend 디렉터리에서 실행해도 같은 서버가 열린다.
 cd frontend && npm run dev
 
 # 데스크톱 개발 셸
