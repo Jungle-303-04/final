@@ -71,7 +71,7 @@ export function ProductHeaderProfileMenu({
           <>
             <div
               aria-label={t("shell.profile.utilities")}
-              className="grid grid-cols-4 items-center justify-items-center gap-1 px-1 py-1"
+              className="flex flex-wrap items-center justify-center gap-3 px-2 py-1"
               role="group"
             >
               {utilities}

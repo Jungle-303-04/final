@@ -42,6 +42,14 @@ describe("ProductHeaderProfileMenu auth semantics", () => {
           <ProductHeaderProfileMenu
             auth={auth}
             settingsHref="/settings"
+            utilities={(
+              <>
+                <span>Language</span>
+                <span>Theme</span>
+                <span>Help</span>
+                <span>Diagnostics</span>
+              </>
+            )}
           />
         </MemoryRouter>
       </I18nProvider>,
@@ -49,6 +57,8 @@ describe("ProductHeaderProfileMenu auth semantics", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Open profile menu/u }));
 
+    expect(screen.getByRole("group", { name: "Display and diagnostic tools" }).className)
+      .toContain("gap-3");
     expect(screen.getByRole("button", { name: "Sign out" })).toHaveProperty("disabled", true);
     expect(screen.getByText(/managed by the trusted proxy/u)).not.toBeNull();
     expect(onSignOut).not.toHaveBeenCalled();

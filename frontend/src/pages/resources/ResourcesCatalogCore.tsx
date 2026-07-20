@@ -76,13 +76,18 @@ export function ResourcesCatalog({
             {t("resources.catalog.description")}
           </p>
         </div>
-        <span className="flex shrink-0 gap-1">
+        <span className="flex shrink-0 gap-1.5">
           {discovered === null ? null : (
-            <Badge variant={discovery?.completeness === "partial" ? "outline" : "secondary"}>
+            <Badge
+              className="h-7 px-3 text-xs tabular-nums"
+              variant={discovery?.completeness === "partial" ? "outline" : "secondary"}
+            >
               {t("resources.catalog.discoveryCountShort", { count: formatNumber(discovered) })}
             </Badge>
           )}
-          <Badge variant="secondary">{formatNumber(items.reduce((sum, item) => sum + item.count, 0))}</Badge>
+          <Badge className="h-7 px-3 text-xs tabular-nums" variant="secondary">
+            {formatNumber(items.reduce((sum, item) => sum + item.count, 0))}
+          </Badge>
         </span>
       </header>
       <nav aria-label={t("resources.catalog.tabs.aria")} className="overflow-x-auto border-b p-2">
