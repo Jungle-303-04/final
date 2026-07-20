@@ -8,8 +8,11 @@ import {
   type ReactNode,
 } from "react";
 
-import { clusterListSchema, type ClusterSummary } from "../api/cluster-schemas";
-import { listClusters } from "../api/clusters";
+import { listDevpreviewClusters } from "../app/apiComposition";
+import { readDevpreviewDataMode } from "../features/filters/devpreviewDeepLinks";
+
+type DevpreviewClusterList = Awaited<ReturnType<typeof listDevpreviewClusters>>;
+type DevpreviewClusterSummary = DevpreviewClusterList["clusters"][number];
 
 export type DevpreviewDataSource = "live" | "fixture";
 export type DevpreviewDataStatus = "loading" | "ready" | "error";
@@ -20,10 +23,10 @@ export interface DevpreviewCluster {
   name: string;
   displayName: string;
   environment: string;
-  provider: NonNullable<ClusterSummary["provider"]>;
+  provider: NonNullable<DevpreviewClusterSummary["provider"]>;
   connectionStatus: string;
-  connectionStage: ClusterSummary["connection_stage"] | null;
-  observationMode: NonNullable<ClusterSummary["observation_mode"]>;
+  connectionStage: DevpreviewClusterSummary["connection_stage"] | null;
+  observationMode: NonNullable<DevpreviewClusterSummary["observation_mode"]>;
   lastObservedAt: string | null;
   kubernetesVersion: string | null;
   nodeCount: number | null;
@@ -44,11 +47,10 @@ export interface DevpreviewContractState {
 }
 
 /**
- * Offline-only preview fixture. It uses the gateway wire contract verbatim and
- * is parsed at module load, so a backend contract change fails loudly instead
- * of silently drifting from the product adapter.
+ * Offline-only preview fixture. `satisfies` keeps it compile-time aligned with
+ * the exact return type of the authenticated gateway composition.
  */
-export const DEV_PREVIEW_CLUSTER_FIXTURE = clusterListSchema.parse({
+export const DEV_PREVIEW_CLUSTER_FIXTURE = {
   clusters: [
     contractCluster({
       clusterId: "management-server",
@@ -69,7 +71,7 @@ export const DEV_PREVIEW_CLUSTER_FIXTURE = clusterListSchema.parse({
       role: "target",
     }),
   ],
-});
+} satisfies DevpreviewClusterList;
 
 const EMPTY_STATE: DevpreviewContractState = {
   source: "live",
@@ -83,7 +85,7 @@ const EMPTY_STATE: DevpreviewContractState = {
 const DevpreviewContractContext = createContext<DevpreviewContractState>(EMPTY_STATE);
 
 export function DevpreviewContractProvider({ children }: { children: ReactNode }) {
-  const source = readDataSource();
+  const source = readDevpreviewDataMode(import.meta.env.VITE_DEVPREVIEW_DATA_MODE);
   const [revision, setRevision] = useState(0);
   const [status, setStatus] = useState<DevpreviewDataStatus>("loading");
   const [clusters, setClusters] = useState<DevpreviewCluster[]>([]);
@@ -99,7 +101,7 @@ export function DevpreviewContractProvider({ children }: { children: ReactNode }
 
     const request = source === "fixture"
       ? Promise.resolve(DEV_PREVIEW_CLUSTER_FIXTURE)
-      : listClusters({}, controller.signal);
+      : listDevpreviewClusters(controller.signal);
 
     void request.then((response) => {
       if (controller.signal.aborted) return;
@@ -136,7 +138,7 @@ export function useDevpreviewContracts(): DevpreviewContractState {
   return useContext(DevpreviewContractContext);
 }
 
-export function projectCluster(cluster: ClusterSummary): DevpreviewCluster {
+export function projectCluster(cluster: DevpreviewClusterSummary): DevpreviewCluster {
   const configuredName = cluster.settings.name;
   const configuredRole = cluster.settings.cluster_role;
   const role = configuredRole === "management" || cluster.environment === "management"
@@ -164,13 +166,6 @@ export function projectCluster(cluster: ClusterSummary): DevpreviewCluster {
     role,
     readOnly: role === "management",
   };
-}
-
-function readDataSource(): DevpreviewDataSource {
-  if (typeof window === "undefined") return "fixture";
-  const query = new URLSearchParams(window.location.search).get("data");
-  if (query === "fixture") return "fixture";
-  return import.meta.env.VITE_DEVPREVIEW_DATA_MODE === "fixture" ? "fixture" : "live";
 }
 
 function contractCluster(input: {

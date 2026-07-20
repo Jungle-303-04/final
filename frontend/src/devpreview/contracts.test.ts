@@ -1,13 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { clusterListSchema } from "../api/cluster-schemas";
 import { DEV_PREVIEW_CLUSTER_FIXTURE, projectCluster } from "./contracts";
 
 describe("devpreview contract fixtures", () => {
   it("keeps the offline cluster fixture on the product gateway contract", () => {
-    const parsed = clusterListSchema.parse(DEV_PREVIEW_CLUSTER_FIXTURE);
-
-    expect(parsed.clusters.map((cluster) => cluster.cluster_id)).toEqual([
+    expect(DEV_PREVIEW_CLUSTER_FIXTURE.clusters.map((cluster) => cluster.cluster_id)).toEqual([
       "management-server",
       "game-server",
       "demo-server",
