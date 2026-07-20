@@ -242,7 +242,8 @@ function IssueOverview({
 }) {
   const listEvidenceCount = issueEvidenceCount(selected);
   const resolved = isResolvedIssue(selected.status);
-  const confidence = selected.confidence === null ? null : `${Math.round(selected.confidence * 100)}%`;
+  const confidencePct = selected.confidence === null ? null : Math.round(selected.confidence * 100);
+  const confidence = confidencePct === null ? null : `${confidencePct}%`;
   const supportingCount = listEvidenceCount === null ? null : copy.listCount(listEvidenceCount);
   const detail = state.data;
   const missingEvidence = detail?.missingEvidence ?? selected.missingEvidence ?? [];
@@ -258,8 +259,30 @@ function IssueOverview({
           <Badge variant={resolved ? "secondary" : "outline"}>
             {resolved ? copy.lifecycleClosed : copy.statusLabel(selected.status)}
           </Badge>
-          {confidence !== null ? (
-            <Badge variant="outline">{copy.confidence} {confidence}</Badge>
+          {confidence !== null && confidencePct !== null ? (
+            <span
+              aria-label={`${copy.confidence} ${confidence}`}
+              className="inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-xs"
+            >
+              <span className="font-medium text-muted-foreground">{copy.confidence}</span>
+              <span
+                aria-hidden="true"
+                className="h-1.5 w-14 overflow-hidden rounded-full bg-muted"
+              >
+                <span
+                  className={cn(
+                    "block h-full rounded-full",
+                    confidencePct >= 80
+                      ? "bg-status-healthy"
+                      : confidencePct >= 50
+                        ? "bg-status-warning"
+                        : "bg-destructive",
+                  )}
+                  style={{ width: `${confidencePct}%` }}
+                />
+              </span>
+              <span className="font-mono font-semibold tabular-nums text-foreground">{confidence}</span>
+            </span>
           ) : null}
           {supportingCount !== null ? (
             <Badge
@@ -574,8 +597,11 @@ function ReportCandidateAccordion({
             {copy.recommended}
           </Badge>
           {selectedCandidate.score !== null ? (
-            <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-              {Math.round(selectedCandidate.score * 100)}%
+            <span className="flex shrink-0 items-center gap-1.5">
+              <span aria-hidden="true" className="h-1 w-10 overflow-hidden rounded-full bg-muted">
+                <span className="block h-full rounded-full bg-status-healthy" style={{ width: `${Math.round(selectedCandidate.score * 100)}%` }} />
+              </span>
+              <span className="text-xs font-mono font-semibold tabular-nums text-foreground">{Math.round(selectedCandidate.score * 100)}%</span>
             </span>
           ) : null}
         </div>
@@ -618,9 +644,16 @@ function ReportCandidateAccordion({
               <span className="min-w-0 truncate text-sm font-medium" title={candidate.title ?? candidate.id}>
                 {candidate.title ?? humanizeFilterValue(candidate.id)}
               </span>
-              <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-                {candidate.score !== null ? `${Math.round(candidate.score * 100)}%` : copy.valueUnknown}
-              </span>
+              {candidate.score !== null ? (
+                <span className="flex shrink-0 items-center gap-1.5">
+                  <span aria-hidden="true" className="h-1 w-10 overflow-hidden rounded-full bg-muted">
+                    <span className="block h-full rounded-full bg-muted-foreground/45" style={{ width: `${Math.round(candidate.score * 100)}%` }} />
+                  </span>
+                  <span className="text-xs font-mono tabular-nums text-muted-foreground">{Math.round(candidate.score * 100)}%</span>
+                </span>
+              ) : (
+                <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{copy.valueUnknown}</span>
+              )}
               <Sparkle
                 aria-hidden="true"
                 className="size-4 shrink-0 text-muted-foreground transition-[color,transform] duration-(--motion-instant) group-hover:text-foreground/80 group-open:rotate-45 group-open:text-foreground motion-reduce:transition-none"
@@ -733,9 +766,28 @@ function EvidenceTokenList({
         ) : null}
         {label}
       </h5>
-      <p className="break-words text-xs leading-relaxed text-muted-foreground">
-        {items.map((item) => evidenceDisplayNameFromToken(item, copy)).join(" · ")}
-      </p>
+      <ul className="flex flex-wrap gap-1.5">
+        {items.map((item) => (
+          <li
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs",
+              tone === "healthy"
+                ? "border-status-healthy/25 bg-status-healthy/8 text-foreground/80"
+                : "border-dashed border-status-warning/40 bg-status-warning/8 text-foreground/80",
+            )}
+            key={item}
+          >
+            <span
+              aria-hidden="true"
+              className={cn(
+                "size-1.5 shrink-0 rounded-full",
+                tone === "healthy" ? "bg-status-healthy" : "bg-status-warning",
+              )}
+            />
+            <span className="break-words">{evidenceDisplayNameFromToken(item, copy)}</span>
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }
