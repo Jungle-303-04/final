@@ -9,9 +9,11 @@ const sourceRoot = fileURLToPath(new URL("./src", import.meta.url));
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, frontendRoot, "");
+  // 기본값은 공유 라이브 백엔드 — 클론 후 env 없이 `npm run dev`만 해도 바로 붙는다.
+  // 로컬 백엔드로 개발하려면 VITE_BACKEND_ORIGIN=http://127.0.0.1:8000 으로 덮어쓴다.
   const backendOrigin = process.env.VITE_BACKEND_ORIGIN
     ?? env.VITE_BACKEND_ORIGIN
-    ?? "http://127.0.0.1:8000";
+    ?? "https://k8s.woonyong.org";
   const proxy = {
     "/api": {
       target: backendOrigin,
