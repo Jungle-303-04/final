@@ -6,6 +6,7 @@ import type { ResourceTopologyView } from "../../features/filters/resourceTopolo
 import type { TimelineRange } from "../../features/filters/filterContract";
 import type { ResourcesFilterResourcePage } from "../../features/resources/resourcesFilterContract";
 import type { ResourceSummary } from "../../features/resources/resourcesContract";
+import type { GitOpsPort } from "../../features/gitops/gitOpsContract";
 import type { ResourceMetricsHistoryFrame } from "./useResourceMetricsHistoryDataFrame";
 import { captureRouteMorph } from "../../motion/useCameraMorph";
 import { useMotionAwareScrollIntoView } from "../../motion/scrollIntoView";
@@ -30,7 +31,6 @@ import type { ChangeTimelineFrame } from "./useChangeTimelineDataFrame";
 import { useResourcesPageState } from "./useResourcesPageState";
 import type { PhysicalTopologyReplayState } from "./usePhysicalTopologyRealtime";
 import type { PhysicalPodOpenTarget } from "./physicalTopologyGraphTypes";
-import { ResourcesViewSwitcher } from "./ResourcesViewSwitcher";
 import { ResourcesToolbar } from "./ResourcesToolbar";
 import { ResourcesListRail } from "./ResourcesListRail";
 import { useResourcesRelationshipFocus } from "./useResourcesRelationshipFocus";
@@ -45,6 +45,7 @@ export function ResourcesListSurface({
   onLoadMore,
   physicalTopology,
   relationTopology,
+  repositoryLineagePort,
   replay,
   selectTableRows,
   state,
@@ -62,6 +63,7 @@ export function ResourcesListSurface({
   onLoadMore: () => void;
   physicalTopology: ReturnType<typeof usePhysicalTopologyDataFrame>;
   relationTopology: RelationTopologyFrame;
+  repositoryLineagePort?: Pick<GitOpsPort, "listApplications" | "listSyncTargets">;
   replay: PhysicalTopologyReplayState;
   selectTableRows: (rows: readonly ResourceSummary[]) => ResourceSummary[];
   state: ReturnType<typeof useResourcesPageState>;
@@ -182,12 +184,12 @@ export function ResourcesListSurface({
   });
   return (
     <div className="grid min-w-0 gap-3.5" data-slot="resources-view-surface">
-      <ResourcesViewSwitcher onChange={state.setView} view={state.view} />
       <div className="grid min-w-0 items-start gap-3.5 lg:grid-cols-[minmax(0,1fr)_16.875rem]">
         <ResourcesListRail
           connectionTopology={connectionTopology}
           focusedNodeId={relationshipFocus.selectedResourceId}
           onFocus={relationshipFocus.focusNode}
+          repositoryLineagePort={repositoryLineagePort}
           repositoryHref={relationshipFocus.repositoryHref}
           state={state}
         />

@@ -1,28 +1,28 @@
 # 실행 상태 자기 진단
 
-기준 시각은 2026-07-20 11:27 KST다. 원격 `dev`와 라이브 console은 `61deed8340b7d9fe699359a507a84f9b02e201cb`로 일치하며, 전면 서피스 제품 배치는 부모 `1b9c6e9c31075ba1c5ab093fff36978bb07b211c`다. demo 기준은 `demo-freeze-v3`의 `adcf92130`이다. 코드·자동 게이트·API 계약·라이브 상태·브라우저 증거가 같은 digest를 가리키지 않는 항목은 완료로 판정하지 않는다.
+기준 시각은 2026-07-20 12:59 KST다. 원격 `dev`와 라이브 console은 `993cd2ec2e0c706a7cda12c0c55ef356b7520090`으로 일치한다. demo 기준은 `demo-freeze-v3`의 `adcf92130`이다. 코드·자동 게이트·API 계약·라이브 상태·브라우저 증거가 같은 digest를 가리키지 않는 항목은 완료로 판정하지 않는다.
 
 ## 이전 보고 대비 델타 — 10줄 요약
 
-1. 전면 UI 배치 `1b9c6e9c3`는 Kyro 셸과 Home·Resources·Deploy/GitOps/Workflow·Alerts·AI·Issues·Timeline·Checks·Cost·Settings를 demo-freeze-v3 문법으로 한 제품 계보에 수렴했다.
-2. 로컬 영향 계약 142/142, Issues 29/29, Cost 8/8, typecheck, ESLint, 디자인 가드 1,446파일, production build, governance 41/41이 저부하·worker 2 규칙에서 성공했다.
-3. 첫 Dev Gate `29711958000`은 Frontend 2,298/2,299 통과 후 `WidgetFrame`이 Router 밖 테스트에서 `<Link>`를 사용한 단일 경계 결함으로 실패했고 Deploy `29712157175`는 정상 skipped됐다.
-4. `61deed834`는 실제 `href`와 새 탭 의미를 보존하면서 일반 클릭만 History API로 전환했고 표적 계약 2/2와 ESLint를 통과했다.
-5. Dev Gate `29712271375`는 proof 16초, backend 35초, frontend 1분53초, full gate 전부 성공했다.
-6. Dev Deploy `29712347044`는 같은 SHA를 11분08초에 배포했고 service·console immutable rollout과 rollback 미실행을 확인했다.
-7. 같은 Deploy에서 post-deploy API smoke와 인증 browser route smoke가 모두 성공했으며 성공 service/console SHA가 클러스터에 기록됐다.
-8. 알림/RCA 발표 감사에서 RCA 자동 시작, 규칙 웹훅 전달, 워크플로우 동적 상태, ack/resolved 집계, 클러스터 연결 완료 표현의 P0 5건을 확인했다.
-9. G4는 기능·라우트·라이브 digest는 일치하지만 Chrome enterprise policy가 라이브 자동 캡처를 차단해 같은 SHA 1280·1440·1920 나란히 증거가 미완료이므로 **부분**을 유지한다.
-10. 다음 3수는 RCA 자동 시작과 웹훅 전달 해소 → 워크플로우·알림 동적 상태 통합 → 실제 2노드 부하/HPA·로그·GitOps·release-run 발표 스모크다.
+1. RCA 상세 딥링크·복구 상태 동기화 `42369ecf2`는 Gate `29713518047`, Deploy `29713598921`, 인증 브라우저 스모크까지 성공했다.
+2. AI 대화 내역 상태와 클러스터 등록 환경·완료 결과 `993cd2ec2`는 프론트 20/20·등록 백엔드 122/122·governance 41/41을 통과했다.
+3. 같은 `993cd2ec2`의 Gate `29715195803`과 Deploy `29715426460`이 성공했고 post-deploy/API/인증 8라우트 스모크와 rollback 미실행을 확인했다.
+4. 배포 전 클러스터 `environment` 422는 구 백엔드/새 프론트의 일시적 digest 불일치였고, 같은 SHA 재검증에서 production payload HTTP 200·명령 발급·1280 overflow/console 오류 0을 확인했다.
+5. 별개 결함인 최초 등록 POST 실패 뒤 `receipt=null` 재시도 no-op은 로컬에서 입력 보존 후 1단계 복귀로 수정했고 poll 실패 재시도와 함께 12/12를 통과했다.
+6. AI 비동기 대화는 HTTP 200 수락 뒤 `ai-chat-worker`가 실패 상태를 기록할 수 있으나 실패 이유·직접 재시도 CTA가 없어 **부분**이다.
+7. 다음 Resources 배치는 실 GitOps 저장소→애플리케이션→클러스터/namespace/revision 계보와 실행 가능한 배포 CTA를 준비했고 프론트 17/17을 통과했다.
+8. 같은 Resources 배치는 current snapshot 노드만 선택하고 fresh inventory CPU/MEM만 폴백하며 stale·비정상 값은 `null`로 유지한다. 백엔드 회귀 40/40·Ruff가 성공했다.
+9. 워크플로우 동적 상태·readiness·재시도/롤백은 로컬 13/13이고 알림 canonical event/webhook outbox도 로컬 계약을 통과했지만 아직 라이브 digest가 아니므로 완료가 아니다.
+10. 다음 3수는 클러스터 실패 재시도·같은 SHA 브라우저 재검증 → Resources/저장소/실노드 배포 → 워크플로우·알림·AI 실패 복구 배포다.
 
 ## 클로드 인계 요약
 
-- 보고 SHA: 이 보고를 담는 후속 docs 커밋을 `dev`에 push한 뒤 채팅 인계 블록에 확정 SHA를 기록한다.
-- 완료: `61deed834` Gate `29712271375`와 Deploy `29712347044` 성공, 전면 Kyro UI 라이브 반영, API·인증 브라우저 스모크 성공.
-- 진행: demo-freeze-v3와 동일 SHA 3-viewport 시각 증거 및 발표용 RCA/알림/워크플로우 동적 경로 보강.
-- 신규 블로커: 외부 사람 필요 0건. 제품 내부 P0는 RCA 자동 시작·규칙 웹훅·워크플로우 동적 상태·알림 상태 집계·클러스터 연결 완료 표현 5건.
-- 판단 요청: 없음. A안(확인된 P0를 작은 배치로 순차 배포)이 B안(다음 대규모 UI 배치)보다 실패 원인 분리와 발표 안정성에 유리해 A안으로 자율 진행한다.
-- 다음 3수: RCA 자동 시작/웹훅 → 워크플로우·알림 상태 → 실제 발표 시나리오 스모크.
+- 보고 SHA: 이 보고는 다음 Resources 제품 배치 커밋에 포함해 `dev` push 후 확정 SHA를 채팅 인계 블록에 기록한다.
+- 완료: `42369ecf2` RCA와 `993cd2ec2` AI 내역/클러스터 계약이 각각 Gate→Deploy→인증 스모크를 완주했다.
+- 진행: Resources 저장소 계보·실노드 CPU/MEM 후보, 클러스터 초기 실패 재시도, 워크플로우·알림 동적 상태.
+- 신규 블로커: 외부 사람 필요 0건. 제품 내부 P0는 AI worker 실패 복구/이유 노출과 클러스터 최초 등록 실패 CTA 2건이다.
+- 판단 요청: 없음. A안(표적 배치별 배포·동일 SHA 검증)을 계속 적용하며 B안(미검증 기능 일괄 배치)은 사용하지 않는다.
+- 다음 3수: 클러스터 재시도 회귀 → Resources 배포 → 워크플로우·알림·AI 복구 배포.
 
 ## 현재 상세 근거
 
@@ -60,9 +60,11 @@
 | `5252a85ec` | Gate `29704105721`, Deploy `29704305166` | Gate success, Deploy는 빌드 전 unknown destination 11건으로 실패 | 로컬 후보 index 정합 후 governance 41/41·unknown 0; 재push 대기 |
 | `1b9c6e9c3` | Gate `29711958000`, Deploy `29712157175` | Frontend 2,298/2,299 후 Router 밖 `<Link>` 단일 결함, Deploy skipped | 제품 링크 경계 결함을 `61deed834`로 해소 |
 | `61deed834` | Gate `29712271375`, Deploy `29712347044` | Gate 전부 success, Deploy success(11m08s), API·인증 browser route smoke success | 현재 원격·라이브 전면 Kyro UI 기준점 |
+| `42369ecf2` | Gate `29713518047`, Deploy `29713598921` | RCA 상세 딥링크·복구 상태 동기화, post-deploy·인증 browser route smoke success | RCA 발표 경로 라이브 기준점 |
+| `993cd2ec2` | Gate `29715195803`, Deploy `29715426460` | AI 내역 상태·클러스터 등록 환경/완료 계약, API·인증 browser route smoke success | 현재 원격·라이브 기준점; 실패 재시도 CTA 후속 필요 |
 | 로컬 후보(커밋 전) | full Vitest·gate-fast·build·governance | full Vitest 443파일·2,271/2,271, gate-fast changed Vitest 210파일·1,190/1,190, typecheck/lint/design 1,414파일/build, governance 41/41 모두 success | 배포와 동일 SHA 증거 전; 완료 아님 |
 
-현재 확인된 성공 기준점에서 원격 `dev`와 라이브는 `e84748b06`으로 일치한다. exact demo `adcf92130`과의 1440 대조에서 Home scope·숫자·편집·차트 델타가 남았으므로 G4 완료를 선언하지 않는다. 다음 push도 소배치 단일 SHA로 만들고 Gate→Deploy 종료까지 추가 push를 금지한다.
+현재 확인된 성공 기준점에서 원격 `dev`와 라이브는 `993cd2ec2`로 일치한다. exact demo `adcf92130`과의 동일 SHA 3-viewport 대조와 AI worker 실패 복구가 남았으므로 G4 완료를 선언하지 않는다. 다음 push도 소배치 단일 SHA로 만들고 Gate→Deploy 종료까지 추가 push를 금지한다.
 
 ### G4 홈과 가시 변화
 

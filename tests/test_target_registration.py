@@ -551,7 +551,7 @@ def assert_guarded_install_command(
     assert command.startswith('existing="$(kubectl -n target get configmap ')
     assert "jsonpath='{.data.TARGET_CLUSTER_ID}'" in command
     assert f'[ "$existing" != {cluster_id} ]' in command
-    assert "Opsia agent is already registered as" in command
+    assert "Kyro agent is already registered as" in command
     assert f"curl -fsSL {manifest_url_prefix}" in command
     assert command.endswith("| kubectl apply -f -")
 

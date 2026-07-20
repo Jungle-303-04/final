@@ -235,7 +235,12 @@ export function ClusterConnectDialog({
     }
   };
   const retryConnection = () => {
-    if (!receipt || phase === "waiting") return;
+    if (phase === "waiting") return;
+    if (!receipt) {
+      setPhase("idle");
+      setStep(1);
+      return;
+    }
     nextPollAfterSeconds.current = null;
     setPhase("waiting");
   };

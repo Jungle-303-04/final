@@ -1897,11 +1897,13 @@ def _physical_topology_statements(
         filters=filters,
         allowed_application_ids=allowed_application_ids,
     ).cte("physical_topology_filter_matches")
+    current_snapshot_node = and_(
+        base.c.resource_type == "node",
+        base.c.source_snapshot_id == base.c.as_of_snapshot_id,
+    )
 
     server_statement = (
-        select(base)
-        .where(base.c.resource_type == "node")
-        .order_by(base.c.name, base.c.inventory_key)
+        select(base).where(current_snapshot_node).order_by(base.c.name, base.c.inventory_key)
     )
 
     matches_filter = (
@@ -1916,7 +1918,7 @@ def _physical_topology_statements(
         .cte("physical_topology_pods")
     )
     pod_node_name = func.coalesce(pods.c.summary["node_name"].astext, "")
-    known_server_names = select(base.c.name).where(base.c.resource_type == "node")
+    known_server_names = select(base.c.name).where(current_snapshot_node)
     placement_node_name = case(
         (pod_node_name.in_(known_server_names), pod_node_name),
         else_="",

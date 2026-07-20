@@ -10,6 +10,7 @@ export const resourcePanelsEn = {
   "resources.connectionPanel.openRepositories": "Open repositories and sync",
   "resources.connectionPanel.repositories": "Repos",
   "resources.connectionPanel.repositoryEmpty": "Repository connections are managed in Deploy repositories and sync.",
+  "resources.connectionPanel.revisions": "{count} revisions",
   "resources.connectionPanel.services": "Services",
   "resources.connectionPanel.tabs": "Relationship lens",
   "resources.connectionPanel.title": "Relationships",

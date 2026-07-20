@@ -1,297 +1,59 @@
-import { useEffect, useMemo, useState } from "react";
-import {
-  isProductContextShortcutId,
-  PRODUCT_SHORTCUT_EVENT,
-  type ProductShortcutEventDetail,
-} from "../../app/shortcutRegistry";
-import { useAuthSessionGate } from "../../features/auth/AuthSessionGate";
-import { useOptionalProductSession } from "../../features/auth/ProductSessionContext";
-import type { HomePort } from "../../features/home/homeContract";
-import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
-import type { ResourcesPort } from "../../features/resources/resourcesContract";
-import type { ResourcesFilterPort } from "../../features/resources/resourcesFilterContract";
-import type { PhysicalTopologyPort } from "../../features/resources/physicalTopologyContract";
-import type { PhysicalTopologyRealtimePort } from "../../features/resources/physicalTopologyRealtimeContract";
-import type { RelationTopologyPort } from "../../features/resources/relationTopologyContract";
-import type { ChangeTimelinePort } from "../../features/resources/changeTimelineContract";
-import type {
-  ResourceMetricsHistoryPort,
-  ResourcesRefreshPolicyKey,
-} from "../../features/resources/resourceMetricsHistoryContract";
-import type {
-  ResourceActionsPort,
-  ResourceCapabilitiesPort,
-} from "../../features/resources/resourceCapabilitiesContract";
-import type { ResourceManifestPort } from "../../features/resources/resourceManifestContract";
-import type { ResourceIssuesPort } from "../../features/issues/resourceIssuesContract";
-import type { ChecksPort } from "../../features/checks/checksContract";
-import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
+import { useState } from "react";
+
+import { EMPTY_POD_TERMINAL_PORT } from "../../features/pod-terminal/podTerminalContract";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
+import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
+import { ResourceDetailOverlay } from "./ResourceDetailOverlay";
 import { ResourceDetailWorkspace } from "./ResourceDetailWorkspace";
+import { ResourcesFleetZoom } from "./ResourcesFleetZoom";
+import { ResourcesListSurface } from "./ResourcesListSurface";
 import { ResourcesSurfaceLoadingPreview } from "./ResourcesLoadingPreview";
+import type { ResourcesPageProps } from "./ResourcesPageContract";
 import {
   CatalogFreshness,
+  ResourcesClusterBoundary,
   ResourcesDenied,
   ResourcesFailure,
   ResourcesRefreshFeedback,
-  ResourcesClusterBoundary,
   UnknownCompletenessEmpty,
   UnknownSelection,
 } from "./ResourcesPageFeedback";
-import { useResourcesFilterDataFrame } from "./useResourcesFilterDataFrame";
-import { usePhysicalTopologyDataFrame } from "./usePhysicalTopologyDataFrame";
-import { useResourcesPageState } from "./useResourcesPageState";
-import { ResourcesFleetZoom } from "./ResourcesFleetZoom";
-import { ResourcesListSurface } from "./ResourcesListSurface";
-import { useResourceMetricsHistoryDataFrame } from "./useResourceMetricsHistoryDataFrame";
-import { useResourceDetailNavigation } from "./useResourceDetailNavigation";
-import { useResourceCapabilitiesDataFrame } from "./useResourceCapabilitiesDataFrame";
-import { useResourceIssuesDataFrame } from "./useResourceIssuesDataFrame";
-import { useRelationTopologyDataFrame } from "./useRelationTopologyDataFrame";
-import { useResourceTopologyViewController } from "./useResourceTopologyViewController";
-import { useChangeTimelineDataFrame } from "./useChangeTimelineDataFrame";
-import { usePhysicalTopologyRealtime } from "./usePhysicalTopologyRealtime";
-import { selectResourceMetricIds } from "./resourceMetricSelection";
-import {
-  EMPTY_POD_TERMINAL_PORT,
-  type PodTerminalPort,
-} from "../../features/pod-terminal/podTerminalContract";
-import type { ServiceAccessPort } from "../../features/service-access/serviceAccessContract";
-import type { PortForwardSessionPort } from "../../features/service-access/portForwardSessionContract";
-import type { TimelinePort } from "../../features/timeline/timelineContract";
-import type { BrowserRefreshPolicyRegistry } from "../../shared/data/browserRefreshPolicyRegistry";
-import type { ResourceFilesPort } from "../../features/resource-files/resourceFilesContract";
-import type { TrafficPort } from "../../features/traffic/trafficContract";
-import { ResourcesTrafficFlowSurface } from "./ResourcesTrafficFlowSurface";
-import { useAiAssistantLayout } from "../../features/ai-assistant/AiAssistantLayoutContext";
-import { ResourceDetailOverlay } from "./ResourceDetailOverlay";
 import { ResourcesStatusHeader } from "./ResourcesStatusHeader";
+import { ResourcesTrafficFlowSurface } from "./ResourcesTrafficFlowSurface";
+import { ResourcesViewSwitcher } from "./ResourcesViewSwitcher";
+import { useResourcesPageModel } from "./useResourcesPageModel";
 
-const CONNECTION_PANEL_RESOURCE_TYPES = [
-  "service",
-  "endpoint",
-  "endpoints",
-  "endpointslice",
-  "ingress",
-  "configmap",
-  "secret",
-  "application",
-  "applicationset",
-  "appproject",
-] as const;
-
-export function ResourcesPage({
-  filterPort,
-  physicalTopologyPort,
-  physicalTopologyRealtimePort,
-  nodePodsPort,
-  relationTopologyPort,
-  changeTimelinePort,
-  timelinePort,
-  resourceMetricsHistoryPort,
-  refreshPolicies,
-  resourceCapabilitiesPort,
-  resourceActionsPort,
-  podTerminalPort = EMPTY_POD_TERMINAL_PORT,
-  serviceAccessPort,
-  portForwardSessions,
-  resourceManifestPort,
-  resourceIssuesPort,
-  checksPort,
-  resourceFilesPort,
-  trafficPort,
-  port,
-}: {
-  filterPort: ResourcesFilterPort;
-  physicalTopologyPort: PhysicalTopologyPort;
-  physicalTopologyRealtimePort: PhysicalTopologyRealtimePort;
-  nodePodsPort: Pick<HomePort, "loadNodePods">;
-  relationTopologyPort: RelationTopologyPort;
-  changeTimelinePort: ChangeTimelinePort;
-  timelinePort?: TimelinePort;
-  resourceMetricsHistoryPort: ResourceMetricsHistoryPort;
-  refreshPolicies: BrowserRefreshPolicyRegistry<ResourcesRefreshPolicyKey>;
-  resourceCapabilitiesPort: ResourceCapabilitiesPort;
-  resourceActionsPort: ResourceActionsPort;
-  podTerminalPort?: PodTerminalPort;
-  serviceAccessPort?: ServiceAccessPort;
-  portForwardSessions?: PortForwardSessionPort;
-  resourceManifestPort?: ResourceManifestPort;
-  resourceIssuesPort?: ResourceIssuesPort;
-  checksPort?: ChecksPort;
-  resourceFilesPort?: ResourceFilesPort;
-  trafficPort?: TrafficPort;
-  port: ResourcesPort;
-}) {
-  const { reportUnauthorized } = useAuthSessionGate();
-  const session = useOptionalProductSession();
-  const filter = useUnifiedFilter();
-  const aiLayout = useAiAssistantLayout();
+export function ResourcesPage(props: ResourcesPageProps) {
+  const {
+    checksPort,
+    nodePodsPort,
+    podTerminalPort = EMPTY_POD_TERMINAL_PORT,
+    portForwardSessions,
+    repositoryLineagePort,
+    resourceActionsPort,
+    resourceFilesPort,
+    resourceManifestPort,
+    serviceAccessPort,
+    trafficPort,
+  } = props;
   const [manifestEditing, setManifestEditing] = useState(false);
-  const state = useResourcesPageState(port, refreshPolicies, manifestEditing);
-  const topology = useResourceTopologyViewController();
-  const authorityKey = session
-    ? `${session.workspaceId}:${session.userId}`
-    : "anonymous";
-  const physicalTopologyFrame = usePhysicalTopologyDataFrame({
-    active:
-      state.selectedClusterExists &&
-      filter.state.common.clusters.length === 1,
-    filterState: filter.state,
-    port: physicalTopologyPort,
-    refreshPolicies,
+  const {
+    aiLayout,
+    changeTimeline,
+    connectionTopology,
+    filter,
+    filtered,
+    metricHistory,
+    physicalRealtime,
+    physicalTopology,
+    relationTopology,
     reportUnauthorized,
-    revision: state.podRevision,
-  });
-  const relationTopology = useRelationTopologyDataFrame({
-    active:
-      state.selectedClusterExists &&
-      filter.state.common.clusters.length === 1 &&
-      topology.view === "relations" &&
-      (filter.state.resources.types.length > 0 ||
-        filter.state.resources.health.length > 0 ||
-        filter.state.resources.query.trim().length > 0),
-    filterState: filter.state,
-    port: relationTopologyPort,
-    reportUnauthorized,
-    revision: state.revision,
-  });
-  const connectionTopologyFilterState = useMemo(() => ({
-    ...filter.state,
-    resources: {
-      ...filter.state.resources,
-      health: [],
-      query: "",
-      types: filter.state.common.applications.length > 0
-        ? []
-        : [...CONNECTION_PANEL_RESOURCE_TYPES],
-    },
-  }), [filter.state]);
-  const connectionTopology = useRelationTopologyDataFrame({
-    active:
-      state.selectedClusterExists &&
-      filter.state.common.clusters.length === 1 &&
-      state.view === "map",
-    filterState: connectionTopologyFilterState,
-    port: relationTopologyPort,
-    reportUnauthorized,
-    revision: state.revision,
-  });
-  const timelineReadBounded = filter.state.resources.types.length > 0 ||
-    filter.state.common.namespaces.length > 0 ||
-    filter.state.common.applications.length > 0 ||
-    filter.state.common.labels.length > 0 ||
-    filter.state.resources.health.length > 0 ||
-    filter.state.resources.query.trim().length > 0;
-  const filtered = useResourcesFilterDataFrame({
-    active:
-      state.selectedClusterExists &&
-      !state.resourceTypeInvalid,
-    authorityKey,
-    facetAxis: null,
-    facetQuery: "",
-    filterState: filter.state,
-    onListFailure: state.recordListFailure,
-    onListSuccess: state.recordListSuccess,
-    port: filterPort,
-    reportUnauthorized,
-    revision: state.revision,
-  });
-  const filteredPage = filtered.list.phase === "ready"
-    ? filtered.list.data
-    : null;
-  const currentResourceRows = useMemo(
-    () => (filteredPage?.items ?? []).map((item) => item.resource),
-    [filteredPage],
-  );
-  const physicalRealtime = usePhysicalTopologyRealtime({
-    active:
-      state.selectedClusterExists &&
-      filter.state.common.clusters.length === 1,
-    clusterId: state.selectedClusterId,
-    frame: physicalTopologyFrame,
-    port: physicalTopologyRealtimePort,
-    replayAtMs: filter.detail.timeAt,
-    rows: currentResourceRows,
-    workspaceId: session?.workspaceId ?? null,
-    onResourceDelta: state.requestResourceEventInvalidation,
-  });
-  const changeTimeline = useChangeTimelineDataFrame({
-    active:
-      state.selectedClusterExists &&
-      filter.state.common.clusters.length === 1 &&
-      timelineReadBounded,
-    authorityKey,
-    filterState: filter.state,
-    onResourceInvalidation: state.requestResourceEventInvalidation,
-    port: changeTimelinePort,
-    range: filter.detail.timeRange ?? "1h",
-    reportUnauthorized,
-    revision: state.revision,
-    timelinePort,
-    workspaceId: session?.workspaceId ?? null,
-  });
-  const physicalTopology = physicalRealtime.frame;
-  const detailResource = state.detail.phase === "ready"
-    ? state.detail.data.resource
-    : null;
-  const detailResourceId = detailResource?.inventoryKey ?? null;
-  const metricResourceIds = useMemo(
-    () => selectResourceMetricIds(detailResource, currentResourceRows),
-    [currentResourceRows, detailResource],
-  );
-  const metricHistory = useResourceMetricsHistoryDataFrame({
-    active: metricResourceIds.length > 0 || detailResource !== null,
-    authorityKey,
-    filterState: filter.state,
-    port: resourceMetricsHistoryPort,
-    range: filter.detail.timeRange ?? "1h",
-    refreshPolicies,
-    reportUnauthorized,
-    resourceIds: metricResourceIds,
-    snapshotRevision: filteredPage?.snapshot.snapshotRevision ?? null,
-    liveSeries: physicalRealtime.metricSeries,
-    observedResource: detailResource,
-    scopeSnapshot: filteredPage?.snapshot ?? null,
-  });
-  const resourceCapabilities = useResourceCapabilitiesDataFrame({
-    active: state.detailRequested && detailResourceId !== null,
-    authorityKey,
-    port: resourceCapabilitiesPort,
-    reportUnauthorized,
-    resourceId: detailResourceId,
-  });
-  const resourceIssues = useResourceIssuesDataFrame({
-    active: resourceIssuesPort !== undefined && state.detailRequested && state.detailIdentity !== null,
-    authorityKey,
-    clusterId: state.detail.phase === "ready"
-      ? state.detail.data.clusterId
-      : state.selectedClusterId,
-    identity: state.detailIdentity,
-    port: resourceIssuesPort ?? INACTIVE_RESOURCE_ISSUES_PORT,
-    reportUnauthorized,
-    revision: state.revision,
-  });
-  const detailNavigationItems = useMemo(
-    () => (filteredPage?.items ?? []).map((item) => item.resource),
-    [filteredPage],
-  );
-  useResourceDetailNavigation({
-    active: state.detailRequested,
-    current: state.detailIdentity,
-    items: detailNavigationItems,
-    onNavigate: state.navigateDetail,
-  });
-  useEffect(() => {
-    const handleShortcut = (event: Event) => {
-      const detail = (event as CustomEvent<ProductShortcutEventDetail>).detail;
-      if (!detail || !isProductContextShortcutId(detail.id)) return;
-      if (detail.id === "resources:previous-kind") state.cycleResourceType(-1);
-      if (detail.id === "resources:next-kind") state.cycleResourceType(1);
-    };
-    window.addEventListener(PRODUCT_SHORTCUT_EVENT, handleShortcut);
-    return () => window.removeEventListener(PRODUCT_SHORTCUT_EVENT, handleShortcut);
-  }, [state]);
+    resourceCapabilities,
+    resourceIssues,
+    state,
+    topology,
+  } = useResourcesPageModel(props, manifestEditing);
+
   if (state.choices.phase === "idle" || state.choices.phase === "loading") {
     return <ProductStateScreen kind="loading" placement="content" />;
   }
@@ -307,10 +69,10 @@ export function ResourcesPage({
   if (state.choices.data.clusters.length === 0) {
     return <ResourcesClusterBoundary variant="catalog-unconfirmed" />;
   }
-  const refreshing =
-    [state.choices, state.catalog, state.list, state.detail].some(
-      (resource) => resource.phase === "ready" && resource.refreshing,
-    ) || filtered.list.refreshing;
+
+  const refreshing = [state.choices, state.catalog, state.list, state.detail].some(
+    (resource) => resource.phase === "ready" && resource.refreshing,
+  ) || filtered.list.refreshing;
   const createNamespace = filter.state.common.namespaces.length === 1
     && filter.state.common.namespaces[0].clusterId === state.selectedClusterId
     ? filter.state.common.namespaces[0].namespace
@@ -318,10 +80,12 @@ export function ResourcesPage({
   const detailFull = state.detailFull || aiLayout.open;
   const detailInset = aiLayout.open ? aiLayout.width : 0;
   const fleetView = filter.detail.resourceSurfaceView ?? "map";
+
   return (
     <div
-      className="relative flex h-[calc(100svh-3.5rem)] min-w-0 overflow-hidden"
+      className="relative flex h-full min-h-0 min-w-0 overflow-hidden"
       data-detail-layout={state.detailRequested ? (detailFull ? "full" : "peek") : "closed"}
+      data-slot="resources-scroll-boundary"
     >
       <div
         aria-hidden={detailFull}
@@ -334,94 +98,43 @@ export function ResourcesPage({
         inert={detailFull}
       >
         <ProductPageFrame>
-          {state.selectedClusterExists ? (
-            <ResourcesStatusHeader
-              automaticRefreshPaused={state.automaticRefreshPaused}
-              clusterId={state.selectedClusterId}
-              createNamespace={createNamespace}
-              live={physicalRealtime.live}
-              manifestPort={resourceManifestPort}
-              onInvalidate={state.refresh}
-              onRefresh={state.refresh}
-              onUnauthorized={reportUnauthorized}
-              pollingDisconnected={physicalTopology.phase === "ready" && Boolean(physicalTopology.refreshFailure)}
-              pollingUpdatedAt={Math.max(state.updatedAt, physicalTopology.updatedAt)}
-              refreshAfterSeconds={state.refreshAfterSeconds}
-              refreshing={refreshing || physicalTopology.refreshing}
-            />
-          ) : null}
-
-          {state.view === "flow" && trafficPort ? (
-            <ResourcesTrafficFlowSurface onOpenService={state.openDetailTarget} port={trafficPort} setView={state.setView} />
-          ) : !state.selectedClusterExists ? (
-            state.clusterSelection.kind === "unknown" ? (
-              <UnknownSelection value={state.selectedClusterId} variant="cluster" />
-            ) : state.clusterSelection.kind === "unfiltered" ? (
-              <ResourcesFleetZoom
-                clusters={state.choices.data.clusters}
-                completeness={state.choices.data.completeness}
-                onViewChange={state.setView}
-                view={fleetView}
+          <div className="flex min-w-0 flex-wrap items-center justify-between gap-2" data-slot="resources-surface-toolbar">
+            <ResourcesViewSwitcher onChange={state.setView} view={state.view} />
+            {state.selectedClusterExists ? (
+              <ResourcesStatusHeader
+                automaticRefreshPaused={state.automaticRefreshPaused}
+                clusterId={state.selectedClusterId}
+                createNamespace={createNamespace}
+                live={physicalRealtime.live}
+                manifestPort={resourceManifestPort}
+                onInvalidate={state.refresh}
+                onRefresh={state.refresh}
+                onUnauthorized={reportUnauthorized}
+                pollingDisconnected={physicalTopology.phase === "ready" && Boolean(physicalTopology.refreshFailure)}
+                pollingUpdatedAt={Math.max(state.updatedAt, physicalTopology.updatedAt)}
+                refreshAfterSeconds={state.refreshAfterSeconds}
+                refreshing={refreshing || physicalTopology.refreshing}
               />
-            ) : state.clusterSelection.kind === "multiple" ? (
-              <ResourcesClusterBoundary variant="multiple" />
-            ) : (
-              <UnknownSelection value={state.selectedClusterId} variant="cluster" />
-            )
-          ) : state.denied ? (
-            <ResourcesDenied onRetry={state.refresh} />
-          ) : state.catalog.phase === "loading" || state.catalog.phase === "idle" ? (
-            <ProductStateScreen
-              kind="loading"
-              loadingPreview={<ResourcesSurfaceLoadingPreview />}
-              placement="content"
-            />
-          ) : state.catalog.phase === "failed" ? (
-            <ResourcesFailure
-              failure={state.catalog.failure}
-              onRetry={state.refresh}
-              retryWaitSeconds={state.retryWaitSeconds}
-            />
-          ) : state.catalog.data.items.length === 0 ? (
-            state.catalog.data.completeness === "observed" ? (
-              <ProductStateScreen kind="empty" placement="content" />
-            ) : (
-              <UnknownCompletenessEmpty variant="catalog" />
-            )
-          ) : (
-            <>
-              <ResourcesRefreshFeedback
-                catalog={state.catalog}
-                choices={state.choices}
-                filterList={filtered.list}
-                list={state.list}
-              />
-              <CatalogFreshness observedAt={state.catalog.data.observedAt} />
-              <ResourcesListSurface
-                connectionTopology={connectionTopology}
-                filterList={filtered.list}
-                listFallback={state.resourceTypeInvalid ? (
-                  <UnknownSelection
-                    value={state.selectedResourceType}
-                    variant="resource"
-                  />
-                ) : null}
-                metricHistory={metricHistory}
-                nodePodsPort={nodePodsPort}
-                onNodePodsUnauthorized={reportUnauthorized}
-                onLoadMore={filtered.loadMoreList}
-                onTopologyViewChange={topology.pin}
-                physicalTopology={physicalTopology}
-                relationTopology={relationTopology}
-                replay={physicalRealtime.replay}
-                selectTableRows={physicalRealtime.selectTableRows}
-                state={state}
-                timelineFrame={changeTimeline}
-                topologyPinned={topology.pinned}
-                topologyView={topology.view}
-              />
-            </>
-          )}
+            ) : null}
+          </div>
+          <ResourcesPageContent
+            changeTimeline={changeTimeline}
+            choices={state.choices.data}
+            connectionTopology={connectionTopology}
+            filterList={filtered.list}
+            fleetView={fleetView}
+            metricHistory={metricHistory}
+            nodePodsPort={nodePodsPort}
+            onLoadMore={filtered.loadMoreList}
+            onUnauthorized={reportUnauthorized}
+            physicalRealtime={physicalRealtime}
+            physicalTopology={physicalTopology}
+            relationTopology={relationTopology}
+            repositoryLineagePort={repositoryLineagePort}
+            state={state}
+            topology={topology}
+            trafficPort={trafficPort}
+          />
         </ProductPageFrame>
       </div>
       {state.detailRequested ? (
@@ -429,26 +142,26 @@ export function ResourcesPage({
           <ResourceDetailWorkspace
             actionsPort={resourceActionsPort}
             capabilities={resourceCapabilities}
-            detail={state.detail}
-            full={state.detailFull}
-            forceFull={aiLayout.open}
-            identity={state.detailIdentity}
-            metricHistory={metricHistory}
-            resourceIssues={resourceIssues}
             checksPort={checksPort}
+            detail={state.detail}
+            forceFull={aiLayout.open}
+            full={state.detailFull}
+            identity={state.detailIdentity}
             manifestPort={resourceManifestPort}
-            onUnauthorized={reportUnauthorized}
-            onManifestEditingChange={setManifestEditing}
+            metricHistory={metricHistory}
             onClose={state.closeDetail}
             onFullChange={state.setDetailFull}
+            onManifestEditingChange={setManifestEditing}
             onNavigateResource={state.navigateDetail}
             onResourceActionInvalidation={state.requestResourceEventInvalidation}
             onTabChange={state.setDetailTab}
-            tab={state.detailTab}
-            terminalPort={podTerminalPort}
-            serviceAccessPort={serviceAccessPort}
+            onUnauthorized={reportUnauthorized}
             portForwardSessions={portForwardSessions}
             resourceFilesPort={resourceFilesPort}
+            resourceIssues={resourceIssues}
+            serviceAccessPort={serviceAccessPort}
+            tab={state.detailTab}
+            terminalPort={podTerminalPort}
           />
         </ResourceDetailOverlay>
       ) : null}
@@ -456,6 +169,118 @@ export function ResourcesPage({
   );
 }
 
-const INACTIVE_RESOURCE_ISSUES_PORT: ResourceIssuesPort = {
-  loadResourceIssues: () => Promise.reject(new Error("resource issue port is inactive")),
-};
+function ResourcesPageContent({
+  changeTimeline,
+  choices,
+  connectionTopology,
+  filterList,
+  fleetView,
+  metricHistory,
+  nodePodsPort,
+  onLoadMore,
+  onUnauthorized,
+  physicalRealtime,
+  physicalTopology,
+  relationTopology,
+  repositoryLineagePort,
+  state,
+  topology,
+  trafficPort,
+}: Pick<ReturnType<typeof useResourcesPageModel>,
+  | "changeTimeline"
+  | "connectionTopology"
+  | "metricHistory"
+  | "physicalRealtime"
+  | "physicalTopology"
+  | "relationTopology"
+  | "state"
+  | "topology"
+> & {
+  choices: NonNullable<ReturnType<typeof useResourcesPageModel>["state"]["choices"]["data"]>;
+  filterList: ReturnType<typeof useResourcesPageModel>["filtered"]["list"];
+  fleetView: "map" | "list" | "flow";
+  nodePodsPort: ResourcesPageProps["nodePodsPort"];
+  onLoadMore: ReturnType<typeof useResourcesPageModel>["filtered"]["loadMoreList"];
+  onUnauthorized: ReturnType<typeof useResourcesPageModel>["reportUnauthorized"];
+  repositoryLineagePort: ResourcesPageProps["repositoryLineagePort"];
+  trafficPort: ResourcesPageProps["trafficPort"];
+}) {
+  if (state.view === "flow" && trafficPort) {
+    return <ResourcesTrafficFlowSurface onOpenService={state.openDetailTarget} port={trafficPort} />;
+  }
+  if (!state.selectedClusterExists) {
+    if (state.clusterSelection.kind === "unknown") {
+      return <UnknownSelection value={state.selectedClusterId} variant="cluster" />;
+    }
+    if (state.clusterSelection.kind === "unfiltered") {
+      return (
+        <ResourcesFleetZoom
+          clusters={choices.clusters}
+          completeness={choices.completeness}
+          onViewChange={state.setView}
+          view={fleetView}
+        />
+      );
+    }
+    if (state.clusterSelection.kind === "multiple") {
+      return <ResourcesClusterBoundary variant="multiple" />;
+    }
+    return <UnknownSelection value={state.selectedClusterId} variant="cluster" />;
+  }
+  if (state.denied) return <ResourcesDenied onRetry={state.refresh} />;
+  if (state.catalog.phase === "loading" || state.catalog.phase === "idle") {
+    return (
+      <ProductStateScreen
+        kind="loading"
+        loadingPreview={<ResourcesSurfaceLoadingPreview />}
+        placement="content"
+      />
+    );
+  }
+  if (state.catalog.phase === "failed") {
+    return (
+      <ResourcesFailure
+        failure={state.catalog.failure}
+        onRetry={state.refresh}
+        retryWaitSeconds={state.retryWaitSeconds}
+      />
+    );
+  }
+  if (state.catalog.data.items.length === 0) {
+    return state.catalog.data.completeness === "observed"
+      ? <ProductStateScreen kind="empty" placement="content" />
+      : <UnknownCompletenessEmpty variant="catalog" />;
+  }
+  return (
+    <>
+      <ResourcesRefreshFeedback
+        catalog={state.catalog}
+        choices={state.choices}
+        filterList={filterList}
+        list={state.list}
+      />
+      <CatalogFreshness observedAt={state.catalog.data.observedAt} />
+      <ResourcesListSurface
+        connectionTopology={connectionTopology}
+        filterList={filterList}
+        listFallback={state.resourceTypeInvalid ? (
+          <UnknownSelection value={state.selectedResourceType} variant="resource" />
+        ) : null}
+        metricHistory={metricHistory}
+        nodePodsPort={nodePodsPort}
+        onLoadMore={onLoadMore}
+        onNodePodsUnauthorized={onUnauthorized}
+        onTopologyViewChange={topology.pin}
+        physicalTopology={physicalTopology}
+        relationTopology={relationTopology}
+        repositoryLineagePort={repositoryLineagePort}
+        replay={physicalRealtime.replay}
+        selectTableRows={physicalRealtime.selectTableRows}
+        state={state}
+        timelineFrame={changeTimeline}
+        topologyPinned={topology.pinned}
+        topologyView={topology.view}
+      />
+    </>
+  );
+}

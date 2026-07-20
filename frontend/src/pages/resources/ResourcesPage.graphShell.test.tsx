@@ -13,11 +13,7 @@ import {
   resourcesPort,
 } from "./ResourcesPage.testSupport";
 
-afterEach(() => {
-  cleanup();
-  window.localStorage.clear();
-});
-
+afterEach(() => { cleanup(); window.localStorage.clear(); });
 describe("ResourcesPage S4 physical topology", () => {
   it("renders verified servers and pods without re-filtering the response", async () => {
     const physicalPort = resourcesPhysicalTopologyPort();
@@ -38,6 +34,12 @@ describe("ResourcesPage S4 physical topology", () => {
     const physicalGrid = document.querySelector('[data-slot="physical-topology-grid"]');
     expect(physicalGrid?.className)
       .toContain("grid-cols-[repeat(auto-fit,minmax(min(100%,18rem),1fr))]");
+    expect(physicalGrid?.className).not.toContain("overflow-y-auto");
+    const scrollBoundary = document.querySelector('[data-slot="resources-scroll-boundary"]');
+    expect(scrollBoundary?.className).toContain("h-full");
+    expect(scrollBoundary?.className).not.toContain("100svh");
+    expect(document.querySelector('[data-slot="resources-surface-toolbar"]')
+      ?.querySelector('[data-slot="resources-view-switcher"]')).toBeTruthy();
     expect(document.querySelector(".react-flow")).toBeNull();
     expect(screen.getByRole("article", { name: "Server worker-a" }).className)
       .toContain("w-full");

@@ -462,7 +462,15 @@ def test_physical_topology_sql_is_scoped_ranked_and_server_evaluates_filter_matc
         assert "valid_to_revision > 42" in sql
 
     assert "resource_type = 'node'" in server_sql
+    assert (
+        "physical_topology_inventory.source_snapshot_id = "
+        "physical_topology_inventory.as_of_snapshot_id"
+    ) in server_sql
     assert "resource_type = 'pod'" in pod_sql
+    assert (
+        "physical_topology_inventory.source_snapshot_id = "
+        "physical_topology_inventory.as_of_snapshot_id"
+    ) in pod_sql
     assert "physical_topology_filter_matches.version_id" in pod_sql
     assert "matches_filter" in pod_sql
     assert "row_number() over (partition by" in pod_sql

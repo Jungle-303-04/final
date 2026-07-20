@@ -270,6 +270,31 @@ describe("ClusterConnectDialog", () => {
       .toBe("/resources?clusters=production-a1b2");
   });
 
+  it("returns an initial registration failure to the preserved form before retrying registration", async () => {
+    const user = userEvent.setup();
+    const port = waitingPort();
+    vi.mocked(port.connect)
+      .mockRejectedValueOnce(new Error("temporary registration failure"))
+      .mockResolvedValue({
+        clusterId: "production-a1b2",
+        installCommand: "curl secret-command | kubectl apply -f -",
+        expiresAt: "2026-07-14T06:00:00Z",
+      });
+    renderDialog(port);
+
+    await user.type(screen.getByRole("textbox", { name: "Cluster name" }), "Production");
+    await user.click(screen.getByRole("button", { name: "Generate install command" }));
+    expect(await screen.findByText("Could not create the connection")).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Retry" }));
+    expect(screen.getByRole("textbox", { name: "Cluster name" }).getAttribute("value"))
+      .toBe("Production");
+    await user.click(screen.getByRole("button", { name: "Generate install command" }));
+
+    expect(await screen.findByText("curl secret-command | kubectl apply -f -")).toBeTruthy();
+    expect(port.connect).toHaveBeenCalledTimes(2);
+  });
+
   it("retries only the failed connection check without registering a duplicate cluster", async () => {
     const user = userEvent.setup();
     const port = waitingPort();

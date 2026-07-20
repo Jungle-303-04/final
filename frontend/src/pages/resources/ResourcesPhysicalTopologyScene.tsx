@@ -43,10 +43,10 @@ export function ResourcesPhysicalTopologyScene({
         <ServerSkeletons clusterId={clusterId} count={skeletonServerCount} />
       ) : frame.phase === "ready" && placements.length > 0 ? (
         <UsageSmoothingBoundary markCount={usageMarkCount}>
-          <div className="grid max-h-[min(65vh,65rem)] min-h-0 grid-rows-[auto_1fr] overflow-hidden">
+          <div className="grid min-h-0 grid-rows-[auto_1fr] overflow-hidden">
             <PhysicalTopologyLegend />
             <div
-              className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,18rem),1fr))] content-start gap-3 overflow-y-auto overflow-x-hidden p-4 pt-3 sm:p-5 sm:pt-3"
+              className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,18rem),1fr))] content-start gap-3 overflow-x-hidden p-4 pt-3 sm:p-5 sm:pt-3"
               data-slot="physical-topology-grid"
             >
               {placements.map((placement, index) => (
@@ -108,7 +108,7 @@ function ServerSkeletons({ clusterId, count }: { clusterId: string; count: numbe
   return (
     <div
       aria-label={t("resources.graph.loading")}
-      className="grid max-h-[min(65vh,65rem)] grid-cols-[repeat(auto-fit,minmax(min(100%,320px),1fr))] content-start gap-4 overflow-hidden p-4 sm:p-5"
+      className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,320px),1fr))] content-start gap-4 overflow-hidden p-4 sm:p-5"
       role="status"
     >
       {Array.from({ length: visible }, (_, index) => (

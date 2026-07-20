@@ -1,18 +1,32 @@
 import { FileCog, GitBranch, Plug, X } from "lucide-react";
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 import {
   relationNodeHealthTone,
   type RelationHealthTone,
 } from "../../features/resources/relationTopologyGraphModel";
 import type { RelationTopologyNode } from "../../features/resources/relationTopologyContract";
-import { useI18n, type TranslationFunction } from "../../shared/i18n";
+import { useI18n } from "../../shared/i18n";
 import { cn } from "../../shared/lib/cn";
 import { Surface } from "../../shared/ui/Surface";
 import { Button } from "../../shared/ui/primitives/button";
 import { ButtonGroup } from "../../shared/ui/primitives/button-group";
-import { Skeleton } from "../../shared/ui/primitives/skeleton";
+import {
+  ConnectionPanelMessage,
+  ConnectionPanelSkeleton,
+  ConnectionStatusMark,
+  connectionCopy,
+  RepositoryConnectionAction,
+} from "./ResourcesConnectionPanelStates";
+import {
+  RepositoryLineageFailure,
+  RepositoryLineageList,
+} from "./ResourcesRepositoryLineage";
+import {
+  useRepositoryLineage,
+  type RepositoryLineagePort,
+} from "./useRepositoryLineage";
 import type { RelationTopologyFrame } from "./useRelationTopologyDataFrame";
 
 type ConnectionTab = "services" | "configuration" | "repositories";
@@ -22,25 +36,41 @@ const CONFIGURATION_KINDS = new Set(["configmap", "secret"]);
 const REPOSITORY_KINDS = new Set(["application", "applicationset", "appproject"]);
 
 export function ResourcesConnectionPanel({
+  clusterId = null,
   focusedNodeId,
   frame,
   onFocus,
   onOpen,
+  repositoryLineagePort,
   repositoryHref,
 }: {
+  clusterId?: string | null;
   focusedNodeId: string | null;
   frame: RelationTopologyFrame;
   onFocus: (node: RelationTopologyNode | null) => void;
   onOpen: (node: RelationTopologyNode) => void;
+  repositoryLineagePort?: RepositoryLineagePort;
   repositoryHref: string;
 }) {
   const { t } = useI18n();
+  const navigate = useNavigate();
   const [tab, setTab] = useState<ConnectionTab>("services");
+  const [focusedRepository, setFocusedRepository] = useState<string | null>(null);
+  const [repositoryRequest, setRepositoryRequest] = useState(0);
+  const repositoryFrame = useRepositoryLineage(
+    repositoryLineagePort,
+    clusterId,
+    repositoryRequest,
+  );
   const visibleNodes = useMemo(
     () => (frame.phase === "ready" ? frame.data.nodes : [])
       .filter((node) => belongsToTab(node, tab))
       .sort(compareConnectionNodes),
     [frame, tab],
+  );
+  const repositoryRowsVisible = tab === "repositories" && (
+    (repositoryFrame.phase === "ready" && repositoryFrame.data.length > 0) ||
+    visibleNodes.length > 0
   );
   const copy = connectionCopy(t);
 
@@ -83,7 +113,11 @@ export function ResourcesConnectionPanel({
                 aria-pressed={tab === candidate}
                 className="min-w-0 gap-1 px-1.5"
                 key={candidate}
-                onClick={() => setTab(candidate)}
+                onClick={() => {
+                  setTab(candidate);
+                  setFocusedRepository(null);
+                  if (candidate === "repositories") onFocus(null);
+                }}
                 size="compact-segment"
                 type="button"
                 variant={tab === candidate ? "outline" : "ghost"}
@@ -96,12 +130,31 @@ export function ResourcesConnectionPanel({
         </ButtonGroup>
       </div>
       <div className="min-h-44 min-w-0 flex-1 overflow-y-auto px-2 pb-2 [scrollbar-gutter:stable]">
-        {frame.phase === "idle" || frame.phase === "loading" ? (
+        {tab === "repositories" && repositoryFrame.phase === "loading" ? (
+          <ConnectionPanelSkeleton label={copy.loading} />
+        ) : tab === "repositories" && repositoryFrame.phase === "failed" ? (
+          <RepositoryLineageFailure
+            message={copy.unavailable}
+            onRetry={() => setRepositoryRequest((current) => current + 1)}
+          />
+        ) : tab === "repositories" && repositoryFrame.phase === "ready" && repositoryFrame.data.length > 0 ? (
+          <RepositoryLineageList
+            focusedKey={focusedRepository}
+            href={repositoryHref}
+            lineages={repositoryFrame.data}
+            onFocus={setFocusedRepository}
+            onOpen={() => navigate(repositoryHref)}
+          />
+        ) : frame.phase === "idle" || frame.phase === "loading" ? (
           <ConnectionPanelSkeleton label={copy.loading} />
         ) : frame.phase === "failed" ? (
           <ConnectionPanelMessage message={copy.unavailable} />
         ) : tab === "repositories" && visibleNodes.length === 0 ? (
-          <RepositoryConnectionAction href={repositoryHref} copy={copy} />
+          <RepositoryConnectionAction
+            href={repositoryHref}
+            message={copy.repositoryEmpty}
+            openLabel={copy.openRepositories}
+          />
         ) : visibleNodes.length === 0 ? (
           <ConnectionPanelMessage message={copy.empty} />
         ) : (
@@ -151,9 +204,11 @@ export function ResourcesConnectionPanel({
           </Button>
         ) : null}
       </div>
-      <p className="border-t px-3 py-2 text-caption leading-5 text-caption-foreground">
-        {copy.openHint}
-      </p>
+      {tab !== "repositories" || repositoryRowsVisible ? (
+        <p className="border-t px-3 py-2 text-caption leading-5 text-caption-foreground">
+          {copy.openHint}
+        </p>
+      ) : null}
     </Surface>
   );
 }
@@ -175,71 +230,4 @@ function compareConnectionNodes(left: RelationTopologyNode, right: RelationTopol
   return tonePriority[relationNodeHealthTone(left.status)]
     - tonePriority[relationNodeHealthTone(right.status)] ||
     left.name.localeCompare(right.name) || left.id.localeCompare(right.id);
-}
-
-function ConnectionStatusMark({ tone }: { tone: RelationHealthTone }) {
-  return (
-    <span
-      aria-hidden="true"
-      className={cn(
-        "size-2 shrink-0 rounded-[3px]",
-        tone === "healthy" && "bg-status-healthy",
-        tone === "warning" && "bg-status-warning",
-        tone === "critical" && "bg-status-critical",
-        tone === "unknown" && "bg-status-unknown",
-      )}
-    />
-  );
-}
-
-function ConnectionPanelSkeleton({ label }: { label: string }) {
-  return (
-    <div aria-label={label} className="grid gap-2 p-1" role="status">
-      {[0, 1, 2, 3].map((index) => <Skeleton className="h-12 w-full rounded-lg" key={index} />)}
-    </div>
-  );
-}
-
-function ConnectionPanelMessage({ message }: { message: string }) {
-  return (
-    <p className="grid min-h-40 place-items-center px-3 text-center text-label leading-5 text-muted-foreground" role="status">
-      {message}
-    </p>
-  );
-}
-
-function RepositoryConnectionAction({
-  copy,
-  href,
-}: {
-  copy: ReturnType<typeof connectionCopy>;
-  href: string;
-}) {
-  return (
-    <div className="grid min-h-40 place-items-center gap-3 rounded-lg border border-dashed p-3 text-center">
-      <GitBranch aria-hidden="true" className="size-5 text-muted-foreground" />
-      <p className="text-label leading-5 text-muted-foreground">{copy.repositoryEmpty}</p>
-      <Button render={<Link to={href} />} size="sm">
-        {copy.openRepositories}
-      </Button>
-    </div>
-  );
-}
-
-function connectionCopy(t: TranslationFunction) {
-  return {
-    clear: t("resources.connectionPanel.clear"),
-    configuration: t("resources.connectionPanel.configuration"),
-    empty: t("resources.connectionPanel.empty"),
-    list: t("resources.connectionPanel.list"),
-    loading: t("resources.connectionPanel.loading"),
-    openHint: t("resources.connectionPanel.openHint"),
-    openRepositories: t("resources.connectionPanel.openRepositories"),
-    repositories: t("resources.connectionPanel.repositories"),
-    repositoryEmpty: t("resources.connectionPanel.repositoryEmpty"),
-    services: t("resources.connectionPanel.services"),
-    tabs: t("resources.connectionPanel.tabs"),
-    title: t("resources.connectionPanel.title"),
-    unavailable: t("resources.connectionPanel.unavailable"),
-  };
 }

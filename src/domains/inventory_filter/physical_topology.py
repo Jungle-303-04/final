@@ -5,6 +5,14 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any, Literal
 
+from domains.inventory.observed_metrics import (
+    inventory_metrics_observed_at,
+    inventory_usage_pct,
+)
+from domains.inventory.observed_metrics import (
+    usage_pct as observed_usage_pct,
+)
+
 JsonObject = dict[str, Any]
 Completeness = Literal["exact", "partial", "unavailable"]
 
@@ -26,18 +34,36 @@ def build_physical_topology(
     servers: list[JsonObject] = []
     server_id_by_name: dict[str, str] = {}
     metric_values: list[float | None] = []
+    fallback_observed_at: list[str] = []
     for row in _rows(result.get("servers")):
         server_id = _text(row.get("inventory_key"))
         name = _text(row.get("name"))
         if not server_id or not name:
             continue
         measured = _mapping(node_usage.get(name))
-        cpu_pct = _usage_pct(measured, ("cpu_pct", "cpu_percent"), ("cpu_ratio",))
-        mem_pct = _usage_pct(
+        cpu_pct = observed_usage_pct(measured, ("cpu_pct", "cpu_percent"), ("cpu_ratio",))
+        mem_pct = observed_usage_pct(
             measured,
             ("mem_pct", "memory_pct"),
             ("mem_ratio", "memory_ratio"),
         )
+        fallback_used = False
+        if cpu_pct is None:
+            cpu_pct = inventory_usage_pct(
+                row,
+                ("cpu_pct", "cpu_percent"),
+                ("cpu_ratio",),
+            )
+            fallback_used = cpu_pct is not None
+        if mem_pct is None:
+            mem_pct = inventory_usage_pct(
+                row,
+                ("mem_pct", "memory_pct"),
+                ("mem_ratio", "memory_ratio"),
+            )
+            fallback_used = fallback_used or mem_pct is not None
+        if fallback_used and (observed_at := inventory_metrics_observed_at(row)) is not None:
+            fallback_observed_at.append(observed_at)
         metric_values.extend((cpu_pct, mem_pct))
         counts = _mapping(pod_counts.get(name))
         server_id_by_name[name] = server_id
@@ -122,7 +148,7 @@ def build_physical_topology(
     metrics_completeness: Completeness
     if not entities_exist:
         metrics_completeness = "exact"
-    elif not usage_sample:
+    elif not any(value is not None for value in metric_values):
         metrics_completeness = "unavailable"
     elif any(value is None for value in metric_values):
         metrics_completeness = "partial"
@@ -135,7 +161,8 @@ def build_physical_topology(
         "truncated": truncated,
         "unassigned_truncated_count": unassigned_truncated_count,
         "metrics_completeness": metrics_completeness,
-        "metrics_observed_at": _optional_text(usage_sample.get("sampled_at")),
+        "metrics_observed_at": _optional_text(usage_sample.get("sampled_at"))
+        or (min(fallback_observed_at) if fallback_observed_at else None),
         "partial_reason_codes": sorted(reasons),
     }
 
@@ -175,22 +202,6 @@ def _request_denominators(summary: Mapping[str, Any]) -> tuple[float | None, flo
         ),
         _positive_number(_first(summary, "mem_request_mib", "request_mem_mib", "requests_mem_mib")),
     )
-
-
-def _usage_pct(
-    usage: Mapping[str, Any],
-    pct_keys: tuple[str, ...],
-    ratio_keys: tuple[str, ...],
-) -> float | None:
-    for key in pct_keys:
-        value = _number(usage.get(key))
-        if value is not None:
-            return round(value, 1)
-    for key in ratio_keys:
-        value = _number(usage.get(key))
-        if value is not None:
-            return round(value * 100.0, 1)
-    return None
 
 
 def _rows(value: object) -> list[Mapping[str, Any]]:

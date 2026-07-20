@@ -43,6 +43,7 @@ import type { ResourceFilesPort } from "../../../features/resource-files/resourc
 import { createChecksProductPort } from "./checks";
 import type { ResourceIssuesPort } from "../../../features/issues/resourceIssuesContract";
 import { createTrafficProductPort } from "../trafficPort";
+import type { GitOpsPort } from "../../../features/gitops/gitOpsContract";
 
 export function loadResourcesSurface(
   homePort: HomePort,
@@ -55,6 +56,7 @@ export function loadResourcesSurface(
   resourceIssuesPort: ResourceIssuesPort,
   resourcesFilterPort: ResourcesFilterPort,
   getInventorySummary: ResourcesEndpointDependencies["getInventorySummary"],
+  gitOpsPort: Pick<GitOpsPort, "listApplications" | "listSyncTargets">,
 ): ComponentType {
   const topologyPorts = createTopologyPorts();
   return createResourcesSurface(
@@ -106,5 +108,6 @@ export function loadResourcesSurface(
     portForwardSessions,
     resourceFilesPort,
     createTrafficProductPort(),
+    gitOpsPort,
   );
 }

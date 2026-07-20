@@ -213,6 +213,7 @@ export function createApiComposition(auth: AuthPort): ProductComposition {
           resourceIssuesPort,
           resourcesFilterPort,
           getInventorySummary,
+          gitOpsPort,
         ),
       })),
     },

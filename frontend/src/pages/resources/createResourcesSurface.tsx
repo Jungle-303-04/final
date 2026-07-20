@@ -28,6 +28,7 @@ import type { TimelinePort } from "../../features/timeline/timelineContract";
 import type { BrowserRefreshPolicyRegistry } from "../../shared/data/browserRefreshPolicyRegistry";
 import type { ResourceFilesPort } from "../../features/resource-files/resourceFilesContract";
 import type { TrafficPort } from "../../features/traffic/trafficContract";
+import type { GitOpsPort } from "../../features/gitops/gitOpsContract";
 
 export function createResourcesSurface(
   port: ResourcesPort,
@@ -50,6 +51,7 @@ export function createResourcesSurface(
   portForwardSessions?: PortForwardSessionPort,
   resourceFilesPort?: ResourceFilesPort,
   trafficPort?: TrafficPort,
+  repositoryLineagePort?: Pick<GitOpsPort, "listApplications" | "listSyncTargets">,
 ): ComponentType {
   function ResourcesSurface() {
     return (
@@ -73,6 +75,7 @@ export function createResourcesSurface(
         portForwardSessions={portForwardSessions}
         resourceFilesPort={resourceFilesPort}
         trafficPort={trafficPort}
+        repositoryLineagePort={repositoryLineagePort}
         port={port}
       />
     );

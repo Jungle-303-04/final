@@ -1,4 +1,5 @@
 import type { RelationTopologyNode } from "../../features/resources/relationTopologyContract";
+import type { GitOpsPort } from "../../features/gitops/gitOpsContract";
 import { ResourcesCatalog } from "./ResourcesCatalog";
 import { ResourcesConnectionPanel } from "./ResourcesConnectionPanel";
 import type { RelationTopologyFrame } from "./useRelationTopologyDataFrame";
@@ -8,12 +9,14 @@ export function ResourcesListRail({
   connectionTopology,
   focusedNodeId,
   onFocus,
+  repositoryLineagePort,
   repositoryHref,
   state,
 }: {
   connectionTopology: RelationTopologyFrame;
   focusedNodeId: string | null;
   onFocus: (node: RelationTopologyNode | null) => void;
+  repositoryLineagePort?: Pick<GitOpsPort, "listApplications" | "listSyncTargets">;
   repositoryHref: string;
   state: ReturnType<typeof useResourcesPageState>;
 }) {
@@ -28,6 +31,8 @@ export function ResourcesListRail({
           frame={connectionTopology}
           onFocus={onFocus}
           onOpen={(node) => state.openDetail(node.identity)}
+          clusterId={state.selectedClusterId}
+          repositoryLineagePort={repositoryLineagePort}
           repositoryHref={repositoryHref}
         />
       ) : (

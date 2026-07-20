@@ -6,6 +6,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { I18nProvider } from "../../shared/i18n";
+import type { GitOpsPort } from "../../features/gitops/gitOpsContract";
 import { ResourcesConnectionPanel } from "./ResourcesConnectionPanel";
 import type { RelationTopologyFrame } from "./useRelationTopologyDataFrame";
 
@@ -44,6 +45,64 @@ describe("ResourcesConnectionPanel", () => {
     expect(screen.getByRole("button", { name: /checkout-app/u })).toBeTruthy();
     expect(screen.getByRole("link", { name: "저장소·동기화 열기" }).getAttribute("href"))
       .toBe("/deploy?section=repositories");
+  });
+
+  it("fills the repository lens from the real GitOps application and sync contracts", async () => {
+    const user = userEvent.setup();
+    const listApplications = vi.fn().mockResolvedValue([{
+      id: "app-checkout",
+      name: "checkout",
+      repository: "Jungle-303-04/final",
+      branch: "dev",
+      clusterId: "cluster-1",
+      manifestPath: "deploy/checkout.yaml",
+    }]);
+    const listSyncTargets = vi.fn().mockResolvedValue([{
+      id: "sync-checkout",
+      applicationIds: ["app-checkout"],
+      applicationId: "app-checkout",
+      applicationName: "checkout",
+      clusterId: "cluster-1",
+      namespace: "game",
+      environment: "development",
+      syncStatus: "Synced",
+      revision: "abc123456",
+      observedAt: "2026-07-20T00:00:00Z",
+    }]);
+    const repositoryLineagePort: Pick<GitOpsPort, "listApplications" | "listSyncTargets"> = {
+      listApplications,
+      listSyncTargets,
+    };
+
+    render(
+      <I18nProvider navigatorLanguage="ko-KR" storage={null}>
+        <MemoryRouter>
+          <ResourcesConnectionPanel
+            clusterId="cluster-1"
+            focusedNodeId={null}
+            frame={relationFrame()}
+            onFocus={vi.fn()}
+            onOpen={vi.fn()}
+            repositoryHref="/deploy?section=repositories"
+            repositoryLineagePort={repositoryLineagePort}
+          />
+        </MemoryRouter>
+      </I18nProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "저장소" }));
+    const repository = await screen.findByRole("button", { name: /Jungle-303-04\/final/u });
+    expect(listApplications).toHaveBeenCalledTimes(1);
+    expect(listSyncTargets).toHaveBeenCalledWith(
+      expect.any(AbortSignal),
+      { clusters: ["cluster-1"] },
+    );
+    expect(screen.getByText("Synced")).toBeTruthy();
+
+    await user.click(repository);
+    expect(screen.getByText("checkout")).toBeTruthy();
+    expect(screen.getByText("cluster-1 / game")).toBeTruthy();
+    expect(screen.getByText("abc1234")).toBeTruthy();
   });
 });
 

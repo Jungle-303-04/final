@@ -657,7 +657,7 @@ def guarded_kubectl_apply_command(
         "target-runtime-config -o jsonpath='{.data.TARGET_CLUSTER_ID}' "
         '2>/dev/null || true)"; '
         f'if [ -n "$existing" ] && [ "$existing" != {shell_quote(expected_cluster_id)} ]; '
-        "then printf 'Opsia agent is already registered as %s; disconnect it before connecting "
+        "then printf 'Kyro agent is already registered as %s; disconnect it before connecting "
         f'{expected_cluster_id}.\\n\' "$existing" >&2; exit 1; fi; '
     )
     return f"{guard}curl -fsSL {shell_quote(manifest_url)} | {kubectl} apply -f -"

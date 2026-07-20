@@ -23,12 +23,10 @@ import {
   trafficServiceKey,
   type TrafficServiceProjection,
 } from "./ResourcesTrafficRelationshipPanel";
-import { ResourcesViewSwitcher } from "./ResourcesViewSwitcher";
 
 export function ResourcesTrafficFlowSurface({
   onOpenService,
   port,
-  setView,
 }: {
   onOpenService: (
     clusterId: string,
@@ -40,7 +38,6 @@ export function ResourcesTrafficFlowSurface({
     },
   ) => void;
   port: TrafficPort;
-  setView: (view: "map" | "list" | "flow") => void;
 }) {
   const { t } = useI18n();
   const filter = useUnifiedFilter();
@@ -82,7 +79,6 @@ export function ResourcesTrafficFlowSurface({
 
   return (
     <div className="grid min-w-0 gap-4" data-slot="resources-flow-surface">
-      <ResourcesViewSwitcher onChange={setView} view="flow" />
       <Surface as="div" aria-labelledby="resources-flow-title" className="min-w-0 overflow-hidden">
         <SurfaceSection className="flex min-w-0 flex-wrap items-start justify-between gap-3 p-4">
           <div className="grid min-w-0 gap-1">

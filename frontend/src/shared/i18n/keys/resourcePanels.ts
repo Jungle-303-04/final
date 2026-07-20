@@ -8,6 +8,7 @@ export type ResourcePanelsMessageKey =
   | "resources.connectionPanel.openRepositories"
   | "resources.connectionPanel.repositories"
   | "resources.connectionPanel.repositoryEmpty"
+  | "resources.connectionPanel.revisions"
   | "resources.connectionPanel.services"
   | "resources.connectionPanel.tabs"
   | "resources.connectionPanel.title"

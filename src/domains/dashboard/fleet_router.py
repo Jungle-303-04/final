@@ -22,7 +22,6 @@ import asyncio
 import json
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
-from math import isfinite
 from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
@@ -52,6 +51,7 @@ from domains.identity.dependencies import (
     resolve_allowed_application_ids,
 )
 from domains.inventory.certificate_expiry import certificate_expiry_summary
+from domains.inventory.observed_metrics import inventory_usage_pct, usage_pct
 from domains.inventory_filter.cursor import FilterCursorCodec, authorization_revision
 from domains.inventory_filter.graph import build_resource_graph
 from domains.inventory_filter.query import filter_fingerprint, parse_resource_filters
@@ -62,7 +62,7 @@ from domains.target.router import (
 )
 from domains.traffic.observation_projection import traffic_overview
 from packages.config.certificate_expiry import certificate_expiry_warning_seconds
-from packages.config.refresh_policies import browser_refresh_policy, integral_refresh_after_seconds
+from packages.config.refresh_policies import integral_refresh_after_seconds
 from packages.config.settings import env
 from packages.contracts.checks.settings import ChecksSettingsPolicy
 from packages.contracts.event_bus.interfaces import JsonObject
@@ -1120,23 +1120,6 @@ def usage_snapshot(sample: JsonObject | None) -> ClusterUsageSnapshot | None:
     )
 
 
-def usage_pct(
-    usage: JsonObject,
-    pct_keys: tuple[str, ...],
-    ratio_keys: tuple[str, ...],
-) -> float | None:
-    """usage 롤업에서 실측 활용률(%)만 추출 — pct 키 우선, ratio 키는 ×100. 없으면 None."""
-    for key in pct_keys:
-        value = _float_or_none(usage.get(key))
-        if value is not None:
-            return round(value, 1)
-    for key in ratio_keys:
-        value = _float_or_none(usage.get(key))
-        if value is not None:
-            return round(value * 100.0, 1)
-    return None
-
-
 def preferred_usage_pct(
     latest_usage: JsonObject,
     inventory_nodes: list[JsonObject],
@@ -1154,49 +1137,6 @@ def preferred_usage_pct(
         if (value := inventory_usage_pct(node, pct_keys, ratio_keys)) is not None
     ]
     return round(sum(values) / len(values), 1) if values else None
-
-
-def inventory_usage_pct(
-    evidence: JsonObject,
-    pct_keys: tuple[str, ...],
-    ratio_keys: tuple[str, ...],
-) -> float | None:
-    """Accept only fresh, timestamped inventory collector measurements."""
-
-    summary_value = evidence.get("summary")
-    summary = summary_value if isinstance(summary_value, dict) else evidence
-    observed_at = _optional_text(
-        evidence.get("metrics_observed_at") or summary.get("metrics_observed_at")
-    )
-    if not inventory_metrics_are_fresh(observed_at):
-        return None
-    value = usage_pct(summary, pct_keys, ratio_keys)
-    return value if value is not None and isfinite(value) and value >= 0 else None
-
-
-def inventory_metrics_are_fresh(
-    observed_at: str | None,
-    *,
-    now: datetime | None = None,
-) -> bool:
-    """Apply the canonical Kubernetes-metrics staleness window, failing closed."""
-
-    if observed_at is None:
-        return False
-    try:
-        parsed = datetime.fromisoformat(observed_at.replace("Z", "+00:00"))
-    except ValueError:
-        return False
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=UTC)
-    else:
-        parsed = parsed.astimezone(UTC)
-    current = now or datetime.now(UTC)
-    stale_after = browser_refresh_policy("metrics_kubernetes").stale_after_seconds
-    if stale_after is None:
-        return False
-    age_seconds = (current - parsed).total_seconds()
-    return -stale_after <= age_seconds <= stale_after
 
 
 def workload_health_item(row: JsonObject) -> ClusterWorkloadHealthItem:

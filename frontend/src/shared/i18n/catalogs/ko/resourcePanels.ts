@@ -10,6 +10,7 @@ export const resourcePanelsKo = {
   "resources.connectionPanel.openRepositories": "저장소·동기화 열기",
   "resources.connectionPanel.repositories": "저장소",
   "resources.connectionPanel.repositoryEmpty": "저장소 연결 정보는 배포의 저장소·동기화에서 확인합니다.",
+  "resources.connectionPanel.revisions": "리비전 {count}개",
   "resources.connectionPanel.services": "서비스",
   "resources.connectionPanel.tabs": "연결 보기",
   "resources.connectionPanel.title": "연결 보기",
