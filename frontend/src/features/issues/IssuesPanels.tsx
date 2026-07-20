@@ -265,22 +265,19 @@ function IssueOverview({
               className="inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-xs"
             >
               <span className="font-medium text-muted-foreground">{copy.confidence}</span>
-              <span
-                aria-hidden="true"
-                className="h-1.5 w-14 overflow-hidden rounded-full bg-muted"
-              >
-                <span
-                  className={cn(
-                    "block h-full rounded-full",
-                    confidencePct >= 80
-                      ? "bg-status-healthy"
-                      : confidencePct >= 50
-                        ? "bg-status-warning"
-                        : "bg-destructive",
-                  )}
-                  style={{ width: `${confidencePct}%` }}
-                />
-              </span>
+              <Progress
+                aria-label={`${copy.confidence} ${confidence}`}
+                className={cn(
+                  "w-14 [&_[data-slot=progress-track]]:h-1.5",
+                  confidencePct >= 80
+                    ? "[&_[data-slot=progress-indicator]]:bg-status-healthy"
+                    : confidencePct >= 50
+                      ? "[&_[data-slot=progress-indicator]]:bg-status-warning"
+                      : "[&_[data-slot=progress-indicator]]:bg-destructive",
+                )}
+                value={confidencePct}
+                valueText={confidence}
+              />
               <span className="font-mono font-semibold tabular-nums text-foreground">{confidence}</span>
             </span>
           ) : null}
@@ -598,9 +595,12 @@ function ReportCandidateAccordion({
           </Badge>
           {selectedCandidate.score !== null ? (
             <span className="flex shrink-0 items-center gap-1.5">
-              <span aria-hidden="true" className="h-1 w-10 overflow-hidden rounded-full bg-muted">
-                <span className="block h-full rounded-full bg-status-healthy" style={{ width: `${Math.round(selectedCandidate.score * 100)}%` }} />
-              </span>
+              <Progress
+                aria-label={`${copy.confidence} ${Math.round(selectedCandidate.score * 100)}%`}
+                className="w-10 [&_[data-slot=progress-indicator]]:bg-status-healthy [&_[data-slot=progress-track]]:h-1"
+                value={Math.round(selectedCandidate.score * 100)}
+                valueText={`${Math.round(selectedCandidate.score * 100)}%`}
+              />
               <span className="text-xs font-mono font-semibold tabular-nums text-foreground">{Math.round(selectedCandidate.score * 100)}%</span>
             </span>
           ) : null}
@@ -646,9 +646,12 @@ function ReportCandidateAccordion({
               </span>
               {candidate.score !== null ? (
                 <span className="flex shrink-0 items-center gap-1.5">
-                  <span aria-hidden="true" className="h-1 w-10 overflow-hidden rounded-full bg-muted">
-                    <span className="block h-full rounded-full bg-muted-foreground/45" style={{ width: `${Math.round(candidate.score * 100)}%` }} />
-                  </span>
+                  <Progress
+                    aria-label={`${copy.confidence} ${Math.round(candidate.score * 100)}%`}
+                    className="w-10 [&_[data-slot=progress-indicator]]:bg-muted-foreground/45 [&_[data-slot=progress-track]]:h-1"
+                    value={Math.round(candidate.score * 100)}
+                    valueText={`${Math.round(candidate.score * 100)}%`}
+                  />
                   <span className="text-xs font-mono tabular-nums text-muted-foreground">{Math.round(candidate.score * 100)}%</span>
                 </span>
               ) : (
