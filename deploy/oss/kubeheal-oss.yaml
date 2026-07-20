@@ -109,7 +109,7 @@ spec:
         - name: controller
           image: kubeheal-service:latest
           imagePullPolicy: IfNotPresent
-          command: ["python", "src/controller/app.py"]
+          command: ["python", "src/entrypoints/app.py"]
           env:
             - name: DATABASE_URL
               value: postgresql+psycopg://kubeheal:kubeheal-local-only@kubeheal-postgres:5432/kubeheal

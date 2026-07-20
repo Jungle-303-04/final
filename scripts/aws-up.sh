@@ -1276,7 +1276,7 @@ bootstrap_admin() {
   PYTHONPATH="${ROOT_DIR}/src:${ROOT_DIR}/src/services/gateway/api-gateway" \
   AUTH_PASSWORD="${AUTH_PASSWORD}" \
   PROJECT_SLUG="${PROJECT_SLUG}" \
-  uv run python -m controller.bootstrap_admin
+  uv run python -m entrypoints.bootstrap_admin
 
   kill "${PORT_FORWARD_PID}" >/dev/null 2>&1 || true
   PORT_FORWARD_PID=""

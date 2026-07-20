@@ -48,8 +48,8 @@ database schema and never initialize or migrate it.
 export DATABASE_URL='postgresql://...'
 export OPSIA_DEMO_WORKSPACE_MUTATIONS='demo-workspace-v1'
 
-PYTHONPATH=src python -m controller.demo_workspace seed
-PYTHONPATH=src python -m controller.demo_workspace reset
+PYTHONPATH=src python -m entrypoints.demo_workspace seed
+PYTHONPATH=src python -m entrypoints.demo_workspace reset
 ```
 
 Seeding the same descriptor digest again is a no-op. A changed descriptor produces a new
@@ -63,8 +63,8 @@ marker. A manual reset of that seed must use the same override so the persisted 
 matches.
 
 ```bash
-PYTHONPATH=src python -m controller.demo_workspace seed --owner-user-id 'user-<uuid>'
-PYTHONPATH=src python -m controller.demo_workspace reset --owner-user-id 'user-<uuid>'
+PYTHONPATH=src python -m entrypoints.demo_workspace seed --owner-user-id 'user-<uuid>'
+PYTHONPATH=src python -m entrypoints.demo_workspace reset --owner-user-id 'user-<uuid>'
 ```
 
 The FULL dev deployment seeds real database-backed demo data after the versioned migration and

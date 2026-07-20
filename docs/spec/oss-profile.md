@@ -5,7 +5,7 @@ status: synced
 
 # OSS profile — PR-only controller + PostgreSQL + agent
 
-> 구현 앵커: `src/controller/app.py`, `src/packages/runtime/controller.py`,
+> 구현 앵커: `src/entrypoints/app.py`, `src/packages/runtime/controller.py`,
 > `charts/opsia/`, `scripts/oss-demo.sh`.
 
 이 프로파일은 공개 저장소의 첫 실행 경로다. 기존 `scripts/up.sh` 기반 다중 서비스 설치는
@@ -40,7 +40,7 @@ process-local session store는 단일 controller용이며 restart 때 세션이 
 H3의 `auto-revert-worker` 합류로 BQ-016 착륙 시점보다 worker가 1개 늘었다.
 
 ```bash
-uv run python src/controller/app.py --check
+uv run python src/entrypoints/app.py --check
 ```
 
 명령은 모든 entrypoint를 실제 import하고 worker handler spec, async `run`, HTTP

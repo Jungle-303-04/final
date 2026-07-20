@@ -491,7 +491,7 @@ def test_full_deploy_bootstraps_fixed_admin_without_persisting_plaintext_credent
     assert '--from-literal="AUTH_PASSWORD=${AUTH_PASSWORD}"' in step["run"]
     assert "trap cleanup EXIT" in step["run"]
     assert "delete secret management-admin-bootstrap" in step["run"]
-    assert "controller.bootstrap_admin" in manifest
+    assert "entrypoints.bootstrap_admin" in manifest
     assert "key: AUTH_PASSWORD" in manifest
 
 

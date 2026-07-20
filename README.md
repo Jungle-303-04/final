@@ -9,7 +9,14 @@ remediation 플랫폼입니다.
 
 ## 구조
 
+루트별 책임과 생성 파일 보존 기준은
+[저장소 구조 원칙](docs/architecture/repository-layout.md)을 정본으로 사용한다.
+
 ```text
+src/entrypoints
+  app.py                 OSS 단일 프로세스 조립 진입점
+  bootstrap*.py          스키마 이후 계정·로컬 실행 초기화
+  demo_*.py              명시적으로 실행하는 개발 보조 진입점
 src/services
   gateway/api-gateway
   gateway/outbox-relay
@@ -64,9 +71,14 @@ src/packages
   ai                     LLM provider 클라이언트 (OpenAI/Anthropic/Gemini)
   security               시크릿 vault (SOPS/age, AWS)
 src/samples  smoke 테스트용 샘플 manifest (Bruno webhook·smoke script 가 참조)
+alembic      PostgreSQL 스키마 migration 정본
+charts       Helm chart
 deploy       management/target Kubernetes manifest
+desktop      Tauri 네이티브 셸
 docs/api     Bruno API 수동 테스트 collection
 frontend     운영 콘솔 React/Vite 앱과 nginx same-origin proxy 설정
+infra        Terraform 인프라 정본
+references   격리된 원본 snapshot과 provenance
 scripts      검증, AWS 배포, 상태 확인, smoke, scale, pod 복구 script
 secrets      SOPS/age 시크릿 템플릿
 config/env   로컬 env 템플릿
@@ -95,8 +107,10 @@ API를 사람이 직접 눌러 확인할 때는 [docs/api/README.md](docs/api/RE
 make clean
 ```
 
-`make clean`은 Python/Playwright 캐시와 프론트 빌드 산출물만 삭제한다. `.env*`,
-`outputs/`, `node_modules/`, `.venv/`, Terraform state는 보존한다.
+`make clean`은 Python/Playwright 캐시와 프론트 빌드 산출물만 삭제한다. 평상시에는
+증분 검사 속도를 위해 `.import_linter_cache/`, `.pytest_cache/`, `.ruff_cache/`,
+`frontend/tsconfig.tsbuildinfo`를 유지한다. `.env*`, `outputs/`, `node_modules/`,
+`.venv/`, Terraform state는 항상 보존한다.
 
 ## Opsia 사용자 인터페이스
 

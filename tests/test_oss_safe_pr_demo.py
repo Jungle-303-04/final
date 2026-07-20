@@ -8,8 +8,8 @@ import httpx
 import pytest
 from conftest import load_service, make_context
 
-from controller.demo_scm_fixture import DemoScmRepository, create_app
 from domains.scm.events import SafePrFilePatch, SafePrRequestedBody
+from entrypoints.demo_scm_fixture import DemoScmRepository, create_app
 
 ROOT = Path(__file__).resolve().parents[1]
 

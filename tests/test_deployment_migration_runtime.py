@@ -58,7 +58,7 @@ def test_admin_bootstrap_job_runs_only_after_versioning_with_ephemeral_secret() 
     manifest = read("deploy/management/admin-bootstrap-job.yaml")
 
     assert "name: management-admin-bootstrap" in manifest
-    assert "controller.bootstrap_admin" in manifest
+    assert "entrypoints.bootstrap_admin" in manifest
     assert "key: COMMAND_NOTIFY_DATABASE_URL" in manifest
     assert f'value: "{repository_migration_head()}"' in manifest
     assert "name: AUTH_PASSWORD" in manifest

@@ -66,7 +66,7 @@ spec:
         - name: bootstrap
           image: {{ include "opsia.image" . | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          command: ["python", "src/controller/bootstrap.py"]
+          command: ["python", "src/entrypoints/bootstrap.py"]
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -98,7 +98,7 @@ spec:
         - name: controller
           image: {{ include "opsia.image" . | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          command: ["python", "src/controller/app.py"]
+          command: ["python", "src/entrypoints/app.py"]
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:

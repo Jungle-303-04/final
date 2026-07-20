@@ -290,7 +290,7 @@ def test_aws_admin_bootstrap_uses_current_identity_repository() -> None:
         script.index("bootstrap_admin() {") : script.index("register_target() {")
     ]
 
-    assert "python -m controller.bootstrap_admin" in admin_bootstrap
+    assert "python -m entrypoints.bootstrap_admin" in admin_bootstrap
     assert "db.init()" not in admin_bootstrap
     assert "role = 'admin'" not in admin_bootstrap
     assert "workspace_members" not in admin_bootstrap

@@ -120,7 +120,7 @@ def test_make_demo_dry_run_lists_the_complete_revert_story() -> None:
 
 def test_controller_check_loads_every_management_entrypoint() -> None:
     result = subprocess.run(
-        ["uv", "run", "python", "src/controller/app.py", "--check"],
+        ["uv", "run", "python", "src/entrypoints/app.py", "--check"],
         cwd=ROOT,
         check=False,
         capture_output=True,

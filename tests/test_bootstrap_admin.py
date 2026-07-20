@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from controller import bootstrap_admin
+from entrypoints import bootstrap_admin
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_dev_admin_identifier_is_fixed_without_a_plaintext_password() -> None:
-    source = (ROOT / "src/controller/bootstrap_admin.py").read_text(encoding="utf-8")
+    source = (ROOT / "src/entrypoints/bootstrap_admin.py").read_text(encoding="utf-8")
 
     assert bootstrap_admin.DEV_ADMIN_IDENTIFIER == "admin"
     assert 'required_env("AUTH_PASSWORD")' in source
@@ -16,7 +16,7 @@ def test_dev_admin_identifier_is_fixed_without_a_plaintext_password() -> None:
 
 
 def test_admin_bootstrap_is_migration_first_and_never_initializes_schema() -> None:
-    source = (ROOT / "src/controller/bootstrap_admin.py").read_text(encoding="utf-8")
+    source = (ROOT / "src/entrypoints/bootstrap_admin.py").read_text(encoding="utf-8")
 
     assert "verify_versioned_head(database_url, expected_head)" in source
     assert "db.verify_schema()" in source

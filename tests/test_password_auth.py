@@ -12,7 +12,7 @@ from conftest import ROOT, load_file
 from fastapi import HTTPException, Request
 from starlette.datastructures import Headers
 
-from controller.demo_workspace import DEFAULT_DESCRIPTOR, load_descriptor
+from entrypoints.demo_workspace import DEFAULT_DESCRIPTOR, load_descriptor
 from packages.storage.sessions import MemorySessionStore, RateLimitExceeded, RedisSessionStoreConfig
 
 ROOT_DIR = Path(__file__).resolve().parents[1]

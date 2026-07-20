@@ -28,16 +28,6 @@ from sqlalchemy import (
 from sqlalchemy import event as sqlalchemy_event
 
 import domains.demo_workspace.repository as demo_repository_module
-from controller.demo_workspace import (
-    DEFAULT_DESCRIPTOR,
-    DEMO_EVENT_SOURCE,
-    OutboxRequiredPublisher,
-    derive_demo_seed_application_id,
-    ensure_demo_gitops_application,
-    load_descriptor,
-    reset_demo_workspace,
-    seed_demo_workspace,
-)
 from domains.applications.router import router as applications_router
 from domains.checks.observation_projection import checks_overview
 from domains.cost.node_projection import cost_node_page
@@ -85,6 +75,16 @@ from domains.inventory_filter.graph import build_resource_graph
 from domains.inventory_filter.metrics_history import build_resource_metric_history
 from domains.registry import Database
 from domains.traffic.router import router as traffic_router
+from entrypoints.demo_workspace import (
+    DEFAULT_DESCRIPTOR,
+    DEMO_EVENT_SOURCE,
+    OutboxRequiredPublisher,
+    derive_demo_seed_application_id,
+    ensure_demo_gitops_application,
+    load_descriptor,
+    reset_demo_workspace,
+    seed_demo_workspace,
+)
 from packages.contracts.demo_workspace import DEMO_SEED_MARKER_KEY, DemoWorkspaceDescriptor
 from packages.contracts.gateway.responses import (
     RepositoryBranchItem,

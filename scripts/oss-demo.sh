@@ -374,7 +374,7 @@ spec:
         - name: scm
           image: ${OPSIA_IMAGE}
           imagePullPolicy: IfNotPresent
-          command: ["python", "src/controller/demo_scm_fixture.py"]
+          command: ["python", "src/entrypoints/demo_scm_fixture.py"]
           env:
             - name: DEMO_SCM_TOKEN
               valueFrom:
