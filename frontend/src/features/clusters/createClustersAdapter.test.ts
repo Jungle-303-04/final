@@ -6,11 +6,20 @@ describe("Clusters adapter", () => {
     const endpoints = dependencies();
     const port = createClustersAdapter(endpoints);
 
-    await expect(port.connect({ name: "Production", provider: "aws" })).resolves.toEqual({
+    await expect(port.connect({
+      environment: "staging",
+      name: "Production",
+      provider: "aws",
+    })).resolves.toEqual({
       clusterId: "production-a1b2",
       installCommand: "curl one-line | kubectl apply -f -",
       expiresAt: "2026-07-14T06:00:00Z",
     });
+    expect(endpoints.connectCluster).toHaveBeenCalledWith({
+      environment: "staging",
+      name: "Production",
+      provider: "aws",
+    }, undefined);
     await expect(port.loadConnection("production-a1b2")).resolves.toEqual({
       status: "waiting",
       stage: "agent_connected",
@@ -41,7 +50,11 @@ describe("Clusters adapter", () => {
       expires_at: "2026-07-14T06:00:00Z",
     });
 
-    await expect(createClustersAdapter(endpoints).connect({ name: "Production", provider: "aws" }))
+    await expect(createClustersAdapter(endpoints).connect({
+      environment: "development",
+      name: "Production",
+      provider: "aws",
+    }))
       .rejects.toMatchObject({ code: "invalid-response" });
   });
 });

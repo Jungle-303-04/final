@@ -1,4 +1,10 @@
 export type ClusterConnectProvider = "aws" | "gcp" | "azure" | "onprem";
+export type ClusterConnectEnvironment = "development" | "staging" | "production";
+export interface ClusterConnectInput {
+  environment: ClusterConnectEnvironment;
+  name: string;
+  provider: ClusterConnectProvider;
+}
 export type ClusterConnectState = "waiting" | "connected" | "expired";
 export type ClusterConnectStage =
   | "token_issued"
@@ -43,7 +49,7 @@ export class ClustersPortFailure extends Error {
 
 export interface ClustersPort {
   connect(
-    input: { name: string; provider: ClusterConnectProvider },
+    input: ClusterConnectInput,
     signal?: AbortSignal,
   ): Promise<ClusterConnectReceipt>;
   loadConnection(

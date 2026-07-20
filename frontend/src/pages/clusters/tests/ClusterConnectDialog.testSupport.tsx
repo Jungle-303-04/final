@@ -5,6 +5,10 @@ import { vi } from "vitest";
 import { AuthSessionGateProvider } from "../../../features/auth/AuthSessionGate";
 import type { ClustersPort } from "../../../features/clusters/clustersContract";
 import { UnifiedFilterProvider } from "../../../features/filters/UnifiedFilterProvider";
+import {
+  ProductNotificationsProvider,
+  useProductNotifications,
+} from "../../../features/notifications/ProductNotificationsProvider";
 import { I18nProvider, useI18n } from "../../../shared/i18n";
 import { ClusterConnectDialog } from "../ClusterConnectDialog";
 
@@ -38,17 +42,20 @@ export function renderDialog(
   return render(
     <I18nProvider navigatorLanguage="en-US" storage={null}>
       <AuthSessionGateProvider reportUnauthorized={vi.fn()}>
-        <MemoryRouter>
-          <UnifiedFilterProvider>
-            <ClusterConnectDialog
-              existingNames={existingNames}
-              onConnected={onConnected}
-              onOpenChange={vi.fn()}
-              open
-              port={port}
-            />
-          </UnifiedFilterProvider>
-        </MemoryRouter>
+        <ProductNotificationsProvider>
+          <MemoryRouter>
+            <UnifiedFilterProvider>
+              <ClusterConnectDialog
+                existingNames={existingNames}
+                onConnected={onConnected}
+                onOpenChange={vi.fn()}
+                open
+                port={port}
+              />
+              <NotificationProbe />
+            </UnifiedFilterProvider>
+          </MemoryRouter>
+        </ProductNotificationsProvider>
       </AuthSessionGateProvider>
     </I18nProvider>,
   );
@@ -62,18 +69,26 @@ export function renderHarness(
   return render(
     <I18nProvider navigatorLanguage="en-US" storage={null}>
       <AuthSessionGateProvider reportUnauthorized={vi.fn()}>
-        <MemoryRouter>
-          <UnifiedFilterProvider>
-            <ConnectionHarness
-              onConnected={onConnected}
-              onRegistered={onRegistered}
-              port={port}
-            />
-          </UnifiedFilterProvider>
-        </MemoryRouter>
+        <ProductNotificationsProvider>
+          <MemoryRouter>
+            <UnifiedFilterProvider>
+              <ConnectionHarness
+                onConnected={onConnected}
+                onRegistered={onRegistered}
+                port={port}
+              />
+              <NotificationProbe />
+            </UnifiedFilterProvider>
+          </MemoryRouter>
+        </ProductNotificationsProvider>
       </AuthSessionGateProvider>
     </I18nProvider>,
   );
+}
+
+function NotificationProbe() {
+  const { notifications } = useProductNotifications();
+  return <output data-testid="cluster-notification-probe">{notifications[0]?.id ?? ""}</output>;
 }
 
 function ConnectionHarness({

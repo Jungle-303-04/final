@@ -1336,7 +1336,7 @@ async def connect_cluster(
         receipt = await register_target(
             TargetRegisterRequest(
                 name=display_name,
-                environment="development",
+                environment=payload.environment,
                 cloud_provider="existing-k8s",
                 deploy_provider=MANUAL_MANIFEST_DEPLOY_PROVIDER,
                 provider_config={"provider_hint": CONNECT_PROVIDER_HINTS[payload.provider]},

@@ -402,6 +402,7 @@ class TargetRegisterRequest(TargetProviderSelectionRequest):
 class ClusterConnectRequest(StrictModel):
     name: str = Field(min_length=1, max_length=120, pattern=r"\S")
     provider: Literal["aws", "gcp", "azure", "onprem"]
+    environment: Literal["development", "staging", "production"] = "development"
 
 
 class TargetPreflightRequest(TargetProviderSelectionRequest):

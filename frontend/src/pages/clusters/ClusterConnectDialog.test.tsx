@@ -13,6 +13,7 @@ import {
 
 afterEach(() => {
   cleanup();
+  window.localStorage.clear();
   vi.restoreAllMocks();
 });
 
@@ -50,6 +51,24 @@ describe("ClusterConnectDialog", () => {
       expiresAt: "2026-07-14T06:00:00Z",
     });
     expect(await screen.findByText("curl secret-command | kubectl apply -f -")).toBeTruthy();
+  });
+
+  it("stores the selected environment in the real registration request", async () => {
+    const user = userEvent.setup();
+    const port = waitingPort();
+    renderDialog(port);
+
+    expect(screen.getByRole("button", { name: "Development" }).getAttribute("aria-pressed"))
+      .toBe("true");
+    await user.click(screen.getByRole("button", { name: "Production" }));
+    await user.type(screen.getByRole("textbox", { name: "Cluster name" }), "Game Cluster");
+    await user.click(screen.getByRole("button", { name: "Generate install command" }));
+
+    expect(port.connect).toHaveBeenCalledWith({
+      environment: "production",
+      name: "Game Cluster",
+      provider: "aws",
+    }, expect.any(AbortSignal));
   });
 
   it("shows only the server command, copies it, and polls without logging the credential", async () => {
@@ -221,7 +240,7 @@ describe("ClusterConnectDialog", () => {
     expect(port.connect).not.toHaveBeenCalled();
   });
 
-  it("closes from the server terminal state without inventing a second finalizing poll", async () => {
+  it("keeps the server-confirmed completion visible without inventing a second finalizing poll", async () => {
     const user = userEvent.setup();
     const onConnected = vi.fn();
     const onRegistered = vi.fn();
@@ -242,6 +261,36 @@ describe("ClusterConnectDialog", () => {
     await waitFor(() => expect(onRegistered).toHaveBeenCalledOnce());
     await waitFor(() => expect(onConnected).toHaveBeenCalledOnce());
     expect(port.loadConnection).toHaveBeenCalledOnce();
-    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    expect(screen.getByText("Cluster connected")).toBeTruthy();
+    expect(screen.getByText("2026.07.15")).toBeTruthy();
+    expect(screen.getByTestId("cluster-notification-probe").textContent)
+      .toBe("cluster-connected:production-a1b2");
+    expect(screen.getByRole("link", { name: "View cluster" }).getAttribute("href"))
+      .toBe("/resources?clusters=production-a1b2");
+  });
+
+  it("retries only the failed connection check without registering a duplicate cluster", async () => {
+    const user = userEvent.setup();
+    const port = waitingPort();
+    vi.mocked(port.loadConnection)
+      .mockRejectedValueOnce(new Error("temporary connection status failure"))
+      .mockResolvedValue({
+        status: "connected",
+        stage: "ready",
+        refreshAfterSeconds: null,
+        agentVersion: "2026.07.20",
+        lastSeenAt: "2026-07-20T01:02:03Z",
+      });
+    renderDialog(port);
+
+    await user.type(screen.getByRole("textbox", { name: "Cluster name" }), "Production");
+    await user.click(screen.getByRole("button", { name: "Generate install command" }));
+    expect(await screen.findByText("Could not create the connection")).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Retry" }));
+    expect(await screen.findByText("Cluster connected")).toBeTruthy();
+    expect(port.connect).toHaveBeenCalledOnce();
+    expect(port.loadConnection).toHaveBeenCalledTimes(2);
   });
 });

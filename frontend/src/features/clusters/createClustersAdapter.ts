@@ -1,6 +1,6 @@
 import {
   ClustersPortFailure,
-  type ClusterConnectProvider,
+  type ClusterConnectInput,
   type ClusterConnectReceipt,
   type ClusterConnectStage,
   type ClusterDisconnectProgress,
@@ -46,7 +46,7 @@ interface CommandStatusWire {
 
 export interface ClustersEndpointDependencies {
   connectCluster(
-    input: { name: string; provider: ClusterConnectProvider },
+    input: ClusterConnectInput,
     signal?: AbortSignal,
   ): Promise<ClusterConnectWire>;
   getClusterConnectionStatus(

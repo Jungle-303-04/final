@@ -722,9 +722,11 @@ export {
   reissueClusterConnectCommand,
 } from "./cluster-connect";
 export {
+  clusterConnectEnvironmentSchema,
   clusterConnectProviderSchema,
   clusterConnectResponseSchema,
   clusterConnectStatusResponseSchema,
+  type ClusterConnectEnvironment,
   type ClusterConnectProvider,
   type ClusterConnectResponse,
   type ClusterConnectStatusResponse,

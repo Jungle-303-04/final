@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
@@ -52,6 +52,40 @@ describe("AI conversation history surface", () => {
       },
     });
   });
+
+  it("keeps a stable loading frame and offers an executable new-conversation action", async () => {
+    const pending = deferred<Awaited<ReturnType<AiConversationHistoryPort["list"]>>>();
+    const port = historyPort();
+    vi.mocked(port.list).mockReturnValue(pending.promise);
+    renderPage(port, ["/ai"]);
+
+    expect(screen.getByRole("button", { name: "새 대화" })).toBeTruthy();
+    expect(document.querySelector('[aria-busy="true"]')).toBeTruthy();
+
+    pending.resolve({ completeness: "complete", items: [], partialConversationIds: [] });
+    expect(await screen.findByText("첫 AI 대화를 시작하세요")).toBeTruthy();
+  });
+
+  it("recovers a failed history request and keeps the empty state actionable", async () => {
+    const port = historyPort();
+    vi.mocked(port.list)
+      .mockRejectedValueOnce(new Error("history unavailable"))
+      .mockResolvedValue({ completeness: "complete", items: [], partialConversationIds: [] });
+    renderPage(port, ["/ai?clusters=prod-eks"]);
+
+    expect(await screen.findByRole("heading", { name: "대화 내역을 불러올 수 없습니다" }))
+      .toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: "다시 시도" }));
+    expect(await screen.findByText("첫 AI 대화를 시작하세요")).toBeTruthy();
+    expect(port.list).toHaveBeenCalledTimes(2);
+
+    const newConversationActions = screen.getAllByRole("button", { name: "새 대화" });
+    await userEvent.click(newConversationActions[newConversationActions.length - 1]!);
+    await waitFor(() => expect(currentAiConversationSession()).toMatchObject({
+      mode: "new",
+      context: { clusterId: "prod-eks", locale: "ko" },
+    }));
+  });
 });
 
 function renderPage(port: AiConversationHistoryPort, entries: string[]) {
@@ -86,4 +120,12 @@ function historyPort(): AiConversationHistoryPort {
     create: vi.fn(),
     append: vi.fn(),
   };
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((onResolve) => {
+    resolve = onResolve;
+  });
+  return { promise, resolve };
 }

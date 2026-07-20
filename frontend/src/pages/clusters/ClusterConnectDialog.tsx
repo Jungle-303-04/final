@@ -6,31 +6,21 @@ import {
 import { useAuthSessionGate } from "../../features/auth/AuthSessionGate";
 import {
   ClustersPortFailure,
+  type ClusterConnectEnvironment,
   type ClusterConnectProvider,
   type ClusterConnectReceipt,
   type ClusterConnectStage,
+  type ClusterConnectionSnapshot,
   type ClustersPort,
 } from "../../features/clusters/clustersContract";
 import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
+import { useOptionalProductNotifications } from "../../features/notifications/ProductNotificationsProvider";
 import { useI18n } from "../../shared/i18n";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "../../shared/ui/primitives/dialog";
-import { ConnectionCommandStep } from "./ClusterConnectDialogParts";
-import {
-  ClusterConnectedStep,
-  ClusterRegistrationStep,
-} from "./ClusterConnectDialogPanels";
+import { ClusterConnectDialogSurface } from "./ClusterConnectDialogSurface";
 import {
   isAbortError, normalizeDisplayName, type ConnectPhase, type WizardStep,
 } from "./ClusterConnectDialogTypes";
 import { clusterResourcesHref } from "./clusterNavigation";
-
-const STEP_MOTION = "motion-wizard-stage";
 
 export function ClusterConnectDialog({
   existingNames,
@@ -49,12 +39,15 @@ export function ClusterConnectDialog({
 }) {
   const { reportUnauthorized } = useAuthSessionGate();
   const filter = useUnifiedFilter();
+  const notifications = useOptionalProductNotifications();
   const { formatDate, t } = useI18n();
   const [step, setStep] = useState<WizardStep>(1);
   const [name, setName] = useState("");
   const [provider, setProvider] = useState<ClusterConnectProvider>("aws");
+  const [environment, setEnvironment] = useState<ClusterConnectEnvironment>("development");
   const [phase, setPhase] = useState<ConnectPhase>("idle");
   const [receipt, setReceipt] = useState<ClusterConnectReceipt | null>(null);
+  const [connectedSnapshot, setConnectedSnapshot] = useState<ClusterConnectionSnapshot | null>(null);
   const [connectionStage, setConnectionStage] = useState<ClusterConnectStage>("awaiting_install");
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
@@ -81,10 +74,19 @@ export function ClusterConnectDialog({
         nextPollAfterSeconds.current = connection.refreshAfterSeconds;
         setConnectionStage(connection.stage);
         if (connection.status === "connected") {
+          const href = clusterResourcesHref(filter.state, receipt.clusterId);
+          setConnectedSnapshot(connection);
           setPhase("connected");
           setStep(3);
           onConnected();
-          onOpenChange(false);
+          notifications?.publish({
+            description: t("clusters.connect.connected.description"),
+            href,
+            id: `cluster-connected:${receipt.clusterId}`,
+            occurredAt: new Date().toISOString(),
+            title: t("clusters.connect.connected.title"),
+            tone: "healthy",
+          });
           return;
         } else if (connection.status === "expired") {
           setPhase("expired");
@@ -125,7 +127,7 @@ export function ClusterConnectDialog({
       controller.abort();
       if (timeout !== undefined) window.clearTimeout(timeout);
     };
-  }, [onConnected, onOpenChange, open, phase, port, receipt, reportUnauthorized, step]);
+  }, [filter.state, notifications, onConnected, open, phase, port, receipt, reportUnauthorized, step, t]);
 
   useEffect(() => {
     if (!open || step !== 2 || phase !== "waiting") return;
@@ -153,8 +155,10 @@ export function ClusterConnectDialog({
     setStep(1);
     setName("");
     setProvider("aws");
+    setEnvironment("development");
     setPhase("idle");
     setReceipt(null);
+    setConnectedSnapshot(null);
     setConnectionStage("awaiting_install");
     setElapsedSeconds(0);
     waitingStartedAt.current = null;
@@ -173,7 +177,11 @@ export function ClusterConnectDialog({
     setServerNameConflict(false);
     setPhase("submitting");
     try {
-      const nextReceipt = await port.connect({ name: name.trim(), provider }, controller.signal);
+      const nextReceipt = await port.connect({
+        environment,
+        name: name.trim(),
+        provider,
+      }, controller.signal);
       setReceipt(nextReceipt);
       setConnectionStage("awaiting_install");
       waitingStartedAt.current = Date.now();
@@ -226,6 +234,11 @@ export function ClusterConnectDialog({
       if (connectAbort.current === controller) connectAbort.current = null;
     }
   };
+  const retryConnection = () => {
+    if (!receipt || phase === "waiting") return;
+    nextPollAfterSeconds.current = null;
+    setPhase("waiting");
+  };
   const copyCommand = async () => {
     if (!receipt) return;
     // Clipboard writes do not need a loading state. Acknowledge the click immediately,
@@ -238,61 +251,32 @@ export function ClusterConnectDialog({
     }
   };
 
-  return (
-    <Dialog onOpenChange={changeOpen} open={open}>
-      <DialogContent
-        className="sm:max-w-2xl"
-        closeLabel={t("common.action.close")}
-        showCloseButton={phase !== "submitting" && phase !== "reissuing"}
-      >
-        <DialogHeader>
-          <p className="text-xs font-medium text-muted-foreground">
-            {t("clusters.connect.step", { current: step, total: 3 })}
-          </p>
-          <DialogTitle>{t("clusters.connect.title")}</DialogTitle>
-          <DialogDescription>{t("clusters.connect.description")}</DialogDescription>
-        </DialogHeader>
-
-        {step === 1 ? (
-          <ClusterRegistrationStep
-            name={name}
-            nameConflict={nameConflict}
-            onNameChange={(nextName) => {
-              setName(nextName);
-              setServerNameConflict(false);
-            }}
-            onProviderChange={setProvider}
-            onRegister={() => void register()}
-            phase={phase}
-            provider={provider}
-            t={t}
-          />
-        ) : null}
-
-        {step === 2 ? (
-          <div className={STEP_MOTION}>
-            <ConnectionCommandStep
-              copyState={copyState}
-              connectionStage={connectionStage}
-              elapsedSeconds={elapsedSeconds}
-              expiresAt={receipt?.expiresAt ?? null}
-              formatDate={formatDate}
-              installCommand={receipt?.installCommand ?? null}
-              onCopy={() => void copyCommand()}
-              onReissue={() => void reissue()}
-              phase={phase}
-              t={t}
-            />
-          </div>
-        ) : null}
-
-        {step === 3 && receipt ? (
-          <ClusterConnectedStep
-            href={clusterResourcesHref(filter.state, receipt.clusterId)}
-            t={t}
-          />
-        ) : null}
-      </DialogContent>
-    </Dialog>
-  );
+  return <ClusterConnectDialogSurface
+    connectedSnapshot={connectedSnapshot}
+    connectionStage={connectionStage}
+    copyState={copyState}
+    elapsedSeconds={elapsedSeconds}
+    environment={environment}
+    formatDate={formatDate}
+    href={receipt ? clusterResourcesHref(filter.state, receipt.clusterId) : null}
+    name={name}
+    nameConflict={nameConflict}
+    onCopy={() => void copyCommand()}
+    onNameChange={(nextName) => {
+      setName(nextName);
+      setServerNameConflict(false);
+    }}
+    onOpenChange={changeOpen}
+    onEnvironmentChange={setEnvironment}
+    onProviderChange={setProvider}
+    onRegister={() => void register()}
+    onReissue={() => void reissue()}
+    onRetry={retryConnection}
+    open={open}
+    phase={phase}
+    provider={provider}
+    receipt={receipt}
+    step={step}
+    t={t}
+  />;
 }

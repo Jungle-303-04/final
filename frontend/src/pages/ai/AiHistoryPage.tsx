@@ -94,6 +94,7 @@ export function AiHistoryPage({ port }: { port: AiConversationHistoryPort }) {
           size="page-action"
           type="button"
         >
+          <Plus aria-hidden="true" />
           <span>{t("shell.ai.newConversation")}</span>
         </Button>
       </header>

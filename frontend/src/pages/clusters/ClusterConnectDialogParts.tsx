@@ -20,6 +20,7 @@ export function ConnectionCommandStep({
   installCommand,
   onCopy,
   onReissue,
+  onRetry,
   phase,
   t,
 }: {
@@ -31,6 +32,7 @@ export function ConnectionCommandStep({
   installCommand: string | null;
   onCopy: () => void;
   onReissue: () => void;
+  onRetry: () => void;
   phase: ConnectPhase;
   t: I18nController["t"];
 }) {
@@ -54,11 +56,15 @@ export function ConnectionCommandStep({
           <span className="block">
             {t(expired ? "clusters.connect.expired.description" : "clusters.connect.failure.description")}
           </span>
-          {expired ? (
-            <Button className="mt-3" onClick={onReissue} size="sm" type="button" variant="outline">
-              {t("clusters.connect.reissue.action")}
-            </Button>
-          ) : null}
+          <Button
+            className="mt-3"
+            onClick={expired ? onReissue : onRetry}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            {t(expired ? "clusters.connect.reissue.action" : "common.action.retry")}
+          </Button>
         </AlertDescription>
       </Alert>
     );

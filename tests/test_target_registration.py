@@ -1790,7 +1790,11 @@ def test_cluster_connect_returns_only_server_generated_one_line_command(monkeypa
 
     async def run():
         return await connect_cluster(
-            ClusterConnectRequest(name="new production", provider="aws"),
+            ClusterConnectRequest(
+                name="new production",
+                provider="aws",
+                environment="staging",
+            ),
             current=SimpleNamespace(user_id="user-1", workspace_id="default"),
             db=db,
             events=StubEvents(),
@@ -1805,12 +1809,23 @@ def test_cluster_connect_returns_only_server_generated_one_line_command(monkeypa
         manifest_url_prefix="https://opsia.example.com/api/install/",
     )
     assert response.expires_at
+    assert db.registered[0]["environment"] == "staging"
+    assert db.registered[0]["settings"]["environment"] == "staging"
     assert db.registered[0]["settings"]["provider_config"] == {"provider_hint": "eks"}
 
 
 def test_cluster_connect_request_rejects_whitespace_only_name() -> None:
     with pytest.raises(ValueError):
         ClusterConnectRequest(name="   ", provider="onprem")
+
+
+def test_cluster_connect_request_rejects_unknown_environment() -> None:
+    with pytest.raises(ValidationError):
+        ClusterConnectRequest(
+            name="Production",
+            provider="aws",
+            environment="prod",
+        )
 
 
 def test_cluster_connect_rejects_duplicate_workspace_display_name_before_issuing_token(
