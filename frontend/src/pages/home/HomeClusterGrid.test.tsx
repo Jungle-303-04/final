@@ -41,7 +41,7 @@ describe("HomeClusterGrid", () => {
     expect(within(explorer).queryByRole("heading", { name: "Explore resources by cluster" }))
       .toBeNull();
     expect(within(explorer).getByRole("link", { name: "Open resources for Production" })
-      .getAttribute("href")).toBe("/resources?clusters=cluster-production");
+      .getAttribute("href")).toBe("/resources?clusters=cluster-production&view=map");
   });
 
   it("keeps the D22 connection entry out of the cluster grid", () => {
