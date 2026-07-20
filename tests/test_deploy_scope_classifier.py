@@ -57,6 +57,45 @@ def test_frontend_only_range_selects_console_scope(tmp_path: Path) -> None:
     assert classify(repo, base, head) == "CONSOLE"
 
 
+def test_operational_reports_only_select_no_deployment(tmp_path: Path) -> None:
+    repo, base = initialized_repo(tmp_path)
+    for path in (
+        "docs/BLOCKERS.md",
+        "docs/GOAL-LOG.md",
+        "docs/STATUS-REPORT.md",
+    ):
+        target = repo / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("changed\n", encoding="utf-8")
+    head = commit(repo, "operational reports")
+
+    assert classify(repo, base, head) == "NONE"
+
+
+def test_operational_reports_do_not_promote_product_scope(tmp_path: Path) -> None:
+    console_parent = tmp_path / "console"
+    console_parent.mkdir()
+    console_repo, console_base = initialized_repo(console_parent)
+    report = console_repo / "docs" / "STATUS-REPORT.md"
+    report.parent.mkdir(parents=True)
+    report.write_text("changed\n", encoding="utf-8")
+    frontend = console_repo / "frontend" / "app.tsx"
+    frontend.parent.mkdir()
+    frontend.write_text("changed\n", encoding="utf-8")
+    console_head = commit(console_repo, "frontend and report")
+    assert classify(console_repo, console_base, console_head) == "CONSOLE"
+
+    full_parent = tmp_path / "full"
+    full_parent.mkdir()
+    full_repo, full_base = initialized_repo(full_parent)
+    report = full_repo / "docs" / "GOAL-LOG.md"
+    report.parent.mkdir(parents=True)
+    report.write_text("changed\n", encoding="utf-8")
+    (full_repo / "service.py").write_text("changed\n", encoding="utf-8")
+    full_head = commit(full_repo, "backend and report")
+    assert classify(full_repo, full_base, full_head) == "FULL"
+
+
 def test_mixed_or_empty_range_fails_closed_to_full_scope(tmp_path: Path) -> None:
     repo, base = initialized_repo(tmp_path)
 
@@ -67,6 +106,16 @@ def test_mixed_or_empty_range_fails_closed_to_full_scope(tmp_path: Path) -> None
     (frontend / "app.tsx").write_text("ui\n", encoding="utf-8")
     (repo / "service.py").write_text("backend\n", encoding="utf-8")
     head = commit(repo, "mixed")
+
+    assert classify(repo, base, head) == "FULL"
+
+
+def test_other_documentation_remains_fail_closed(tmp_path: Path) -> None:
+    repo, base = initialized_repo(tmp_path)
+    contract = repo / "docs" / "spec" / "runtime.md"
+    contract.parent.mkdir(parents=True)
+    contract.write_text("changed\n", encoding="utf-8")
+    head = commit(repo, "contract docs")
 
     assert classify(repo, base, head) == "FULL"
 

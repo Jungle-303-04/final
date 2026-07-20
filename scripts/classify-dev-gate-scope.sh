@@ -35,12 +35,20 @@ fi
 
 changed_path_count=0
 backend_changed=0
+docs_changed=0
 frontend_changed=0
 smoke_changed=0
 
 while IFS= read -r -d '' path; do
   changed_path_count=$((changed_path_count + 1))
   lower_path="$(printf '%s' "${path}" | LC_ALL=C tr '[:upper:]' '[:lower:]')"
+
+  case "${path}" in
+    docs/BLOCKERS.md | docs/GOAL-LOG.md | docs/STATUS-REPORT.md)
+      docs_changed=1
+      continue
+      ;;
+  esac
 
   case "${path}" in
     frontend/scripts/post-deploy-route-smoke.mjs \
@@ -131,6 +139,8 @@ elif [[ "${backend_changed}" -eq 1 ]]; then
   printf 'BACKEND\n'
 elif [[ "${frontend_changed}" -eq 1 ]]; then
   printf 'FRONTEND\n'
+elif [[ "${docs_changed}" -eq 1 ]]; then
+  printf 'DOCS\n'
 else
   fallback_full "change set has no classified product path"
 fi

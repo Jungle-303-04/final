@@ -153,7 +153,7 @@ def test_push_reuses_the_successful_pull_request_gate_before_deployment() -> Non
         in (resolver["run"])
     )
     assert "scripts/classify-dev-gate-scope.sh" in resolver["run"]
-    assert "REUSE|FULL|BACKEND|FRONTEND|SMOKE" in resolver["run"]
+    assert "REUSE|FULL|BACKEND|FRONTEND|SMOKE|DOCS" in resolver["run"]
 
 
 def test_pull_request_runs_backend_and_frontend_after_scope_resolution() -> None:
@@ -216,7 +216,8 @@ def test_backend_scope_skips_only_the_redundant_frontend_full_gate() -> None:
     setup_node = next(step for step in frontend["steps"] if step.get("name") == "Set up Node.js")
     assert setup_node["if"] == (
         "${{ needs.source-proof.outputs.gate_scope != 'BACKEND' "
-        "&& needs.source-proof.outputs.gate_scope != 'REUSE' }}"
+        "&& needs.source-proof.outputs.gate_scope != 'REUSE' "
+        "&& needs.source-proof.outputs.gate_scope != 'DOCS' }}"
     )
     assert setup_node["with"]["cache"] == "npm"
     assert setup_node["with"]["cache-dependency-path"] == "frontend/package-lock.json"
@@ -231,20 +232,14 @@ def test_frontend_scope_runs_impacted_tests_with_full_static_and_build_checks() 
         step for step in frontend["steps"] if step.get("name") == "Run changed frontend gate"
     )
 
-    assert fetch_base == {
-        "name": "Fetch changed frontend base",
-        "if": "${{ needs.source-proof.outputs.gate_scope == 'FRONTEND' }}",
-        "env": {
-            "BASE_SHA": "${{ github.event.pull_request.base.sha || github.event.before || '' }}"
-        },
-        "run": (
-            "set -euo pipefail\n"
-            'test -n "${BASE_SHA}"\n'
-            '! [[ "${BASE_SHA}" =~ ^0+$ ]]\n'
-            'git fetch --no-tags --depth=1 origin "${BASE_SHA}"\n'
-            'git cat-file -e "${BASE_SHA}^{commit}"\n'
-        ),
+    assert fetch_base["if"] == ("${{ needs.source-proof.outputs.gate_scope == 'FRONTEND' }}")
+    assert fetch_base["env"] == {
+        "BASE_SHA": "${{ github.event.pull_request.base.sha || github.event.before || '' }}"
     }
+    assert 'test -n "${BASE_SHA}"' in fetch_base["run"]
+    assert '[[ ! "${BASE_SHA}" =~ ^0+$ ]]' in fetch_base["run"]
+    assert 'git fetch --no-tags --depth=1 origin "${BASE_SHA}"' in fetch_base["run"]
+    assert 'git cat-file -e "${BASE_SHA}^{commit}"' in fetch_base["run"]
     assert changed["name"] == "Run changed frontend gate"
     assert changed["if"] == "${{ needs.source-proof.outputs.gate_scope == 'FRONTEND' }}"
     assert changed["env"] == {
@@ -277,7 +272,36 @@ def test_smoke_scope_runs_only_bounded_deployment_gates() -> None:
         "run": "make gate-deploy-smoke-frontend",
     }
     resolver = proof_steps_by_name()["Resolve gate scope"]
-    assert "REUSE|FULL|BACKEND|FRONTEND|SMOKE" in resolver["run"]
+    assert "REUSE|FULL|BACKEND|FRONTEND|SMOKE|DOCS" in resolver["run"]
+
+
+def test_operational_docs_scope_runs_only_bounded_governance() -> None:
+    jobs = workflow_document()["jobs"]
+    proof = proof_steps_by_name()
+    governance = proof["Run operational docs governance"]
+    backend_skip = next(
+        step
+        for step in jobs["backend"]["steps"]
+        if step.get("name") == "Record operational docs backend skip"
+    )
+    frontend_skip = next(
+        step
+        for step in jobs["frontend"]["steps"]
+        if step.get("name") == "Record operational docs frontend skip"
+    )
+
+    assert governance["if"] == "${{ steps.gate-scope.outputs.scope == 'DOCS' }}"
+    assert "git diff --check" in governance["run"]
+    assert "docs/BLOCKERS.md docs/GOAL-LOG.md docs/STATUS-REPORT.md" in governance["run"]
+    assert "node scripts/verify-product-brand-boundary.mjs" in governance["run"]
+    assert backend_skip["if"] == "${{ needs.source-proof.outputs.gate_scope == 'DOCS' }}"
+    assert frontend_skip["if"] == "${{ needs.source-proof.outputs.gate_scope == 'DOCS' }}"
+
+    for job_id in ("backend", "frontend"):
+        checkout = next(
+            step for step in jobs[job_id]["steps"] if step.get("uses") == "actions/checkout@v4"
+        )
+        assert "gate_scope != 'DOCS'" in checkout["if"]
 
 
 def test_full_gate_status_fails_closed_over_every_parallel_job() -> None:
@@ -379,6 +403,27 @@ def test_dev_gate_scope_classifies_product_only_changes(tmp_path: Path) -> None:
     assert classify_gate_scope(frontend_repository, frontend_base) == "FRONTEND"
 
 
+def test_dev_gate_scope_classifies_only_operational_reports_as_docs(tmp_path: Path) -> None:
+    repository, base_sha = make_repository(tmp_path / "docs")
+    for path in (
+        "docs/BLOCKERS.md",
+        "docs/GOAL-LOG.md",
+        "docs/STATUS-REPORT.md",
+    ):
+        commit_file(repository, path, "changed\n", "operational docs")
+    assert classify_gate_scope(repository, base_sha) == "DOCS"
+
+    frontend_repository, frontend_base = make_repository(tmp_path / "docs-frontend")
+    commit_file(frontend_repository, "docs/STATUS-REPORT.md", "changed\n", "report")
+    commit_file(frontend_repository, "frontend/src/app.ts", "changed\n", "frontend")
+    assert classify_gate_scope(frontend_repository, frontend_base) == "FRONTEND"
+
+    backend_repository, backend_base = make_repository(tmp_path / "docs-backend")
+    commit_file(backend_repository, "docs/GOAL-LOG.md", "changed\n", "report")
+    commit_file(backend_repository, "src/backend.py", "changed\n", "backend")
+    assert classify_gate_scope(backend_repository, backend_base) == "BACKEND"
+
+
 def test_dev_gate_scope_promotes_mixed_and_shared_changes_to_full(tmp_path: Path) -> None:
     mixed_repository, mixed_base = make_repository(tmp_path / "mixed")
     commit_file(mixed_repository, "src/backend.py", "changed\n", "backend")
@@ -442,6 +487,10 @@ def test_dev_gate_scope_fails_closed_for_unknown_or_invalid_ranges(tmp_path: Pat
     unknown_repository, unknown_base = make_repository(tmp_path / "unknown")
     commit_file(unknown_repository, "new-root/tool.txt", "changed\n", "unknown")
     assert classify_gate_scope(unknown_repository, unknown_base) == "FULL"
+
+    other_docs_repository, other_docs_base = make_repository(tmp_path / "other-docs")
+    commit_file(other_docs_repository, "docs/spec/runtime.md", "changed\n", "contract docs")
+    assert classify_gate_scope(other_docs_repository, other_docs_base) == "FULL"
 
     empty_repository, empty_base = make_repository(tmp_path / "empty")
     assert classify_gate_scope(empty_repository, empty_base) == "FULL"

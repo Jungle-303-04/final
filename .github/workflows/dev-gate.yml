@@ -72,7 +72,7 @@ jobs:
             scope="$(scripts/classify-dev-gate-scope.sh "${BASE_SHA}" "${HEAD_SHA}")"
           fi
           case "${scope}" in
-            REUSE|FULL|BACKEND|FRONTEND|SMOKE) ;;
+            REUSE|FULL|BACKEND|FRONTEND|SMOKE|DOCS) ;;
             *)
               echo "Unknown gate scope ${scope}; retaining FULL gate scope." >&2
               scope="FULL"
@@ -80,6 +80,23 @@ jobs:
           esac
           echo "scope=${scope}" >>"${GITHUB_OUTPUT}"
           echo "Dev Gate scope: ${scope}"
+
+      - name: Set up Node.js for operational docs governance
+        if: ${{ steps.gate-scope.outputs.scope == 'DOCS' }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Run operational docs governance
+        if: ${{ steps.gate-scope.outputs.scope == 'DOCS' }}
+        env:
+          BASE_SHA: ${{ github.event.before || github.event.pull_request.base.sha || '' }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          git diff --check "${BASE_SHA}..${HEAD_SHA}" -- \
+            docs/BLOCKERS.md docs/GOAL-LOG.md docs/STATUS-REPORT.md
+          node scripts/verify-product-brand-boundary.mjs
 
       - name: Classify automatic deployment scope
         env:
@@ -105,7 +122,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Check out repository
-        if: ${{ needs.source-proof.outputs.gate_scope != 'REUSE' }}
+        if: ${{ needs.source-proof.outputs.gate_scope != 'REUSE' && needs.source-proof.outputs.gate_scope != 'DOCS' }}
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -114,14 +131,18 @@ jobs:
         if: ${{ needs.source-proof.outputs.gate_scope == 'REUSE' }}
         run: echo "Reusing the exact successful pull request backend gate."
 
+      - name: Record operational docs backend skip
+        if: ${{ needs.source-proof.outputs.gate_scope == 'DOCS' }}
+        run: echo "Operational report-only change; backend product gate is not applicable."
+
       - name: Set up Python
-        if: ${{ needs.source-proof.outputs.gate_scope != 'REUSE' }}
+        if: ${{ needs.source-proof.outputs.gate_scope != 'REUSE' && needs.source-proof.outputs.gate_scope != 'DOCS' }}
         uses: actions/setup-python@v5
         with:
           python-version-file: ".python-version"
 
       - name: Set up uv
-        if: ${{ needs.source-proof.outputs.gate_scope != 'REUSE' }}
+        if: ${{ needs.source-proof.outputs.gate_scope != 'REUSE' && needs.source-proof.outputs.gate_scope != 'DOCS' }}
         uses: astral-sh/setup-uv@v6
         with:
           version: "0.9.17"
@@ -141,7 +162,7 @@ jobs:
           version: v4.2.2
 
       - name: Install Python dependencies
-        if: ${{ needs.source-proof.outputs.gate_scope != 'REUSE' }}
+        if: ${{ needs.source-proof.outputs.gate_scope != 'REUSE' && needs.source-proof.outputs.gate_scope != 'DOCS' }}
         run: uv sync --frozen
 
       - name: Run contract and manifest gate
@@ -163,7 +184,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Check out repository
-        if: ${{ needs.source-proof.outputs.gate_scope != 'REUSE' }}
+        if: ${{ needs.source-proof.outputs.gate_scope != 'REUSE' && needs.source-proof.outputs.gate_scope != 'DOCS' }}
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -172,8 +193,12 @@ jobs:
         if: ${{ needs.source-proof.outputs.gate_scope == 'REUSE' }}
         run: echo "Reusing the exact successful pull request frontend gate."
 
+      - name: Record operational docs frontend skip
+        if: ${{ needs.source-proof.outputs.gate_scope == 'DOCS' }}
+        run: echo "Operational report-only change; frontend product gate is not applicable."
+
       - name: Set up Node.js
-        if: ${{ needs.source-proof.outputs.gate_scope != 'BACKEND' && needs.source-proof.outputs.gate_scope != 'REUSE' }}
+        if: ${{ needs.source-proof.outputs.gate_scope != 'BACKEND' && needs.source-proof.outputs.gate_scope != 'REUSE' && needs.source-proof.outputs.gate_scope != 'DOCS' }}
         uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -191,7 +216,7 @@ jobs:
         run: |
           set -euo pipefail
           test -n "${BASE_SHA}"
-          ! [[ "${BASE_SHA}" =~ ^0+$ ]]
+          [[ ! "${BASE_SHA}" =~ ^0+$ ]]
           git fetch --no-tags --depth=1 origin "${BASE_SHA}"
           git cat-file -e "${BASE_SHA}^{commit}"
 

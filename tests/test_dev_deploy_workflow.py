@@ -28,8 +28,16 @@ def deploy_job() -> dict:
     return workflow()["jobs"]["deploy"]
 
 
+def scope_job() -> dict:
+    return workflow()["jobs"]["scope"]
+
+
 def steps_by_name() -> dict[str, dict]:
     return {step["name"]: step for step in deploy_job()["steps"]}
+
+
+def scope_steps_by_name() -> dict[str, dict]:
+    return {step["name"]: step for step in scope_job()["steps"]}
 
 
 def test_deploy_only_follows_a_successful_dev_push_gate_with_exact_opt_in() -> None:
@@ -54,7 +62,7 @@ def test_deploy_only_follows_a_successful_dev_push_gate_with_exact_opt_in() -> N
         "type": "string",
     }
     assert deploy_job()["environment"] == "dev-deploy"
-    condition = deploy_job()["if"]
+    condition = scope_job()["if"]
     assert "workflow_run.conclusion == 'success'" in condition
     assert "workflow_run.event == 'push'" in condition
     assert "workflow_run.head_branch == 'dev'" in condition
@@ -62,6 +70,10 @@ def test_deploy_only_follows_a_successful_dev_push_gate_with_exact_opt_in() -> N
     assert "github.event_name == 'workflow_dispatch'" in condition
     assert "github.ref == 'refs/heads/dev'" in condition
     assert "deployment_mode" not in condition
+    assert deploy_job()["needs"] == "scope"
+    assert deploy_job()["if"] == (
+        "${{ needs.scope.result == 'success' && needs.scope.outputs.deployment_scope != 'NONE' }}"
+    )
     assert workflow()["concurrency"] == {
         "group": "dev-deploy",
         "cancel-in-progress": False,
@@ -89,9 +101,9 @@ def test_deploy_checks_out_the_exact_tree_that_passed_the_gate() -> None:
 
 
 def test_automatic_deploy_uses_the_successful_gate_scope_proof() -> None:
-    steps = steps_by_name()
+    steps = scope_steps_by_name()
     download = steps["Download automatic deployment scope"]
-    resolve = steps["Resolve automatic deployment scope"]
+    resolve = steps["Resolve deployment scope"]
 
     assert download["if"] == "github.event_name == 'workflow_run'"
     assert download["uses"] == "actions/download-artifact@v4"
@@ -101,19 +113,41 @@ def test_automatic_deploy_uses_the_successful_gate_scope_proof() -> None:
         "github-token": "${{ github.token }}",
         "run-id": "${{ github.event.workflow_run.id }}",
     }
-    assert resolve["if"] == "github.event_name == 'workflow_run'"
     assert 'case "${scope}" in' in resolve["run"]
-    assert "FULL|CONSOLE" in resolve["run"]
-    assert 'echo "DEPLOYMENT_SCOPE=${scope}" >>"${GITHUB_ENV}"' in resolve["run"]
-    assert deploy_job()["env"]["DEPLOYMENT_SCOPE"].endswith("|| 'FULL' }}")
+    assert "FULL|CONSOLE|NONE" in resolve["run"]
+    assert 'echo "scope=${scope}" >>"${GITHUB_OUTPUT}"' in resolve["run"]
+    assert scope_job()["outputs"]["deployment_scope"] == "${{ steps.resolve.outputs.scope }}"
+    assert deploy_job()["env"]["DEPLOYMENT_SCOPE"] == (
+        "${{ needs.scope.outputs.deployment_scope }}"
+    )
+
+
+def test_none_scope_skips_the_entire_privileged_deploy_job() -> None:
+    job = deploy_job()
+    scope = scope_job()
+    resolve = scope_steps_by_name()["Resolve deployment scope"]
+
+    assert scope["permissions"] == {"actions": "read", "contents": "read"}
+    assert (
+        "NONE" not in workflow()["on"]["workflow_dispatch"]["inputs"]["deployment_scope"]["options"]
+    )
+    assert "FULL|CONSOLE|NONE" in resolve["run"]
+    assert "FULL|CONSOLE) ;;" in resolve["run"]
+    assert job["needs"] == "scope"
+    assert "needs.scope.result == 'success'" in job["if"]
+    assert "needs.scope.outputs.deployment_scope != 'NONE'" in job["if"]
 
 
 def test_manual_deploy_requires_exact_gate_and_previous_release_proofs() -> None:
     document = workflow()
     steps = steps_by_name()
     job = deploy_job()
+    resolve = scope_steps_by_name()["Resolve deployment scope"]
 
     assert document["permissions"]["actions"] == "read"
+    assert resolve["env"] == {"MANUAL_SCOPE": "${{ inputs.deployment_scope }}"}
+    assert 'scope="${MANUAL_SCOPE}"' in resolve["run"]
+    assert 'echo "invalid manual deployment scope"' in resolve["run"]
     gate_proof = steps["Verify manual gated SHA"]["run"]
     assert 'gh_api_retry "repos/${GITHUB_REPOSITORY}/git/ref/heads/dev"' in gate_proof
     assert "grep -Eq '\\(HTTP (429|5[0-9]{2})\\)'" in gate_proof
@@ -441,7 +475,7 @@ def test_full_deploy_keeps_migration_rollout_and_smoke() -> None:
             "steps.release_lease.outputs.mode == 'deploy' && env.DEPLOYMENT_SCOPE == 'FULL'"
         )
     assert deploy_job()["env"]["DEPLOYMENT_SCOPE"] == (
-        "${{ github.event_name == 'workflow_dispatch' && inputs.deployment_scope || 'FULL' }}"
+        "${{ needs.scope.outputs.deployment_scope }}"
     )
 
 

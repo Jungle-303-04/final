@@ -10,6 +10,8 @@ base_revision="$1"
 head_revision="$2"
 scope="CONSOLE"
 changed_path_count=0
+deployable_path_count=0
+operational_docs_changed=0
 changed_paths_file="$(mktemp)"
 trap 'rm -f "${changed_paths_file}"' EXIT
 
@@ -23,6 +25,13 @@ git diff \
 
 while IFS= read -r -d '' path; do
   changed_path_count=$((changed_path_count + 1))
+  case "${path}" in
+    docs/BLOCKERS.md | docs/GOAL-LOG.md | docs/STATUS-REPORT.md)
+      operational_docs_changed=1
+      continue
+      ;;
+  esac
+  deployable_path_count=$((deployable_path_count + 1))
   if [[ "${path}" != frontend/* ]]; then
     scope="FULL"
   fi
@@ -30,6 +39,8 @@ done <"${changed_paths_file}"
 
 if [[ "${changed_path_count}" -eq 0 ]]; then
   scope="FULL"
+elif [[ "${deployable_path_count}" -eq 0 && "${operational_docs_changed}" -eq 1 ]]; then
+  scope="NONE"
 fi
 
 printf '%s\n' "${scope}"
