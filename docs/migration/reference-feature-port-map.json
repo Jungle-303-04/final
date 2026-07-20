@@ -1068,7 +1068,7 @@
         "frontend/src/api/clusters.test.ts",
         "frontend/src/features/home/createHomeAdapter.mapping.test.ts",
         "frontend/src/features/cluster-scope/ClusterScopeProvider.test.tsx",
-        "frontend/src/features/cluster-scope/ClusterScopePicker.test.tsx"
+        "frontend/src/features/global-filter/UnifiedFilterBar.test.tsx"
       ],
       "coverage": {
         "backend": {
@@ -1129,7 +1129,7 @@
         "frontend/src/api/clusters.test.ts",
         "frontend/src/features/home/createHomeAdapter.mapping.test.ts",
         "frontend/src/features/cluster-scope/ClusterScopeProvider.test.tsx",
-        "frontend/src/features/cluster-scope/ClusterScopePicker.test.tsx"
+        "frontend/src/features/global-filter/UnifiedFilterBar.test.tsx"
       ],
       "coverage": {
         "backend": {
@@ -5266,7 +5266,6 @@
         "tests/test_workload_detail.py",
         "frontend/src/api/rightsizing.test.ts",
         "frontend/src/api/rightsizing-schemas.test.ts",
-        "frontend/src/features/rightsizing/RightsizingStrip.test.tsx",
         "frontend/src/features/rightsizing/createRightsizingAdapter.test.ts",
         "frontend/src/features/rightsizing/useRightsizingScans.test.tsx",
         "frontend/src/pages/cost/RightsizingScanView.test.tsx"
@@ -5283,7 +5282,7 @@
           "state": "implemented",
           "destination": "frontend/src/pages/cost/RightsizingScanView.tsx#RightsizingScanView",
           "consumer": "frontend/src/features/rightsizing/createRightsizingAdapter.ts#createRightsizingAdapter",
-          "reason": "The workload strip and explicit multi-cluster Cost scan surface consume the connected strict observation repository with exact provenance, coverage, confidence, safety reasons, and partial failure states.",
+          "reason": "The explicit multi-cluster Cost scan surface consumes the connected strict observation repository with exact provenance, coverage, confidence, safety reasons, and partial failure states.",
           "test": "frontend/src/pages/cost/RightsizingScanView.test.tsx"
         },
         "realtime": {

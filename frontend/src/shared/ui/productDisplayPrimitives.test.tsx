@@ -4,7 +4,6 @@ import { cleanup, render as renderBase, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import type { ReactElement } from "react";
 import { I18nProvider } from "../i18n";
-import { Metric } from "./Metric";
 import { StatusMark } from "./StatusMark";
 import { Surface, SurfaceSection } from "./Surface";
 
@@ -62,23 +61,6 @@ describe("product display primitives", () => {
     );
   });
 
-  it("renders unavailable separately from a real zero and preserves units", () => {
-    const { rerender } = render(
-      <Metric label="월간 비용" value={null} />,
-    );
-
-    expect(screen.getByText("사용할 수 없음")).toBeTruthy();
-    expect(screen.queryByText("0")).toBeNull();
-
-    rerender(
-      <Metric label="활성 이슈" note="현재 선택 범위" unit="건" value={0} />,
-    );
-    expect(screen.getByText("활성 이슈")).toBeTruthy();
-    expect(screen.getByText("0")).toBeTruthy();
-    expect(screen.getByText("건")).toBeTruthy();
-    expect(screen.getByText("현재 선택 범위")).toBeTruthy();
-  });
-
   it("always exposes a textual status and opts into polite announcements explicitly", () => {
     const { rerender } = render(<StatusMark tone="unknown" />);
 
@@ -113,8 +95,6 @@ function assertDisplayPrimitiveTypeContracts() {
   void <Surface aria-hidden aria-label="요약">숨겨진 section</Surface>;
   void <Surface as="div">레이아웃 전용 surface</Surface>;
   void <Surface aria-hidden as="div" role="presentation">장식용 layout surface</Surface>;
-  // @ts-expect-error undefined is not an unavailable metric value
-  void <Metric label="CPU" value={undefined} />;
   // @ts-expect-error provider-specific free-form tones are not canonical status tones
   void <StatusMark tone="provider-degraded" />;
 }

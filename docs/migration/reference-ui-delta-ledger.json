@@ -748,7 +748,7 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/features/cluster-scope/ClusterScopePicker.tsx",
+              "frontend/src/features/global-filter/UnifiedFilterBar.tsx",
               "frontend/src/features/cluster-scope/ClusterScopeProvider.tsx",
               "frontend/src/shared/ui/ClusterConnectionStatus.tsx"
             ],
@@ -7336,18 +7336,18 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/shared/ui/primitives/multi-select-picker.tsx",
-              "frontend/src/shared/ui/primitives/multi-select-picker.test.tsx"
+              "frontend/src/features/global-filter/UnifiedFilterBar.tsx",
+              "frontend/src/features/global-filter/UnifiedFilterBar.test.tsx"
             ],
             "requiredBackendContracts": [
               "packages.contracts.parity"
             ],
             "plannedTestIds": [
-              "shared-ui.multi-select.controlled"
+              "shell.cluster-scope.selection"
             ],
-            "state": "in_progress",
-            "blockedReason": null,
-            "rationale": "The product test exercises the same reusable picker through actual user interactions instead of source-runtime SSR markup, including owner-controlled selection and completion callbacks."
+            "state": "blocked",
+            "blockedReason": "No mounted product surface requires a generic visible-set bulk picker; current cluster and namespace selection is owned by the canonical unified filter.",
+            "rationale": "The surviving domain control tests real keyboard, selection, dismissal, and canonical-URL interactions. An unmounted generic picker and its isolated tests are not retained as apparent capability."
           }
         }
       ]
@@ -7373,18 +7373,18 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/shared/ui/primitives/multi-select-picker.tsx",
-              "frontend/src/shared/ui/primitives/multi-select-picker.test.tsx"
+              "frontend/src/features/global-filter/UnifiedFilterBar.tsx",
+              "frontend/src/features/global-filter/UnifiedFilterBar.test.tsx"
             ],
             "requiredBackendContracts": [
               "packages.contracts.parity"
             ],
             "plannedTestIds": [
-              "shared-ui.multi-select.controlled"
+              "shell.cluster-scope.selection"
             ],
-            "state": "in_progress",
-            "blockedReason": null,
-            "rationale": "The product primitive keeps data and all visible copy owner-provided. It does not derive resource kinds, namespaces, authorization, or labels in the browser, so every scoped filter can reuse one behavior safely."
+            "state": "blocked",
+            "blockedReason": "No mounted product surface requires a generic visible-set bulk picker; current server-authorized scope selection is domain-owned by the unified filter.",
+            "rationale": "The unified filter keeps authorization, labels, and canonical URL state with the owning domain. A second generic selection implementation would duplicate control semantics without a runtime consumer."
           }
         }
       ]
@@ -7414,24 +7414,25 @@
             "reducedMotion": "The shared spinner keeps status semantics but stops its decorative rotation when reduced motion is requested.",
             "evidence": [
               "references/upstream/packages/k8s-ui/src/components/ui/PaneLoader.tsx",
-              "frontend/src/shared/ui/primitives/pane-loader.tsx",
+              "frontend/src/shared/ui/ProductStateScreen.tsx",
               "frontend/src/shared/ui/primitives/spinner.tsx"
             ]
           },
           "opsiaPort": {
             "destinations": [
-              "frontend/src/shared/ui/primitives/pane-loader.tsx",
-              "frontend/src/shared/ui/primitives/pane-loader.test.tsx"
+              "frontend/src/shared/ui/ProductStateScreen.tsx",
+              "frontend/src/shared/ui/ProductStateScreen.test.tsx",
+              "frontend/src/shared/ui/primitives/spinner.tsx"
             ],
             "requiredBackendContracts": [
               "packages.contracts.parity"
             ],
             "plannedTestIds": [
-              "shared-ui.pane-loader.geometry"
+              "shell.cluster-load.disclosure"
             ],
             "state": "in_progress",
             "blockedReason": null,
-            "rationale": "The product PaneLoader ports the changed stable-label and optional-detail behavior with the shared accessible Spinner. The unchanged source-specific image asset is intentionally not imported into the product runtime."
+            "rationale": "Mounted loading states use one ProductStateScreen boundary and the shared accessible, reduced-motion-safe Spinner. An unmounted pane-specific wrapper is not retained as a second loading grammar."
           }
         }
       ]
@@ -7883,7 +7884,7 @@
             "destinations": [
               "frontend/src/features/workload-detail/workloadDetailContract.ts",
               "frontend/src/features/cost/WorkloadCostPanel.tsx",
-              "frontend/src/features/rightsizing/RightsizingStrip.tsx",
+              "frontend/src/pages/cost/RightsizingScanView.tsx",
               "frontend/src/pages/workload-detail/WorkloadDetailRoute.tsx",
               "src/domains/workload_detail/router.py"
             ],
@@ -10698,7 +10699,7 @@
             "reducedMotion": "loading, connecting, retrying, partial, and ready states retain semantic labels and stable geometry when decorative spin, pulse, and transitions are disabled.",
             "evidence": [
               "frontend/src/shared/ui/ProductStateScreen.tsx",
-              "frontend/src/shared/ui/primitives/pane-loader.tsx",
+              "frontend/src/shared/ui/primitives/spinner.tsx",
               "frontend/src/shared/ui/ClusterConnectionStatus.tsx"
             ]
           },
@@ -10708,7 +10709,7 @@
               "frontend/src/features/cluster-scope/ClusterScopeProvider.tsx",
               "frontend/src/pages/home/useHomeClusterFrame.ts",
               "frontend/src/shared/ui/ProductStateScreen.tsx",
-              "frontend/src/shared/ui/primitives/pane-loader.tsx"
+              "frontend/src/shared/ui/primitives/spinner.tsx"
             ],
             "requiredBackendContracts": [
               "packages.contracts.gateway.responses",
@@ -10718,8 +10719,7 @@
             "plannedTestIds": [
               "shell.cluster-load.disclosure",
               "shell.cluster-scope.selection",
-              "shell.connection-retry.safety",
-              "shared-ui.pane-loader.geometry"
+              "shell.connection-retry.safety"
             ],
             "state": "in_progress",
             "blockedReason": null,
@@ -11215,7 +11215,7 @@
               "frontend/src/api/clusters.ts",
               "frontend/src/features/home/createHomeAdapter.ts",
               "frontend/src/features/cluster-scope/ClusterScopeProvider.tsx",
-              "frontend/src/features/cluster-scope/ClusterScopePicker.tsx",
+              "frontend/src/features/global-filter/UnifiedFilterBar.tsx",
               "frontend/src/features/filters/UnifiedFilterProvider.tsx"
             ],
             "requiredBackendContracts": [
@@ -11349,18 +11349,18 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/features/cost/cloudConsoleLink.test.ts",
-              "frontend/src/features/cost/cloudConsoleLink.ts"
+              "frontend/src/pages/cost/CostPage.test.tsx",
+              "frontend/src/pages/cost/CostPage.tsx"
             ],
             "requiredBackendContracts": [
               "packages.contracts.cost.observations"
             ],
             "plannedTestIds": [
-              "cost.cloud-console.allowlist"
+              "cost.nodes.observed-or-unavailable"
             ],
-            "state": "in_progress",
-            "blockedReason": null,
-            "rationale": "The product-owned builder validates resource identity and the final HTTPS host without parsing display names or source provider-ID strings."
+            "state": "blocked",
+            "blockedReason": "The Cost contract does not provide a typed account or project, location, and cloud-resource identity tuple, so the product intentionally exposes no external console destination.",
+            "rationale": "The mounted Cost surface fails closed by omitting external links and disclosing unavailable provider evidence; an unused browser-only URL builder is not retained as apparent product capability."
           }
         }
       ]
@@ -11386,18 +11386,18 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/features/cost/cloudConsoleLink.ts",
+              "frontend/src/pages/cost/CostPage.tsx",
               "src/packages/contracts/cost/observations.py"
             ],
             "requiredBackendContracts": [
               "packages.contracts.cost.observations"
             ],
             "plannedTestIds": [
-              "cost.cloud-console.allowlist"
+              "cost.nodes.observed-or-unavailable"
             ],
             "state": "blocked",
             "blockedReason": "The current Cost response has no typed provider, project/account, region/location, or resource identity fields, so no external console link is mounted in the product UI.",
-            "rationale": "The link builder is reusable and allow-listed, but the browser intentionally receives no fallback parser for Kubernetes context names or provider-ID strings."
+            "rationale": "The mounted Cost surface intentionally receives no fallback parser for Kubernetes context names or provider-ID strings; the external link remains absent until Python supplies the complete typed identity."
           }
         }
       ]
@@ -14626,8 +14626,8 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/features/rightsizing/RightsizingStrip.test.tsx",
-              "frontend/src/features/rightsizing/RightsizingStrip.tsx",
+              "frontend/src/pages/cost/RightsizingScanView.test.tsx",
+              "frontend/src/pages/cost/RightsizingScanView.tsx",
               "tests/test_workload_detail.py"
             ],
             "requiredBackendContracts": [
@@ -14636,11 +14636,11 @@
             ],
             "plannedTestIds": [
               "rightsizing.workload",
-              "rightsizing.strip"
+              "rightsizing.scan.surface"
             ],
             "state": "blocked",
             "blockedReason": "The observed and partial branches are contract-tested, but no production metrics repository currently supplies recommendation evidence for an exact workload.",
-            "rationale": "The production strip truthfully renders collector absence and never turns missing metrics into balanced, zero-impact, or no-change guidance."
+            "rationale": "The mounted Cost request-guidance surface truthfully renders collector absence and never turns missing metrics into balanced, zero-impact, or no-change guidance; the unmounted workload strip is not retained."
           }
         }
       ]
@@ -14676,12 +14676,12 @@
             "reducedMotion": "all guidance and safety states remain static semantic content with no motion-dependent disclosure.",
             "evidence": [
               "references/upstream/web/src/components/resource/RightsizingStrip.tsx",
-              "frontend/src/features/rightsizing/RightsizingStrip.tsx"
+              "frontend/src/pages/cost/RightsizingScanView.tsx"
             ]
           },
           "opsiaPort": {
             "destinations": [
-              "frontend/src/features/rightsizing/RightsizingStrip.tsx",
+              "frontend/src/pages/cost/RightsizingScanView.tsx",
               "frontend/src/pages/workload-detail/WorkloadDetailRoute.tsx",
               "frontend/src/features/workload-detail/createWorkloadDetailAdapter.ts",
               "src/domains/workload_detail/rightsizing_projection.py",
@@ -14695,11 +14695,11 @@
             "plannedTestIds": [
               "rightsizing.contract",
               "rightsizing.workload",
-              "rightsizing.strip"
+              "rightsizing.scan.surface"
             ],
             "state": "blocked",
-            "blockedReason": "The strict surface and explicit unavailable branch are mounted, but provider-backed demand samples, autoscaling evidence, OOM history, and throttling observations are not persisted.",
-            "rationale": "No default window, headroom, threshold, savings value, or recommendation is hardcoded in React; all observed guidance must arrive through the Python contract."
+            "blockedReason": "The Cost scan surface and explicit unavailable branch are mounted, but an exact-workload guidance strip remains absent until provider-backed demand samples, autoscaling evidence, OOM history, and throttling observations are persisted.",
+            "rationale": "The surviving scan surface hardcodes no window, headroom, threshold, savings value, or recommendation; all observed guidance must arrive through the Python contract."
           }
         }
       ]
@@ -15021,7 +15021,7 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/features/rightsizing/RightsizingStrip.test.tsx",
+              "frontend/src/pages/cost/RightsizingScanView.test.tsx",
               "frontend/src/shared/i18n/catalogs/en/rightsizing.ts",
               "frontend/src/shared/i18n/catalogs/ko/rightsizing.ts"
             ],
@@ -15029,7 +15029,7 @@
               "packages.contracts.rightsizing"
             ],
             "plannedTestIds": [
-              "rightsizing.strip",
+              "rightsizing.scan.surface",
               "rightsizing.presentation"
             ],
             "state": "in_progress",
@@ -15177,7 +15177,7 @@
           "opsiaPort": {
             "destinations": [
               "frontend/src/features/rightsizing/rightsizingPresentation.ts",
-              "frontend/src/features/rightsizing/RightsizingStrip.tsx",
+              "frontend/src/pages/cost/RightsizingScanView.tsx",
               "frontend/src/shared/i18n/keys/rightsizing.ts"
             ],
             "requiredBackendContracts": [
@@ -15185,7 +15185,7 @@
             ],
             "plannedTestIds": [
               "rightsizing.presentation",
-              "rightsizing.strip"
+              "rightsizing.scan.surface"
             ],
             "state": "in_progress",
             "blockedReason": null,
@@ -16263,7 +16263,7 @@
           "opsiaPort": {
             "destinations": [
               "frontend/src/features/cluster-scope/ClusterScopeProvider.tsx",
-              "frontend/src/features/cluster-scope/ClusterScopePicker.tsx",
+              "frontend/src/features/global-filter/UnifiedFilterBar.tsx",
               "frontend/src/shared/ui/ClusterConnectionStatus.tsx",
               "frontend/src/shared/ui/ProductStateScreen.tsx",
               "frontend/src/pages/home/useHomeClusterFrame.ts",
@@ -16983,7 +16983,7 @@
           "opsiaPort": {
             "destinations": [
               "frontend/src/features/home/homeContract.ts",
-              "frontend/src/features/cluster-scope/ClusterScopePicker.tsx",
+              "frontend/src/features/global-filter/UnifiedFilterBar.tsx",
               "frontend/src/pages/home/HomeClusterGrid.tsx"
             ],
             "requiredBackendContracts": [
