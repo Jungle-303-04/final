@@ -10,6 +10,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import yaml
+
 from packages.runtime.discovery import discover_services
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -172,14 +174,22 @@ def test_local_up_seeds_complete_demo_and_connects_prometheus() -> None:
     assert 'if [ "${state}" = "connected" ]' in up_script
 
 
-def test_gateway_pool_capacity_covers_agent_long_poll_fanout() -> None:
-    services = read_project_file("deploy/management/services.yaml")
+def test_gateway_pool_capacity_does_not_regress_below_long_poll_floor() -> None:
+    documents = yaml.safe_load_all(read_project_file("deploy/management/services.yaml"))
+    gateway = next(
+        document
+        for document in documents
+        if document.get("kind") == "Deployment"
+        and document.get("metadata", {}).get("name") == "api-gateway"
+    )
+    container = gateway["spec"]["template"]["spec"]["containers"][0]
+    environment = {item["name"]: item.get("value") for item in container["env"]}
 
-    # 게이트웨이는 세션 API + agent 롱폴 동시성 최대 지점 — pgbouncer(transaction
-    # pooling)가 서버 커넥션을 다중화하므로 클라이언트 풀 16+16 으로 폴 팬아웃을 흡수한다.
-    assert '- name: DB_POOL_SIZE\n              value: "16"' in services
-    assert '- name: DB_MAX_OVERFLOW\n              value: "16"' in services
-    assert '- name: DB_POOL_TIMEOUT_SECONDS\n              value: "20"' in services
+    # 게이트웨이는 세션 API + agent 롱폴 동시성 최대 지점이다. 운영 튜닝으로
+    # 용량을 늘릴 수는 있지만 검증된 16+16/20초 하한 아래로 회귀하면 안 된다.
+    assert int(environment["DB_POOL_SIZE"]) >= 16
+    assert int(environment["DB_MAX_OVERFLOW"]) >= 16
+    assert int(environment["DB_POOL_TIMEOUT_SECONDS"]) >= 20
 
 
 def test_api_gateway_is_prometheus_scrape_annotated() -> None:
