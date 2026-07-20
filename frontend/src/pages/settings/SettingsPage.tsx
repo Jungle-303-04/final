@@ -38,6 +38,7 @@ import {
 import { useI18n, type MessageKey } from "../../shared/i18n";
 import { cn } from "../../shared/lib/cn";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
+import { ProductSurfaceTitle } from "../../shared/ui/ProductSurfaceTitle";
 import { ThemeSelectionList } from "../../shared/ui/ThemeToggle";
 import { useProductTheme } from "../../shared/ui/useProductTheme";
 import { Badge } from "../../shared/ui/primitives/badge";
@@ -66,6 +67,7 @@ import {
   TabsTrigger,
 } from "../../shared/ui/primitives/tabs";
 import { PrometheusIntegrationCard } from "./PrometheusIntegrationCard";
+import { SettingsOverviewList } from "./SettingsOverviewList";
 
 type SettingsSection = "overview" | "access" | "preferences" | "administration";
 type LoadState<T> =
@@ -116,9 +118,8 @@ export function SettingsPage({
 
   return (
     <ProductPageFrame className="gap-4">
-      <header className="flex min-w-0 items-center gap-2.5">
-        <Building2 aria-hidden="true" className="size-[1.0625rem] shrink-0 text-primary" />
-        <h2 className="min-w-0 truncate font-heading text-heading font-extrabold tracking-[-0.02em]">{t("settings.title")}</h2>
+      <header className="min-w-0">
+        <ProductSurfaceTitle icon={Building2} title={t("settings.title")} />
         <p className="sr-only">{t("settings.description")}</p>
       </header>
 
@@ -133,50 +134,50 @@ export function SettingsPage({
           aria-label={t("settings.navigation")}
           className="max-w-full justify-start overflow-x-auto rounded-lg bg-muted/70 p-0.5"
         >
-          <TabsTrigger value="overview">{t("settings.section.overview")}</TabsTrigger>
-          <TabsTrigger value="access">{t("settings.section.access")}</TabsTrigger>
-          <TabsTrigger value="preferences">{t("settings.section.preferences")}</TabsTrigger>
-          <TabsTrigger value="administration">{t("settings.section.administration")}</TabsTrigger>
+          <TabsTrigger className="shrink-0 whitespace-nowrap" value="overview">{t("settings.section.overview")}</TabsTrigger>
+          <TabsTrigger className="shrink-0 whitespace-nowrap" value="access">{t("settings.section.access")}</TabsTrigger>
+          <TabsTrigger className="shrink-0 whitespace-nowrap" value="preferences">{t("settings.section.preferences")}</TabsTrigger>
+          <TabsTrigger className="shrink-0 whitespace-nowrap" value="administration">{t("settings.section.administration")}</TabsTrigger>
         </TabsList>
 
         <TabsContent className="min-w-0" value="overview">
-          <div className="grid gap-4 lg:grid-cols-2">
-            <NavigationCard
-              description={t("settings.workspace.description")}
-              icon={Building2}
-              onOpen={() => selectSection("access")}
-              title={t("settings.section.workspace")}
-            >
-              <Definition label={t("settings.workspace.current")} value={session.workspaceId} />
-            </NavigationCard>
-            <NavigationCard
-              description={t("settings.clusters.description")}
-              icon={Server}
-              onOpen={() => selectSection("access")}
-              title={t("settings.section.clusters")}
-            >
-              <p className="text-sm font-medium">{clusterSummary}</p>
-            </NavigationCard>
-            <NavigationCard
-              description={t("settings.members.description")}
-              icon={UserRound}
-              onOpen={() => selectSection("access")}
-              title={t("settings.members.currentSession")}
-            >
-              <div className="grid min-w-0 gap-1" title={profile.fullIdentity}>
-                <p className="truncate text-sm font-medium">{profile.displayName}</p>
-                <p className="truncate text-xs text-muted-foreground">{profile.secondaryLabel}</p>
-              </div>
-            </NavigationCard>
-            <NavigationCard
-              description={t("settings.preferences.description")}
-              icon={Settings2}
-              onOpen={() => selectSection("preferences")}
-              title={t("settings.section.preferences")}
-            >
-              <p className="text-sm font-medium">{t("settings.preferences.persisted")}</p>
-            </NavigationCard>
-          </div>
+          <SettingsOverviewList
+            items={[
+              {
+                description: t("settings.workspace.description"),
+                icon: Building2,
+                id: "workspace",
+                onOpen: () => selectSection("access"),
+                title: t("settings.section.workspace"),
+                value: session.workspaceId,
+              },
+              {
+                description: t("settings.clusters.description"),
+                icon: Server,
+                id: "clusters",
+                onOpen: () => void navigate(filter.navigationHref("/resources")),
+                title: t("settings.section.clusters"),
+                value: clusterSummary,
+              },
+              {
+                description: profile.secondaryLabel,
+                icon: UserRound,
+                id: "member",
+                onOpen: () => selectSection("access"),
+                title: t("settings.members.currentSession"),
+                value: profile.displayName,
+              },
+              {
+                description: t("settings.preferences.description"),
+                icon: Settings2,
+                id: "preferences",
+                onOpen: () => selectSection("preferences"),
+                title: t("settings.section.preferences"),
+                value: t("settings.preferences.persisted"),
+              },
+            ]}
+            label={t("settings.section.overview")}
+          />
         </TabsContent>
 
         <TabsContent className="min-w-0" value="access">
@@ -554,28 +555,6 @@ function AdministrationPanel({ settingsPort }: { settingsPort: SettingsPort }) {
         unavailable
       />
     </div>
-  );
-}
-
-function NavigationCard({
-  children,
-  description,
-  icon,
-  onOpen,
-  title,
-}: {
-  children: ReactNode;
-  description: string;
-  icon: LucideIcon;
-  onOpen: () => void;
-  title: string;
-}) {
-  return (
-    <button className="min-w-0 text-left" onClick={onOpen} type="button">
-      <SettingsCard description={description} icon={icon} title={title}>
-        {children}
-      </SettingsCard>
-    </button>
   );
 }
 

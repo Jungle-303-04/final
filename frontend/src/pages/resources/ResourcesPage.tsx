@@ -66,6 +66,20 @@ import { ResourcesTrafficFlowSurface } from "./ResourcesTrafficFlowSurface";
 import { useAiAssistantLayout } from "../../features/ai-assistant/AiAssistantLayoutContext";
 import { ResourceDetailOverlay } from "./ResourceDetailOverlay";
 import { ResourcesStatusHeader } from "./ResourcesStatusHeader";
+
+const CONNECTION_PANEL_RESOURCE_TYPES = [
+  "service",
+  "endpoint",
+  "endpoints",
+  "endpointslice",
+  "ingress",
+  "configmap",
+  "secret",
+  "application",
+  "applicationset",
+  "appproject",
+] as const;
+
 export function ResourcesPage({
   filterPort,
   physicalTopologyPort,
@@ -148,7 +162,9 @@ export function ResourcesPage({
       ...filter.state.resources,
       health: [],
       query: "",
-      types: [],
+      types: filter.state.common.applications.length > 0
+        ? []
+        : [...CONNECTION_PANEL_RESOURCE_TYPES],
     },
   }), [filter.state]);
   const connectionTopology = useRelationTopologyDataFrame({

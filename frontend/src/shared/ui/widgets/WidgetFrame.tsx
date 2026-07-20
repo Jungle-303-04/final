@@ -1,5 +1,6 @@
 import { ChevronDown, ChevronRight, Info } from "lucide-react";
 import { type ReactNode, useId, useState } from "react";
+import { Link } from "react-router-dom";
 
 import { cn } from "@/shared/lib/cn";
 import {
@@ -64,7 +65,7 @@ export function WidgetFrame({
     <section
       aria-labelledby={titleId}
       className={cn(
-        "grid min-h-0 overflow-hidden rounded-card bg-card transition-[border-color] duration-(--motion-fade) ease-(--ease-soft) motion-reduce:transition-none",
+        "grid min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-card bg-card transition-[border-color] duration-(--motion-fade) ease-(--ease-soft) motion-reduce:transition-none",
         editing
           ? "border-[1.5px] border-dashed border-primary/50"
           : "border border-border",
@@ -97,14 +98,14 @@ export function WidgetFrame({
         <span className="ml-auto flex shrink-0 items-center gap-1">
           {headerActions}
           {deepLink ? (
-            <a
+            <Link
               aria-label={deepLink.label}
               className="flex items-center gap-0.5 rounded-md px-1 py-0.5 text-caption-2 font-bold text-primary outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/60"
-              href={deepLink.href}
+              to={deepLink.href}
             >
               {deepLink.label}
               <ChevronRight aria-hidden="true" className="size-3" />
-            </a>
+            </Link>
           ) : null}
           {collapsible ? (
             <button

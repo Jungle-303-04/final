@@ -9,6 +9,9 @@ export interface HomeBoardPreferences {
   visible: readonly HomeWidgetId[];
 }
 
+const HOME_BOARD_STORAGE_PREFIX = "kyro:home-board:";
+const LEGACY_HOME_BOARD_STORAGE_PREFIX = "opsia:home-board:";
+
 export const DEFAULT_HOME_BOARD_PREFERENCES: HomeBoardPreferences = {
   collapsed: [],
   order: HOME_WIDGET_IDS,
@@ -21,7 +24,8 @@ export function loadHomeBoardPreferences(
 ): HomeBoardPreferences {
   if (!storage || !key) return DEFAULT_HOME_BOARD_PREFERENCES;
   try {
-    return normalizeHomeBoardPreferences(JSON.parse(storage.getItem(key) ?? "null"));
+    const stored = storage.getItem(key) ?? storage.getItem(legacyHomeBoardPreferenceKey(key));
+    return normalizeHomeBoardPreferences(JSON.parse(stored ?? "null"));
   } catch {
     return DEFAULT_HOME_BOARD_PREFERENCES;
   }
@@ -41,8 +45,14 @@ export function homeBoardPreferenceKey(
   userId: string | null,
 ): string | null {
   return workspaceId && userId
-    ? `opsia:home-board:${workspaceId}:${userId}:v2`
+    ? `${HOME_BOARD_STORAGE_PREFIX}${workspaceId}:${userId}:v2`
     : null;
+}
+
+function legacyHomeBoardPreferenceKey(key: string): string {
+  return key.startsWith(HOME_BOARD_STORAGE_PREFIX)
+    ? `${LEGACY_HOME_BOARD_STORAGE_PREFIX}${key.slice(HOME_BOARD_STORAGE_PREFIX.length)}`
+    : key;
 }
 
 export function useHomeBoardPreferenceDraft(

@@ -85,11 +85,18 @@ describe("CostPage", () => {
         reasonCodes: [],
       },
       trend: {
-        availability: "unavailable",
+        availability: "available",
         timeRange: "24h",
-        currency: null,
-        series: [],
-        reasonCodes: ["cost_trend_history_insufficient"],
+        currency: "USD",
+        series: [{
+          key: "cluster-a/shop",
+          label: "shop",
+          points: [
+            { timestamp: 1_784_275_200, rateMicros: 2_500_000 },
+            { timestamp: 1_784_278_800, rateMicros: 3_000_000 },
+          ],
+        }],
+        reasonCodes: [],
       },
     });
 
@@ -99,6 +106,9 @@ describe("CostPage", () => {
     expect(screen.getByText("$2.00")).toBeTruthy();
     expect(screen.getByText("$1,460.00")).toBeTruthy();
     expect(screen.getByText("$0.50")).toBeTruthy();
+    const namespaceDrilldown = screen.getByRole("link", { name: /shop/u });
+    expect(namespaceDrilldown.getAttribute("href")).toContain("clusters=cluster-a");
+    expect(namespaceDrilldown.getAttribute("href")).toContain("namespaces=cluster-a%2Fshop");
   });
 
   it("renders a forbidden response without querying a replacement scope", async () => {

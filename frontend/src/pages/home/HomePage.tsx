@@ -19,14 +19,12 @@ import {
   ClusterDisconnectDialog,
   type DisconnectPhase,
 } from "../clusters/ClusterDisconnectDialog";
-import { PollingFreshness } from "../PollingFreshness";
 import type { HomeBoardPorts } from "./useHomeBoardData";
 import { HomeClusterGrid } from "./HomeClusterGrid";
 import { HomeFleetHeader } from "./HomeFleetHeader";
 import {
   exactIncidentSum,
   HomeClusterBoundary,
-  homeConnectionState,
   HomeFailureScreen,
   isResumableDisconnectPhase,
   PartialFailureBanner,
@@ -107,9 +105,6 @@ export function HomePage({
   if (state.clusterAccess.kind === "forbidden") {
     return <HomeFailureScreen failure={state.clusterAccess.failure} onRetry={state.refresh} />;
   }
-  const refreshing = [state.choices, state.overview, state.insights, state.nodes, state.pods].some(
-    (resource) => resource.phase === "ready" && resource.refreshing,
-  );
   return (
     <ProductPageFrame>
       <HomeFleetHeader
@@ -119,15 +114,6 @@ export function HomePage({
         criticalHref={filter.navigationHref("/issues")}
         editing={editingBoard}
         fleetUsage={fleetUsage}
-        freshness={state.refreshIntervalSeconds === null ? null : (
-          <PollingFreshness
-            connectionState={homeConnectionState(state)}
-            dataUpdatedAt={state.dataUpdatedAt}
-            intervalSeconds={state.refreshIntervalSeconds}
-            isFetching={refreshing}
-            onRefresh={state.refresh}
-          />
-        )}
         onEdit={boardPorts ? () => setEditingBoard((current) => !current) : undefined}
         onConnect={canManageClusters ? () => setConnectOpen(true) : undefined}
         onPeriodChange={boardPorts ? (period) => {
@@ -143,7 +129,6 @@ export function HomePage({
         clusters={boardClusters}
         disconnectClusterId={disconnectCluster?.id}
         disconnectPhase={disconnectPhase}
-        onConnect={canManageClusters ? () => setConnectOpen(true) : undefined}
         onDisconnect={canManageClusters ? (cluster) => {
           setDisconnectCluster(cluster);
           setDisconnectOpen(true);

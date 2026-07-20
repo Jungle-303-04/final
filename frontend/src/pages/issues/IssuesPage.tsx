@@ -1,3 +1,4 @@
+import { AlertTriangle } from "lucide-react";
 import { useMemo } from "react";
 import { useClusterScope } from "../../features/cluster-scope/ClusterScopeProvider";
 import type { ClusterScopeFailure } from "../../features/cluster-scope/clusterScopeContract";
@@ -8,6 +9,7 @@ import { useI18n } from "../../shared/i18n";
 import type { MessageKey, TranslationFunction } from "../../shared/i18n/types";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
+import { ProductSurfaceTitle } from "../../shared/ui/ProductSurfaceTitle";
 import { createIssuesCopy } from "./issuesPageCopy";
 
 export function IssuesPage({ port }: { port: IssuesPort }) {
@@ -78,7 +80,10 @@ export function IssuesPage({ port }: { port: IssuesPort }) {
     : scope.selection.cluster.id;
 
   return (
-    <ProductPageFrame>
+    <ProductPageFrame className="gap-4">
+      <header className="flex min-w-0 items-center gap-2.5">
+        <ProductSurfaceTitle icon={AlertTriangle} title={copy.listLabel} />
+      </header>
       <IssuesSurface
         clusterId={clusterId}
         copy={copy}

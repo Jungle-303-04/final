@@ -26,7 +26,7 @@ describe("product document bootstrap", () => {
     expect(documentSource).toContain(
       "document.documentElement.dataset.productSidebarState = sidebarState",
     );
-    expect(documentSource).toContain('(max-width: 1100px)');
+    expect(documentSource).toContain('(max-width: 1280px)');
     expect(documentSource).toContain("document.documentElement.style.colorScheme");
     expect(documentSource).toContain(
       'const selectedTheme = storedTheme === "dark" || storedTheme === "light"',

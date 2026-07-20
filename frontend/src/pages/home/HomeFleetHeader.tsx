@@ -17,7 +17,6 @@ export function HomeFleetHeader({
   criticalCount,
   criticalHref,
   editing,
-  freshness,
   fleetUsage,
   onEdit,
   onConnect,
@@ -30,7 +29,6 @@ export function HomeFleetHeader({
   criticalCount?: number | null;
   criticalHref?: string;
   editing?: boolean;
-  freshness?: ReactNode;
   fleetUsage?: HomeFleetUsageSummary | null;
   onEdit?: () => void;
   onConnect?: () => void;
@@ -60,13 +58,13 @@ export function HomeFleetHeader({
 
   return (
     <div
-      className="-mb-0.5 grid min-w-0 grid-cols-1 items-center gap-x-3 gap-y-6 min-[1600px]:mb-0.5 min-[1600px]:grid-cols-[minmax(0,1fr)_auto] min-[1600px]:gap-y-2"
+      className="-mb-0.5 grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3"
       data-slot="home-fleet-header"
     >
       <h1 className="sr-only">{t("home.cluster.available")}</h1>
       <div
         aria-label={t("home.cluster.grid.aria")}
-        className="scrollbar-thin flex min-w-0 flex-nowrap items-center gap-2 overflow-x-auto overscroll-x-contain pb-0.5"
+        className="scrollbar-thin flex min-w-0 flex-nowrap items-center gap-2 overflow-x-auto overscroll-x-contain py-0.5"
         role="group"
       >
         <FleetMetric
@@ -104,8 +102,7 @@ export function HomeFleetHeader({
           criticalChip
         )}
       </div>
-      <div className="flex min-w-0 flex-nowrap items-center justify-end gap-2 overflow-x-auto overscroll-x-contain">
-        {freshness ? <div className="shrink-0">{freshness}</div> : null}
+      <div className="scrollbar-thin flex min-w-0 max-w-[min(57vw,45rem)] flex-nowrap items-center justify-end gap-2 overflow-x-auto overscroll-x-contain py-0.5">
         {period && onPeriodChange ? (
           <ButtonGroup aria-label={t("timeline.strip.range")} className="rounded-lg bg-muted p-0.5">
             {(["today", "7d", "30d"] as const).map((value) => (
@@ -167,7 +164,7 @@ function FleetMetric({ icon, label, tone = "neutral", value }: {
     <TintChip
       className="shrink-0 gap-[5px] whitespace-nowrap rounded-full px-[11px] py-[5px] text-label font-semibold"
       icon={<span className="text-caption-foreground [&_svg]:size-[11px]">{icon}</span>}
-      label={<span className="inline-flex items-baseline gap-1"><span>{label}</span><strong className="font-mono text-label font-bold tabular-nums text-foreground">{value}</strong></span>}
+      label={<span className="inline-flex items-baseline gap-1"><span>{label}</span><strong className="inline-block min-w-[3ch] text-right font-mono text-label font-bold tabular-nums text-foreground">{value}</strong></span>}
       tone={tone}
     />
   );

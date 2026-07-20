@@ -78,56 +78,20 @@ export function ResourcesGraphShell({
   const { t } = useI18n();
   const rootRef = useRef<HTMLDivElement>(null);
   const { capture, play } = useCameraMorph(rootRef);
-  const [displayedView, setDisplayedView] = useState<ResourceTopologyView>("physical");
+  const displayedView = topologyView;
   const [autoHintVisible, setAutoHintVisible] = useState(false);
+  const hintedRelationRevision = useRef<string | null>(null);
   const { beginResize, height, reset, resizeBy } = useResizableGraphHeight();
-  const [retainedPhysical, setRetainedPhysical] = useState<
-    Extract<PhysicalTopologyFrame, { phase: "ready" }> | null
-  >(
-    frame.phase === "ready" ? frame : null,
-  );
-  const [retainedRelation, setRetainedRelation] = useState<{
-    clusterId: string;
-    frame: Extract<RelationTopologyFrame, { phase: "ready" }>;
-  } | null>(relationFrame.phase === "ready" ? { clusterId, frame: relationFrame } : null);
-
   useEffect(() => {
-    if (frame.phase !== "ready" && relationFrame.phase !== "ready") return undefined;
-    const animationFrame = requestAnimationFrame(() => {
-      if (frame.phase === "ready") setRetainedPhysical(frame);
-      if (relationFrame.phase === "ready") {
-        setRetainedRelation({ clusterId, frame: relationFrame });
-      }
-    });
-    return () => cancelAnimationFrame(animationFrame);
-  }, [clusterId, frame, relationFrame]);
-
-  const physicalSceneFrame = displayedView === "physical" &&
-      topologyView !== displayedView &&
-      frame.phase !== "ready" &&
-      retainedPhysical?.data.clusterId === clusterId
-    ? retainedPhysical
-    : frame;
-  const relationSceneFrame = displayedView === "relations" &&
-      topologyView !== displayedView &&
-      relationFrame.phase !== "ready" &&
-      retainedRelation?.clusterId === clusterId
-    ? retainedRelation.frame
-    : relationFrame;
-  useEffect(() => {
-    if (topologyView === displayedView) return;
-    const targetPhase = topologyView === "relations" ? relationFrame.phase : frame.phase;
-    if (targetPhase !== "ready" && targetPhase !== "failed") return;
-    capture();
-    const animationFrame = requestAnimationFrame(() => {
-      setDisplayedView(topologyView);
-      setAutoHintVisible(
-        targetPhase === "ready" && topologyView === "relations" && !topologyPinned,
-      );
-    });
-    return () => cancelAnimationFrame(animationFrame);
-  }, [capture, displayedView, frame.phase, relationFrame.phase, topologyPinned, topologyView]);
-
+    if (
+      topologyView !== "relations" ||
+      topologyPinned ||
+      relationFrame.phase !== "ready" ||
+      hintedRelationRevision.current === relationFrame.data.graphRevision
+    ) return;
+    hintedRelationRevision.current = relationFrame.data.graphRevision;
+    setAutoHintVisible(true);
+  }, [relationFrame, topologyPinned, topologyView]);
   useEffect(() => {
     if (!autoHintVisible) return undefined;
     const timeout = window.setTimeout(() => setAutoHintVisible(false), 6_000);
@@ -157,15 +121,16 @@ export function ResourcesGraphShell({
   }, [capture, displayedView, frame.phase, play]);
 
   const displayedFrame = displayedView === "relations"
-    ? relationSceneFrame
-    : physicalSceneFrame;
+    ? relationFrame
+    : frame;
   const changeTopologyView = (view: ResourceTopologyView) => {
+    capture();
     setAutoHintVisible(false);
     onTopologyViewChange(view);
   };
   return (
     <div
-      aria-busy={topologyView !== displayedView || displayedFrame.phase === "loading"}
+      aria-busy={displayedFrame.phase === "loading"}
       aria-live="polite"
       className={cn(
         "group/resources-graph relative isolate flex overflow-hidden bg-linear-to-b from-muted/20 via-card to-muted/40",
@@ -192,8 +157,8 @@ export function ResourcesGraphShell({
         onSelectAll={onSelectAll}
         onTimelineRangeChange={onTimelineRangeChange}
         onTopologyViewChange={changeTopologyView}
-        physicalFrame={physicalSceneFrame}
-        relationFrame={relationSceneFrame}
+        physicalFrame={frame}
+        relationFrame={relationFrame}
         timelineRange={timelineRange}
         topologyView={topologyView}
       />
@@ -209,14 +174,14 @@ export function ResourcesGraphShell({
           >
             {displayedView === "relations" ? (
               <RelationTopologyCanvas
-                frame={relationSceneFrame}
+                frame={relationFrame}
                 onSelectResource={onSelectRelationResource}
                 selectedResourceId={selectedRelationResourceId}
               />
             ) : (
               <ResourcesPhysicalTopologyScene
                 clusterId={clusterId}
-                frame={physicalSceneFrame}
+                frame={frame}
                 nodePodsPort={nodePodsPort}
                 onOpenPod={onOpenPod}
                 onNodePodsUnauthorized={onNodePodsUnauthorized}

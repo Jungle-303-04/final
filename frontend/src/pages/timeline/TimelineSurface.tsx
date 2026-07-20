@@ -9,6 +9,7 @@ import { useI18n, type I18nController } from "../../shared/i18n";
 import type { MessageKey } from "../../shared/i18n/types";
 import { ProductFloatingActionAvoidance } from "../../shared/ui/ProductFloatingActionAvoidance";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
+import { ProductSurfaceTitle } from "../../shared/ui/ProductSurfaceTitle";
 import { LiveStatusDot, type LiveStatusDotTone } from "../../shared/ui/LiveStatusDot";
 import { Button } from "../../shared/ui/primitives/button";
 import {
@@ -124,8 +125,7 @@ export function TimelineSurface({
   return (
     <ProductPageFrame className="gap-4">
       <header className="flex min-w-0 items-center gap-2.5">
-        <Clock aria-hidden="true" className="size-[1.0625rem] shrink-0 text-primary" />
-        <h2 className="min-w-0 truncate font-heading text-heading font-extrabold tracking-[-0.02em]">{t("timeline.title")}</h2>
+        <ProductSurfaceTitle icon={Clock} title={t("timeline.title")} />
         <p className="sr-only">{t("timeline.description")}</p>
       </header>
       <TimelineToolbar

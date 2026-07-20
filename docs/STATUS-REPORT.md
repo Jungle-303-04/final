@@ -1,19 +1,19 @@
 # 실행 상태 자기 진단
 
-기준 시각은 2026-07-20 06:35 KST다. 원격 `dev`는 `5252a85ec49fbaaa1fca1da702dbba74d97f520f`, 라이브는 직전 성공 배포 `e84748b06ded3450ca3693efb5863ccbfc30eb68`로 서로 다르다. demo 기준은 `demo-freeze-v3`의 `adcf92130`이며, 코드·자동 게이트·API 계약·라이브 상태·브라우저 증거가 같은 digest를 가리키지 않는 항목은 완료로 판정하지 않는다.
+기준 시각은 2026-07-20 10:08 KST다. 원격 `dev`와 라이브 console은 `8f90bac560427f523808e4d36e0456072f687be5`로 일치하며, 화면 변경의 제품 부모 SHA는 `28a45c974d7f52b337fd2c5e69fa86a0aab1f9a9`다. demo 기준은 `demo-freeze-v3`의 `adcf92130`이다. 코드·자동 게이트·API 계약·라이브 상태·브라우저 증거가 같은 digest를 가리키지 않는 항목은 완료로 판정하지 않는다.
 
 ## 이전 보고 대비 델타 — 10줄 요약
 
-1. `5252a85ec` Dev Gate `29704105721`은 성공했지만 Dev Deploy `29704305166`은 빌드 전 reference UI delta의 unknown Opsia destination 11건으로 실패했다.
-2. 실패는 제품 런타임이 아니라 후보에 포함되지 않은 최신 Home/GitOps 계보 분류의 포트 카탈로그 정합 문제이며 BLOCKERS에 run ID와 함께 기록했다.
-3. 로컬 후보는 Home 범위·수치 정렬, 독립 알림·AI 대화, Deploy GitOps/워크플로우 복원, 이슈 RCA, 전역 셸·토큰·모션, 중복 GitOps 구세대 제거를 한 작업 트리에 포함한다.
-4. 결정적 프론트 회귀 11건을 소거했고 셸·라우트·필터 표적 36/36, GitOps·워크플로우 32/32가 통과했다.
-5. 전체 Vitest 443파일·2,271/2,271, `tsc -b`, ESLint, 디자인 가드 1,414파일, production build, `make gate-fast`가 worker 2·저부하 직렬 조건에서 모두 통과했다.
-6. feature 원장은 240행, UI delta 원장은 276파일·pending 0이며 삭제 ApplicationCard와 Home/GitOps 이식 계보를 현행 소유자로 재분류했다.
-7. 로컬 governance의 첫 재현은 미추적 신규 목적지가 index 기반 카탈로그에서 제외돼 21건으로 실패했으나, 후보 전체를 index에 포함한 재검증은 UI delta 276파일·pending 0·feature 240행·41/41·unknown 0으로 성공했다.
-8. `dev=origin/dev` 단일 계보이고 merge/rebase/cherry-pick은 없으며 활성 Gate/Deploy도 0건이다. demo worktree는 read-only로 보존한다.
-9. 새 외부 사람 필요 블로커는 0개다. G4는 라이브와 후보 SHA가 다르므로 Home 포함 **부분**, 나머지도 완료 선언 금지 상태다.
-10. 다음 3수는 index 포함 governance 0 → 단일 후보 커밋·push와 Gate/Deploy 완주 → 같은 SHA demo/live 1280·1440·1920 증거와 GOAL-LOG 갱신이다.
+1. 화면 배치 `28a45c974`는 Kyro 셸과 Home·Resources·Deploy/GitOps/Workflow·Alerts·AI·Timeline·Checks·Cost·Settings의 demo-freeze-v3 소비 구조를 한 제품 SHA에 고정했다.
+2. 로컬 결정적 계약 70/70, changed Vitest 1,057/1,057, full Vitest 2,297/2,297, typecheck, ESLint, 디자인 가드, production build, `gate-fast`, governance 41/41이 저부하·worker 2 규칙에서 성공했다.
+3. `28a45c974` Dev Gate `29709438336`은 성공했지만 자동 Deploy `29709590850`과 수동 Deploy `29709761226`·`29709890857`은 GitHub Actions/API 503으로 제품 빌드 전에 실패했다.
+4. 배포 검증 `8f90bac56`은 SHA 조상 관계와 성공 Gate 증명을 약화하지 않고 429/5xx만 최대 12회 지수 백오프로 재시도하며, 기존 계약 테스트 34/34를 통과했다.
+5. `8f90bac56` Dev Gate `29710022968`은 proof/backend/frontend/full gate 전부 성공했고 총 6분38초가 걸렸다.
+6. 자동 Deploy `29710176338`은 artifact `8448805112`를 찾은 뒤 GitHub 다운로드 503으로 실패했으며 build·cluster access·rollout은 모두 생략됐다.
+7. 수동 Deploy `29710204808`은 compare API의 연속 503 세 번을 2초·4초·8초 백오프로 흡수하고 7분11초에 성공했다.
+8. 같은 run에서 console image build 1분32초, immutable console rollout 14초, post-deploy console smoke 25초, 인증 browser route smoke 1분14초가 모두 성공했다.
+9. G4는 기능 배포와 인증 라우트 계약은 통과했지만, 현재 Chrome enterprise policy가 라이브 도메인의 자동 화면 캡처를 차단해 같은 SHA 1280·1440·1920 나란히 증거가 미완료이므로 **부분**을 유지한다.
+10. 다음 3수는 라이브 시각 증거 회수 → 보존 game stack의 P0 계약 충돌 5개 해소 → 실제 2노드·부하/HPA·로그·GitOps·release-run 시나리오 검증이다.
 
 ## 현재 상세 근거
 

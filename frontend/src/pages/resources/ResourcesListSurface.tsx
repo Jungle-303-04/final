@@ -181,9 +181,9 @@ export function ResourcesListSurface({
     relationTopology,
   });
   return (
-    <div className="grid min-w-0 gap-4" data-slot="resources-view-surface">
+    <div className="grid min-w-0 gap-3.5" data-slot="resources-view-surface">
       <ResourcesViewSwitcher onChange={state.setView} view={state.view} />
-      <div className="grid min-w-0 items-start gap-4 lg:grid-cols-[minmax(0,1fr)_15.5rem]">
+      <div className="grid min-w-0 items-start gap-3.5 lg:grid-cols-[minmax(0,1fr)_16.875rem]">
         <ResourcesListRail
           connectionTopology={connectionTopology}
           focusedNodeId={relationshipFocus.selectedResourceId}
@@ -192,7 +192,7 @@ export function ResourcesListSurface({
           state={state}
         />
         <div className={cn(
-          "grid min-w-0 gap-4 overflow-x-hidden lg:col-start-1 lg:row-start-1",
+          "grid min-w-0 gap-3.5 overflow-x-hidden lg:col-start-1 lg:row-start-1",
           state.view === "map" && "min-h-0",
         )}>
           {state.view === "map" ? (

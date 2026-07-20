@@ -16,11 +16,12 @@ export function WorkflowEvidenceNavigation({
 }) {
   const { t } = useI18n();
   if (!page.selectedPlan) return null;
+  const editorActive = page.view === "overview" || page.view === "edit";
   return (
     <div className="grid min-w-0 gap-3">
       <div className="flex min-w-0 flex-wrap gap-2">
-        <Button onClick={() => page.setView("overview")} size="sm" type="button" variant={page.view === "overview" ? "secondary" : "ghost"}>
-          <LayoutGrid aria-hidden="true" />{t("workflows.view.overview")}
+        <Button onClick={() => page.setView("edit")} size="sm" type="button" variant={editorActive ? "secondary" : "ghost"}>
+          <LayoutGrid aria-hidden="true" />{t("workflows.view.edit")}
         </Button>
         <Button onClick={() => { page.setView("runs"); void page.checkReadiness(); }} size="sm" type="button" variant={page.view === "runs" ? "secondary" : "ghost"}>
           <CirclePlay aria-hidden="true" />{t("workflows.view.runs")}
@@ -34,7 +35,7 @@ export function WorkflowEvidenceNavigation({
           applications={page.data.applications}
           onAction={(run, action) => void page.runAction(run.run_id, action)}
           onCheckReadiness={() => void page.checkReadiness()}
-          onEdit={() => page.setView("overview")}
+          onEdit={() => page.setView("edit")}
           onStart={() => void page.startPlan()}
           pending={["readiness", "start", "run"].includes(page.operation)}
           plan={page.selectedPlan}
@@ -45,7 +46,7 @@ export function WorkflowEvidenceNavigation({
       {page.view === "yaml" ? (
         <ManifestWorkspace
           onGenerate={(index) => void page.generateManifest(index)}
-          onEdit={() => page.setView("overview")}
+          onEdit={() => page.setView("edit")}
           onSafePr={(index) => void page.submitSafePr(index)}
           pending={page.operation === "generate" ? "generate" : page.operation === "safe-pr" ? "safe-pr" : "idle"}
           plan={page.selectedPlan}

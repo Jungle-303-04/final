@@ -113,7 +113,7 @@ describe("ResourcesPage S9 relationship topology", () => {
     expect(podNode.getAttribute("data-selected")).toBe("true");
   });
 
-  it("keeps the old ready scene until a filter-derived target can run the Pod FLIP", async () => {
+  it("marks the graph busy instead of presenting a retained scene under a new filter", async () => {
     const physicalPending = deferred<typeof PHYSICAL_TOPOLOGY>();
     const relationPending = deferred<RelationTopologySnapshot>();
     const relationTopology = relationSnapshot();
@@ -127,13 +127,6 @@ describe("ResourcesPage S9 relationship topology", () => {
         .mockResolvedValueOnce(relationTopology)
         .mockImplementationOnce(() => relationPending.promise),
     });
-    const bounds = vi.spyOn(Element.prototype, "getBoundingClientRect")
-      .mockReturnValue(domRect());
-    const animate = vi.fn(() => ({ cancel: vi.fn() } as unknown as Animation));
-    Object.defineProperty(HTMLElement.prototype, "animate", {
-      configurable: true,
-      value: animate,
-    });
     const rendered = renderEnglishResources(
       "/resources?clusters=cluster-1&resources.types=pod&view=map",
       relationPort,
@@ -142,6 +135,16 @@ describe("ResourcesPage S9 relationship topology", () => {
 
     expect(await screen.findByRole("article", { name: "Server worker-a" })).toBeTruthy();
     await waitFor(() => expect(relationPort.loadRelationTopology).toHaveBeenCalledOnce());
+    expect(relationPort.loadRelationTopology).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        resources: expect.objectContaining({
+          types: expect.arrayContaining(["service", "configmap", "secret", "application"]),
+        }),
+      }),
+      {},
+      expect.any(AbortSignal),
+    );
     await act(async () => {
       await rendered.router.navigate(
         "/resources?clusters=cluster-1&applications=checkout&view=map",
@@ -149,16 +152,17 @@ describe("ResourcesPage S9 relationship topology", () => {
     });
     await waitFor(() => expect(relationPort.loadRelationTopology).toHaveBeenCalledTimes(2));
     expect(physicalPort.loadPhysicalTopology).toHaveBeenCalledTimes(2);
-    expect(document.querySelector('[data-morph-id="pod:pod:shop/checkout-api-0"]'))
-      .toBeTruthy();
+    expect(document.querySelector('[data-morph-id="pod:pod:shop/checkout-api-0"]')).toBeNull();
+    expect(document.querySelector('[data-slot="resources-graph-shell"]')
+      ?.getAttribute("aria-busy")).toBe("true");
 
     await act(async () => {
       relationPending.resolve(relationTopology);
       await relationPending.promise;
     });
     expect(await screen.findByText("Resource relationships")).toBeTruthy();
-    await waitFor(() => expect(animate).toHaveBeenCalled());
-    expect(bounds).toHaveBeenCalled();
+    expect(document.querySelector('[data-slot="resources-graph-shell"]')
+      ?.getAttribute("aria-busy")).toBe("false");
   });
 
   it("lets an explicit physical pin override automatic relation derivation", async () => {
@@ -307,20 +311,6 @@ function relationSnapshot(): RelationTopologySnapshot {
       stale: false,
       partialReasonCodes: [],
     },
-  };
-}
-
-function domRect(): DOMRect {
-  return {
-    bottom: 24,
-    height: 24,
-    left: 0,
-    right: 24,
-    top: 0,
-    width: 24,
-    x: 0,
-    y: 0,
-    toJSON: () => ({}),
   };
 }
 

@@ -58,7 +58,7 @@ export function GitOpsRepositoryWorkspace({
       <Table className="min-w-[54rem] table-fixed" scrollAreaLabel={t("workflows.target.repository")}>
         <TableHeader>
           <TableRow>
-            <TableHead className="w-[34%] px-4 text-micro font-semibold tracking-[0.05em] text-caption-foreground">{t("workflows.target.repository")}</TableHead>
+            <TableHead className="w-[34%] px-4 text-micro font-semibold tracking-[0.05em] text-caption-foreground">{t("applications.repository")}</TableHead>
             <TableHead className="w-[14%] px-4 text-micro font-semibold tracking-[0.05em] text-caption-foreground">{t("metrics.meta.source")}</TableHead>
             <TableHead className="w-[18%] px-4 text-micro font-semibold tracking-[0.05em] text-caption-foreground">{t("workflows.sync.table.revision")}</TableHead>
             <TableHead className="w-[18%] px-4 text-micro font-semibold tracking-[0.05em] text-caption-foreground">{t("workflows.sync.table.status")}</TableHead>

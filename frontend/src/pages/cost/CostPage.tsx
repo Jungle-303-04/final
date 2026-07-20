@@ -18,9 +18,10 @@ import { RefreshAction } from "../../motion/RefreshAction";
 import { useI18n, type TranslationFunction } from "../../shared/i18n";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
+import { ProductSurfaceTitle } from "../../shared/ui/ProductSurfaceTitle";
 import { Alert, AlertDescription, AlertTitle } from "../../shared/ui/primitives/alert";
-import { Card, CardContent, CardHeader, CardTitle } from "../../shared/ui/primitives/card";
 import { AvailabilityReasons, CostScopeCard } from "./CostScopeCard";
+import { CostOverviewBoard } from "./CostOverviewBoard";
 import { useCostOverview } from "./useCostOverviewData";
 import { CostNodesPanel } from "./CostNodesPanel";
 import { RightsizingScanView } from "./RightsizingScanView";
@@ -96,7 +97,7 @@ function CostReadyPage({
   return (
     <ProductPageFrame className="gap-4">
       <header className="flex min-w-0 items-center gap-2.5">
-        <Coins aria-hidden="true" className="size-[1.0625rem] shrink-0 text-primary" /><h1 className="min-w-0 truncate font-heading text-heading font-extrabold tracking-[-0.02em]">{t("cost.title")}</h1>
+        <ProductSurfaceTitle icon={Coins} title={t("cost.title")} />
         <p className="sr-only">{t("cost.description")}</p>
       </header>
       <CostViewTabs onSelect={onViewChange} value={view} />
@@ -205,14 +206,7 @@ function CostContent({
       ) : (
         <div aria-labelledby="cost-tab-overview" className="grid min-w-0 gap-4" id="cost-panel-overview" role="tabpanel">
           <ObservationNotice overview={overview} />
-          <section className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-3" aria-label={t("cost.summary.title")}>
-            <SummaryCard currency={overview.observation.currency} label={t("cost.summary.hourly")} value={overview.summary.hourlyCost} />
-            <SummaryCard currency={overview.observation.currency} label={t("cost.summary.monthly")} value={overview.summary.monthlyProjection} />
-            <SummaryCard currency={overview.observation.currency} label={t("cost.summary.storage")} value={overview.summary.storageCost} />
-            <SummaryCard currency={overview.observation.currency} label={t("cost.summary.idle")} value={overview.summary.idleCost} />
-            <SummaryCard currency={null} kind="percent" label={t("cost.summary.efficiency")} value={overview.summary.efficiency} />
-            <SummaryCard currency={null} label={t("cost.summary.savings")} value={overview.summary.savingsRecommendations} />
-          </section>
+          <CostOverviewBoard overview={overview} />
           <CostScopeCard overview={overview} />
         </div>
       )}
@@ -231,37 +225,6 @@ function ObservationNotice({ overview }: { overview: CostOverview }) {
         <AvailabilityReasons reasons={overview.observation.reasonCodes} />
       </AlertDescription>
     </Alert>
-  );
-}
-
-function SummaryCard({
-  currency,
-  kind = "currency",
-  label,
-  value,
-}: {
-  currency: string | null;
-  kind?: "currency" | "percent";
-  label: string;
-  value: number | null;
-}) {
-  const { formatNumber, t } = useI18n();
-  const rendered = value === null
-    ? t("cost.value.notObserved")
-    : kind === "percent"
-      ? `${formatNumber(value / 100, { maximumFractionDigits: 2 })}%`
-      : currency === null
-        ? t("cost.value.notObserved")
-        : formatNumber(value / 1_000_000, {
-          currency,
-          maximumFractionDigits: value >= 1_000_000 ? 2 : 4,
-          style: "currency",
-        });
-  return (
-    <Card className="min-h-28 justify-between transition-[border-color,box-shadow] hover:border-border-hover hover:shadow-product-hover motion-reduce:transition-none" size="sm">
-      <CardHeader><CardTitle>{label}</CardTitle></CardHeader>
-      <CardContent><p className="truncate font-mono text-title-2 font-semibold tabular-nums" title={rendered}>{rendered}</p></CardContent>
-    </Card>
   );
 }
 

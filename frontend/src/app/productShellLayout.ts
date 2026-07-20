@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 export const PRODUCT_SIDEBAR_STORAGE_KEY = "kyro.sidebar.state";
-export const PRODUCT_COMPACT_RAIL_QUERY = "(max-width: 1100px)";
+export const PRODUCT_COMPACT_RAIL_QUERY = "(max-width: 1280px)";
 
 export type ProductSidebarState = "collapsed" | "expanded";
 

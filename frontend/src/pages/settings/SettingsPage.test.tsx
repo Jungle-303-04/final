@@ -46,7 +46,7 @@ describe("SettingsPage", () => {
     const user = userEvent.setup();
     renderSettings("/settings");
 
-    expect(screen.getByRole("heading", { name: "설정", level: 2 })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "설정", level: 1 })).toBeTruthy();
     expect(screen.getByText("default")).toBeTruthy();
     expect(screen.getByText("Woo Nyong")).toBeTruthy();
     expect(screen.getByText("woonyong.kr@gmail.com")).toBeTruthy();
@@ -87,7 +87,7 @@ describe("SettingsPage", () => {
     renderSettings("/settings#preferences");
 
     await user.click(screen.getByRole("button", { name: "English" }));
-    expect(screen.getByRole("heading", { name: "Settings", level: 2 })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Settings", level: 1 })).toBeTruthy();
     expect(screen.getByText("Changes are saved automatically with optimistic revision checks."))
       .toBeTruthy();
   });

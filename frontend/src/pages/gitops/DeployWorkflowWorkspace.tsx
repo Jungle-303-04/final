@@ -44,6 +44,7 @@ export function DeployWorkflowWorkspace({ port }: { port: GitOpsPort }) {
   }
 
   if (page.selectedPlan && page.draft) {
+    const editorActive = page.view === "overview" || page.view === "edit";
     return (
       <div className="grid min-w-0 gap-3">
         {page.feedback ? (
@@ -52,19 +53,21 @@ export function DeployWorkflowWorkspace({ port }: { port: GitOpsPort }) {
             onClose={() => page.setFeedback(undefined)}
           />
         ) : null}
-        <WorkflowEditor
-          applications={page.data.applications}
-          clusters={page.data.clusters}
-          createTarget={page.createTarget}
-          draft={page.draft}
-          onBack={page.showPlanList}
-          onChange={page.setDraft}
-          onSave={() => void page.saveDraft()}
-          onSelectNode={setSelectedNode}
-          pending={page.operation === "save"}
-          selectedNode={selectedWorkflowNode(page.draft, selectedNode)}
-          targetPending={page.operation === "target"}
-        />
+        {editorActive ? (
+          <WorkflowEditor
+            applications={page.data.applications}
+            clusters={page.data.clusters}
+            createTarget={page.createTarget}
+            draft={page.draft}
+            onBack={page.showPlanList}
+            onChange={page.setDraft}
+            onSave={() => void page.saveDraft()}
+            onSelectNode={setSelectedNode}
+            pending={page.operation === "save"}
+            selectedNode={selectedWorkflowNode(page.draft, selectedNode)}
+            targetPending={page.operation === "target"}
+          />
+        ) : null}
         <WorkflowEvidenceNavigation page={page} />
       </div>
     );

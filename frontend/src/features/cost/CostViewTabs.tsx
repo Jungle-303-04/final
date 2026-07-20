@@ -34,7 +34,11 @@ export function CostViewTabs({
     refs.current[next]?.focus();
   };
   return (
-    <div aria-label={t("cost.tabs.label")} className="flex min-w-0 gap-1 overflow-x-auto border-b" role="tablist">
+    <div
+      aria-label={t("cost.tabs.label")}
+      className="flex h-[2.55859375rem] w-fit max-w-full min-w-0 gap-[0.15625rem] overflow-x-auto rounded-[0.703125rem] bg-muted/70 p-[0.15625rem]"
+      role="tablist"
+    >
       {COST_VIEWS.map((view) => {
         const selected = view === value;
         return (
@@ -42,9 +46,9 @@ export function CostViewTabs({
             aria-controls={`cost-panel-${view}`}
             aria-selected={selected}
             className={cn(
-              "relative shrink-0 px-3 py-2 text-sm font-medium text-muted-foreground transition-colors",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-              selected && "text-foreground after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:rounded-full after:bg-primary",
+              "h-[2.24609375rem] shrink-0 whitespace-nowrap rounded-[0.546875rem] px-5 text-label-2 font-bold text-muted-foreground transition-[background-color,color,box-shadow] duration-(--motion-micro)",
+              "hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none",
+              selected && "bg-card text-foreground shadow-sm",
             )}
             id={`cost-tab-${view}`}
             key={view}

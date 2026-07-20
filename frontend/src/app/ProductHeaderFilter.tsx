@@ -87,7 +87,7 @@ export const ProductHeaderFilter = forwardRef<
           setActiveGroup("cluster");
           filterBarRef.current?.openGroup("cluster");
         }}
-        widthClass="w-36 max-[1100px]:w-[7.75rem]"
+        widthClass="w-36 max-[1280px]:w-[7.75rem]"
       />
       <ScopeSelector
         anchorRef={namespaceAnchorRef}
@@ -102,7 +102,7 @@ export const ProductHeaderFilter = forwardRef<
           setActiveGroup("namespace");
           filterBarRef.current?.openGroup("namespace");
         }}
-        widthClass="w-48 max-[1100px]:w-[9.25rem]"
+        widthClass="w-48 max-[1280px]:w-[9.25rem]"
       />
       <div className="min-w-0 flex-1">
         <UnifiedFilterBar

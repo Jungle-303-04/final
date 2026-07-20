@@ -46,7 +46,7 @@ export function ResourcesPhysicalTopologyScene({
           <div className="grid max-h-[min(65vh,65rem)] min-h-0 grid-rows-[auto_1fr] overflow-hidden">
             <PhysicalTopologyLegend />
             <div
-              className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,320px),1fr))] content-start gap-4 overflow-y-auto overflow-x-hidden p-4 pt-3 sm:p-5 sm:pt-3"
+              className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,18rem),1fr))] content-start gap-3 overflow-y-auto overflow-x-hidden p-4 pt-3 sm:p-5 sm:pt-3"
               data-slot="physical-topology-grid"
             >
               {placements.map((placement, index) => (

@@ -14,7 +14,7 @@ describe("deploy GitOps surface", () => {
     expect(await screen.findByText("Applications")).toBeTruthy();
     expect(screen.getByText("Synced")).toBeTruthy();
     expect(screen.getByText("OutOfSync")).toBeTruthy();
-    expect(screen.getByText("Git repository")).toBeTruthy();
+    expect(screen.getByText("Repository")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Connect repository" })).toBeNull();
   });
 
@@ -30,5 +30,19 @@ describe("deploy GitOps surface", () => {
     const application = (await screen.findByText("Checkout API")).closest("li");
     expect(application).not.toBeNull();
     expect(within(application as HTMLLIElement).getByText("81de44f")).toBeTruthy();
+  });
+
+  it("keeps the observed branch visible and gives run evidence its own workspace", async () => {
+    const user = userEvent.setup();
+    renderGitOps("/deploy?section=workflows");
+
+    expect(await screen.findByText("Branch · main")).toBeTruthy();
+    await user.click(screen.getAllByRole("button", { name: "Edit this plan" })[0]);
+    expect(await screen.findByLabelText("Plan name")).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Runs" }));
+
+    expect(await screen.findByText("Release runs")).toBeTruthy();
+    expect(screen.queryByLabelText("Plan name")).toBeNull();
   });
 });

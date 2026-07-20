@@ -113,8 +113,8 @@ export function TimelineToolbar({
       className="grid min-w-0 gap-2.5 rounded-card border bg-card p-3"
       data-slot="timeline-toolbar"
     >
-      <div className="flex min-w-0 flex-wrap items-end gap-2">
-        <label className="grid min-w-48 flex-1 gap-1 text-sm font-medium sm:max-w-md">
+      <div className="flex min-w-0 flex-nowrap items-end gap-2 overflow-x-auto pb-1">
+        <label className="grid min-w-[18rem] flex-1 gap-1 text-sm font-medium sm:max-w-md">
           <span>{t("timeline.search")}</span>
           <input
             aria-label={t("timeline.search")}
@@ -132,7 +132,7 @@ export function TimelineToolbar({
           />
         </label>
 
-        <label className="grid min-w-36 gap-1 text-sm font-medium" htmlFor={activityId}>
+        <label className="grid min-w-36 shrink-0 gap-1 text-sm font-medium" htmlFor={activityId}>
           <span>{t("timeline.toolbar.activity")}</span>
           <select
             className="h-9 min-w-0 rounded-md border bg-background px-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -149,7 +149,7 @@ export function TimelineToolbar({
         </label>
 
         {activitySelection.option.problemsActivity.length > 0 ? (
-          <label className="flex h-9 items-center gap-2 rounded-md border px-2 text-sm font-medium">
+          <label className="flex h-9 shrink-0 items-center gap-2 whitespace-nowrap rounded-md border px-2 text-sm font-medium">
             <input
               checked={activitySelection.problemsOnly}
               className="size-4 accent-primary"
@@ -160,7 +160,7 @@ export function TimelineToolbar({
           </label>
         ) : null}
 
-        <label className="flex h-9 items-center gap-2 rounded-md border px-2 text-sm font-medium">
+        <label className="flex h-9 shrink-0 items-center gap-2 whitespace-nowrap rounded-md border px-2 text-sm font-medium">
           <input
             checked={state.showDeleted}
             className="size-4 accent-primary"
@@ -189,14 +189,14 @@ export function TimelineToolbar({
         />
       </div>
 
-      <div className="flex min-w-0 flex-wrap items-end gap-2 border-t border-border-subtle pt-2.5">
-        <fieldset className="flex min-w-0 flex-wrap gap-1" aria-label={t("timeline.view")} ref={viewGroupRef}>
+      <div className="flex min-w-0 flex-nowrap items-end gap-2 overflow-x-auto border-t border-border-subtle pt-2.5 pb-1">
+        <fieldset className="flex min-w-max shrink-0 flex-nowrap gap-1" aria-label={t("timeline.view")} ref={viewGroupRef}>
           <legend className="sr-only">{t("timeline.view")}</legend>
           {controls.views.map((option) => {
             const disabled = capabilities.namespaceFilterPolicy === "required" && option.id !== "list";
             return (
               <label
-                className="inline-flex h-8 min-w-0 cursor-pointer items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors has-[:checked]:border-primary has-[:checked]:bg-secondary has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-50 motion-reduce:transition-none"
+                className="inline-flex h-8 min-w-0 shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-md border px-2.5 text-xs font-medium transition-colors has-[:checked]:border-primary has-[:checked]:bg-secondary has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-50 motion-reduce:transition-none"
                 key={option.id}
                 title={option.description ?? undefined}
               >
@@ -218,7 +218,7 @@ export function TimelineToolbar({
           })}
         </fieldset>
 
-        <label className="grid min-w-32 gap-1 text-sm font-medium" htmlFor={groupingId}>
+        <label className="grid min-w-32 shrink-0 gap-1 text-sm font-medium" htmlFor={groupingId}>
           <span>{t("timeline.toolbar.grouping")}</span>
           <select
             className="h-8 min-w-0 rounded-md border bg-background px-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -234,7 +234,7 @@ export function TimelineToolbar({
           </select>
         </label>
 
-        <label className="grid min-w-32 gap-1 text-sm font-medium" htmlFor={sortId}>
+        <label className="grid min-w-32 shrink-0 gap-1 text-sm font-medium" htmlFor={sortId}>
           <span>{t("timeline.toolbar.sort")}</span>
           <select
             className="h-8 min-w-0 rounded-md border bg-background px-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -272,7 +272,7 @@ function KindMenu({
   const [open, setOpen] = useState(false);
   return (
     <details
-      className="relative min-w-0 max-w-full"
+      className="relative min-w-0 max-w-full shrink-0"
       data-slot="timeline-kind-menu"
       onKeyDown={closeDetailsOnEscape}
       onToggle={(event) => setOpen(event.currentTarget.open)}
@@ -339,7 +339,7 @@ function LegendMenu({
   const [open, setOpen] = useState(false);
   return (
     <details
-      className="relative min-w-28"
+      className="relative min-w-28 shrink-0"
       onKeyDown={closeDetailsOnEscape}
       onToggle={(event) => setOpen(event.currentTarget.open)}
     >

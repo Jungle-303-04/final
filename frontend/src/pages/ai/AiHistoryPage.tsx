@@ -76,18 +76,20 @@ export function AiHistoryPage({ port }: { port: AiConversationHistoryPort }) {
 
   return (
     <ProductPageFrame>
-      <header className="flex min-w-0 items-center gap-2.5">
-        <ProductSurfaceTitle icon={Sparkles} title={t("shell.ai.history.title")} />
-        {frame.phase === "ready" && frame.page.completeness === "partial" ? (
-          <TintChip
-            className="max-w-[min(38vw,22rem)] rounded-full px-2.5 py-1 text-caption font-bold"
-            icon={<AlertTriangle className="size-3.5" />}
-            label={t("shell.ai.history.partial")}
-            tone="warning"
-          />
-        ) : null}
+      <header className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2.5">
+        <div className="flex min-w-0 items-center gap-2.5 overflow-hidden">
+          <ProductSurfaceTitle className="min-w-0 shrink" icon={Sparkles} title={t("shell.ai.history.title")} />
+          {frame.phase === "ready" && frame.page.completeness === "partial" ? (
+            <TintChip
+              className="min-w-0 max-w-[min(38vw,22rem)] rounded-full px-2.5 py-1 text-caption font-bold"
+              icon={<AlertTriangle className="size-3.5" />}
+              label={t("shell.ai.history.partial")}
+              tone="warning"
+            />
+          ) : null}
+        </div>
         <Button
-          className="ml-auto shrink-0"
+          className="shrink-0 whitespace-nowrap"
           onClick={createNew}
           size="page-action"
           type="button"
@@ -171,10 +173,10 @@ function HistoryData({
                       </span>
                     </button>
                   </TableCell>
-                  <TableCell className="px-3.5 py-2.5">
+                  <TableCell className="px-3.5 py-2.5 whitespace-nowrap">
                     <ContextTint kind={item.contextKind} />
                   </TableCell>
-                  <TableCell className="px-3.5 py-2.5 font-mono text-label-2 tabular-nums text-caption-foreground">
+                  <TableCell className="px-3.5 py-2.5 whitespace-nowrap font-mono text-label-2 tabular-nums text-caption-foreground">
                     {relativeTime(item.updatedAt, renderedAt, t)}
                   </TableCell>
                 </SurfaceRowMotion>

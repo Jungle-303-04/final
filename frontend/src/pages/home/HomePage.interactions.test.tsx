@@ -187,7 +187,7 @@ describe("HomePage board interactions", () => {
   it("commits layout preferences only when editing completes", async () => {
     const user = userEvent.setup();
     seedMinimalHomeBoard();
-    const key = "opsia:home-board:test-workspace:test-user:v2";
+    const key = "kyro:home-board:test-workspace:test-user:v2";
     const preferencesBeforeEditing = window.localStorage.getItem(key);
     renderHome(homePort());
     await screen.findByRole("heading", { name: "이슈" });

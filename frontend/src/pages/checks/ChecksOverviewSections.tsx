@@ -6,6 +6,7 @@ import { checksCopy } from "../../features/checks/checksCopy";
 import { alertEventResourceHref } from "../../features/filters/alertEventResourceHref";
 import { useI18n } from "../../shared/i18n";
 import { SurfaceSection } from "../../shared/ui/Surface";
+import { TintChip } from "../../shared/ui/status";
 import { Badge } from "../../shared/ui/primitives/badge";
 import { ChecksAvailabilityReasons } from "./ChecksAvailabilityReasons";
 
@@ -19,9 +20,9 @@ export function ChecksSummaryChips({ overview }: { overview: ChecksOverview }) {
   const evaluated = result.availability === "unavailable" ? null : result.totalCheckCount;
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-2" aria-label={copy.resultStatus}>
-      <Badge className="h-7 gap-1.5 px-3 tabular-nums" variant="outline">{copy.catalogStatus} <strong>{evaluated ?? "—"}</strong></Badge>
-      <Badge className="h-7 gap-1.5 px-3 tabular-nums" variant="warning">{t("timeline.severity.warning")} <strong>{result.availability === "unavailable" ? "—" : warning}</strong></Badge>
-      <Badge className="h-7 gap-1.5 px-3 tabular-nums" variant="destructive">{t("timeline.severity.critical")} <strong>{result.availability === "unavailable" ? "—" : danger}</strong></Badge>
+      <TintChip className="h-7 rounded-full px-3 tabular-nums" label={<>{copy.catalogStatus} <strong>{evaluated ?? "—"}</strong></>} tone="neutral" />
+      <TintChip className="h-7 rounded-full px-3 tabular-nums" label={<>{t("timeline.severity.warning")} <strong>{result.availability === "unavailable" ? "—" : warning}</strong></>} tone="warning" />
+      <TintChip className="h-7 rounded-full px-3 tabular-nums" label={<>{t("timeline.severity.critical")} <strong>{result.availability === "unavailable" ? "—" : danger}</strong></>} tone="critical" />
     </div>
   );
 }

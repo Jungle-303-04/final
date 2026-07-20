@@ -10,7 +10,7 @@ import type { ApplicationCardModel } from "./applicationsContract";
 afterEach(cleanup);
 
 describe("application catalog items", () => {
-  it("keeps every operational channel in the dense table without inventing readiness", async () => {
+  it("uses the six-column demo grammar and keeps every operational channel in expandable evidence", async () => {
     const user = userEvent.setup();
     const onOpen = vi.fn();
     renderUi(
@@ -39,25 +39,46 @@ describe("application catalog items", () => {
       />,
     );
 
+    expect(screen.getAllByRole("columnheader").map((header) => header.textContent)).toEqual([
+      "Application",
+      "Environment",
+      "Sync status",
+      "Health",
+      "Ready pods",
+      "Revision",
+    ]);
+
     const checkoutRow = screen.getByRole("row", { name: /checkout-api/i });
-    const ready = within(checkoutRow).getByTestId("application-ready-bar");
+    expect(within(checkoutRow).getByText("prod")).toBeTruthy();
+    expect(within(checkoutRow).getByText("OutOfSync")).toBeTruthy();
+    expect(within(checkoutRow).getByText("degraded")).toBeTruthy();
+    expect(within(checkoutRow).getByText("2/3")).toBeTruthy();
+    expect(within(checkoutRow).getByText("a3f9c2e")).toBeTruthy();
+
+    await user.click(within(checkoutRow).getByRole("button", { name: "View details: checkout-api" }));
+    const checkoutEvidence = screen.getByRole("region", { name: "checkout-api View details" });
+    const ready = within(checkoutEvidence).getByTestId("application-ready-bar");
     expect(ready.textContent).toContain("2/3");
     expect(within(ready).getByRole("progressbar").getAttribute("aria-valuenow")).toBe("2");
-    expect(within(checkoutRow).getByText("v2.4.1")).toBeTruthy();
-    expect(within(checkoutRow).getByText("a3f9c2e")).toBeTruthy();
-    expect(within(checkoutRow).getByTestId("application-delivery-state-channel").textContent)
+    expect(within(checkoutEvidence).getByText("v2.4.1")).toBeTruthy();
+    expect(within(checkoutEvidence).getByText("a3f9c2e")).toBeTruthy();
+    expect(within(checkoutEvidence).getByTestId("application-delivery-state-channel").textContent)
       .toContain("Failed");
-    expect(within(checkoutRow).getByTestId("application-batch-runtime-channel").textContent)
+    expect(within(checkoutEvidence).getByTestId("application-batch-runtime-channel").textContent)
       .toContain("active 1");
-    expect(within(checkoutRow).getByTestId("application-drift-channel")).toBeTruthy();
-    expect(within(checkoutRow).getByTestId("application-incident-channel")).toBeTruthy();
+    expect(within(checkoutEvidence).getByTestId("application-drift-channel")).toBeTruthy();
+    expect(within(checkoutEvidence).getByTestId("application-incident-channel")).toBeTruthy();
+    expect(within(checkoutEvidence).getByText("opsia/checkout · main · deploy/prod")).toBeTruthy();
 
     await user.click(within(checkoutRow).getByRole("button", { name: "View details" }));
     expect(onOpen).toHaveBeenCalledWith("app-checkout");
 
     const workerRow = screen.getByRole("row", { name: /worker/i });
     expect(within(workerRow).queryByRole("progressbar")).toBeNull();
-    expect(within(workerRow).getByTestId("application-ready-bar").textContent).toContain("Unavailable");
+    await user.click(within(workerRow).getByRole("button", { name: "View details: worker" }));
+    const workerEvidence = screen.getByRole("region", { name: "worker View details" });
+    expect(within(workerEvidence).queryByRole("progressbar")).toBeNull();
+    expect(within(workerEvidence).getByTestId("application-ready-bar").textContent).toContain("Unavailable");
   });
 });
 

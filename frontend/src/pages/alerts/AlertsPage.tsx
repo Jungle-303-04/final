@@ -54,16 +54,18 @@ export function AlertsPage({
   return (
     <ProductPageFrame>
       <Tabs onValueChange={selectTab} value={selectedTab}>
-        <header className="flex min-w-0 items-center gap-3">
+        <header className="min-w-0">
           <ProductSurfaceTitle icon={Bell} title={t("alerts.title")} />
-          <TabsList aria-label={t("alerts.tabs.label")} className="ml-auto h-[2.55859375rem] shrink-0 gap-[0.15625rem] rounded-[0.703125rem] p-[0.15625rem]" variant="default">
-            <TabsTrigger className="h-[2.24609375rem] rounded-[0.546875rem] px-5 [font-size:var(--type-label-2)] [line-height:1.46484375rem] font-bold" value="events">{t("alerts.tabs.events")}</TabsTrigger>
-            <TabsTrigger className="h-[2.24609375rem] rounded-[0.546875rem] px-5 [font-size:var(--type-label-2)] [line-height:1.46484375rem] font-bold" data-alert-tab="rules" value="rules">{t("alerts.tabs.rules")}</TabsTrigger>
-            <TabsTrigger className="h-[2.24609375rem] rounded-[0.546875rem] px-5 [font-size:var(--type-label-2)] [line-height:1.46484375rem] font-bold" value="channels">{t("alerts.tabs.channels")}</TabsTrigger>
-          </TabsList>
         </header>
+        <div className="mt-4 min-w-0 overflow-x-auto">
+          <TabsList aria-label={t("alerts.tabs.label")} className="h-[2.55859375rem] w-max min-w-full justify-start gap-[0.15625rem] rounded-[0.703125rem] p-[0.15625rem] sm:min-w-0" variant="default">
+            <TabsTrigger className="h-[2.24609375rem] shrink-0 whitespace-nowrap rounded-[0.546875rem] px-5 [font-size:var(--type-label-2)] [line-height:1.46484375rem] font-bold" value="events">{t("alerts.tabs.events")}</TabsTrigger>
+            <TabsTrigger className="h-[2.24609375rem] shrink-0 whitespace-nowrap rounded-[0.546875rem] px-5 [font-size:var(--type-label-2)] [line-height:1.46484375rem] font-bold" data-alert-tab="rules" value="rules">{t("alerts.tabs.rules")}</TabsTrigger>
+            <TabsTrigger className="h-[2.24609375rem] shrink-0 whitespace-nowrap rounded-[0.546875rem] px-5 [font-size:var(--type-label-2)] [line-height:1.46484375rem] font-bold" value="channels">{t("alerts.tabs.channels")}</TabsTrigger>
+          </TabsList>
+        </div>
 
-        <TabsContent className="mt-4 min-w-0" value="events">
+        <TabsContent className="mt-3 min-w-0" value="events">
           <AlertEventsPanel
             acknowledge={alerts.acknowledge}
             data={data}
@@ -76,10 +78,10 @@ export function AlertsPage({
             refresh={alerts.refresh}
           />
         </TabsContent>
-        <TabsContent className="mt-4 min-w-0" value="rules">
+        <TabsContent className="mt-3 min-w-0" value="rules">
           <AlertRulesPanel channelsPort={channelsPort} focusRuleId={filter.detail.detail} port={rulesPort} />
         </TabsContent>
-        <TabsContent className="mt-4 min-w-0" value="channels">
+        <TabsContent className="mt-3 min-w-0" value="channels">
           <AlertChannelsPanel lastInAppDeliveryAt={data.rows[0]?.occurredAt ?? null} port={channelsPort} />
         </TabsContent>
       </Tabs>

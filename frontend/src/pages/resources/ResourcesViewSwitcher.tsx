@@ -1,5 +1,3 @@
-import { List, Map as MapIcon, Network } from "lucide-react";
-
 import type { ResourceSurfaceView } from "../../features/filters/filterContract";
 import { useI18n } from "../../shared/i18n";
 import { Button } from "../../shared/ui/primitives/button";
@@ -15,35 +13,35 @@ export function ResourcesViewSwitcher({
   const { t } = useI18n();
   return (
     <div data-slot="resources-view-switcher">
-      <ButtonGroup aria-label={t("resources.surface.view.aria")}>
+      <ButtonGroup
+        aria-label={t("resources.surface.view.aria")}
+        className="rounded-lg bg-muted p-0.5"
+      >
         <Button
           aria-pressed={view === "map"}
           onClick={() => onChange("map")}
-          size="sm"
+          size="compact-segment"
           type="button"
-          variant={view === "map" ? "secondary" : "outline"}
+          variant={view === "map" ? "outline" : "ghost"}
         >
-          <MapIcon aria-hidden="true" />
           {t("resources.surface.view.map")}
         </Button>
         <Button
           aria-pressed={view === "list"}
           onClick={() => onChange("list")}
-          size="sm"
+          size="compact-segment"
           type="button"
-          variant={view === "list" ? "secondary" : "outline"}
+          variant={view === "list" ? "outline" : "ghost"}
         >
-          <List aria-hidden="true" />
           {t("resources.surface.view.list")}
         </Button>
         <Button
           aria-pressed={view === "flow"}
           onClick={() => onChange("flow")}
-          size="sm"
+          size="compact-segment"
           type="button"
-          variant={view === "flow" ? "secondary" : "outline"}
+          variant={view === "flow" ? "outline" : "ghost"}
         >
-          <Network aria-hidden="true" />
           {t("resources.surface.view.flow")}
         </Button>
       </ButtonGroup>

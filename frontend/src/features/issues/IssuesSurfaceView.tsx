@@ -48,18 +48,16 @@ export function IssuesSurfaceView({
             : "hidden min-w-0 flex-1 lg:block lg:opacity-100 lg:transition-[flex-basis,opacity] lg:duration-(--motion-page) lg:ease-(--ease-page) motion-reduce:transition-none"}
         role="region"
       >
-        <header className="flex min-h-16 flex-row items-center gap-3 border-b px-5 py-4">
-          <div className="min-w-0 flex-1">
-            <h2 className="font-semibold leading-none">{copy.listLabel}</h2>
-            {lastRefreshedAt !== null ? (
-              <time
-                className="mt-0.5 block truncate text-[11px] tabular-nums text-muted-foreground"
-                dateTime={new Date(lastRefreshedAt).toISOString()}
-              >
-                {copy.updated} · {copy.auditTime(new Date(lastRefreshedAt).toISOString())}
-              </time>
-            ) : null}
-          </div>
+        <header className="flex min-h-11 flex-row items-center gap-3 border-b bg-muted/20 px-5 py-2">
+          <h2 className="sr-only">{copy.listLabel}</h2>
+          {lastRefreshedAt !== null ? (
+            <time
+              className="min-w-0 flex-1 truncate font-mono text-caption tabular-nums text-muted-foreground"
+              dateTime={new Date(lastRefreshedAt).toISOString()}
+            >
+              {copy.updated} · {copy.auditTime(new Date(lastRefreshedAt).toISOString())}
+            </time>
+          ) : <span className="min-w-0 flex-1" />}
           <Button
             aria-label={copy.refresh}
             onClick={refreshList}

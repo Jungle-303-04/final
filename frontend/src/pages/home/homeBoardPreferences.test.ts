@@ -11,8 +11,21 @@ import {
 describe("home board preferences", () => {
   it("scopes persisted layout to the authenticated user and workspace", () => {
     expect(homeBoardPreferenceKey("workspace-a", "user-a"))
-      .toBe("opsia:home-board:workspace-a:user-a:v2");
+      .toBe("kyro:home-board:workspace-a:user-a:v2");
     expect(homeBoardPreferenceKey(null, "user-a")).toBeNull();
+  });
+
+  it("reads the legacy internal layout while new writes use the Kyro key", () => {
+    const values = new Map<string, string>([[
+      "opsia:home-board:workspace-a:user-a:v2",
+      JSON.stringify({ collapsed: ["W2"], order: HOME_WIDGET_IDS, visible: HOME_WIDGET_IDS }),
+    ]]);
+    const storage = { getItem: (key: string) => values.get(key) ?? null };
+
+    expect(loadHomeBoardPreferences(
+      storage,
+      homeBoardPreferenceKey("workspace-a", "user-a"),
+    ).collapsed).toEqual(["W2"]);
   });
 
   it("validates stored widget IDs and preserves the catalog order", () => {

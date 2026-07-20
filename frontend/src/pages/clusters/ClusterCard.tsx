@@ -148,22 +148,22 @@ export function ClusterCard({
           </div>
         </CardHeader>
         <CardContent className="grid flex-1 content-between gap-3 p-4">
-          <p className="flex min-w-0 flex-wrap gap-x-3.5 gap-y-1 text-label tabular-nums text-muted-foreground" data-slot="cluster-card-counts">
-            <span>
+          <p className="flex min-w-0 flex-nowrap items-center gap-x-3.5 overflow-hidden text-label tabular-nums text-muted-foreground" data-slot="cluster-card-counts">
+            <span className="shrink-0 whitespace-nowrap">
               {t("clusters.card.nodesLabel")}{" "}
               <b className="font-mono text-foreground">
                 {metricValue(usage?.nodesReady, formatNumber)}/{metricValue(usage?.nodesTotal ?? cluster.nodeCount, formatNumber)}
               </b>{" "}
               {t("clusters.card.readySuffix")}
             </span>
-            <span>
+            <span className="shrink-0 whitespace-nowrap">
               {t("clusters.card.podsLabel")}{" "}
               <b className="font-mono text-foreground">{metricValue(usage?.podsTotal ?? cluster.podCount, formatNumber)}</b>
               {incidents != null && incidents > 0 ? (
                 <b className="font-mono text-destructive"> · {t("clusters.card.criticalLabel")} {formatNumber(incidents)}</b>
               ) : null}
             </span>
-            <span>
+            <span className="min-w-0 truncate whitespace-nowrap" title={`${t("clusters.card.namespacesLabel")} ${metricValue(cluster.namespaceCount, formatNumber)}`}>
               {t("clusters.card.namespacesLabel")}{" "}
               <b className="font-mono text-foreground">{metricValue(cluster.namespaceCount, formatNumber)}</b>
             </span>

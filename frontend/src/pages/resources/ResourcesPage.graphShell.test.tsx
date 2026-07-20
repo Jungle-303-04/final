@@ -37,7 +37,7 @@ describe("ResourcesPage S4 physical topology", () => {
     expect(screen.getByRole("article", { name: "Server worker-b" })).toBeTruthy();
     const physicalGrid = document.querySelector('[data-slot="physical-topology-grid"]');
     expect(physicalGrid?.className)
-      .toContain("grid-cols-[repeat(auto-fit,minmax(min(100%,320px),1fr))]");
+      .toContain("grid-cols-[repeat(auto-fit,minmax(min(100%,18rem),1fr))]");
     expect(document.querySelector(".react-flow")).toBeNull();
     expect(screen.getByRole("article", { name: "Server worker-a" }).className)
       .toContain("w-full");

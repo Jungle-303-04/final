@@ -82,7 +82,7 @@ function DeploySummary({ overview }: { overview: DeployOverview }) {
         value={summary?.outOfSync ?? null}
       />
       <DeploySummaryMetric
-        label={t("workflows.target.repository")}
+        label={t("applications.repository")}
         value={summary?.repositories ?? null}
       />
     </div>

@@ -17,6 +17,7 @@ import { namespaceSelector, normalizeNamespaceRefs } from "../../features/filter
 import { useI18n } from "../../shared/i18n";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
+import { ProductSurfaceTitle } from "../../shared/ui/ProductSurfaceTitle";
 import { Surface, SurfaceSection } from "../../shared/ui/Surface";
 import { Alert, AlertDescription, AlertTitle } from "../../shared/ui/primitives/alert";
 import { Badge } from "../../shared/ui/primitives/badge";
@@ -65,12 +66,9 @@ function ChecksReadyPage({
   return (
     <ProductPageFrame className="gap-4">
       <header className="flex min-w-0 items-center gap-2.5">
-        <ShieldCheck aria-hidden="true" className="size-[1.0625rem] shrink-0 text-primary" />
-        <div className="min-w-0">
-          <h1 className="truncate font-heading text-heading font-extrabold tracking-[-0.02em]">{copy.title}</h1>
-          <p className="sr-only">{copy.description}</p>
-        </div>
-        <Button aria-label={copy.settingsAction} className="ml-auto shrink-0" onClick={() => setSettingsOpen(true)} size="sm" variant="outline">
+        <ProductSurfaceTitle icon={ShieldCheck} title={copy.title} />
+        <p className="sr-only">{copy.description}</p>
+        <Button aria-label={copy.settingsAction} className="ml-auto shrink-0 whitespace-nowrap" onClick={() => setSettingsOpen(true)} size="sm" variant="outline">
           <Settings aria-hidden="true" />{copy.settingsAction}
         </Button>
       </header>

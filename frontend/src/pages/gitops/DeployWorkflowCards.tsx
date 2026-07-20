@@ -44,6 +44,7 @@ export function WorkflowPreview({
 }) {
   const { formatDate, t } = useI18n();
   const repositories = repositoriesForPlan(plan, applications);
+  const branches = branchesForPlan(plan, applications);
   return (
     <Surface
       aria-label={t("workflows.plan.open", { name: plan.name })}
@@ -55,6 +56,11 @@ export function WorkflowPreview({
         <span className="min-w-0 truncate font-mono text-caption-2 text-caption-foreground">
           {repositories.length ? repositories.join(" · ") : t("common.value.unavailable")}
         </span>
+        {branches ? (
+          <span className="min-w-0 max-w-48 truncate font-mono text-caption-2 text-caption-foreground">
+            {t("workflows.detail.branch")} · {branches}
+          </span>
+        ) : null}
         <span className="ml-auto flex shrink-0 items-center gap-2">
           {plan.updated_at ? (
             <span className="font-mono text-caption text-caption-foreground">
@@ -223,4 +229,11 @@ function repositoriesForPlan(plan: ReleasePlan, applications: ReleaseApplication
   return [...new Set(plan.steps
     .map((step) => applications.find((application) => application.id === step.application_id)?.repository || "")
     .filter(Boolean))];
+}
+
+function branchesForPlan(plan: ReleasePlan, applications: ReleaseApplication[]): string | null {
+  const branches = [...new Set(plan.steps
+    .map((step) => applications.find((application) => application.id === step.application_id)?.branch.trim() || "")
+    .filter(Boolean))];
+  return branches.length ? branches.join(" · ") : null;
 }

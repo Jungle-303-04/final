@@ -163,7 +163,7 @@ describe("HomePage three-layer board", () => {
     expect(screen.queryByRole("link", { name: "cluster-1 리소스 열기" })).toBeNull();
   });
 
-  it("routes the incident-backed critical count to the same scoped issue surface", async () => {
+  it("routes the incident-backed critical count to the scoped issue surface", async () => {
     const listResourcePage = vi.fn().mockResolvedValue(criticalResourcePage(17, "partial", 5));
     renderHome(
       homePort(),
