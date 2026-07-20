@@ -112,7 +112,7 @@ v1과 동일하되 두 항목을 추가한다.
    쓴다. `setQueryData` 키는 `useQuery` 키와 상수로 공유한다(L1·L2 재발 금지).**
 6. 레이아웃 이동 금지(고정 track/aspect-ratio), reduced-motion·키보드 focus 지원.
 7. `/console/*`은 리다이렉트 외 코드 금지.
-8. 매 커밋 `tsc --noEmit` + `scripts/frontend-check.sh` 통과, 한국어 conventional commit.
+8. 매 커밋 `make gate-fast` 통과, 한국어 conventional commit.
 
 ## 4. 실행 계획
 
@@ -188,9 +188,9 @@ v1과 동일하되 두 항목을 추가한다.
 
 - D3: `ReleaseFlowView.css` 삭제, `ui/` 프리미티브·토큰 클래스로 이관, 3폭 스크린샷 회귀.
 - D9: `@nivo/treemap` 제거.
-- `frontend-check.sh` 강화: 예외 0 적용 + 의심 리터럴(임의 수치 폴백, `\|\| 0` 패턴) grep 게이트
+- `frontend/scripts/product-design-guard.mjs` 강화: 예외 0 적용 + 의심 리터럴(임의 수치 폴백, `\|\| 0` 패턴) grep 게이트
   + `setQueriesData` prefix 매칭 사용 금지 검사.
-- 게이트: `frontend-check.sh` 예외 0 통과.
+- 게이트: `cd frontend && npm run check:design` 예외 0 통과.
 
 ### 6단계 — 누락 기능 (1~2일)
 

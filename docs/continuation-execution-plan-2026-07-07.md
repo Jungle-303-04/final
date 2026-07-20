@@ -290,7 +290,7 @@
   - Bruno `07-ai/05-delete-conversation.bru`, API map, gateway/ai spec에 DELETE 계약을 추가했다.
 - 검증:
   - `uv run pytest tests/test_docs_index.py tests/test_bruno_collection.py tests/test_ai_conversation.py -q` → 27 passed.
-  - `bash scripts/frontend-check.sh` → typecheck, eslint, unit test, production build OK.
+  - 당시 프론트 전체 검사 → typecheck, eslint, unit test, production build OK. 현재 동등 명령은 `make gate-frontend`다.
   - `make check` → 688 passed, 3 skipped; manifest check 포함.
   - `make manifest-check` → management 53 objects, target 16 objects.
 
