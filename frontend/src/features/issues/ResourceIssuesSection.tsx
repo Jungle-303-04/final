@@ -1,4 +1,5 @@
 import { ChevronDown, Clock3, TriangleAlert } from "lucide-react";
+import { Link } from "react-router-dom";
 
 import { cn } from "@/shared/lib/cn";
 import { useI18n } from "../../shared/i18n";
@@ -14,6 +15,7 @@ import {
   sortIssuesForQueue,
 } from "./issuePresentation";
 import { humanizeFilterValue } from "../../shared/presentation/humanizeFilterValue";
+import { serializeRouteSearch } from "../filters/routeSearchAdapter";
 
 export function ResourceIssuesSection({ frame }: { frame: ResourceIssuesFrame }) {
   const { formatDate, t } = useI18n();
@@ -97,13 +99,16 @@ export function ResourceIssuesSection({ frame }: { frame: ResourceIssuesFrame })
                 <p className="text-xs text-muted-foreground">
                   {t("resources.detail.issues.timingUnavailable")}
                 </p>
-                {issue.clusterId ? (
-                  <a
+                {issue.clusterId && issue.incidentId ? (
+                  <Link
                     className="w-fit text-xs font-medium text-primary underline-offset-4 hover:underline"
-                    href={`/issues?clusters=${encodeURIComponent(issue.clusterId)}`}
+                    to={`/issues${serializeRouteSearch([
+                      ["clusters", issue.clusterId],
+                      ["detail", issue.incidentId],
+                    ])}`}
                   >
                     {t("resources.detail.issues.open")}
-                  </a>
+                  </Link>
                 ) : null}
               </div>
             </details>

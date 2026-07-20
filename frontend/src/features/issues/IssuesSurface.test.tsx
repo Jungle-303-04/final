@@ -18,7 +18,7 @@ describe("IssuesSurface", () => {
       <IssuesSurface
         clusterId="cluster-1"
         copy={COPY}
-        initialIssueId="issue:workspace-1/correlation-1"
+        initialIssueId="incident-1"
         port={issuesPort()}
         recoverySelection={{ state: "enabled" }}
       />,
@@ -27,6 +27,35 @@ describe("IssuesSurface", () => {
     const issue = await screen.findByRole("button", { name: "Elevated response latency" });
     await screen.findByRole("region", { name: "Incident detail" });
     expect(issue.getAttribute("aria-current")).toBe("true");
+  });
+
+  it("polls selected incident detail after recovery and renders the terminal server status", async () => {
+    const baseline = issuesPort();
+    const initialDetail = await baseline.loadIssue("incident-1", "cluster-1");
+    const loadIssue = vi.fn()
+      .mockResolvedValueOnce(initialDetail)
+      .mockResolvedValue({
+        ...initialDetail,
+        status: "command_completed",
+        currentSubject: "command.completed",
+      });
+    const port = issuesPort({ loadIssue });
+    renderSurface(
+      <IssuesSurface
+        clusterId="cluster-1"
+        copy={COPY}
+        port={port}
+        recoverySelection={{ state: "enabled" }}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Elevated response latency" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Increase memory limit" }));
+
+    await waitFor(() => expect(loadIssue).toHaveBeenCalledTimes(2));
+    expect((await screen.findAllByText(COPY.recoveryProgressCompletion)).length)
+      .toBeGreaterThan(0);
+    expect(screen.getByText("100%")).toBeTruthy();
   });
 
   it("refreshes the incident queue on the exact issues audit cadence only while visible", async () => {

@@ -12,8 +12,8 @@ import {
   isAbortError,
   loadSection,
   portFailure,
-  recoveryProgressIsTerminalStatus,
 } from "./issuesSurfaceState";
+import { recoveryStatusIsTerminal } from "./issueRecoveryProgress";
 
 export interface IssueListRecord {
   scope: string | null;
@@ -86,7 +86,9 @@ export function useIssuesSurfaceEffects({
           : `${clusterId ?? ""}\u0000${initialIssueId}`;
         const initialIssue = initialIssueId === null
           ? undefined
-          : data.items.find((issue) => issue.id === initialIssueId);
+          : data.items.find((issue) => (
+              issue.id === initialIssueId || issue.incidentId === initialIssueId
+            ));
         if (
           hydrationKey !== null
           && initialIssue !== undefined
@@ -206,13 +208,16 @@ export function useIssuesSurfaceEffects({
       selectedCorrelationId === null || selectedId === null || selectedStatus === null ||
       panels.receipt === null
     ) return;
-    if (recoveryProgressIsTerminalStatus(selectedStatus)) return;
+    if (recoveryStatusIsTerminal(selectedStatus)) return;
     const controller = new AbortController();
     const refreshProgress = async () => {
       try {
-        const [recoveryResult, auditResult, policyResult] = await Promise.allSettled([
+        const [recoveryResult, auditResult, detailResult, policyResult] = await Promise.allSettled([
           port.loadRecoveryPlan(selectedCorrelationId, controller.signal),
           port.loadAuditTimeline(selectedCorrelationId, {}, controller.signal),
+          selectedIncidentId === null
+            ? Promise.resolve(null)
+            : port.loadIssue(selectedIncidentId, clusterId, controller.signal),
           port.loadIssuesAuditRefreshPolicy(controller.signal),
         ]);
         if (controller.signal.aborted) return;
@@ -232,11 +237,34 @@ export function useIssuesSurfaceEffects({
                 loading: false,
                 failure: portFailure(recoveryResult.reason),
               },
+          detail: detailResult.status === "fulfilled" && detailResult.value !== null
+            ? { data: detailResult.value, loading: false, failure: null }
+            : selectedIncidentId === null
+              ? current.detail
+              : {
+                  data: current.detail.data,
+                  loading: false,
+                  failure: detailResult.status === "rejected"
+                    ? portFailure(detailResult.reason)
+                    : current.detail.failure,
+                },
         }));
+        if (detailResult.status === "fulfilled" && detailResult.value !== null) {
+          const detail = detailResult.value;
+          setSelectedRecord((current) => (
+            current?.scope === clusterId && current.issue.id === selectedId
+              ? { scope: clusterId, issue: { ...current.issue, ...detail } }
+              : current
+          ));
+        }
         setLastRefreshedAt(Date.now());
         if (
           policyResult.status === "fulfilled" &&
-          (recoveryResult.status === "fulfilled" || auditResult.status === "fulfilled")
+          (
+            recoveryResult.status === "fulfilled" ||
+            auditResult.status === "fulfilled" ||
+            detailResult.status === "fulfilled"
+          )
         ) {
           refreshController.acceptSuccess(policyResult.value);
         } else {
@@ -251,14 +279,17 @@ export function useIssuesSurfaceEffects({
     void refreshProgress();
     return () => controller.abort();
   }, [
+    clusterId,
     panels.receipt,
     port,
     refreshController,
     revision,
     selectedCorrelationId,
     selectedId,
+    selectedIncidentId,
     selectedStatus,
     setLastRefreshedAt,
     setPanels,
+    setSelectedRecord,
   ]);
 }

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
+import { MemoryRouter, useLocation } from "react-router-dom";
 
 import { I18nProvider } from "../../shared/i18n";
 import type { ResourceIssuesFrame } from "../../pages/resources/useResourceIssuesDataFrame";
@@ -12,7 +13,9 @@ describe("ResourceIssuesSection", () => {
   it("renders server-ranked issues as collapsed accessible rows", () => {
     render(
       <I18nProvider navigatorLanguage="en-US" storage={null}>
-        <ResourceIssuesSection frame={READY_FRAME} />
+        <MemoryRouter>
+          <ResourceIssuesSection frame={READY_FRAME} />
+        </MemoryRouter>
       </I18nProvider>,
     );
 
@@ -24,7 +27,30 @@ describe("ResourceIssuesSection", () => {
       .toBeTruthy();
     expect(screen.queryByText("checkout-api")).toBeNull();
   });
+
+  it("opens the selected incident in the scoped issues SPA route", () => {
+    render(
+      <I18nProvider navigatorLanguage="en-US" storage={null}>
+        <MemoryRouter initialEntries={["/resources?clusters=cluster-1"]}>
+          <ResourceIssuesSection frame={READY_FRAME} />
+          <LocationProbe />
+        </MemoryRouter>
+      </I18nProvider>,
+    );
+
+    const link = screen.getByRole("link");
+    expect(link.getAttribute("href"))
+      .toBe("/issues?clusters=cluster-1&detail=incident-1");
+    fireEvent.click(link);
+    expect(screen.getByTestId("location").textContent)
+      .toBe("/issues?clusters=cluster-1&detail=incident-1");
+  });
 });
+
+function LocationProbe() {
+  const location = useLocation();
+  return <output data-testid="location">{location.pathname}{location.search}</output>;
+}
 
 const READY_FRAME: ResourceIssuesFrame = {
   phase: "ready",
