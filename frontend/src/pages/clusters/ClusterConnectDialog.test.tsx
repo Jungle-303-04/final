@@ -147,7 +147,7 @@ describe("ClusterConnectDialog", () => {
 
     expect(await screen.findByText("Cluster connected", {}, { timeout: 4_000 })).toBeTruthy();
     expect(screen.getByRole("link", { name: "View cluster" }).getAttribute("href"))
-      .toBe("/resources?clusters=production-a1b2");
+      .toBe("/resources?clusters=production-a1b2&view=map");
     expect(onConnected).toHaveBeenCalledOnce();
   });
 
@@ -267,7 +267,7 @@ describe("ClusterConnectDialog", () => {
     expect(screen.getByTestId("cluster-notification-probe").textContent)
       .toBe("cluster-connected:production-a1b2");
     expect(screen.getByRole("link", { name: "View cluster" }).getAttribute("href"))
-      .toBe("/resources?clusters=production-a1b2");
+      .toBe("/resources?clusters=production-a1b2&view=map");
   });
 
 });
