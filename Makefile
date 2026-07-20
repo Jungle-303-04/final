@@ -24,7 +24,7 @@ export REFERENCE_UI_BASE_REVISION
 export REFERENCE_UPSTREAM_GIT
 export REFERENCE_UPSTREAM_REPOSITORY
 
-.PHONY: help setup setup-hooks env local-test-env frontend-live local-up local-smoke sync hooks doctor lint format test manifest-check product-brand-boundary-check reference-ledger reference-ledger-check reference-feature-ledger reference-feature-ledger-check reference-upstream-prepare reference-ui-delta-ledger reference-ui-delta-ledger-check reference-ui-delta-rebaseline-check reference-feature-parity-check reference-feature-web-parity-check reference-feature-post-parity-check release-governance release-governance-web release-governance-web-patch gate gate-backend gate-contract-manifest gate-deploy-smoke-backend gate-deploy-smoke-frontend gate-frontend gate-frontend-changed gate-fast events event-bus-equivalence crash-test check build-image up install-telemetry down status smoke demo scale kill-pod external-instances external-kubeconfig cluster-interactions aws-up aws-down clean
+.PHONY: help setup setup-hooks env local-test-env frontend-live local-up local-smoke sync hooks doctor lint format test manifest-check product-brand-boundary-check reference-ledger reference-ledger-check reference-feature-ledger reference-feature-ledger-check reference-upstream-prepare reference-ui-delta-ledger reference-ui-delta-ledger-check reference-ui-delta-rebaseline-check reference-feature-parity-check reference-feature-web-parity-check reference-feature-post-parity-check mirror-parity-check release-governance release-governance-web release-governance-web-patch gate gate-backend gate-contract-manifest gate-deploy-smoke-backend gate-deploy-smoke-frontend gate-frontend gate-frontend-changed gate-fast events event-bus-equivalence crash-test check build-image up install-telemetry down status smoke demo scale kill-pod external-instances external-kubeconfig cluster-interactions aws-up aws-down clean
 
 help: ## 사용 가능한 명령어 출력
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make <target>\n\nTargets:\n"} /^[a-zA-Z0-9_-]+:.*##/ {printf "  %-14s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -127,6 +127,9 @@ reference-feature-web-parity-check: reference-ui-delta-rebaseline-check ## 웹 �
 
 reference-feature-post-parity-check: reference-ui-delta-rebaseline-check ## 기준 동등성 이후 RCA·AI 확장 기능 완료 여부 추적
 	node scripts/reference-feature-ledger.mjs --source docs/spec/frontend/reference-feature-inventory.md --revision "$(REFERENCE_REVISION)" --output docs/migration/reference-feature-ledger.json --contracts-output src/packages/contracts/reference_feature_catalog.json --port-map docs/migration/reference-feature-port-map.json --check --require-complete --surface web --phase post_parity
+
+mirror-parity-check: ## 데모↔dev↔백엔드 계약 3자 미러 정합 검증
+	node scripts/mirror-parity-check.mjs
 
 release-governance: reference-ledger-check reference-ui-delta-rebaseline-check reference-feature-parity-check ## 출하 차단용 최신 원본 동등성 gate
 
