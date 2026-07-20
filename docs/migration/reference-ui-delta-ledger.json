@@ -41,7 +41,7 @@
           "opsiaPort": {
             "destinations": [
               "frontend/package.json",
-              "frontend/src/app/buildBaseline.test.ts"
+              "frontend/src/ProductApp.test.tsx"
             ],
             "requiredBackendContracts": [
               "packages.contracts.parity"
@@ -65,7 +65,7 @@
           "opsiaPort": {
             "destinations": [
               "frontend/package.json",
-              "frontend/src/app/buildBaseline.test.ts"
+              "frontend/src/ProductApp.test.tsx"
             ],
             "requiredBackendContracts": [
               "packages.contracts.parity"
@@ -9198,7 +9198,7 @@
           "opsiaPort": {
             "destinations": [
               "frontend/index.html",
-              "frontend/src/app/buildBaseline.test.ts"
+              "frontend/src/ProductApp.test.tsx"
             ],
             "requiredBackendContracts": [
               "packages.contracts.parity"
@@ -9238,7 +9238,7 @@
           "opsiaPort": {
             "destinations": [
               "frontend/package.json",
-              "frontend/src/app/buildBaseline.test.ts"
+              "frontend/src/ProductApp.test.tsx"
             ],
             "requiredBackendContracts": [
               "packages.contracts.parity"
@@ -9262,7 +9262,7 @@
           "opsiaPort": {
             "destinations": [
               "frontend/package.json",
-              "frontend/src/app/buildBaseline.test.ts"
+              "frontend/src/ProductApp.test.tsx"
             ],
             "requiredBackendContracts": [
               "packages.contracts.parity"
@@ -9286,7 +9286,7 @@
           "opsiaPort": {
             "destinations": [
               "frontend/package.json",
-              "frontend/src/app/buildBaseline.test.ts"
+              "frontend/src/ProductApp.test.tsx"
             ],
             "requiredBackendContracts": [
               "packages.contracts.parity"
@@ -9326,7 +9326,7 @@
           "opsiaPort": {
             "destinations": [
               "frontend/package.json",
-              "frontend/src/app/buildBaseline.test.ts"
+              "frontend/src/ProductApp.test.tsx"
             ],
             "requiredBackendContracts": [
               "packages.contracts.parity"
@@ -16670,7 +16670,7 @@
           "opsiaPort": {
             "destinations": [
               "frontend/src/ProductApp.tsx",
-              "frontend/src/app/buildBaseline.test.ts"
+              "frontend/src/ProductApp.test.tsx"
             ],
             "requiredBackendContracts": [
               "packages.contracts.parity"
@@ -16710,7 +16710,7 @@
           "opsiaPort": {
             "destinations": [
               "frontend/package.json",
-              "frontend/src/app/buildBaseline.test.ts",
+              "frontend/src/ProductApp.test.tsx",
               "frontend/src/app/ProductRouter.tsx"
             ],
             "requiredBackendContracts": [
@@ -16872,7 +16872,7 @@
           "opsiaPort": {
             "destinations": [
               "frontend/src/ProductApp.tsx",
-              "frontend/src/app/buildBaseline.test.ts"
+              "frontend/src/ProductApp.test.tsx"
             ],
             "requiredBackendContracts": [
               "packages.contracts.parity"

@@ -324,8 +324,8 @@
       "rationale": "The product-owned provider asset registry and copied bytes remain pinned to immutable upstream source hashes without importing the isolated source runtime."
     },
     "build.entrypoint.baseline": {
-      "destination": "frontend/src/app/buildBaseline.test.ts",
-      "rationale": "The standalone product package and document root retain an explicit compatibility baseline without importing or publishing the isolated upstream runtime."
+      "destination": "frontend/src/ProductApp.test.tsx",
+      "rationale": "The product entrypoint contract renders the one supported application composition while npm ci, typecheck, and build validate its package and document bootstrap."
     },
     "helm.release-list.scope": {
       "destination": "frontend/src/pages/helm/HelmPage.test.tsx",
@@ -3098,7 +3098,7 @@
           "opsiaPort": {
             "destinations": [
               "frontend/package.json",
-              "frontend/src/app/buildBaseline.test.ts"
+              "frontend/src/ProductApp.test.tsx"
             ],
             "requiredBackendContracts": [
               "packages.contracts.parity"
@@ -3122,7 +3122,7 @@
           "opsiaPort": {
             "destinations": [
               "frontend/package.json",
-              "frontend/src/app/buildBaseline.test.ts"
+              "frontend/src/ProductApp.test.tsx"
             ],
             "requiredBackendContracts": [
               "packages.contracts.parity"
@@ -3772,7 +3772,7 @@
           "opsiaPort": {
             "destinations": [
               "frontend/index.html",
-              "frontend/src/app/buildBaseline.test.ts"
+              "frontend/src/ProductApp.test.tsx"
             ],
             "requiredBackendContracts": [
               "packages.contracts.parity"
@@ -3801,7 +3801,7 @@
           "opsiaPort": {
             "destinations": [
               "frontend/package.json",
-              "frontend/src/app/buildBaseline.test.ts"
+              "frontend/src/ProductApp.test.tsx"
             ],
             "requiredBackendContracts": [
               "packages.contracts.parity"
@@ -3825,7 +3825,7 @@
           "opsiaPort": {
             "destinations": [
               "frontend/package.json",
-              "frontend/src/app/buildBaseline.test.ts"
+              "frontend/src/ProductApp.test.tsx"
             ],
             "requiredBackendContracts": [
               "packages.contracts.parity"
@@ -3849,7 +3849,7 @@
           "opsiaPort": {
             "destinations": [
               "frontend/package.json",
-              "frontend/src/app/buildBaseline.test.ts"
+              "frontend/src/ProductApp.test.tsx"
             ],
             "requiredBackendContracts": [
               "packages.contracts.parity"
@@ -9964,7 +9964,7 @@
           "opsiaPort": {
             "destinations": [
               "frontend/package.json",
-              "frontend/src/app/buildBaseline.test.ts"
+              "frontend/src/ProductApp.test.tsx"
             ],
             "requiredBackendContracts": [
               "packages.contracts.parity"
@@ -9993,7 +9993,7 @@
           "opsiaPort": {
             "destinations": [
               "frontend/package.json",
-              "frontend/src/app/buildBaseline.test.ts",
+              "frontend/src/ProductApp.test.tsx",
               "frontend/src/app/ProductRouter.tsx"
             ],
             "requiredBackendContracts": [
@@ -10133,7 +10133,7 @@
           "opsiaPort": {
             "destinations": [
               "frontend/src/ProductApp.tsx",
-              "frontend/src/app/buildBaseline.test.ts"
+              "frontend/src/ProductApp.test.tsx"
             ],
             "requiredBackendContracts": [
               "packages.contracts.parity"
@@ -13947,7 +13947,7 @@
           "opsiaPort": {
             "destinations": [
               "frontend/src/ProductApp.tsx",
-              "frontend/src/app/buildBaseline.test.ts"
+              "frontend/src/ProductApp.test.tsx"
             ],
             "requiredBackendContracts": [
               "packages.contracts.parity"
