@@ -1,6 +1,5 @@
 import { ChevronDown, ChevronRight, Info } from "lucide-react";
-import { type ReactNode, useId, useState } from "react";
-import { Link } from "react-router-dom";
+import { type MouseEvent, type ReactNode, useId, useState } from "react";
 
 import { cn } from "@/shared/lib/cn";
 import {
@@ -98,14 +97,15 @@ export function WidgetFrame({
         <span className="ml-auto flex shrink-0 items-center gap-1">
           {headerActions}
           {deepLink ? (
-            <Link
+            <a
               aria-label={deepLink.label}
               className="flex items-center gap-0.5 rounded-md px-1 py-0.5 text-caption-2 font-bold text-primary outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/60"
-              to={deepLink.href}
+              href={deepLink.href}
+              onClick={(event) => openProductHref(event, deepLink.href)}
             >
               {deepLink.label}
               <ChevronRight aria-hidden="true" className="size-3" />
-            </Link>
+            </a>
           ) : null}
           {collapsible ? (
             <button
@@ -144,4 +144,11 @@ export function WidgetFrame({
       </div>
     </section>
   );
+}
+
+function openProductHref(event: MouseEvent<HTMLAnchorElement>, href: string): void {
+  if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+  event.preventDefault();
+  window.history.pushState(null, "", href);
+  window.dispatchEvent(new PopStateEvent("popstate"));
 }
