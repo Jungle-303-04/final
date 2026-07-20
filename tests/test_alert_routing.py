@@ -31,7 +31,11 @@ def load_alert_worker():
     )
 
 
-def alert(severity: str = "critical") -> AlertRequestedBody:
+def alert(
+    severity: str = "critical",
+    *,
+    channel_ids: list[str] | None = None,
+) -> AlertRequestedBody:
     return AlertRequestedBody(
         cluster_id="cluster-1",
         namespace="sandbox",
@@ -39,6 +43,7 @@ def alert(severity: str = "critical") -> AlertRequestedBody:
         message="pod crash looping",
         reason="restart threshold",
         workspace_id="workspace-1",
+        channel_ids=channel_ids,
     )
 
 
@@ -103,6 +108,67 @@ def test_worker_routes_to_matching_channels(monkeypatch) -> None:
     assert db.requested == ["workspace-1"]
     channels = {body.channel for body in bodies}
     assert channels == {"ops-critical", "ops-all"}
+
+
+def test_worker_routes_rule_transition_only_to_selected_channels(monkeypatch) -> None:
+    module = load_alert_worker()
+    sent: list[str] = []
+
+    async def stub_dispatch(alert, channel):
+        sent.append(str(channel["channel_id"]))
+        return module.dispatched_body(alert, channel=str(channel["name"]), mode="webhook")
+
+    monkeypatch.setattr(module, "dispatch_to_channel", stub_dispatch)
+    db = StubWorkerDb(
+        [
+            {
+                "channel_id": "chan-primary",
+                "name": "primary",
+                "url": "http://hook-1",
+                "min_severity": "info",
+            },
+            {
+                "channel_id": "chan-secondary",
+                "name": "secondary",
+                "url": "http://hook-2",
+                "min_severity": "info",
+            },
+        ]
+    )
+
+    bodies = run_handler(
+        module,
+        alert("critical", channel_ids=["chan-secondary"]),
+        db,
+    )
+
+    assert sent == ["chan-secondary"]
+    assert [body.channel for body in bodies] == ["secondary"]
+
+
+def test_worker_rejects_explicit_rule_channels_when_none_are_available() -> None:
+    module = load_alert_worker()
+    db = StubWorkerDb(
+        [
+            {
+                "channel_id": "chan-disabled",
+                "name": "disabled",
+                "url": "http://hook",
+                "min_severity": "info",
+                "enabled": False,
+            }
+        ]
+    )
+
+    bodies = run_handler(
+        module,
+        alert("critical", channel_ids=["chan-disabled"]),
+        db,
+    )
+
+    assert len(bodies) == 1
+    assert type(bodies[0]).__name__ == "AlertRejectedBody"
+    assert bodies[0].reason == module.ALERT_SELECTED_CHANNELS_UNAVAILABLE_REASON
 
 
 def test_worker_accepts_async_channel_store(monkeypatch) -> None:

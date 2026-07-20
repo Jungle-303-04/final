@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Callable
+from typing import Any
 
 from sqlalchemy import case, delete, func, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -14,6 +16,7 @@ from packages.storage.engine import DatabaseConnection, iso_or_none
 # severity 순위 — 명확한 단일 기준. 미지 값은 warning 으로 취급(과소 통지 방지 절충).
 SEVERITY_RANK: dict[str, int] = {"info": 0, "warning": 1, "critical": 2}
 DEFAULT_SEVERITY_RANK = SEVERITY_RANK["warning"]
+AlertTransitionStager = Callable[[Any, JsonObject], None]
 
 
 def severity_rank(severity: str) -> int:
@@ -416,6 +419,8 @@ class AlertRuleRepository(DatabaseConnection):
         self,
         state: JsonObject,
         event: JsonObject,
+        *,
+        stage_transition: AlertTransitionStager | None = None,
     ) -> tuple[JsonObject, bool]:
         state_table = AlertRuleTargetState.__table__
         event_table = AlertEvent.__table__
@@ -480,7 +485,13 @@ class AlertRuleRepository(DatabaseConnection):
                         updated_at=func.now(),
                     )
                 )
-        return serialize_alert_event(dict(saved_event)), created
+            serialized = serialize_alert_event(dict(saved_event))
+            if created and stage_transition is not None:
+                # The rule state and delivery outbox must cross the commit boundary
+                # together.  A staging failure raises out of this UoW so the next
+                # evaluator cycle can retry the same transition.
+                stage_transition(conn, serialized)
+        return serialized, created
 
     def refresh_alert_rule_event(
         self,
@@ -515,6 +526,7 @@ class AlertRuleRepository(DatabaseConnection):
         observed_value: float,
         evidence: list[JsonObject],
         resolved_at: object,
+        stage_transition: AlertTransitionStager | None = None,
     ) -> JsonObject | None:
         event_table = AlertEvent.__table__
         state_table = AlertRuleTargetState.__table__
@@ -557,4 +569,9 @@ class AlertRuleRepository(DatabaseConnection):
                     updated_at=func.now(),
                 )
             )
-        return serialize_alert_event(dict(row))
+            serialized = serialize_alert_event(dict(row))
+            if stage_transition is not None:
+                # Resolution delivery is just as durable as firing delivery: if
+                # outbox staging fails, keep the event active and retry later.
+                stage_transition(conn, serialized)
+        return serialized

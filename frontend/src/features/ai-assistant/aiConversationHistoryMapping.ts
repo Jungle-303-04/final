@@ -95,11 +95,19 @@ function parseMessage(value: Record<string, unknown>): AiStoredConversationMessa
   if (role !== "assistant" && role !== "user") {
     throw new TypeError("AI conversation message role is invalid");
   }
+  const metadata = isRecord(value.metadata) ? value.metadata : {};
+  const failureCode = metadata.failure_code === "rate_limited"
+    || metadata.failure_code === "unavailable"
+    ? metadata.failure_code
+    : null;
   return {
     id: requiredString(value, "message_id"),
     role,
     content: requiredString(value, "content"),
     createdAt: requiredTimestamp(value, "created_at"),
+    ...(failureCode === null
+      ? {}
+      : { failure: { code: failureCode, retryable: metadata.retryable === true } }),
   };
 }
 

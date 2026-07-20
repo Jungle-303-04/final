@@ -164,6 +164,8 @@ export interface SafePrResult extends GeneratedManifest {
   patch_sha256: string;
 }
 
+export type ApprovalDecision = "grant" | "reject";
+
 export type ReleaseRunAction =
   | "advance"
   | "pause"

@@ -32,6 +32,7 @@ export function endpointFixture(
     previewPlan: unsupported,
     checkReadiness: unsupported,
     startPlan: unsupported,
+    decideApproval: unsupported,
     renderManifest: unsupported,
     submitSafePr: unsupported,
     runAction: unsupported,
@@ -94,6 +95,65 @@ export function detailFixture() {
       enabled: false,
       operation_blocked: true,
       reason_code: "operation_in_progress",
+    }],
+  };
+}
+
+export function mappedDetailFixture() {
+  return {
+    applicationId: "app-storefront",
+    name: "storefront",
+    resource: {
+      apiGroup: "opsia.io",
+      version: "v1",
+      kind: "GitOpsApplication",
+      namespace: "storefront",
+      name: "storefront",
+      uid: "app-storefront",
+    },
+    scope: {
+      availability: "available",
+      scope: {
+        workspaceId: "workspace-a",
+        clusterId: "cluster-a",
+        namespaces: ["storefront"],
+        freshness: "partial",
+      },
+      reasonCode: null,
+    },
+    source: {
+      repositoryRef: "opsia/storefront",
+      defaultBranch: "main",
+      manifestPath: "deploy/production",
+    },
+    desiredLiveDiff: {
+      availability: "unavailable",
+      sourceRevision: "abc123",
+      liveObservationRevision: null,
+      reasonCode: "live_observation_not_integrated",
+    },
+    operation: {
+      availability: "partial",
+      inProgress: true,
+      workflowRunId: "run-1",
+      status: "applying",
+      observedAt: "2026-07-16T09:00:00Z",
+      reasonCode: "provider_operation_not_integrated",
+    },
+    capabilities: [{
+      action: "refresh",
+      authorization: "allowed",
+      availability: "unavailable",
+      enabled: false,
+      operationBlocked: false,
+      reasonCode: "provider_refresh_not_integrated",
+    }, {
+      action: "sync",
+      authorization: "allowed",
+      availability: "unavailable",
+      enabled: false,
+      operationBlocked: true,
+      reasonCode: "operation_in_progress",
     }],
   };
 }

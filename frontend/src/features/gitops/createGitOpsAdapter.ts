@@ -113,6 +113,9 @@ export function createGitOpsAdapter(endpoints: GitOpsEndpointDependencies): GitO
     previewPlan: (plan, signal) => withPortFailure(() => endpoints.previewPlan(plan, signal)),
     checkReadiness: (plan, signal) => withPortFailure(() => endpoints.checkReadiness(plan, signal)),
     startPlan: (plan, signal) => withPortFailure(() => endpoints.startPlan(plan, signal)),
+    decideApproval: (approvalId, decision, reason, signal) => withPortFailure(async () => {
+      await endpoints.decideApproval(approvalId, decision, reason, signal);
+    }),
     renderManifest: (plan, stepIndex, signal) =>
       withPortFailure(() => endpoints.renderManifest(plan, stepIndex, signal)),
     submitSafePr: (plan, stepIndex, signal) =>

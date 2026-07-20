@@ -1,4 +1,5 @@
 import { apiRequest, type ApiPath } from "./client";
+import { grantApproval, rejectApproval } from "./approvals";
 import { connectApplication, listApplications } from "./applications";
 import { listClusters } from "./clusters";
 import {
@@ -79,6 +80,14 @@ export function createReleaseFlowClient() {
       );
       return response.run;
     },
+    decideApproval: (
+      approvalId: string,
+      decision: "grant" | "reject",
+      reason?: string,
+      signal?: AbortSignal,
+    ) => decision === "grant"
+      ? grantApproval(approvalId, { reason, signal })
+      : rejectApproval(approvalId, { reason, signal }),
     renderManifest: (plan: ReleasePlanApi, stepIndex: number, signal?: AbortSignal) =>
       apiRequest(
         "/api/release-plans/render-manifest",
@@ -119,6 +128,7 @@ function jsonRequest(method: string, body: unknown, signal?: AbortSignal): Reque
 
 function releasePlanPayload(plan: ReleasePlanApi) {
   return {
+    plan_id: plan.plan_id,
     name: plan.name,
     description: plan.description,
     status: plan.status,

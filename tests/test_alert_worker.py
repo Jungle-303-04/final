@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from contextlib import contextmanager
 
 import httpx
 from conftest import load_service, run_handler, subjects_of
@@ -223,3 +224,94 @@ def test_default_rule_evaluation_interval_is_five_seconds() -> None:
     alert = load_service("alert/alert-worker")
 
     assert alert.DEFAULT_ALERT_EVALUATION_INTERVAL_SECONDS == "5"
+
+
+def test_rule_transition_notifier_stages_selected_channel_alert_in_outbox() -> None:
+    alert = load_service("alert/alert-worker")
+
+    class Store:
+        def __init__(self) -> None:
+            self.recorded = []
+            self.staged = []
+
+        @contextmanager
+        def unit_of_work(self):
+            yield object()
+
+        def record_event(self, event) -> None:
+            self.recorded.append(event)
+
+        def stage_events(self, _connection, events) -> None:
+            self.staged.extend(events)
+
+    store = Store()
+    transition = {
+        "event_id": "ale-1",
+        "workspace_id": "workspace-1",
+        "rule_id": "alr-1",
+        "rule_name": "파드 CPU 과부하",
+        "severity": "high",
+        "status": "firing",
+        "transition": "firing",
+        "channel_ids": ["chan-ops"],
+        "subject": {
+            "cluster": "cluster-1",
+            "namespace": "shop",
+            "kind": "Pod",
+            "name": "checkout-0",
+        },
+    }
+
+    asyncio.run(alert.AlertRuleTransitionNotifier(store)(transition))
+
+    assert len(store.recorded) == 1
+    assert store.staged == store.recorded
+    envelope = store.staged[0]
+    assert envelope.subject == "alert.requested"
+    assert envelope.correlation_id == "ale-1"
+    assert envelope.workspace_id == "workspace-1"
+    assert envelope.payload["channel_ids"] == ["chan-ops"]
+    assert envelope.payload["severity"] == "critical"
+    assert envelope.payload["message"] == "파드 CPU 과부하 · 발생"
+
+
+def test_rule_transition_without_selected_channels_remains_in_app_only() -> None:
+    alert = load_service("alert/alert-worker")
+
+    class Store:
+        def __init__(self) -> None:
+            self.recorded = []
+            self.staged = []
+
+        @contextmanager
+        def unit_of_work(self):
+            yield object()
+
+        def record_event(self, event) -> None:
+            self.recorded.append(event)
+
+        def stage_events(self, _connection, events) -> None:
+            self.staged.extend(events)
+
+    store = Store()
+    transition = {
+        "event_id": "ale-in-app",
+        "workspace_id": "workspace-1",
+        "rule_id": "alr-in-app",
+        "rule_name": "인앱 전용 규칙",
+        "severity": "medium",
+        "transition": "firing",
+        "channel_ids": [],
+        "subject": {
+            "cluster": "cluster-1",
+            "namespace": "shop",
+            "kind": "Pod",
+            "name": "checkout-0",
+        },
+    }
+
+    asyncio.run(alert.AlertRuleTransitionNotifier(store)(transition))
+
+    assert alert.alert_request_for_rule_transition(transition).channel_ids == []
+    assert store.recorded == []
+    assert store.staged == []

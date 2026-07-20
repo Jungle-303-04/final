@@ -153,6 +153,7 @@ export function gitOpsPort(): GitOpsPort {
     previewPlan: vi.fn().mockRejectedValue(new Error("not used")),
     checkReadiness: vi.fn().mockRejectedValue(new Error("not used")),
     startPlan: vi.fn().mockRejectedValue(new Error("not used")),
+    decideApproval: vi.fn().mockRejectedValue(new Error("not used")),
     renderManifest: vi.fn().mockRejectedValue(new Error("not used")),
     submitSafePr: vi.fn().mockRejectedValue(new Error("not used")),
     runAction: vi.fn().mockRejectedValue(new Error("not used")),
@@ -182,7 +183,7 @@ export function plan(planId: string, name: string, applicationId: string): Relea
     name,
     description: `${name} description`,
     status: "draft",
-    settings: { approval_policy: "manual_each_step", runtime_mode: "review" },
+    settings: { approval_policy: "manual_each_step", runtime_mode: "demo" },
     steps: [{
       step_id: `${planId}-step-1`,
       application_id: applicationId,
@@ -195,6 +196,8 @@ export function plan(planId: string, name: string, applicationId: string): Relea
         cluster_id: application.clusterId,
         namespace: "default",
         approval_gate: "inherit",
+        commit_sha: "81de44f",
+        image: `ghcr.io/team/${applicationId}@sha256:123`,
       },
     }],
   };

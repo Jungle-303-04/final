@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { GitOpsPortFailure } from "./gitOpsContract";
 import { createGitOpsAdapter } from "./createGitOpsAdapter";
-import { detailFixture, endpointFixture } from "./createGitOpsAdapter.testSupport";
+import {
+  detailFixture,
+  endpointFixture,
+  mappedDetailFixture,
+} from "./createGitOpsAdapter.testSupport";
 
 describe("createGitOpsAdapter", () => {
   it("maps provider-neutral detail availability without manufacturing a diff", async () => {
@@ -9,62 +13,8 @@ describe("createGitOpsAdapter", () => {
       getApplicationDetail: vi.fn().mockResolvedValue({ application: detailFixture() }),
     });
 
-    await expect(createGitOpsAdapter(endpoints).getApplicationDetail("app-storefront")).resolves.toEqual({
-      applicationId: "app-storefront",
-      name: "storefront",
-      resource: {
-        apiGroup: "opsia.io",
-        version: "v1",
-        kind: "GitOpsApplication",
-        namespace: "storefront",
-        name: "storefront",
-        uid: "app-storefront",
-      },
-      scope: {
-        availability: "available",
-        scope: {
-          workspaceId: "workspace-a",
-          clusterId: "cluster-a",
-          namespaces: ["storefront"],
-          freshness: "partial",
-        },
-        reasonCode: null,
-      },
-      source: {
-        repositoryRef: "opsia/storefront",
-        defaultBranch: "main",
-        manifestPath: "deploy/production",
-      },
-      desiredLiveDiff: {
-        availability: "unavailable",
-        sourceRevision: "abc123",
-        liveObservationRevision: null,
-        reasonCode: "live_observation_not_integrated",
-      },
-      operation: {
-        availability: "partial",
-        inProgress: true,
-        workflowRunId: "run-1",
-        status: "applying",
-        observedAt: "2026-07-16T09:00:00Z",
-        reasonCode: "provider_operation_not_integrated",
-      },
-      capabilities: [{
-        action: "refresh",
-        authorization: "allowed",
-        availability: "unavailable",
-        enabled: false,
-        operationBlocked: false,
-        reasonCode: "provider_refresh_not_integrated",
-      }, {
-        action: "sync",
-        authorization: "allowed",
-        availability: "unavailable",
-        enabled: false,
-        operationBlocked: true,
-        reasonCode: "operation_in_progress",
-      }],
-    });
+    await expect(createGitOpsAdapter(endpoints).getApplicationDetail("app-storefront"))
+      .resolves.toEqual(mappedDetailFixture());
     expect(endpoints.getApplicationDetail).toHaveBeenCalledWith("app-storefront", undefined);
   });
 
@@ -282,6 +232,21 @@ describe("createGitOpsAdapter", () => {
 
     await expect(request).rejects.toBeInstanceOf(GitOpsPortFailure);
     await expect(request).rejects.toMatchObject({ code: "invalid-response" });
+  });
+
+  it("forwards the exact workflow approval identity and decision", async () => {
+    const decideApproval = vi.fn().mockResolvedValue({ accepted: true });
+    const port = createGitOpsAdapter(endpointFixture({ decideApproval }));
+
+    await expect(port.decideApproval("approval-a", "grant", "reviewed"))
+      .resolves.toBeUndefined();
+
+    expect(decideApproval).toHaveBeenCalledWith(
+      "approval-a",
+      "grant",
+      "reviewed",
+      undefined,
+    );
   });
 
 });

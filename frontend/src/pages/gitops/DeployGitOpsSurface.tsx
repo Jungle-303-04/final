@@ -52,7 +52,9 @@ export function DeployGitOpsSurface({
           />
         )
       ) : null}
-      {tab === "workflows" ? <DeployWorkflowWorkspace port={port} /> : null}
+      {tab === "workflows" ? (
+        <DeployWorkflowWorkspace port={port} refreshPolicies={refreshPolicies} />
+      ) : null}
     </ProductPageFrame>
   );
 }

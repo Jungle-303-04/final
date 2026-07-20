@@ -65,6 +65,45 @@ describe("stored AI conversation panel", () => {
       expect.any(AbortSignal),
     );
   });
+
+  it("restores a failed request into the draft without automatically resending it", async () => {
+    const port = panelPort();
+    vi.mocked(port.load).mockResolvedValue({
+      id: "aic-failed",
+      title: "파드 재시작 진단",
+      contextKind: "cluster",
+      contextValue: "prod-eks",
+      status: "failed",
+      updatedAt: "2026-07-20T00:10:00Z",
+      messages: [{
+        id: "aim-user",
+        role: "user",
+        content: "왜 파드가 재시작됐어?",
+        createdAt: "2026-07-20T00:09:00Z",
+      }, {
+        id: "aim-assistant",
+        role: "assistant",
+        content: "AI 공급자의 요청 한도에 도달해 진단을 생성하지 못했습니다.",
+        createdAt: "2026-07-20T00:10:00Z",
+        failure: { code: "rate_limited", retryable: true },
+      }],
+      hasMore: false,
+      messagesCompleteness: "complete",
+    });
+    renderPanel(port, {
+      mode: "resume",
+      conversationId: "aic-failed",
+      revision: 3,
+    });
+
+    expect(await screen.findByText("안전 실패 코드: rate_limited")).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: "질문 복원" }));
+
+    expect((screen.getByRole("textbox", {
+      name: "지금 보고 있는 것에 대해 질문하세요…",
+    }) as HTMLTextAreaElement).value).toBe("왜 파드가 재시작됐어?");
+    expect(port.append).not.toHaveBeenCalled();
+  });
 });
 
 function renderPanel(

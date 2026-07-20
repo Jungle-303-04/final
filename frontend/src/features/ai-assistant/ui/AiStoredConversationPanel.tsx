@@ -11,7 +11,6 @@ import {
   useRef,
   useState,
   type FormEvent,
-  type KeyboardEvent,
 } from "react";
 
 import {
@@ -42,6 +41,11 @@ import {
   NewThread,
   StoredMessage,
 } from "./AiStoredConversationStates";
+import {
+  failedConversationRecovery,
+  FailedConversationState,
+  submitAiMessageFromKeyboard,
+} from "./AiStoredConversationFailure";
 
 const WAITING_REFRESH_INTERVAL_MS = 1_800;
 
@@ -131,6 +135,16 @@ function AiStoredConversationSession({
   const contextKind = frame.phase === "ready"
     ? frame.conversation.contextKind
     : launchContextKind(session.mode === "new" ? session.context : currentContext);
+  const failureRecovery = frame.phase === "ready"
+    ? failedConversationRecovery(frame.conversation)
+    : null;
+
+  const restoreFailedDraft = useCallback(() => {
+    if (!failureRecovery?.retryable || !failureRecovery.userContent) return;
+    setDraft(failureRecovery.userContent);
+    setSendFailure(null);
+    queueMicrotask(() => inputRef.current?.focus());
+  }, [failureRecovery]);
 
   const submit = useCallback(async (event: FormEvent) => {
     event.preventDefault();
@@ -238,10 +252,10 @@ function AiStoredConversationSession({
                   </div>
                 ) : null}
                 {frame.conversation.status === "failed" ? (
-                  <p className="flex items-center gap-2 text-body text-tint-crit-fg" role="status">
-                    <AlertTriangle aria-hidden="true" className="size-4" />
-                    {t("shell.ai.history.status.failed")}
-                  </p>
+                  <FailedConversationState
+                    onRestore={restoreFailedDraft}
+                    recovery={failureRecovery}
+                  />
                 ) : null}
               </div>
             </>
@@ -263,7 +277,7 @@ function AiStoredConversationSession({
               disabled={sending}
               maxLength={16_000}
               onChange={(event) => setDraft(event.currentTarget.value)}
-              onKeyDown={submitFromKeyboard}
+              onKeyDown={submitAiMessageFromKeyboard}
               placeholder={t("shell.ai.placeholder")}
               ref={inputRef}
               value={draft}
@@ -283,9 +297,4 @@ function AiStoredConversationSession({
     </AiAssistantMotionProvider>
   );
 
-  function submitFromKeyboard(event: KeyboardEvent<HTMLTextAreaElement>) {
-    if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
-    event.preventDefault();
-    event.currentTarget.form?.requestSubmit();
-  }
 }

@@ -1,4 +1,5 @@
 import type {
+  ApprovalDecision,
   GeneratedManifest,
   ReleasePlan,
   ReleasePreview,
@@ -250,6 +251,12 @@ export interface GitOpsEndpointDependencies {
   previewPlan(plan: ReleasePlan, signal?: AbortSignal): Promise<ReleasePreview>;
   checkReadiness(plan: ReleasePlan, signal?: AbortSignal): Promise<ReleaseReadiness>;
   startPlan(plan: ReleasePlan, signal?: AbortSignal): Promise<ReleaseRun>;
+  decideApproval(
+    approvalId: string,
+    decision: ApprovalDecision,
+    reason?: string,
+    signal?: AbortSignal,
+  ): Promise<unknown>;
   renderManifest(plan: ReleasePlan, stepIndex: number, signal?: AbortSignal): Promise<GeneratedManifest>;
   submitSafePr(plan: ReleasePlan, stepIndex: number, signal?: AbortSignal): Promise<SafePrResult>;
   runAction(

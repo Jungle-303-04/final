@@ -13,3 +13,4 @@ G7 · 배포 완주 · e84748b06ded3450ca3693efb5863ccbfc30eb68 · Dev Gate 2969
 G7 · 배포 완주 · 61deed8340b7d9fe699359a507a84f9b02e201cb · Dev Gate 29712271375 + Dev Deploy 29712347044 success(11m08s), Kyro 전면 서피스 라이브 반영 + post-deploy API/authenticated browser route smoke 통과, rollback 미실행; 동일 SHA 자동 시각 캡처 미완료로 G4 부분 유지
 G7 · 배포 완주 · 42369ecf2852df82efdd8d46ed0805f78fa7f9f2 · Dev Gate 29713518047 + Dev Deploy 29713598921 success, RCA 상세 이동·복구 상태 동기화 + post-deploy/authenticated browser route smoke 통과
 G7 · 배포 완주 · 993cd2ec2e0c706a7cda12c0c55ef356b7520090 · Dev Gate 29715195803 + Dev Deploy 29715426460 success, AI 대화 내역 상태·클러스터 등록 환경/완료 계약 + post-deploy/authenticated browser route smoke 통과; 최초 등록 실패 retry CTA 후속 회귀 중
+G7 · 배포 완주 · c54650ae3e2a02157ba770893f68495a6d309932 · Dev Gate 29716148166 + Dev Deploy 29716384428 success, Resources 실 GitOps 저장소 계보·current-cut 노드/fresh CPU·MEM·클러스터 실패 재시도 + post-deploy/authenticated browser route smoke 통과; 동일 SHA 숫자 대조 중

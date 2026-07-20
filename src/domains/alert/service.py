@@ -14,7 +14,7 @@ from domains.alert.schemas import (
     AlertRulePatchRequest,
     AlertRuleResponse,
 )
-from domains.rca.events import Evidence, IncidentDetectedBody, IncidentRecord
+from domains.rca.events import Evidence, EvidenceBuiltBody
 
 
 class AlertChannelNotFoundError(ValueError):
@@ -105,7 +105,7 @@ def promote_alert_event_occurrence(
     workspace_id: str,
     actor_id: str,
     id_factory: Callable[[], str] | None = None,
-) -> tuple[AlertIncidentPromotionResponse, IncidentDetectedBody | None]:
+) -> tuple[AlertIncidentPromotionResponse, EvidenceBuiltBody | None]:
     proposed_incident_id = (id_factory or _new_incident_id)()
     result = db.promote_alert_event(
         workspace_id,
@@ -123,20 +123,19 @@ def promote_alert_event_occurrence(
     response = AlertIncidentPromotionResponse(incident_id=incident_id)
     if not created:
         return response, None
-    return response, _incident_body_from_alert_event(
+    return response, _evidence_body_from_alert_event(
         event,
         workspace_id=workspace_id,
         incident_id=incident_id,
     )
 
 
-def _incident_body_from_alert_event(
+def _evidence_body_from_alert_event(
     event: AlertEventResponse,
     *,
     workspace_id: str,
     incident_id: str,
-) -> IncidentDetectedBody:
-    subject = event.subject.model_dump()
+) -> EvidenceBuiltBody:
     symptom = event.rule_name or "외부 알림"
     evidence = Evidence(
         cluster_id=event.subject.cluster,
@@ -148,6 +147,8 @@ def _incident_body_from_alert_event(
             },
             "symptom": symptom,
             "severity": event.severity,
+            "category": "external_alert",
+            "first_seen_at": event.fired_at.isoformat(),
         },
         metrics={
             "alert_event": {
@@ -163,28 +164,16 @@ def _incident_body_from_alert_event(
         object_ref=f"alert-event:{event.event_id}",
         workspace_id=workspace_id,
     )
-    incident = IncidentRecord(
-        incident_id=incident_id,
-        cluster_id=event.subject.cluster,
-        resource_kind=event.subject.kind,
-        resource_name=event.subject.name,
-        namespace=event.subject.namespace,
-        symptom=symptom,
-        severity=event.severity,
-        category="external_alert",
-        first_seen_at=event.fired_at.isoformat(),
-        summary=f"알림 발생 {event.event_id}을 운영자가 인시던트로 승격했습니다.",
-        workspace_id=workspace_id,
-    )
-    return IncidentDetectedBody(
-        cluster_id=event.subject.cluster,
-        detected=True,
-        reason="operator promoted alert event",
-        workspace_id=workspace_id,
-        severity=event.severity,
-        affected=[subject],
+    return EvidenceBuiltBody(
         evidence=evidence,
-        incident=incident,
+        correlation_id=incident_id,
+        kind="alert_event",
+        summary={
+            "event_id": event.event_id,
+            "rule_name": symptom,
+            "severity": event.severity,
+            "promoted_by_operator": True,
+        },
     )
 
 

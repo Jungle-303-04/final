@@ -1,32 +1,22 @@
-import { ArrowRight, X } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import type { ReactNode } from "react";
 
 import type {
   ReleaseApplication,
   ReleasePlan,
-  ReleasePlanStep,
 } from "../../features/gitops/gitOpsContract";
 import {
   APPROVAL_POLICIES,
-  ENVIRONMENTS,
-  STRATEGIES,
-  configString,
   settingString,
   stepKey,
-  syncSelectedApplications,
-  updateStep,
 } from "../../features/gitops/workflowModel";
 import { useI18n } from "../../shared/i18n";
-import { Button } from "../../shared/ui/primitives/button";
-import { Input } from "../../shared/ui/primitives/input";
 import { AddApplicationControl } from "./DeployWorkflowPlanActions";
+import { ReleaseStepSettings } from "./DeployWorkflowStepSettings";
 import {
   FormField,
   NativeSelect,
-  environmentLabel,
-  gateLabel,
   policyLabel,
-  strategyLabel,
 } from "./WorkflowFormControls";
 
 export type SelectedWorkflowNode = "source" | "preflight" | "verification" | string;
@@ -115,6 +105,9 @@ export function WorkflowNodeSettings({
                   {application?.repository || t("common.value.unavailable")}
                   {application?.branch ? ` · ${application.branch}` : ""}
                 </dd>
+                <dd className="m-0 truncate font-mono text-caption-2 text-caption-foreground">
+                  {application?.manifestPath || t("common.value.unavailable")}
+                </dd>
               </div>
             );
           })}
@@ -141,9 +134,11 @@ export function WorkflowNodeSettings({
         <FormField label={t("workflows.editor.runtime")}>
           <NativeSelect
             onChange={(value) => onChange({ ...plan, settings: { ...plan.settings, runtime_mode: value } })}
-            value={settingString(plan, "runtime_mode", "review")}
+            value={settingString(plan, "runtime_mode", "demo") === "review"
+              ? "demo"
+              : settingString(plan, "runtime_mode", "demo")}
           >
-            <option value="review">{t("workflows.option.runtime.review")}</option>
+            <option value="demo">{t("workflows.option.runtime.review")}</option>
             <option value="live">{t("workflows.option.runtime.live")}</option>
           </NativeSelect>
         </FormField>
@@ -169,68 +164,6 @@ export function WorkflowNodeSettings({
   return step ? (
     <ReleaseStepSettings applications={applications} index={index} onChange={onChange} plan={plan} step={step} />
   ) : null;
-}
-
-function ReleaseStepSettings({
-  applications,
-  index,
-  onChange,
-  plan,
-  step,
-}: {
-  applications: ReleaseApplication[];
-  index: number;
-  onChange: (plan: ReleasePlan) => void;
-  plan: ReleasePlan;
-  step: ReleasePlanStep;
-}) {
-  const { t } = useI18n();
-  const changeConfig = (key: string, value: string) => onChange(updateStep(plan, index, (current) => ({
-    ...current,
-    config: { ...current.config, [key]: value },
-  })));
-  const remove = () => onChange(syncSelectedApplications(
-    plan,
-    plan.steps.filter((_, stepIndex) => stepIndex !== index).map((item) => item.application_id),
-    applications,
-  ));
-  return (
-    <NodeSettingsFrame title={step.name || step.application_id}>
-      <FormField label={t("workflows.editor.environment")}>
-        <NativeSelect onChange={(value) => changeConfig("environment", value)} value={configString(step, "environment", "staging")}>
-          {ENVIRONMENTS.map((environment) => (
-            <option key={environment} value={environment}>{environmentLabel(environment, t)}</option>
-          ))}
-        </NativeSelect>
-      </FormField>
-      <FormField label={t("workflows.editor.strategy")}>
-        <NativeSelect onChange={(value) => changeConfig("strategy", value)} value={configString(step, "strategy", settingString(plan, "default_strategy", "rolling"))}>
-          {STRATEGIES.map((strategy) => (
-            <option key={strategy} value={strategy}>{strategyLabel(strategy, t)}</option>
-          ))}
-        </NativeSelect>
-      </FormField>
-      <FormField label={t("workflows.editor.cluster")}><Input onChange={(event) => changeConfig("cluster_id", event.currentTarget.value)} value={configString(step, "cluster_id")} /></FormField>
-      <FormField label={t("workflows.editor.namespace")}>
-        <Input
-          onChange={(event) => changeConfig("namespace", event.currentTarget.value)}
-          value={typeof step.config.namespace === "string" ? step.config.namespace : "default"}
-        />
-      </FormField>
-      <FormField label={t("workflows.editor.commitSha")}><Input className="font-mono" onChange={(event) => changeConfig("commit_sha", event.currentTarget.value)} value={configString(step, "commit_sha")} /></FormField>
-      <FormField label={t("workflows.editor.image")}><Input className="font-mono" onChange={(event) => changeConfig("image", event.currentTarget.value)} value={configString(step, "image")} /></FormField>
-      <FormField label={t("workflows.editor.gate")}>
-        <NativeSelect onChange={(value) => changeConfig("approval_gate", value)} value={configString(step, "approval_gate", "inherit")}>
-          {(["inherit", "auto", "manual", "safe_pr"] as const).map((gate) => (
-            <option key={gate} value={gate}>{gateLabel(gate, t)}</option>
-          ))}
-        </NativeSelect>
-      </FormField>
-      <Button className="self-end" onClick={remove} size="sm" type="button" variant="destructive">
-        <X aria-hidden="true" />{t("workflows.editor.remove")}
-      </Button>
-    </NodeSettingsFrame>
-  );
 }
 
 function NodeSettingsFrame({ children, title }: { children: ReactNode; title: string }) {

@@ -1,7 +1,7 @@
 import { Plus } from "lucide-react";
-import { useState } from "react";
 
 import type { GitOpsPort } from "../../features/gitops/gitOpsContract";
+import type { BrowserRefreshPolicyRegistry } from "../../shared/data/browserRefreshPolicyRegistry";
 import { useI18n } from "../../shared/i18n";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
 import {
@@ -20,10 +20,16 @@ import {
 } from "./DeployWorkflowSupport";
 import { useGitOpsPageController } from "./useGitOpsPageController";
 
-export function DeployWorkflowWorkspace({ port }: { port: GitOpsPort }) {
+export function DeployWorkflowWorkspace({
+  port,
+  refreshPolicies,
+}: {
+  port: GitOpsPort;
+  refreshPolicies: BrowserRefreshPolicyRegistry<"gitops_rows">;
+}) {
   const { t } = useI18n();
-  const page = useGitOpsPageController(port);
-  const [selectedNode, setSelectedNode] = useState<SelectedWorkflowNode>("preflight");
+  const page = useGitOpsPageController(port, refreshPolicies);
+  const selectedNode: SelectedWorkflowNode = page.selectedStepId || "preflight";
 
   if (page.data.loading && !page.data.plans.length) {
     return <ProductStateScreen kind="loading" placement="content" />;
@@ -62,7 +68,7 @@ export function DeployWorkflowWorkspace({ port }: { port: GitOpsPort }) {
             onBack={page.showPlanList}
             onChange={page.setDraft}
             onSave={() => void page.saveDraft()}
-            onSelectNode={setSelectedNode}
+            onSelectNode={page.setSelectedStepId}
             pending={page.operation === "save"}
             selectedNode={selectedWorkflowNode(page.draft, selectedNode)}
             targetPending={page.operation === "target"}

@@ -110,11 +110,30 @@ class AiConversationRepository(DatabaseConnection):
 
     def record_ai_failure(self, payload: JsonObject) -> bool:
         with self.unit_of_work():
-            return self.mark_ai_conversation_status(
+            if not self.mark_ai_conversation_status(
                 str(payload["workspace_id"]),
                 str(payload["conversation_id"]),
                 STATUS_FAILED,
-            )
+            ):
+                return False
+            response_message_id = payload.get("response_message_id")
+            content = payload.get("content")
+            if response_message_id and content:
+                # The deterministic response ID and append_ai_message's conflict guard make
+                # event redelivery idempotent while keeping the conversation truthfully failed.
+                self.append_ai_message(
+                    {
+                        "message_id": response_message_id,
+                        "conversation_id": payload["conversation_id"],
+                        "workspace_id": payload["workspace_id"],
+                        "role": ROLE_ASSISTANT,
+                        "content": content,
+                        "agent": payload["agent"],
+                        "correlation_id": payload.get("correlation_id"),
+                        "metadata": payload.get("metadata") or {},
+                    }
+                )
+        return True
 
     def list_ai_conversations(
         self, workspace_id: str, *, user_id: str | None = None, limit: int = 100

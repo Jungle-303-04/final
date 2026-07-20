@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -180,6 +181,71 @@ class ConcurrentActivationDb(StubEvaluationDb):
             return saved, created
 
 
+class AtomicEvaluationDb(StubEvaluationDb):
+    """In-memory UoW model used to prove notifier failure preserves retry state."""
+
+    def activate_alert_rule_event(
+        self,
+        state: dict[str, Any],
+        event: dict[str, Any],
+        *,
+        stage_transition=None,
+    ) -> tuple[dict[str, Any], bool]:
+        snapshot = self._snapshot()
+        try:
+            saved, created = super().activate_alert_rule_event(state, event)
+            if created and stage_transition is not None:
+                stage_transition(self, saved)
+            return saved, created
+        except Exception:
+            self._restore(snapshot)
+            raise
+
+    def resolve_alert_rule_event(
+        self,
+        state: dict[str, Any],
+        *,
+        observed_value: float,
+        evidence: list[dict[str, Any]],
+        resolved_at: datetime,
+        stage_transition=None,
+    ) -> dict[str, Any]:
+        snapshot = self._snapshot()
+        try:
+            saved = super().resolve_alert_rule_event(
+                state,
+                observed_value=observed_value,
+                evidence=evidence,
+                resolved_at=resolved_at,
+            )
+            if stage_transition is not None:
+                stage_transition(self, saved)
+            return saved
+        except Exception:
+            self._restore(snapshot)
+            raise
+
+    def _snapshot(self):
+        return copy.deepcopy((self.states, self.events, self.rule_updates))
+
+    def _restore(self, snapshot) -> None:
+        self.states, self.events, self.rule_updates = snapshot
+
+
+class AtomicNotifier:
+    def __init__(self) -> None:
+        self.fail = False
+        self.staged: list[dict[str, Any]] = []
+
+    async def __call__(self, _transition: dict[str, Any]) -> None:
+        raise AssertionError("atomic notifier must be staged inside the repository UoW")
+
+    def stage(self, _connection: object, transition: dict[str, Any]) -> None:
+        if self.fail:
+            raise RuntimeError("outbox unavailable")
+        self.staged.append(dict(transition))
+
+
 def run_once(
     db: StubEvaluationDb,
     value: float,
@@ -214,6 +280,7 @@ def test_alert_rule_waits_for_full_duration_then_fires_once() -> None:
     assert event["evidence"]
     assert db.rule_updates == [("workspace-1", "alr-1")]
     assert [item["transition"] for item in notifications] == ["firing"]
+    assert notifications[0]["channel_ids"] == ["chan-ops"]
 
     run_once(db, 95, BASE_TIME + timedelta(seconds=25), notifications)
     assert len(db.events) == 1
@@ -281,6 +348,49 @@ def test_alert_rule_resets_pending_and_resolves_only_on_observed_recovery() -> N
     assert db.events[event_id]["status"] == "resolved"
     assert db.events[event_id]["resolved_at"] == BASE_TIME + timedelta(seconds=40)
     assert [item["transition"] for item in notifications] == ["firing", "resolved"]
+    assert [item["channel_ids"] for item in notifications] == [
+        ["chan-ops"],
+        ["chan-ops"],
+    ]
+
+
+def test_outbox_failure_rolls_back_rule_transitions_and_same_sample_retries() -> None:
+    db = AtomicEvaluationDb()
+    notifier = AtomicNotifier()
+    current = measurement(90, observed_at=BASE_TIME)
+
+    async def load(_rule: dict[str, Any]) -> list[AlertMeasurement]:
+        return [current]
+
+    engine = AlertEvaluationEngine(db, load_measurements=load, notify=notifier)
+
+    asyncio.run(engine.evaluate_once(now=BASE_TIME))
+    current = measurement(92, observed_at=BASE_TIME + timedelta(seconds=20))
+    notifier.fail = True
+    with pytest.raises(RuntimeError, match="outbox unavailable"):
+        asyncio.run(engine.evaluate_once(now=current.observed_at))
+
+    assert db.events == {}
+    assert next(iter(db.states.values()))["active_event_id"] is None
+
+    notifier.fail = False
+    asyncio.run(engine.evaluate_once(now=current.observed_at))
+    event_id = next(iter(db.events))
+    assert db.events[event_id]["status"] == "firing"
+    assert [item["transition"] for item in notifier.staged] == ["firing"]
+
+    current = measurement(60, observed_at=BASE_TIME + timedelta(seconds=25))
+    notifier.fail = True
+    with pytest.raises(RuntimeError, match="outbox unavailable"):
+        asyncio.run(engine.evaluate_once(now=current.observed_at))
+
+    assert db.events[event_id]["status"] == "firing"
+    assert next(iter(db.states.values()))["active_event_id"] == event_id
+
+    notifier.fail = False
+    asyncio.run(engine.evaluate_once(now=current.observed_at))
+    assert db.events[event_id]["status"] == "resolved"
+    assert [item["transition"] for item in notifier.staged] == ["firing", "resolved"]
 
 
 def test_missing_measurement_does_not_manufacture_a_resolution() -> None:

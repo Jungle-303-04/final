@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncIterator
 
+import httpx
 import tools  # noqa: F401  # 서비스 로컬 도구(@ai.tool) 등록 유발
 
 from domains.ai.agent import build_system_prompt
@@ -47,10 +48,24 @@ _mcp_client: ManagementApiClient | None | object = _MCP_CLIENT_UNSET
 # 런타임 핸들러 타임아웃(30초)보다 짧게 — 실패 기록/이벤트가 항상 실행될 예산 확보.
 AGENT_DEADLINE_SECONDS = 20
 HISTORY_LIMIT = 10
+FAILURE_RATE_LIMITED = "rate_limited"
+FAILURE_UNAVAILABLE = "unavailable"
 
 
 def response_message_id(request_message_id: str) -> str:
     return f"{request_message_id}-assistant"
+
+
+def safe_failure(error: Exception) -> tuple[str, bool]:
+    """Classify provider failures without exposing response bodies or credentials."""
+    if isinstance(error, httpx.HTTPStatusError):
+        status = error.response.status_code
+        if status == 429:
+            return FAILURE_RATE_LIMITED, True
+        return FAILURE_UNAVAILABLE, status == 408 or status >= 500
+    if isinstance(error, (TimeoutError, httpx.TimeoutException, httpx.TransportError)):
+        return FAILURE_UNAVAILABLE, True
+    return FAILURE_UNAVAILABLE, False
 
 
 def request_locale(evt: AiMessageReceivedBody) -> str | None:
@@ -191,20 +206,30 @@ async def on_ai_message_received(
             return
         yield response
     except Exception as exc:
-        reason = (
-            text("chat.timeout_reason", locale, seconds=AGENT_DEADLINE_SECONDS)
-            if isinstance(exc, TimeoutError)
-            else text("chat.failure_reason", locale, error=exc)
-        )
+        failure_code, retryable = safe_failure(exc)
+        failure_metadata = {
+            "request_event_id": ctx.event_id,
+            "correlation_id": ctx.correlation_id,
+            "failure_code": failure_code,
+            "retryable": retryable,
+            "source": "safe_failure_fallback",
+        }
         failure = AiMessageFailedBody(
             conversation_id=evt.conversation_id,
             request_message_id=evt.message_id,
-            reason=reason,
+            reason=text(f"chat.failure.{failure_code}.reason", locale),
             agent=evt.agent,
             workspace_id=evt.workspace_id,
-            metadata={"request_event_id": ctx.event_id, "correlation_id": ctx.correlation_id},
+            metadata=failure_metadata,
         )
-        stored = await ctx.db.record_ai_failure(failure.to_body())
+        stored = await ctx.db.record_ai_failure(
+            {
+                **failure.to_body(),
+                "response_message_id": response_message_id(evt.message_id),
+                "content": text(f"chat.failure.{failure_code}.fallback", locale),
+                "correlation_id": ctx.correlation_id,
+            }
+        )
         if not stored:
             return
         yield failure

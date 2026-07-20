@@ -245,6 +245,7 @@ export interface GitOpsResourceActionInput {
 }
 
 export type {
+  ApprovalDecision,
   GeneratedManifest,
   ReleasePlan,
   ReleasePlanStep,

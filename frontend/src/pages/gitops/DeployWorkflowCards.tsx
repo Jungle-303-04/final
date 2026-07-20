@@ -11,6 +11,7 @@ import {
   STRATEGIES,
   planValidationCodes,
   settingString,
+  stepKey,
   syncSelectedApplications,
 } from "../../features/gitops/workflowModel";
 import { useI18n } from "../../shared/i18n";
@@ -23,6 +24,7 @@ import {
   type SelectedWorkflowNode,
   WorkflowNodeRail,
   WorkflowNodeSettings,
+  selectedWorkflowNode,
 } from "./DeployWorkflowNodes";
 import { QuickPlanActions } from "./DeployWorkflowPlanActions";
 import {
@@ -107,7 +109,7 @@ export function WorkflowEditor({
   targetPending: boolean;
 }) {
   const { t } = useI18n();
-  const validation = planValidationCodes(draft);
+  const validation = planValidationCodes(draft, applications);
   const createAndAddTarget = async (input: ReleaseTargetInput) => {
     const application = await createTarget(input);
     if (!application) return null;
@@ -123,6 +125,7 @@ export function WorkflowEditor({
       <div className="flex min-w-0 flex-wrap items-center gap-2.5">
         <GitBranch aria-hidden="true" className="size-4 shrink-0 text-primary" />
         <Input
+          aria-invalid={validation.includes("name") || undefined}
           aria-label={t("workflows.editor.name")}
           className="h-8 min-w-48 max-w-sm flex-1 border-0 bg-background-subtle px-2.5 text-body font-bold shadow-none"
           onChange={(event) => onChange({ ...draft, name: event.currentTarget.value })}
@@ -138,7 +141,12 @@ export function WorkflowEditor({
             <option key={status} value={status}>{t(`workflows.status.${status}`)}</option>
           ))}
         </NativeSelect>
-        <span className="ml-auto flex items-center gap-2">
+        <span className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2">
+          {validation.length ? (
+            <span className="text-caption font-medium text-destructive" role="status">
+              {t("workflows.editor.missingCount", { count: validation.length })}
+            </span>
+          ) : null}
           <Button onClick={onBack} size="sm" type="button" variant="outline">{t("common.action.cancel")}</Button>
           <Button disabled={pending || validation.length > 0} onClick={onSave} size="sm" type="button">
             <Save aria-hidden="true" />
@@ -160,18 +168,23 @@ export function WorkflowEditor({
 export function WorkflowCreation({ page }: { page: ReturnType<typeof useGitOpsPageController> }) {
   const { t } = useI18n();
   const plan = page.newPlan;
-  const [applicationId, setApplicationId] = useState(plan.steps[0]?.application_id || "");
+  const [selectedNode, setSelectedNode] = useState<SelectedWorkflowNode>(
+    plan.steps[0] ? stepKey(plan.steps[0], 0) : "preflight",
+  );
   const selectedIds = plan.steps.map((step) => step.application_id);
+  const validation = planValidationCodes(plan, page.data.applications);
   const syncTarget = (nextId: string) => {
-    setApplicationId(nextId);
-    page.setNewPlan(syncSelectedApplications(plan, nextId ? [nextId] : [], page.data.applications));
+    const nextPlan = syncSelectedApplications(plan, nextId ? [nextId] : [], page.data.applications);
+    page.setNewPlan(nextPlan);
+    setSelectedNode(nextPlan.steps[0] ? stepKey(nextPlan.steps[0], 0) : "preflight");
   };
   const createAndSelect = async (input: ReleaseTargetInput) => {
     const application = await page.createTarget(input);
     if (!application) return null;
     const applications = [...page.data.applications, application];
-    setApplicationId(application.id);
-    page.setNewPlan(syncSelectedApplications(plan, [application.id], applications));
+    const nextPlan = syncSelectedApplications(plan, [application.id], applications);
+    page.setNewPlan(nextPlan);
+    setSelectedNode(stepKey(nextPlan.steps[0], 0));
     return application;
   };
   return (
@@ -179,15 +192,21 @@ export function WorkflowCreation({ page }: { page: ReturnType<typeof useGitOpsPa
       <div className="flex min-w-0 flex-wrap items-center gap-2.5">
         <GitBranch aria-hidden="true" className="size-4 shrink-0 text-primary" />
         <Input
+          aria-invalid={validation.includes("name") || undefined}
           aria-label={t("workflows.editor.name")}
           autoFocus
           className="h-8 min-w-48 max-w-sm flex-1 border-0 bg-background-subtle px-2.5 text-body font-bold shadow-none"
           onChange={(event) => page.setNewPlan({ ...plan, name: event.currentTarget.value })}
           value={plan.name}
         />
-        <span className="ml-auto flex items-center gap-2">
+        <span className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2">
+          {validation.length ? (
+            <span className="text-caption font-medium text-destructive" role="status">
+              {t("workflows.editor.missingCount", { count: validation.length })}
+            </span>
+          ) : null}
           <Button onClick={page.cancelCreate} size="sm" type="button" variant="outline">{t("common.action.cancel")}</Button>
-          <Button disabled={page.operation === "create" || planValidationCodes(plan).length > 0} onClick={() => void page.createPlan()} size="sm" type="button">
+          <Button disabled={page.operation === "create" || validation.length > 0} onClick={() => void page.createPlan()} size="sm" type="button">
             <Save aria-hidden="true" />
             {page.operation === "create" ? t("workflows.editor.saving") : t("workflows.wizard.create")}
           </Button>
@@ -195,7 +214,7 @@ export function WorkflowCreation({ page }: { page: ReturnType<typeof useGitOpsPa
       </div>
       <div className="mt-3 grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <FormField label={t("workflows.editor.application")}>
-          <NativeSelect disabled={!page.data.applications.length} onChange={syncTarget} value={selectedIds[0] || applicationId}>
+          <NativeSelect disabled={!page.data.applications.length} onChange={syncTarget} value={selectedIds[0] || ""}>
             <option disabled value="">{t("workflows.editor.application")}</option>
             {page.data.applications.map((application) => (
               <option key={application.id} value={application.id}>{application.name}</option>
@@ -214,7 +233,18 @@ export function WorkflowCreation({ page }: { page: ReturnType<typeof useGitOpsPa
         </FormField>
         <DeploymentTargetDialog clusters={page.data.clusters} onCreate={createAndSelect} pending={page.operation === "target"} />
       </div>
-      <WorkflowNodeRail applications={page.data.applications} plan={plan} selected={null} />
+      <WorkflowNodeRail
+        applications={page.data.applications}
+        onSelect={setSelectedNode}
+        plan={plan}
+        selected={selectedWorkflowNode(plan, selectedNode)}
+      />
+      <WorkflowNodeSettings
+        applications={page.data.applications}
+        onChange={page.setNewPlan}
+        plan={plan}
+        selectedNode={selectedWorkflowNode(plan, selectedNode)}
+      />
     </Surface>
   );
 }

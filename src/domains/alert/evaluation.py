@@ -78,7 +78,6 @@ class AlertEvaluationEngine:
                 if transition is None:
                     continue
                 transitions.append(transition)
-                await _await_if_needed(self.notify(transition))
         return transitions
 
     async def run(self, stopping: asyncio.Event) -> None:
@@ -123,7 +122,13 @@ class AlertEvaluationEngine:
             float(rule["threshold"]),
         )
         if not matched:
-            return await self._recover(state, state_payload, measurement, evaluated_at)
+            return await self._recover(
+                state,
+                state_payload,
+                measurement,
+                evaluated_at,
+                rule=rule,
+            )
 
         active_event_id = state.get("active_event_id")
         condition_since = _datetime_or_none(state.get("condition_since"))
@@ -168,13 +173,19 @@ class AlertEvaluationEngine:
             return None
 
         event = _firing_event(rule, measurement, evaluated_at=evaluated_at, subject_key=subject_key)
-        saved, created = await _await_if_needed(
-            self.db.activate_alert_rule_event(
-                {**state_payload, "condition_since": condition_since},
-                event,
-            )
+        stage_transition = self._transactional_stager(rule, "firing")
+        activation = self.db.activate_alert_rule_event(
+            {**state_payload, "condition_since": condition_since},
+            event,
+            **({"stage_transition": stage_transition} if stage_transition is not None else {}),
         )
-        return {**dict(saved), "transition": "firing"} if created else None
+        saved, created = await _await_if_needed(activation)
+        if not created:
+            return None
+        transition = _notification_transition(saved, rule, "firing")
+        if stage_transition is None:
+            await _await_if_needed(self.notify(transition))
+        return transition
 
     async def _recover(
         self,
@@ -182,6 +193,8 @@ class AlertEvaluationEngine:
         state_payload: JsonObject,
         measurement: AlertMeasurement,
         evaluated_at: datetime,
+        *,
+        rule: Mapping[str, Any],
     ) -> JsonObject | None:
         active_event_id = state.get("active_event_id")
         if not active_event_id:
@@ -191,15 +204,53 @@ class AlertEvaluationEngine:
                 )
             )
             return None
-        resolved = await _await_if_needed(
-            self.db.resolve_alert_rule_event(
-                {**state, **state_payload, "active_event_id": active_event_id},
-                observed_value=float(measurement.observed_value),
-                evidence=[dict(item) for item in measurement.evidence],
-                resolved_at=evaluated_at,
-            )
+        stage_transition = self._transactional_stager(rule, "resolved")
+        resolution = self.db.resolve_alert_rule_event(
+            {**state, **state_payload, "active_event_id": active_event_id},
+            observed_value=float(measurement.observed_value),
+            evidence=[dict(item) for item in measurement.evidence],
+            resolved_at=evaluated_at,
+            **({"stage_transition": stage_transition} if stage_transition is not None else {}),
         )
-        return {**dict(resolved), "transition": "resolved"} if resolved is not None else None
+        resolved = await _await_if_needed(resolution)
+        if resolved is None:
+            return None
+        transition = _notification_transition(resolved, rule, "resolved")
+        if stage_transition is None:
+            await _await_if_needed(self.notify(transition))
+        return transition
+
+    def _transactional_stager(
+        self,
+        rule: Mapping[str, Any],
+        transition_name: str,
+    ) -> Callable[[Any, JsonObject], None] | None:
+        stage = getattr(self.notify, "stage", None)
+        if not callable(stage):
+            return None
+
+        def stage_saved(connection: Any, saved: JsonObject) -> None:
+            result = stage(
+                connection,
+                _notification_transition(saved, rule, transition_name),
+            )
+            if inspect.isawaitable(result):
+                raise TypeError("transactional alert transition staging must be synchronous")
+
+        return stage_saved
+
+
+def _notification_transition(
+    event: Mapping[str, Any],
+    rule: Mapping[str, Any],
+    transition: str,
+) -> JsonObject:
+    """Preserve the rule's explicit delivery selection outside the persisted event row."""
+    return {
+        **dict(event),
+        "transition": transition,
+        "channel_ids": [str(channel_id) for channel_id in rule.get("channels", [])],
+    }
 
 
 def compare_alert_value(value: float, comparator: str, threshold: float) -> bool:

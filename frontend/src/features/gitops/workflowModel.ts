@@ -1,8 +1,29 @@
-import type { ReleaseApplication, ReleasePlan, ReleasePlanStep } from "./gitOpsContract";
+import type {
+  ReleaseApplication,
+  ReleasePlan,
+  ReleasePlanStep,
+  ReleaseRun,
+} from "./gitOpsContract";
 
 export type WorkflowView = "overview" | "edit" | "runs" | "yaml";
 export type WizardStage = "basics" | "targets" | "policy" | "review";
-export type StepSetupField = "commit_sha" | "image" | "cluster_id";
+export type WorkflowRunState =
+  | "succeeded"
+  | "failed"
+  | "rollback_requested"
+  | "cancelled"
+  | "waiting_for_approval"
+  | "paused"
+  | "running"
+  | "pending";
+export type StepSetupField =
+  | "application_id"
+  | "repo_ref"
+  | "branch"
+  | "manifest_path"
+  | "cluster_id"
+  | "commit_sha"
+  | "image";
 
 export interface StepSetupIssue {
   field: StepSetupField;
@@ -22,8 +43,43 @@ export const APPROVAL_POLICIES = [
   "external_change_ticket",
 ] as const;
 
+const TERMINAL_RUN_STATUSES = new Set([
+  "cancelled",
+  "canceled",
+  "completed",
+  "error",
+  "failed",
+  "rollback_requested",
+  "success",
+  "succeeded",
+]);
+
 export function isWorkflowView(value: string | null): value is WorkflowView {
   return WORKFLOW_VIEWS.some((view) => view === value);
+}
+
+export function effectiveWorkflowRunStatus(run: Pick<ReleaseRun, "derived_status" | "status">): string {
+  return normalizeWorkflowRunStatus(run.derived_status || run.status);
+}
+
+export function isActiveWorkflowRun(run: Pick<ReleaseRun, "derived_status" | "status">): boolean {
+  return !TERMINAL_RUN_STATUSES.has(effectiveWorkflowRunStatus(run));
+}
+
+export function workflowRunState(status: string): WorkflowRunState {
+  const normalized = normalizeWorkflowRunStatus(status);
+  if (["succeeded", "success", "completed"].includes(normalized)) return "succeeded";
+  if (normalized === "rollback_requested") return "rollback_requested";
+  if (["failed", "error"].includes(normalized)) return "failed";
+  if (["cancelled", "canceled"].includes(normalized)) return "cancelled";
+  if (normalized === "waiting_for_approval") return "waiting_for_approval";
+  if (normalized === "paused") return "paused";
+  if (["running", "in_progress", "queued"].includes(normalized)) return "running";
+  return "pending";
+}
+
+function normalizeWorkflowRunStatus(status: string | undefined): string {
+  return String(status || "pending").trim().toLowerCase();
 }
 
 export function createEmptyPlan(): ReleasePlan {
@@ -34,7 +90,7 @@ export function createEmptyPlan(): ReleasePlan {
     settings: {
       approval_policy: "manual_each_step",
       default_strategy: "rolling",
-      runtime_mode: "review",
+      runtime_mode: "demo",
     },
     steps: [],
   };
@@ -43,7 +99,12 @@ export function createEmptyPlan(): ReleasePlan {
 export function clonePlan(plan: ReleasePlan): ReleasePlan {
   return {
     ...plan,
-    settings: { ...plan.settings },
+    settings: {
+      ...plan.settings,
+      runtime_mode: settingString(plan, "runtime_mode", "demo") === "review"
+        ? "demo"
+        : settingString(plan, "runtime_mode", "demo"),
+    },
     steps: plan.steps.map((step) => ({
       ...step,
       depends_on: [...step.depends_on],
@@ -85,7 +146,20 @@ export function stepSetupFields(
   if (!configString(step, "image") && !settingString(plan, "image")) {
     missing.push("image");
   }
-  if (!configString(step, "cluster_id") && !application?.clusterId.trim()) {
+  if (!application) {
+    missing.push("application_id");
+    return missing;
+  }
+  if (!configString(step, "repo_ref") && !application.repository.trim()) {
+    missing.push("repo_ref");
+  }
+  if (!configString(step, "branch") && !application.branch.trim()) {
+    missing.push("branch");
+  }
+  if (!configString(step, "manifest_path") && !application.manifestPath.trim()) {
+    missing.push("manifest_path");
+  }
+  if (!configString(step, "cluster_id") && !application.clusterId.trim()) {
     missing.push("cluster_id");
   }
   return missing;
@@ -174,7 +248,10 @@ export function releaseWaves(steps: ReleasePlanStep[]): Map<string, number> {
   return result;
 }
 
-export function planValidationCodes(plan: ReleasePlan): string[] {
+export function planValidationCodes(
+  plan: ReleasePlan,
+  applications: ReleaseApplication[],
+): string[] {
   const errors: string[] = [];
   if (!plan.name.trim()) errors.push("name");
   if (plan.steps.length === 0) errors.push("steps");
@@ -183,5 +260,8 @@ export function planValidationCodes(plan: ReleasePlan): string[] {
   if (plan.steps.some((step) => step.depends_on.some((dependency) => !ids.has(dependency)))) {
     errors.push("dependency");
   }
+  errors.push(...releaseStepSetupIssues(plan, applications).map((issue) => (
+    `step:${issue.stepId}:${issue.field}`
+  )));
   return errors;
 }

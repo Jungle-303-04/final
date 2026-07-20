@@ -24,12 +24,18 @@ describe("deployment workflow editor interactions", () => {
     const onSave = vi.fn<(plan: ReleasePlan) => void>();
     render(<WorkflowEditorHarness onSave={onSave} />);
 
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Save changes" }).disabled).toBe(true);
+    await user.click(screen.getByRole("button", { name: "Checkout API" }));
+    await user.type(screen.getByLabelText("Commit SHA"), "81de44f");
+    await user.type(screen.getByLabelText("Container image"), "ghcr.io/team/checkout@sha256:123");
     await user.click(screen.getByRole("button", { name: "Source" }));
     await user.click(screen.getByRole("button", { name: "Add target" }));
     await user.click(screen.getByRole("button", { name: "Payments Worker" }));
     await user.selectOptions(screen.getByLabelText("Environment"), "production");
     await user.clear(screen.getByLabelText("Namespace"));
     await user.type(screen.getByLabelText("Namespace"), "payments-live");
+    await user.type(screen.getByLabelText("Commit SHA"), "91fe55a");
+    await user.type(screen.getByLabelText("Container image"), "ghcr.io/team/payments@sha256:456");
     await user.click(screen.getByRole("button", { name: "Save changes" }));
 
     expect(onSave).toHaveBeenNthCalledWith(1, expect.objectContaining({
@@ -38,7 +44,9 @@ describe("deployment workflow editor interactions", () => {
         expect.objectContaining({
           application_id: "payments-worker",
           config: expect.objectContaining({
+            commit_sha: "91fe55a",
             environment: "production",
+            image: "ghcr.io/team/payments@sha256:456",
             namespace: "payments-live",
           }),
         }),

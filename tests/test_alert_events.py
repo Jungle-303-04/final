@@ -14,7 +14,9 @@ from pydantic import ValidationError
 from domains.alert.router import router as alert_router
 from domains.alert.schemas import AlertEventResponse
 from domains.identity.dependencies import require_admin_session
+from domains.rca.events import EvidenceBundleBuiltBody, IncidentDetectedBody
 from packages.runtime.dependencies import get_db, get_events
+from services.ai.agent.pipeline import IncidentPipeline
 
 FIRED_AT = datetime(2026, 7, 15, 2, 0, tzinfo=UTC)
 
@@ -234,7 +236,7 @@ def test_ack_alert_event_records_actor_and_hides_other_workspace() -> None:
     assert client.post("/alert-events/ale-resolved/ack").status_code == 409
 
 
-def test_promote_alert_event_emits_one_evidence_backed_incident_with_actor() -> None:
+def test_promote_alert_event_enters_canonical_rca_pipeline_once_with_actor() -> None:
     db = StubAlertEventDb()
     events = StubEvents()
     client = TestClient(alert_app(db, events))
@@ -247,12 +249,18 @@ def test_promote_alert_event_emits_one_evidence_backed_incident_with_actor() -> 
     assert second.json() == first.json()
     assert len(events.accepted) == 1
     body, correlation_id, actor = events.accepted[0]
-    assert type(body).__name__ == "IncidentDetectedBody"
-    assert body.evidence is not None
+    assert type(body).__name__ == "EvidenceBuiltBody"
     assert body.evidence.metrics["alert_event"]["observed_value"] == 91.0
     assert body.evidence.metrics["alert_event"]["evidence"]
-    assert body.incident is not None
-    assert body.incident.incident_id == first.json()["incident_id"]
+    assert body.correlation_id == first.json()["incident_id"]
+    assert body.kind == "alert_event"
+
+    pipeline_bodies = IncidentPipeline().build_bodies(body.evidence, body.correlation_id)
+    assert isinstance(pipeline_bodies.detected_body, IncidentDetectedBody)
+    assert pipeline_bodies.detected_body.incident is not None
+    assert pipeline_bodies.detected_body.incident.incident_id == first.json()["incident_id"]
+    assert isinstance(pipeline_bodies.next_body, EvidenceBundleBuiltBody)
+    assert pipeline_bodies.next_body.incident.incident_id == first.json()["incident_id"]
     assert correlation_id == first.json()["incident_id"]
     assert actor.user_id == "admin-1"
     assert db.promote_calls[0][0:2] == ("workspace-1", "ale-1")

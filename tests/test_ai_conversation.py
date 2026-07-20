@@ -126,6 +126,16 @@ class CaptureEngine:
         return EngineResult("context captured", raw_length=0)
 
 
+class FailingEngine:
+    def __init__(self, error: Exception) -> None:
+        self.error = error
+        self.llm = object()
+
+    async def respond(self, **kwargs: Any) -> EngineResult:
+        del kwargs
+        raise self.error
+
+
 def test_chat_worker_answers_via_engine_with_tool_loop() -> None:
     worker = load_service("ai/chat-worker")
     scripted = ScriptedLlm(
@@ -296,6 +306,48 @@ def test_chat_worker_drops_late_response_for_deleted_conversation() -> None:
     assert outs == []
     assert store.responses == []
     assert store.failures == []
+
+
+def test_chat_worker_records_safe_retryable_fallback_for_provider_rate_limit() -> None:
+    worker = load_service("ai/chat-worker")
+    request = httpx.Request("POST", "https://api.openai.com/v1/chat/completions")
+    response = httpx.Response(
+        429,
+        request=request,
+        json={"error": {"message": "provider-private-body"}},
+    )
+    worker.engine = FailingEngine(
+        httpx.HTTPStatusError(
+            "provider-private-body",
+            request=request,
+            response=response,
+        )
+    )
+    store = StubConversationStore()
+
+    outs = run_handler(
+        worker.on_ai_message_received,
+        AiMessageReceivedBody(
+            conversation_id="aic-rate-limited",
+            message_id="aim-rate-limited",
+            content="왜 파드가 재시작됐어?",
+            agent="operations-chat",
+            user_id="user-1",
+            workspace_id="ws-1",
+            context={"locale": "ko"},
+        ),
+        db=store,
+    )
+
+    assert [out.__subject__ for out in outs] == ["ai.message.failed"]
+    assert outs[0].reason == "AI 공급자 요청 한도에 도달했습니다"
+    assert "provider-private-body" not in outs[0].reason
+    assert outs[0].metadata["failure_code"] == "rate_limited"
+    assert outs[0].metadata["retryable"] is True
+    assert store.failures[0]["response_message_id"] == "aim-rate-limited-assistant"
+    assert store.failures[0]["metadata"]["source"] == "safe_failure_fallback"
+    assert "진단을 생성하지 못했습니다" in store.failures[0]["content"]
+    assert "provider-private-body" not in store.failures[0]["content"]
 
 
 def test_llm_client_defaults_to_openai_and_boots_without_credentials(
@@ -716,3 +768,42 @@ def test_ai_repository_skips_late_failure_when_conversation_was_deleted() -> Non
     assert stored is False
     assert repository.status_calls == [("ws-1", "aic-deleted", STATUS_FAILED)]
     assert repository.messages == []
+
+
+def test_ai_repository_records_failed_status_and_idempotent_fallback_identity() -> None:
+    repository = GuardedAiRepository(exists=True)
+
+    stored = repository.record_ai_failure(
+        {
+            "workspace_id": "ws-1",
+            "conversation_id": "aic-1",
+            "response_message_id": "aim-1-assistant",
+            "content": "No diagnosis was generated. Review and retry.",
+            "agent": "operations-chat",
+            "correlation_id": "corr-1",
+            "metadata": {
+                "failure_code": "rate_limited",
+                "retryable": True,
+                "source": "safe_failure_fallback",
+            },
+        }
+    )
+
+    assert stored is True
+    assert repository.status_calls == [("ws-1", "aic-1", STATUS_FAILED)]
+    assert repository.messages == [
+        {
+            "message_id": "aim-1-assistant",
+            "conversation_id": "aic-1",
+            "workspace_id": "ws-1",
+            "role": "assistant",
+            "content": "No diagnosis was generated. Review and retry.",
+            "agent": "operations-chat",
+            "correlation_id": "corr-1",
+            "metadata": {
+                "failure_code": "rate_limited",
+                "retryable": True,
+                "source": "safe_failure_fallback",
+            },
+        }
+    ]

@@ -1,5 +1,6 @@
 import {
   Bell,
+  CheckCircle2,
   CirclePause,
   CirclePlay,
   FastForward,
@@ -8,7 +9,12 @@ import {
   XCircle,
 } from "lucide-react";
 import type { ReactNode } from "react";
-import type { ReleaseRun, ReleaseRunAction } from "../../features/gitops/gitOpsContract";
+import type {
+  ApprovalDecision,
+  ReleaseRun,
+  ReleaseRunAction,
+} from "../../features/gitops/gitOpsContract";
+import { workflowRunState } from "../../features/gitops/workflowModel";
 import { useI18n } from "../../shared/i18n";
 import { Badge } from "../../shared/ui/primitives/badge";
 import { Button } from "../../shared/ui/primitives/button";
@@ -18,10 +24,16 @@ export function RunActions({
   run,
   pending,
   onAction,
+  onApprovalDecision,
 }: {
   run: ReleaseRun;
   pending: boolean;
   onAction: (run: ReleaseRun, action: ReleaseRunAction) => void;
+  onApprovalDecision: (
+    run: ReleaseRun,
+    approvalId: string,
+    decision: ApprovalDecision,
+  ) => void;
 }) {
   const { t } = useI18n();
   const icon = {
@@ -33,7 +45,9 @@ export function RunActions({
     cancel: XCircle,
     notify: Bell,
   };
-  const actions = actionsForStatus(run.status);
+  const state = workflowRunState(run.derived_status || run.status);
+  const approvalId = state === "waiting_for_approval" ? pendingApprovalId(run) : null;
+  const actions = actionsForRun(run);
   const standardActions = actions.filter((action) => action !== "rollback" && action !== "cancel");
   const dangerActions = actions.filter((action) => action === "rollback" || action === "cancel");
   const renderAction = (action: ReleaseRunAction) => {
@@ -57,6 +71,35 @@ export function RunActions({
   };
   return (
     <div className="flex min-w-0 flex-wrap items-center justify-end gap-1.5">
+      {approvalId ? (
+        <div className="flex min-w-0 flex-wrap items-center justify-end gap-1.5">
+          <Button
+            disabled={pending}
+            onClick={() => onApprovalDecision(run, approvalId, "grant")}
+            size="sm"
+          >
+            <CheckCircle2 aria-hidden="true" />
+            {t("workflows.runs.action.grant")}
+          </Button>
+          <Button
+            disabled={pending}
+            onClick={() => {
+              if (window.confirm(t("workflows.runs.confirmDanger"))) {
+                onApprovalDecision(run, approvalId, "reject");
+              }
+            }}
+            size="sm"
+            variant="destructive"
+          >
+            <XCircle aria-hidden="true" />
+            {t("workflows.runs.action.reject")}
+          </Button>
+        </div>
+      ) : state === "waiting_for_approval" ? (
+        <span className="text-xs font-medium text-tint-warn-fg" role="status">
+          {t("workflows.runs.approvalUnavailable")}
+        </span>
+      ) : null}
       <div className="flex min-w-0 flex-wrap items-center justify-end gap-1.5">
         {standardActions.map(renderAction)}
       </div>
@@ -83,10 +126,10 @@ export function RunFact({ icon, label, value }: { icon: ReactNode; label: string
 
 export function RunStatusBadge({ status }: { status: string }) {
   const { t } = useI18n();
-  const normalized = status.toLowerCase();
-  const variant = ["failed", "error", "cancelled"].includes(normalized)
+  const state = workflowRunState(status);
+  const variant = state === "failed" || state === "rollback_requested" || state === "cancelled"
     ? "destructive"
-    : ["succeeded", "success", "completed"].includes(normalized)
+    : state === "succeeded"
       ? "default"
       : "secondary";
   return <Badge variant={variant}>{statusLabel(status, t)}</Badge>;
@@ -111,20 +154,40 @@ export function shortRunId(value: string): string {
 type T = ReturnType<typeof useI18n>["t"];
 
 function statusLabel(status: string, t: T): string {
-  const normalized = status.toLowerCase();
-  if (["succeeded", "success", "completed"].includes(normalized)) return t("workflows.status.succeeded");
-  if (["failed", "error"].includes(normalized)) return t("workflows.status.failed");
-  if (normalized === "cancelled") return t("workflows.status.cancelled");
-  if (normalized === "waiting_for_approval") return t("workflows.status.waitingApproval");
-  if (["running", "in_progress", "queued"].includes(normalized)) return t("workflows.status.running");
-  if (normalized === "paused") return t("workflows.status.paused");
+  const state = workflowRunState(status);
+  if (state === "succeeded") return t("workflows.status.succeeded");
+  if (state === "failed") return t("workflows.status.failed");
+  if (state === "rollback_requested") return t("workflows.status.rollbackRequested");
+  if (state === "cancelled") return t("workflows.status.cancelled");
+  if (state === "waiting_for_approval") return t("workflows.status.waitingApproval");
+  if (state === "running") return t("workflows.status.running");
+  if (state === "paused") return t("workflows.status.paused");
   return t("workflows.status.pending");
 }
 
-function actionsForStatus(status: string): ReleaseRunAction[] {
-  const normalized = status.toLowerCase();
-  if (normalized === "paused") return ["resume", "cancel", "notify"];
-  if (["failed", "error"].includes(normalized)) return ["retry", "rollback", "notify"];
-  if (["succeeded", "cancelled"].includes(normalized)) return ["notify"];
-  return ["advance", "pause", "cancel", "notify"];
+function actionsForRun(run: ReleaseRun): ReleaseRunAction[] {
+  const state = workflowRunState(run.derived_status || run.status);
+  const rollback = rollbackAllowed(run, state) ? ["rollback" as const] : [];
+  if (state === "running") return ["advance", "pause", ...rollback, "cancel", "notify"];
+  if (state === "paused") return ["resume", ...rollback, "cancel", "notify"];
+  if (state === "waiting_for_approval") return [...rollback, "cancel", "notify"];
+  if (state === "failed") return ["retry", "notify"];
+  if (state === "succeeded" || state === "cancelled" || state === "rollback_requested") {
+    return ["notify"];
+  }
+  return ["cancel", "notify"];
+}
+
+function rollbackAllowed(run: ReleaseRun, state: ReturnType<typeof workflowRunState>): boolean {
+  return ["running", "paused", "waiting_for_approval"].includes(state)
+    && run.settings.rollback_policy !== "disabled";
+}
+
+function pendingApprovalId(run: ReleaseRun): string | null {
+  const waitingStep = run.steps.find((step) => (
+    workflowRunState(step.status) === "waiting_for_approval"
+    && typeof step.approval_id === "string"
+    && step.approval_id.trim() !== ""
+  ));
+  return waitingStep?.approval_id?.trim() || null;
 }

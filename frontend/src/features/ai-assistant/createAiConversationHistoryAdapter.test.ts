@@ -105,6 +105,52 @@ describe("persisted AI conversation history adapter", () => {
     );
   });
 
+  it("maps only safe failure metadata from a stored assistant fallback", async () => {
+    const port = createAiConversationHistoryAdapter({
+      append: vi.fn(),
+      create: vi.fn(),
+      get: vi.fn().mockResolvedValue({
+        conversation: {
+          conversation_id: "aic-failed",
+          title: "cluster diagnosis",
+          status: "failed",
+          context: { cluster_id: "prod-eks" },
+          updated_at: "2026-07-20T00:10:00Z",
+        },
+        messages: [{
+          message_id: "aim-user",
+          role: "user",
+          content: "Why did the pod restart?",
+          created_at: "2026-07-20T00:09:00Z",
+        }, {
+          message_id: "aim-assistant",
+          role: "assistant",
+          content: "No diagnosis was generated. Review and retry.",
+          created_at: "2026-07-20T00:10:00Z",
+          metadata: {
+            failure_code: "rate_limited",
+            retryable: true,
+            provider_body: "must-not-cross-the-contract",
+          },
+        }],
+        ...COMPLETE_PAGE,
+      }),
+      list: vi.fn(),
+    });
+
+    await expect(port.load("aic-failed")).resolves.toMatchObject({
+      status: "failed",
+      messages: [
+        { id: "aim-user", role: "user" },
+        {
+          id: "aim-assistant",
+          role: "assistant",
+          failure: { code: "rate_limited", retryable: true },
+        },
+      ],
+    });
+  });
+
   it("maps malformed stored data to an explicit invalid-response failure", async () => {
     const port = createAiConversationHistoryAdapter({
       append: vi.fn(),

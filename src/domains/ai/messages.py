@@ -24,13 +24,33 @@ _CATALOG: dict[str, dict[str, str]] = {
         "en": "No response generated.",
         "ko": "생성된 응답이 없습니다.",
     },
-    "chat.failure_reason": {
-        "en": "agent response failed: {error}",
-        "ko": "에이전트 응답 실패: {error}",
+    "chat.failure.rate_limited.reason": {
+        "en": "AI provider rate limit reached",
+        "ko": "AI 공급자 요청 한도에 도달했습니다",
     },
-    "chat.timeout_reason": {
-        "en": "agent response timed out after {seconds}s",
-        "ko": "에이전트 응답이 {seconds}초 안에 완료되지 않았습니다",
+    "chat.failure.rate_limited.fallback": {
+        "en": (
+            "The AI provider is temporarily rate-limited, so no diagnosis was generated. "
+            "Your request is preserved. Review it and retry in a moment."
+        ),
+        "ko": (
+            "AI 공급자의 요청 한도에 일시적으로 도달해 진단을 생성하지 못했습니다. "
+            "질문은 보존했습니다. 내용을 확인한 뒤 잠시 후 다시 시도하세요."
+        ),
+    },
+    "chat.failure.unavailable.reason": {
+        "en": "AI provider is unavailable",
+        "ko": "AI 공급자를 사용할 수 없습니다",
+    },
+    "chat.failure.unavailable.fallback": {
+        "en": (
+            "The AI provider is unavailable, so no diagnosis was generated. "
+            "Your request is preserved. Review it before retrying."
+        ),
+        "ko": (
+            "AI 공급자를 사용할 수 없어 진단을 생성하지 못했습니다. "
+            "질문은 보존했습니다. 다시 시도하기 전에 내용을 확인하세요."
+        ),
     },
 }
 

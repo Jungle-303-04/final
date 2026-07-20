@@ -34,19 +34,25 @@ export function WorkflowEvidenceNavigation({
         <RunWorkspace
           applications={page.data.applications}
           onAction={(run, action) => void page.runAction(run.run_id, action)}
+          onApprovalDecision={(_run, approvalId, decision) => (
+            void page.decideApproval(approvalId, decision)
+          )}
           onCheckReadiness={() => void page.checkReadiness()}
-          onEdit={() => page.setView("edit")}
+          onEdit={page.openEditor}
           onStart={() => void page.startPlan()}
+          onRetryRuns={page.data.refreshRuns}
           pending={["readiness", "start", "run"].includes(page.operation)}
           plan={page.selectedPlan}
           readiness={page.readiness}
           runs={page.data.runs}
+          runsError={page.data.runsError}
+          runsLoading={page.data.runsLoading}
         />
       ) : null}
       {page.view === "yaml" ? (
         <ManifestWorkspace
           onGenerate={(index) => void page.generateManifest(index)}
-          onEdit={() => page.setView("edit")}
+          onEdit={page.openEditor}
           onSafePr={(index) => void page.submitSafePr(index)}
           pending={page.operation === "generate" ? "generate" : page.operation === "safe-pr" ? "safe-pr" : "idle"}
           plan={page.selectedPlan}

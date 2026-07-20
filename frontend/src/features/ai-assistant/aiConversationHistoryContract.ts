@@ -40,6 +40,10 @@ export interface AiStoredConversationMessage {
   role: "assistant" | "user";
   content: string;
   createdAt: string;
+  failure?: {
+    code: "rate_limited" | "unavailable";
+    retryable: boolean;
+  };
 }
 
 export interface AiStoredConversation {

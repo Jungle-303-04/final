@@ -6,6 +6,7 @@ import asyncio
 import inspect
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
+from typing import Any
 
 import httpx
 
@@ -22,11 +23,13 @@ from packages.config.logs import CONTEXT_KEY, get_logger
 from packages.config.settings import env
 from packages.contracts.alert.provider import AlertProvider
 from packages.contracts.event_bus.bodies import EventBody
+from packages.events.envelope import event
 from packages.runtime.app import App, EventContext
-from packages.runtime.async_db import AsyncDb
+from packages.runtime.async_db import AsyncDb, run_sync_with_uow_affinity
 from packages.runtime.service import AsyncService
 from packages.runtime.worker import WorkerRuntime
 from packages.storage.database import Database, wait_for_database
+from packages.storage.retry import to_thread_db_retry
 
 app = App("alert-worker")
 LOGGER = get_logger(__name__)
@@ -46,6 +49,15 @@ DEFAULT_ALERT_EVALUATION_INTERVAL_SECONDS = "5"
 ALERT_MEASUREMENT_MAX_AGE_SECONDS_ENV = "ALERT_MEASUREMENT_MAX_AGE_SECONDS"
 ALERT_SEVERITY_BLOCKED_REASON = "alert severity blocked by policy"
 AUTO_COMMAND_ENVIRONMENT_DENIED_REASON = "auto command not allowed for environment"
+ALERT_SELECTED_CHANNELS_UNAVAILABLE_REASON = "selected alert channels unavailable"
+RULE_DELIVERY_SEVERITY = {
+    "critical": "critical",
+    "high": "critical",
+    "medium": "warning",
+    "low": "info",
+    "warning": "warning",
+    "info": "info",
+}
 # 웹훅 URL 부재는 부팅 실패가 아니라 요청 시점 실패 — 워커는 뜨고,
 # 각 alert.requested 는 alert.rejected 경로로 흐름.
 MISSING_WEBHOOK_URL_MESSAGE = (
@@ -175,11 +187,13 @@ async def matching_channels(
     loaded = lister(evt.workspace_id)
     channels = await loaded if inspect.isawaitable(loaded) else loaded
     channels = channels or []
+    selected = set(evt.channel_ids) if evt.channel_ids is not None else None
     return [
         dict(channel)
         for channel in channels
         if bool(channel.get("enabled", True))
         and severity_matches(str(channel.get("min_severity", "warning")), evt.severity)
+        and (selected is None or str(channel.get("channel_id") or "") in selected)
     ]
 
 
@@ -219,6 +233,15 @@ async def on_alert_requested(
             return
         if evt.next_command is not None:
             yield evt.next_command
+        return
+
+    if evt.channel_ids is not None:
+        # 규칙 전이는 선택 채널 밖으로 새지 않는다. 삭제·비활성·severity 불일치는
+        # 전역 provider 폴백이 아니라 명시적 거부 이벤트로 남긴다.
+        yield AlertRejectedBody(
+            reason=ALERT_SELECTED_CHANNELS_UNAVAILABLE_REASON,
+            requested=evt.to_body(),
+        )
         return
 
     try:
@@ -290,6 +313,63 @@ async def run_alert_evaluation(
             continue
 
 
+@dataclass(frozen=True)
+class AlertRuleTransitionNotifier:
+    """Stage rule transitions into the existing alert.requested delivery chain."""
+
+    db: Database
+
+    async def __call__(self, transition: dict[str, object]) -> None:
+        def stage() -> None:
+            with self.db.unit_of_work() as connection:
+                self.stage(connection, transition)
+
+        await run_sync_with_uow_affinity(stage, thread_runner=to_thread_db_retry)
+
+    def stage(self, connection: Any, transition: dict[str, object]) -> None:
+        """Join the evaluator's UoW so state and external delivery are atomic."""
+        body = alert_request_for_rule_transition(transition)
+        if body.channel_ids == []:
+            # A rule with no selected external channels remains a valid in-app
+            # alert.  Do not manufacture an alert.rejected outbox entry for it.
+            return
+        envelope = event(
+            body.__subject__,
+            app.name,
+            body.to_body(),
+            correlation_id=str(transition["event_id"]),
+            workspace_id=body.workspace_id,
+        )
+        self.db.record_event(envelope)
+        self.db.stage_events(connection, [envelope])
+
+
+def alert_request_for_rule_transition(transition: dict[str, object]) -> AlertRequestedBody:
+    subject = transition.get("subject")
+    subject = subject if isinstance(subject, dict) else {}
+    state = str(transition.get("transition") or "")
+    state_label = "해소" if state == "resolved" else "발생"
+    rule_name = str(transition.get("rule_name") or transition.get("rule_id") or "알림 규칙")
+    channel_ids = transition.get("channel_ids")
+    selected = (
+        [str(channel_id) for channel_id in channel_ids]
+        if isinstance(channel_ids, list | tuple)
+        else None
+    )
+    return AlertRequestedBody(
+        cluster_id=str(subject.get("cluster") or "unknown"),
+        namespace=str(subject.get("namespace") or ""),
+        severity=RULE_DELIVERY_SEVERITY.get(
+            str(transition.get("severity") or "warning").strip().lower(),
+            "warning",
+        ),
+        message=f"{rule_name} · {state_label}",
+        reason=f"alert rule {state or 'firing'}",
+        workspace_id=str(transition.get("workspace_id") or "default"),
+        channel_ids=selected,
+    )
+
+
 async def serve_alert_worker() -> None:
     """Run the NATS delivery consumer and the DB-backed rule evaluator as one service."""
     evaluation_store = Database()
@@ -314,6 +394,7 @@ async def serve_alert_worker() -> None:
     engine = AlertEvaluationEngine(
         evaluation_db,
         load_measurements=loader,
+        notify=AlertRuleTransitionNotifier(evaluation_store),
         interval_seconds=interval_seconds,
     )
     stopping = asyncio.Event()

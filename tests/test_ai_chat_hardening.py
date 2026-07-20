@@ -25,7 +25,8 @@ def test_message_catalog_locales_and_fallback() -> None:
     assert text("chat.empty_response", "ko") == "생성된 응답이 없습니다."
     # 미등록 로케일은 기본 로케일 폴백
     assert text("chat.empty_response", "fr") == text("chat.empty_response", DEFAULT_LOCALE)
-    assert text("chat.failure_reason", "ko", error="x").endswith("x")
+    assert "진단을 생성하지 못했습니다" in text("chat.failure.rate_limited.fallback", "ko")
+    assert "rate-limited" in text("chat.failure.rate_limited.fallback", "en")
 
     with pytest.raises(KeyError, match="unknown message key"):
         text("chat.nonexistent")
@@ -33,7 +34,7 @@ def test_message_catalog_locales_and_fallback() -> None:
 
 def test_every_message_key_has_default_locale() -> None:
     for key in registered_message_keys():
-        assert text(key, DEFAULT_LOCALE, error="e", seconds=1)
+        assert text(key, DEFAULT_LOCALE)
 
 
 def test_prompt_includes_history_and_locale() -> None:

@@ -33,6 +33,9 @@ class AlertRequestedBody(EventBody):
     workflow_run_id: str = DEFAULT_WORKFLOW_RUN_ID
     binding_id: str = DEFAULT_DEPLOYMENT_BINDING_ID
     environment: str = DEFAULT_ENVIRONMENT
+    # None은 기존 발행자의 severity 기반 전체 라우팅, 비어 있지 않은 list는
+    # 규칙이 선택한 채널만 허용. 빈 list인 규칙 전이는 notifier가 인앱 전용으로 남긴다.
+    channel_ids: list[str] | None = None
 
 
 @event(EventSubject.ALERT_DISPATCHED)

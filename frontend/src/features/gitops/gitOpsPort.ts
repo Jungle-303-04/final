@@ -1,5 +1,6 @@
 import type { RepositoryConnectionPort } from "./repositoryConnectionContract";
 import type {
+  ApprovalDecision,
   GitOpsApplicationDetail,
   GitOpsResourceActionInput,
   GitOpsResourceInsights,
@@ -34,6 +35,12 @@ export interface GitOpsPort extends RepositoryConnectionPort {
   previewPlan(plan: ReleasePlan, signal?: AbortSignal): Promise<ReleasePreview>;
   checkReadiness(plan: ReleasePlan, signal?: AbortSignal): Promise<ReleaseReadiness>;
   startPlan(plan: ReleasePlan, signal?: AbortSignal): Promise<ReleaseRun>;
+  decideApproval(
+    approvalId: string,
+    decision: ApprovalDecision,
+    reason?: string,
+    signal?: AbortSignal,
+  ): Promise<void>;
   renderManifest(plan: ReleasePlan, stepIndex: number, signal?: AbortSignal): Promise<GeneratedManifest>;
   submitSafePr(plan: ReleasePlan, stepIndex: number, signal?: AbortSignal): Promise<SafePrResult>;
   runAction(
