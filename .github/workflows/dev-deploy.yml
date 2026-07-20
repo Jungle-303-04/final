@@ -70,8 +70,6 @@ jobs:
       CONSOLE_BOOTSTRAP_ENABLED: ${{ vars.AWS_DEV_CONSOLE_BOOTSTRAP_ENABLED || '0' }}
       PUBLIC_EDGE_MAX_ATTEMPTS: ${{ vars.AWS_DEV_PUBLIC_EDGE_MAX_ATTEMPTS || '30' }}
       PUBLIC_EDGE_RETRY_SECONDS: ${{ vars.AWS_DEV_PUBLIC_EDGE_RETRY_SECONDS || '2' }}
-      ROUTE_SMOKE_MAX_PHASE_MS: ${{ vars.AWS_DEV_ROUTE_SMOKE_MAX_PHASE_MS || '12000' }}
-      ROUTE_SMOKE_MAX_ROUTE_MS: ${{ vars.AWS_DEV_ROUTE_SMOKE_MAX_ROUTE_MS || '24000' }}
       ROUTE_SMOKE_MIN_CRITICAL_API_REQUESTS: ${{ vars.AWS_DEV_ROUTE_SMOKE_MIN_CRITICAL_API_REQUESTS || '1' }}
       DEPLOY_LEASE_TTL_SECONDS: ${{ vars.AWS_DEV_DEPLOY_LEASE_TTL_SECONDS || '600' }}
     steps:
@@ -171,8 +169,6 @@ jobs:
           [[ "${CONSOLE_BOOTSTRAP_ENABLED}" =~ ^[01]$ ]]
           [[ "${PUBLIC_EDGE_MAX_ATTEMPTS}" =~ ^[1-9][0-9]*$ ]]
           [[ "${PUBLIC_EDGE_RETRY_SECONDS}" =~ ^[0-9]+([.][0-9]+)?$ ]]
-          [[ "${ROUTE_SMOKE_MAX_PHASE_MS}" =~ ^[1-9][0-9]*$ ]]
-          [[ "${ROUTE_SMOKE_MAX_ROUTE_MS}" =~ ^[1-9][0-9]*$ ]]
           [[ "${ROUTE_SMOKE_MIN_CRITICAL_API_REQUESTS}" =~ ^[1-9][0-9]*$ ]]
           [[ "${DEPLOY_LEASE_TTL_SECONDS}" =~ ^[1-9][0-9]*$ ]]
           if [[ "${DEPLOYMENT_SCOPE}" == "FULL" ]]; then

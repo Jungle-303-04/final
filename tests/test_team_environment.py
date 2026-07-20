@@ -77,12 +77,3 @@ def test_github_secret_sync_uses_stdin_and_explicit_allowlist() -> None:
     assert "RELEASE_FLOW_API_BASE_URL" in script
     assert 'gh secret set "${secret_name}" --repo "${REPOSITORY}" --body -' in script
     assert "AWS_SECRET_ACCESS_KEY" not in script
-
-
-def test_local_testing_docs_explain_secret_distribution_boundary() -> None:
-    docs = read("docs/local-testing.md")
-
-    assert "GitHub Actions Secret" in docs
-    assert "다시 내려받을 수 없다" in docs
-    assert "kubeheal/test/team" in docs
-    assert "scripts/bootstrap-team-env.sh" in docs

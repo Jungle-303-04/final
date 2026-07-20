@@ -144,10 +144,6 @@ jobs:
         if: ${{ needs.source-proof.outputs.gate_scope != 'REUSE' }}
         run: uv sync --frozen
 
-      - name: Verify commit message gate rules
-        if: ${{ needs.source-proof.outputs.gate_scope == 'FULL' || needs.source-proof.outputs.gate_scope == 'BACKEND' }}
-        run: uv run pytest -q tests/test_commit_msg_gate.py
-
       - name: Run contract and manifest gate
         if: ${{ needs.source-proof.outputs.gate_scope == 'FRONTEND' }}
         run: make gate-contract-manifest

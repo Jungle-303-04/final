@@ -44,6 +44,7 @@ def test_make_gate_is_the_single_full_gate_entrypoint() -> None:
     ) in makefile
     assert "tests/test_dev_gate_workflow.py" in minimum_recipe
     assert "tests/test_merged_pr_gate_reuse.py" in minimum_recipe
+    assert "tests/test_commit_msg_gate.py" not in minimum_recipe
     assert "bash scripts/manifest-check.sh" in minimum_recipe
 
     frontend_recipe = make_recipe("gate-frontend")
@@ -61,19 +62,20 @@ def test_make_gate_is_the_single_full_gate_entrypoint() -> None:
     assert "npm run build" in changed_frontend_recipe
 
 
-def test_make_gate_fast_keeps_static_checks_and_explicit_changed_tests() -> None:
+def test_make_gate_fast_keeps_static_checks_without_repeating_ci_product_tests() -> None:
     makefile = (ROOT / "Makefile").read_text()
     recipe = make_recipe("gate-fast")
 
-    assert "FAST_TESTS ?= tests/test_dev_gate_contract.py" in makefile
+    assert "FAST_TESTS" not in makefile
     assert "uv run ruff check ." in recipe
     assert "uv run ruff format --check ." in recipe
     assert "uv run lint-imports --config .importlinter" in recipe
     assert "uv run python -m compileall -q src scripts" in recipe
-    assert "uv run pytest -q $(FAST_TESTS)" in recipe
     assert "npm run typecheck" in recipe
     assert "npm run lint" in recipe
-    assert "npm test" in recipe
+    assert "product-design-guard.mjs --release-gate" in recipe
+    assert "uv run pytest" not in recipe
+    assert "npm test" not in recipe
     assert "npm run build" not in recipe
 
 
@@ -151,16 +153,20 @@ def test_dev_ci_reuses_pr_proof_on_push_and_keeps_full_pr_checks() -> None:
         "${{ needs.source-proof.outputs.gate_scope == 'FULL' "
         "|| needs.source-proof.outputs.gate_scope == 'BACKEND' }}"
     )
-    commit_test = next(
-        step
-        for step in jobs["backend"]["steps"]
-        if step.get("name") == "Verify commit message gate rules"
-    )
     full_or_backend = (
         "${{ needs.source-proof.outputs.gate_scope == 'FULL' "
         "|| needs.source-proof.outputs.gate_scope == 'BACKEND' }}"
     )
-    assert commit_test["if"] == full_or_backend
+    commit_gate_runs = [
+        step["run"]
+        for job in jobs.values()
+        for step in job.get("steps", [])
+        if "commit-msg-gate.sh" in str(step.get("run", ""))
+    ]
+    assert commit_gate_runs == ["scripts/commit-msg-gate.sh --range origin/dev..HEAD"]
+    assert all(
+        step.get("name") != "Verify commit message gate rules" for step in jobs["backend"]["steps"]
+    )
     assert jobs["backend"]["steps"][-1]["run"] == "make gate-backend"
     assert jobs["backend"]["steps"][-1]["if"] == full_or_backend
     assert jobs["frontend"]["steps"][-1]["run"] == "make gate-frontend"

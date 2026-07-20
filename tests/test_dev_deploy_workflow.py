@@ -306,8 +306,8 @@ def test_deploy_runs_authenticated_dynamic_browser_route_smoke_before_recording(
     assert '"/api/auth/workspaces/switch"' not in script
     assert "DEMO_WORKSPACE_ID" not in script
     assert "assertRouteReleaseBudget" in script
-    assert "ROUTE_SMOKE_MAX_PHASE_MS" in script
-    assert "ROUTE_SMOKE_MAX_ROUTE_MS" in script
+    assert "ROUTE_SMOKE_MAX_PHASE_MS" not in script
+    assert "ROUTE_SMOKE_MAX_ROUTE_MS" not in script
     assert "ROUTE_SMOKE_MIN_CRITICAL_API_REQUESTS" in script
     assert 'input[name="email"]' not in script
     assert 'input[name="password"]' not in script

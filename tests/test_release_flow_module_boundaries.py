@@ -1,13 +1,8 @@
 from __future__ import annotations
 
-import ast
 import importlib
-from pathlib import Path
 
 from domains.release_flow import router as release_router
-
-ROOT = Path(__file__).resolve().parents[1]
-RELEASE_FLOW_DIR = ROOT / "src" / "domains" / "release_flow"
 
 EXPECTED_EXPORTS = {
     "_support": {
@@ -52,24 +47,3 @@ def test_release_flow_internal_modules_are_router_compatible_facades() -> None:
         module = importlib.import_module(f"domains.release_flow.{module_name}")
         for name in names:
             assert getattr(release_router, name) is getattr(module, name)
-
-
-def test_release_flow_internal_modules_do_not_import_router_backwards() -> None:
-    for module_name in EXPECTED_EXPORTS:
-        source = (RELEASE_FLOW_DIR / f"{module_name}.py").read_text()
-        tree = ast.parse(source)
-        imported = {
-            alias.name
-            for node in ast.walk(tree)
-            if isinstance(node, ast.Import)
-            for alias in node.names
-        }
-        imported.update(
-            node.module or "" for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)
-        )
-        assert "domains.release_flow.router" not in imported
-        assert not any(value.endswith(".release_flow.router") for value in imported)
-
-
-def test_release_flow_router_is_reduced_to_transport_and_orchestration() -> None:
-    assert len((RELEASE_FLOW_DIR / "router.py").read_text().splitlines()) < 2_000

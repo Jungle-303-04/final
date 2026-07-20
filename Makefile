@@ -10,7 +10,6 @@ LOCAL_TEST_ENV ?= .env.local-test
 FRONTEND_PORT ?= 5175
 FRONTEND_HOST ?= 127.0.0.1
 FRONTEND_BACKEND_ORIGIN ?= https://k8s.woonyong.org
-FAST_TESTS ?= tests/test_dev_gate_contract.py
 REFERENCE_PROVENANCE ?= references/provenance/source.json
 REFERENCE_REVISION ?= $(shell node scripts/reference-provenance.mjs revision)
 REFERENCE_UI_BASE_REVISION ?= $(shell node scripts/reference-provenance.mjs ui-base-revision)
@@ -144,7 +143,7 @@ gate-backend: product-brand-boundary-check reference-ledger-check reference-feat
 	bash scripts/manifest-check.sh
 
 gate-contract-manifest: product-brand-boundary-check reference-ledger-check reference-feature-ledger-check ## 교차 계약·manifest 최소 gate
-	uv run pytest -q tests/test_dev_gate_contract.py tests/test_dev_gate_workflow.py tests/test_merged_pr_gate_reuse.py tests/test_commit_msg_gate.py
+	uv run pytest -q tests/test_dev_gate_contract.py tests/test_dev_gate_workflow.py tests/test_merged_pr_gate_reuse.py
 	bash scripts/manifest-check.sh
 
 gate-deploy-smoke-backend: ## 배포 스모크 셸·회귀 테스트 전용 gate
@@ -177,12 +176,11 @@ gate-frontend-changed: ## 프론트 정적 검사·영향 테스트·빌드 gate
 	test -s frontend/dist/index.html
 	ls frontend/dist/assets/*.js >/dev/null
 
-gate-fast: ## pre-push용 빠른 정적 검사와 지정 변경 영역 테스트(FAST_TESTS로 선택)
+gate-fast: ## pre-push용 빠른 정적 검사(CI의 제품 테스트와 중복 실행하지 않음)
 	uv run ruff check .
 	uv run ruff format --check .
 	PYTHONPATH=src uv run lint-imports --config .importlinter
 	uv run python -m compileall -q src scripts
-	uv run pytest -q $(FAST_TESTS)
 	@set -e; changed_files="$$(bash scripts/changed-files.sh)"; \
 	if grep -Eq '^frontend/' <<<"$$changed_files"; then \
 		base="$$(bash scripts/changed-files.sh --base)"; \
@@ -192,11 +190,6 @@ gate-fast: ## pre-push용 빠른 정적 검사와 지정 변경 영역 테스트
 		(cd frontend && npm run typecheck); \
 		(cd frontend && npm run lint); \
 		(cd frontend && node scripts/product-design-guard.mjs --release-gate --base "$$base"); \
-		if grep -Eq '^frontend/(package.json|package-lock.json|vitest.config.[^/]+|vite.config.[^/]+|tsconfig[^/]*)$$' <<<"$$changed_files"; then \
-			(cd frontend && npm test -- --maxWorkers=2); \
-		else \
-			(cd frontend && npm test -- --maxWorkers=2 --changed "$$base"); \
-		fi; \
 	else \
 		echo "[gate-fast] frontend 변경 없음 — 프론트 검사 생략"; \
 	fi

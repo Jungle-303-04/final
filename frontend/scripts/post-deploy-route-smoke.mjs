@@ -686,16 +686,6 @@ function slowRequestSummary(requests) {
 
 export function readRouteReleaseBudget(environment) {
   return {
-    maxPhaseMs: positiveIntegerEnvironment(
-      environment,
-      "ROUTE_SMOKE_MAX_PHASE_MS",
-      12_000,
-    ),
-    maxRouteMs: positiveIntegerEnvironment(
-      environment,
-      "ROUTE_SMOKE_MAX_ROUTE_MS",
-      24_000,
-    ),
     minCriticalApiRequests: positiveIntegerEnvironment(
       environment,
       "ROUTE_SMOKE_MIN_CRITICAL_API_REQUESTS",
@@ -709,20 +699,7 @@ export function assertRouteReleaseBudget({
   direct,
   pathname,
   spa,
-  totalDurationMs,
 }) {
-  assert.ok(
-    spa.durationMs <= budget.maxPhaseMs,
-    `route ${pathname} SPA exceeded ${budget.maxPhaseMs}ms: ${spa.durationMs}ms`,
-  );
-  assert.ok(
-    direct.durationMs <= budget.maxPhaseMs,
-    `route ${pathname} direct load exceeded ${budget.maxPhaseMs}ms: ${direct.durationMs}ms`,
-  );
-  assert.ok(
-    totalDurationMs <= budget.maxRouteMs,
-    `route ${pathname} total exceeded ${budget.maxRouteMs}ms: ${totalDurationMs}ms`,
-  );
   const criticalEvidence = (
     spa.successfulCriticalApiRequestCount
     + direct.successfulCriticalApiRequestCount

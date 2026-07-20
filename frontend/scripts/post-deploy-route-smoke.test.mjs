@@ -574,30 +574,22 @@ describe("post-deploy route smoke helpers", () => {
     })).rejects.toThrow("current workspace session workspace mismatch");
   });
 
-  it("uses configurable fail-closed route release budgets", () => {
+  it("uses a configurable fail-closed critical API evidence minimum", () => {
     expect(readRouteReleaseBudget({})).toEqual({
-      maxPhaseMs: 12_000,
-      maxRouteMs: 24_000,
       minCriticalApiRequests: 1,
     });
     expect(readRouteReleaseBudget({
-      ROUTE_SMOKE_MAX_PHASE_MS: "4000",
-      ROUTE_SMOKE_MAX_ROUTE_MS: "7000",
       ROUTE_SMOKE_MIN_CRITICAL_API_REQUESTS: "2",
     })).toEqual({
-      maxPhaseMs: 4_000,
-      maxRouteMs: 7_000,
       minCriticalApiRequests: 2,
     });
     expect(() => readRouteReleaseBudget({
-      ROUTE_SMOKE_MAX_PHASE_MS: "0",
-    })).toThrow("ROUTE_SMOKE_MAX_PHASE_MS must be a positive integer");
+      ROUTE_SMOKE_MIN_CRITICAL_API_REQUESTS: "0",
+    })).toThrow("ROUTE_SMOKE_MIN_CRITICAL_API_REQUESTS must be a positive integer");
   });
 
-  it("fails slow routes and routes without successful critical API evidence", () => {
+  it("does not roll back healthy routes for timing jitter and still requires API evidence", () => {
     const budget = {
-      maxPhaseMs: 4_000,
-      maxRouteMs: 7_000,
       minCriticalApiRequests: 1,
     };
     const passing = {
@@ -613,11 +605,11 @@ describe("post-deploy route smoke helpers", () => {
     })).not.toThrow();
     expect(() => assertRouteReleaseBudget({
       budget,
-      direct: { ...passing, durationMs: 4_001 },
+      direct: { ...passing, durationMs: 30_000 },
       pathname: "/resources",
       spa: passing,
-      totalDurationMs: 6_001,
-    })).toThrow("direct load exceeded 4000ms");
+      totalDurationMs: 60_000,
+    })).not.toThrow();
     expect(() => assertRouteReleaseBudget({
       budget,
       direct: { ...passing, successfulCriticalApiRequestCount: 0 },

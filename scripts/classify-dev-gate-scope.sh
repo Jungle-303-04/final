@@ -90,8 +90,7 @@ while IFS= read -r -d '' path; do
       | frontend/scripts/* \
       | frontend/src/api/* \
       | frontend/src-tauri/* \
-      | tests/test_dev_gate* \
-      | tests/test_commit_msg_gate.py)
+      | tests/test_dev_gate*)
       printf 'FULL\n'
       exit 0
       ;;
