@@ -1,28 +1,28 @@
 # 실행 상태 자기 진단
 
-기준 시각은 2026-07-20 13:27 KST다. 원격 `dev`와 라이브 console은 `c54650ae3e2a02157ba770893f68495a6d309932`로 일치한다. demo 기준은 `demo-freeze-v3`의 `adcf92130`이다. 코드·자동 게이트·API 계약·라이브 상태·브라우저 증거가 같은 digest를 가리키지 않는 항목은 완료로 판정하지 않는다.
+기준 시각은 2026-07-20 17:08 KST다. 원격 `dev`와 라이브 service/console은 `f5e43d76d5773d90998a548e5fd687e7e0be762a`로 일치한다. demo 기준은 `demo-freeze-v3`의 `adcf92130`이다. 코드·자동 게이트·API 계약·라이브 상태·브라우저 증거가 같은 digest를 가리키지 않는 항목은 완료로 판정하지 않는다.
 
 ## 이전 보고 대비 델타 — 10줄 요약
 
-1. RCA 상세 딥링크·복구 상태 동기화 `42369ecf2`는 Gate `29713518047`, Deploy `29713598921`, 인증 브라우저 스모크까지 성공했다.
-2. AI 대화 내역 상태와 클러스터 등록 환경·완료 결과 `993cd2ec2`는 프론트 20/20·등록 백엔드 122/122·governance 41/41을 통과했다.
-3. 같은 `993cd2ec2`의 Gate `29715195803`과 Deploy `29715426460`이 성공했고 post-deploy/API/인증 8라우트 스모크와 rollback 미실행을 확인했다.
-4. 배포 전 클러스터 `environment` 422는 구 백엔드/새 프론트의 일시적 digest 불일치였고, 같은 SHA 재검증에서 production payload HTTP 200·명령 발급·1280 overflow/console 오류 0을 확인했다.
-5. 별개 결함인 최초 등록 POST 실패 뒤 `receipt=null` 재시도 no-op은 로컬에서 입력 보존 후 1단계 복귀로 수정했고 poll 실패 재시도와 함께 12/12를 통과했다.
-6. AI 비동기 대화는 HTTP 200 수락 뒤 `ai-chat-worker`가 실패 상태를 기록할 수 있으나 실패 이유·직접 재시도 CTA가 없어 **부분**이다.
-7. Resources `c54650ae3`은 실 GitOps 저장소→애플리케이션→클러스터/namespace/revision 계보와 실행 가능한 배포 CTA를 반영했고 Gate `29716148166`·Deploy `29716384428`이 성공했다.
-8. 같은 Resources 배치는 current snapshot 노드만 선택하고 fresh inventory CPU/MEM만 폴백하며 stale·비정상 값은 `null`로 유지한다. 백엔드 회귀 40/40·Ruff·post-deploy/authenticated smoke가 성공했다.
-9. 워크플로우 동적 상태·readiness·재시도/롤백은 로컬 13/13이고 알림 canonical event/webhook outbox도 로컬 계약을 통과했지만 아직 라이브 digest가 아니므로 완료가 아니다.
-10. 다음 3수는 Resources 동일 SHA 브라우저 대조 → 워크플로우·알림·AI 실패 복구 배포 → 같은 SHA 실행 경로 재검증이다.
+1. `e5d49f80a`에서 실행 참조 0인 흡수 파생물·폐기 스크립트를 정리했다: 484파일, +4/-115,442이며 upstream/provenance와 현행 구현은 보존했다.
+2. `4bf34cd92`에서 계약·회귀 방지가 아닌 형식 단언을 삭제했다: 6파일, +1/-199이며 동작 계약은 유지했다.
+3. `b037911cd`에서 실사용 0인 프론트 좀비 구현·테스트를 삭제하고 계보 원장을 현행 목적지로 이관했다: 27파일, +107/-2,309.
+4. 세 정리 커밋 합계는 517파일, +112/-117,950이며 최종 Gate 기준 Backend 3,734 pass/3 skip·Frontend 441파일/2,261 pass로 필수 계약이 유지됐다.
+5. `17794575c` Gate `29723401159`의 결정적 실패 2건은 현행 DB pool 50을 16으로 기대한 단언과 Home 인프라 진입의 `view=map`을 누락한 낡은 URL 단언이었다.
+6. 두 단언은 `27805aa3d`·`5cf5c6dd1`로 정합화했지만 Gate `29723983464`는 `5cf5c6dd1` 제목의 필수 ` / ` 누락으로 Commit proof에서 실패했다.
+7. 후속 `5bd0dc347` Gate `29724205163`은 성공했으나 Deploy `29724528898`은 `/cost`의 `GET /api/cost/nodes`가 무경계 윈도 정렬로 PostgreSQL `pgsql_tmp`를 순간 소진해 500을 반환했고 롤백됐다.
+8. `f5e43d76d`는 클러스터별 인덱스 역방향 조회를 먼저 상한 처리하고 작은 집합만 윈도 처리하며 3클러스터·limit 1과 limit 999→288 회귀를 고정했다.
+9. 같은 SHA의 Gate `29725862657`은 Backend 3,734/3 skip·Frontend 2,261 전부 성공했고 Deploy `29726217807`도 11분 7초에 성공했다.
+10. 라이브 `/api/cost/nodes`는 post-deploy 3.050초·인증 direct 2.233초·SPA 2.209초 모두 HTTP 200이고 10라우트 스모크·rollback 미실행까지 같은 SHA로 일치한다. G4는 별도 시각 대조가 남아 **부분**이다.
 
 ## 클로드 인계 요약
 
-- 보고 SHA: 이 보고는 다음 Resources 제품 배치 커밋에 포함해 `dev` push 후 확정 SHA를 채팅 인계 블록에 기록한다.
-- 완료: `42369ecf2` RCA, `993cd2ec2` AI 내역/클러스터 계약, `c54650ae3` Resources 저장소 계보/실노드 후보가 각각 Gate→Deploy→인증 스모크를 완주했다.
-- 진행: Resources 동일 SHA 실브라우저 숫자 대조, 워크플로우·알림 동적 상태, AI 429 안전 복구 UX.
-- 신규 블로커: 외부 OpenAI provider 429 한도 1건은 제품 밖이며, 제품 내부 P0는 실패 이유 안전 노출·질문 보존/직접 재시도로 수렴 중이다. 클러스터 최초 등록 실패 CTA는 `c54650ae3`에서 해소했다.
-- 판단 요청: 없음. A안(표적 배치별 배포·동일 SHA 검증)을 계속 적용하며 B안(미검증 기능 일괄 배치)은 사용하지 않는다.
-- 다음 3수: Resources 실브라우저 대조 → 워크플로우·알림·AI 복구 배포 → 같은 SHA 실행 경로 검증.
+- 보고 SHA: 이 보고를 담은 문서 전용 커밋은 `dev` push 후 채팅 인계 블록에서 확정한다.
+- 완료: 삭제·테스트 다이어트·좀비 소거 517파일(+112/-117,950), 비용 이력 무경계 정렬 제거, Gate `29725862657`과 Deploy `29726217807` 완주.
+- 진행: G4 demo-freeze-v3 동일 SHA 시각·숫자·클릭 대조와 잔여 중복 코드의 소비자 단위 소거.
+- 신규 블로커: 이번 `/cost` 배포 블로커는 해소됐다. 새 외부 사람 필요 항목은 0개이며 G4는 증거 미완료로 부분이다.
+- 판단 요청: 없음. A안(계약 소비자가 있는 작은 삭제 배치)을 유지하고 B안(테스트 수만 목표로 일괄 삭제)은 사용하지 않는다.
+- 다음 3수: 라이브 비용·홈 숫자 재확인 → G4 3-viewport 대조 → 중복군 한 묶음씩 대체 경로 증명 후 소거.
 
 ## 현재 상세 근거
 
@@ -62,10 +62,14 @@
 | `61deed834` | Gate `29712271375`, Deploy `29712347044` | Gate 전부 success, Deploy success(11m08s), API·인증 browser route smoke success | 현재 원격·라이브 전면 Kyro UI 기준점 |
 | `42369ecf2` | Gate `29713518047`, Deploy `29713598921` | RCA 상세 딥링크·복구 상태 동기화, post-deploy·인증 browser route smoke success | RCA 발표 경로 라이브 기준점 |
 | `993cd2ec2` | Gate `29715195803`, Deploy `29715426460` | AI 내역 상태·클러스터 등록 환경/완료 계약, API·인증 browser route smoke success | 현재 원격·라이브 기준점; 실패 재시도 CTA 후속 필요 |
-| `c54650ae3` | Gate `29716148166`, Deploy `29716384428` | Resources 저장소 계보·current-cut 노드/fresh CPU·MEM·클러스터 실패 재시도, API·인증 browser route smoke success | 현재 원격·라이브 기준점; 동일 SHA 숫자/시각 대조 중 |
-| 로컬 후보(커밋 전) | full Vitest·gate-fast·build·governance | full Vitest 443파일·2,271/2,271, gate-fast changed Vitest 210파일·1,190/1,190, typecheck/lint/design 1,414파일/build, governance 41/41 모두 success | 배포와 동일 SHA 증거 전; 완료 아님 |
+| `c54650ae3` | Gate `29716148166`, Deploy `29716384428` | Resources 저장소 계보·current-cut 노드/fresh CPU·MEM·클러스터 실패 재시도, API·인증 browser route smoke success | 이전 원격·라이브 기준점; 동일 SHA 숫자/시각 대조 중 |
+| `e5d49f80a` + `4bf34cd92` + `b037911cd` | 정리 배치 | 517파일, +112/-117,950; 흡수 파생물·형식 단언·실사용 0 프론트 좀비 제거 | G5 진행 중; upstream/provenance·동작 계약 보존 |
+| `17794575c` | Gate `29723401159` | Backend 3,733 pass/3 skip/1 fail, Frontend 2,260 pass/1 fail | DB pool·Home `view=map`의 낡은 테스트 기대 2건; Deploy 없음 |
+| `5cf5c6dd1` | Gate `29723983464`, Deploy `29724007126` | 제목의 필수 ` / ` 누락으로 Commit proof 실패, 제품 검증 skipped | 원격 이력 재작성 없이 후속 정상 제목으로 재기동 |
+| `5bd0dc347` | Gate `29724205163`, Deploy `29724528898` | Gate 성공; `/cost`→`/api/cost/nodes` 500·PostgreSQL `DiskFull`, rollback 성공 | 전체 이력 window sort의 임시 파일 순간 소진 결함 |
+| `f5e43d76d` | Gate `29725862657`, Deploy `29726217807` | Backend 3,734/3 skip·Frontend 2,261 성공, Deploy 11m07s, 인증 10라우트 및 `/cost` direct/SPA 200 | 현재 원격·라이브 기준점; rollback 미실행, G4 시각 증거는 별도 부분 |
 
-현재 확인된 성공 기준점에서 원격 `dev`와 라이브는 `c54650ae3`로 일치한다. exact demo `adcf92130`과의 동일 SHA 3-viewport 대조와 AI worker 실패 복구가 남았으므로 G4 완료를 선언하지 않는다. 다음 push도 소배치 단일 SHA로 만들고 Gate→Deploy 종료까지 추가 push를 금지한다.
+현재 확인된 성공 기준점에서 원격 `dev`와 라이브는 `f5e43d76d`로 일치한다. exact demo `adcf92130`과의 동일 SHA 3-viewport 대조가 남았으므로 G4 완료를 선언하지 않는다. 다음 push도 소배치 단일 SHA로 만들고 Gate→Deploy 종료까지 추가 push를 금지한다.
 
 ### G4 홈과 가시 변화
 
