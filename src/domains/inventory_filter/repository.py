@@ -24,6 +24,7 @@ from sqlalchemy import (
     select,
     true,
     tuple_,
+    union_all,
     update,
     values,
 )
@@ -2022,42 +2023,43 @@ def _resource_metric_history_statements(
 
     usage = ClusterUsageSampleRecord.__table__
     revision = InventoryFilterRevision.__table__
-    eligible = (
-        select(
-            usage.c.cluster_id,
-            usage.c.sampled_at,
-            usage.c.usage,
-            func.max(usage.c.sampled_at)
-            .over(partition_by=usage.c.cluster_id)
-            .label("cluster_latest_sampled_at"),
-            func.row_number()
-            .over(partition_by=usage.c.cluster_id, order_by=usage.c.sampled_at.desc())
-            .label("recency_rank"),
-        )
-        .select_from(
-            usage.join(
-                revision,
-                and_(
-                    revision.c.workspace_id == usage.c.workspace_id,
-                    revision.c.cluster_id == usage.c.cluster_id,
-                    revision.c.snapshot_id == usage.c.snapshot_id,
-                ),
-            )
-        )
+    bounded_limit = max(1, min(limit, 288))
+    eligible_revision = (
+        select(revision.c.snapshot_id)
         .where(
-            usage.c.workspace_id == workspace_id,
-            usage.c.cluster_id.in_(cluster_ids),
+            revision.c.workspace_id == usage.c.workspace_id,
+            revision.c.cluster_id == usage.c.cluster_id,
+            revision.c.snapshot_id == usage.c.snapshot_id,
             revision.c.revision_id <= snapshot_revision,
         )
-        .cte("metric_history_eligible_samples")
+        .exists()
     )
+    branches = [
+        select(usage.c.cluster_id, usage.c.sampled_at, usage.c.usage)
+        .where(
+            usage.c.workspace_id == workspace_id,
+            usage.c.cluster_id == cluster_id,
+            eligible_revision,
+        )
+        .order_by(usage.c.sampled_at.desc())
+        .limit(bounded_limit)
+        for cluster_id in cluster_ids
+    ]
+    bounded = union_all(*branches).cte("bounded_metric_history")
+    eligible = select(
+        bounded.c.cluster_id,
+        bounded.c.sampled_at,
+        bounded.c.usage,
+        func.max(bounded.c.sampled_at)
+        .over(partition_by=bounded.c.cluster_id)
+        .label("cluster_latest_sampled_at"),
+    ).cte("metric_history_eligible_samples")
     history = (
         select(eligible.c.cluster_id, eligible.c.sampled_at, eligible.c.usage)
         .where(
             eligible.c.sampled_at
             >= eligible.c.cluster_latest_sampled_at
             - timedelta(seconds=max(60, min(window_seconds, 24 * 60 * 60))),
-            eligible.c.recency_rank <= max(1, min(limit, 288)),
         )
         .order_by(eligible.c.cluster_id, eligible.c.sampled_at)
     )
