@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from collections.abc import Awaitable, Callable
 from typing import Any
+
+from sqlalchemy.exc import OperationalError
 
 from domains.inventory.repository import InventorySnapshotMutation
 from domains.timeline.repository import (
@@ -87,15 +90,53 @@ def _persist_inventory_snapshot(
     Kubernetes snapshot can be large, so keeping the whole synchronous unit of
     work on the ASGI loop would stall every agent and browser request in the
     process until the inventory and Timeline writes commit.
+
+    Cluster-scoped writers share one transaction-scoped advisory lock. Under
+    frequent collection that lock can exceed ``lock_timeout`` and raise
+    ``LockNotAvailable``. Retrying on a fresh transaction avoids dropping the
+    snapshot; each attempt re-runs stale detection, so ordering stays correct.
     """
-    with unit_of_work_or_null(db):
-        return _write_inventory_snapshot(
-            db,
-            workspace_id=workspace_id,
-            cluster_id=cluster_id,
-            agent_id=agent_id,
-            payload=payload,
-        )
+
+    def _once() -> tuple[JsonObject, tuple[TimelineLedgerAppend, ...]]:
+        with unit_of_work_or_null(db):
+            return _write_inventory_snapshot(
+                db,
+                workspace_id=workspace_id,
+                cluster_id=cluster_id,
+                agent_id=agent_id,
+                payload=payload,
+            )
+
+    return _run_with_advisory_lock_retry(_once)
+
+
+_ADVISORY_LOCK_RETRY_ATTEMPTS = 5
+_ADVISORY_LOCK_RETRY_BASE_DELAY_SECONDS = 0.05
+_LOCK_NOT_AVAILABLE_SQLSTATE = "55P03"
+
+
+def _run_with_advisory_lock_retry(
+    operation: Callable[[], tuple[JsonObject, tuple[TimelineLedgerAppend, ...]]],
+) -> tuple[JsonObject, tuple[TimelineLedgerAppend, ...]]:
+    """Retry one snapshot write when the shared advisory lock times out."""
+    for attempt in range(_ADVISORY_LOCK_RETRY_ATTEMPTS):
+        try:
+            return operation()
+        except OperationalError as exc:
+            last = attempt == _ADVISORY_LOCK_RETRY_ATTEMPTS - 1
+            if last or not _is_lock_timeout(exc):
+                raise
+            time.sleep(_ADVISORY_LOCK_RETRY_BASE_DELAY_SECONDS * (2 ** attempt))
+    raise RuntimeError("unreachable advisory lock retry")
+
+
+def _is_lock_timeout(exc: OperationalError) -> bool:
+    original = getattr(exc, "orig", None)
+    sqlstate = getattr(original, "sqlstate", None)
+    if sqlstate == _LOCK_NOT_AVAILABLE_SQLSTATE:
+        return True
+    message = str(original if original is not None else exc).lower()
+    return "lock timeout" in message or "locknotavailable" in message
 
 
 async def _persist_inventory_snapshot_with_callbacks(

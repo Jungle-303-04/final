@@ -58,9 +58,9 @@ spec:
             # pgbouncer(transaction pooling)가 서버 커넥션을 다중화하므로
             # 클라이언트 풀을 넉넉히 잡아 폴 대기가 API 요청을 굶기지 않게 한다.
             - name: DB_POOL_SIZE
-              value: "50"
+              value: "64"
             - name: DB_MAX_OVERFLOW
-              value: "50"
+              value: "64"
             - name: DB_POOL_TIMEOUT_SECONDS
               value: "30"
             # 인벤토리 스냅샷 적재는 클러스터별 어드바이저리 락을 트랜잭션 내내 잡는다.
