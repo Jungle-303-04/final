@@ -1199,11 +1199,14 @@ function App() {
   const [pinned, setPinned] = useState<string[]>([]);
   const [q, setQ] = useState(""); // 단일 검색 — 종류 인덱스와 표 행을 동시에 필터
   const [surface, setSurface] = useState<Surface>("home"); // 셸 내 서피스 전환 — 홈이 랜딩(D19)
+  const [scope, setScope] = useState<{ level: string; cluster?: string; node?: string }>({ level: "clusters" });
   const [ns, setNs] = useState("모든 네임스페이스");
   const [nsOpen, setNsOpen] = useState(false);
   // 네임스페이스 셀렉트 — 실 관측 네임스페이스(파드 관측 기반)로 구동. 하드코딩 목록 제거.
   // 계약이 unavailable/빈이면 "모든 네임스페이스"만 남는다.
-  const nsFeed = useInventoryNamespaces(surface === "resources" ? clusterIds : []);
+  const resourcesListActive = surface === "resources" && resView === "list";
+  const resourcesDrillActive = surface === "resources" && resView === "map" && scope.level !== "clusters";
+  const nsFeed = useInventoryNamespaces(resourcesListActive ? clusterIds : []);
   const nsOptions = useMemo(() => ["모든 네임스페이스", ...nsFeed.items.map((item) => item.namespace)], [nsFeed.items]);
   const [meOpen, setMeOpen] = useState(false); // 계정 메뉴 (헤더 맨 오른쪽, D20)
   const [detail, setDetail] = useState<{ kind: Kind; row: Row } | null>(null);
@@ -1223,14 +1226,12 @@ function App() {
     const set = scope === "cluster" ? setPendingCl : setPendingRepo;
     set((xs) => { const nx = xs.includes(ref) ? xs : [...xs, ref]; try { sessionStorage.setItem(key, JSON.stringify(nx)); } catch { /* 데모 */ } return nx; });
   };
-  const [dense, setDense] = useState(false); // 표 밀도 — 기본/촘촘
   const onAiHandleDown = (e: React.PointerEvent) => {
     e.preventDefault(); setAiDragging(true);
     const move = (ev: PointerEvent) => setAiW(Math.min(560, Math.max(380, (document.documentElement.clientWidth - ev.clientX) / PRESENT_SCALE)));
     const up = () => { setAiDragging(false); window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
     window.addEventListener("pointermove", move); window.addEventListener("pointerup", up);
   };
-  const [scope, setScope] = useState<{ level: string; cluster?: string; node?: string }>({ level: "clusters" });
   const scopeLabel = scope.level === "clusters" ? "전체 클러스터" : scope.level === "nodes" ? `클러스터 ${scope.cluster}` : `노드 ${scope.node}`;
   const kind = KINDS.find((k) => k.id === kindId)!;
   const togglePin = (id: string) => setPinned((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
@@ -1276,7 +1277,7 @@ function App() {
   // 표 데이터: gateway가 단일 클러스터 경로만 제공하므로 전체 범위는 실제 클러스터별
   // 요청을 병렬 수행한 합집합이다. 카운트와 표가 같은 clusterIds를 사용해 2029/0 같은
   // 불일치가 생기지 않는다.
-  const resourceClusterIds = surface === "resources"
+  const resourceClusterIds = resourcesListActive
     ? (scope.cluster ? [scope.cluster] : clusterIds)
     : [];
   const resourcesView = useInventoryResourcesAcrossClusters(resourceClusterIds, kindToResourceType(kindId));
@@ -1302,7 +1303,9 @@ function App() {
   // 클러스터 카드 메타 — 라이브 인벤토리 요약(GET .../inventory/summary)의 종류별 카운트.
   // useInventoryKindCounts는 resource_type 키(소문자) 맵을 주므로, 소비처가 기대하는
   // kind 표기(Deployment 등)로 kindToResourceType 매핑을 통해 조회한다.
-  const kindCountsView = useInventoryKindCounts(surface === "resources" ? clusterIds : []);
+  const kindCountsView = useInventoryKindCounts(
+    resourcesListActive || resourcesDrillActive ? clusterIds : [],
+  );
   const clusterMeta = useMemo(() => {
     const kinds = ["Deployment", "StatefulSet", "DaemonSet", "Service", "Ingress", "Job", "CronJob", "Namespace"] as const;
     const meta: Record<string, Record<string, number>> = {};
@@ -1617,10 +1620,6 @@ function App() {
                 </button>
               ))}
             </span>
-            {/* 스코프 표시는 한 곳씩만: 지도=브레드크럼, 목록=표 제목줄. 흐름은 서비스 수준이라 클러스터 스코프가 적용되지 않는다 */}
-            {resView === "flow" && (
-              <span style={{ fontSize: TYPE.caption2, fontWeight: 600, color: UI.ink3 }}>서비스 호출 관점 — 전체 클러스터</span>
-            )}
           </div>
 
           {resView === "map" && (
@@ -1657,15 +1656,6 @@ function App() {
                   <span style={{ fontSize: TYPE.title3, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink }}>{kind.label}</span>
                   <span style={{ fontSize: TYPE.label, fontFamily: MONO, color: UI.ink3 }}>{shownRows.length}{shownRows.length !== allRows.length ? ` / ${allRows.length}` : ""}</span>
                   <span style={{ fontSize: TYPE.caption2, fontWeight: 600, color: inScope ? BLUE : UI.ink2, background: inScope ? blueA(0.08) : inkA(0.045), borderRadius: 999, padding: "3px 11px" }}>범위 · {scopeLabel}</span>
-                  {/* 밀도 토글 — 많은 행을 한 화면에 */}
-                  <span style={{ marginLeft: "auto", display: "flex", gap: 2, background: inkA(0.05), borderRadius: 8, padding: 2 }}>
-                    {([["기본", false], ["촘촘", true]] as const).map(([l, v]) => (
-                      <button type="button" aria-pressed={dense === v} key={l} onClick={() => setDense(v)}
-                        style={{ border: "none", borderRadius: 6, padding: "3px 9px", fontSize: TYPE.caption2, fontWeight: 600, cursor: "pointer",
-                          background: dense === v ? UI.card : "transparent", color: dense === v ? UI.ink : UI.ink3,
-                          boxShadow: dense === v ? `0 1px 3px ${inkA(0.12)}` : "none" }}>{l}</button>
-                    ))}
-                  </span>
                 </div>
                 {/* 표 교체는 대기 없이 즉시 — exit를 기다리면 전환이 느리고, 탭 스로틀 시 멈춘다 */}
                 <motion.div key={kindId} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={SOFT}>
@@ -1675,7 +1665,7 @@ function App() {
                   ) : resourcesView.status === "unavailable" ? (
                     <div style={{ background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 14, padding: "40px 18px", textAlign: "center", fontSize: TYPE.body, color: UI.ink3 }}>인벤토리 관측 안 됨</div>
                   ) : (
-                    <ResourceTable kind={kind} rows={shownRows} q={q} dense={dense}
+                    <ResourceTable kind={kind} rows={shownRows} q={q} dense
                       filterDesc={[inScope ? `${scopeLabel}` : "", ns !== "모든 네임스페이스" ? `${ns} 네임스페이스` : ""].filter(Boolean).join(" · ")}
                       onClearFilter={() => { setQ(""); setNs("모든 네임스페이스"); }}
                       onOpen={(r) => setDetail({ kind, row: r })} />

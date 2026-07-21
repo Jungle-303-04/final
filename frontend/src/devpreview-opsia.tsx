@@ -16,7 +16,6 @@ import { isActiveIncidentCluster } from "./devpreview/rcaIssuesFeed";
 import { useClusterSummaries, type ClusterSummaryView } from "./devpreview/clusterSummaryFeed";
 import {
   podsForNode,
-  useClusterTopologies,
   useClusterTopology,
   type ClusterTopologyView,
   type InvNode,
@@ -360,7 +359,6 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
   const { clusters } = useDevpreviewContracts();
   const clusterIds = useMemo(() => clusters.map((cl) => cl.id), [clusters]);
   const clusterSummaries = useClusterSummaries(clusterIds);
-  const clusterTopologies = useClusterTopologies(clusterIds);
 
   const [view, setView] = useState<View>(initialCluster ? { level: "nodes", cluster: initialCluster } : { level: "clusters" });
   useEffect(() => { onScopeChange?.(view); }, [view]);
@@ -462,33 +460,6 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
           );
         })()}
 
-        {/* 물리 탐색 레벨은 항상 보이는 하나의 컨트롤로 고정한다. 클러스터 선택은
-            곧 정본 physical topology의 단일 cluster scope가 된다. */}
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
-          <span style={{ display: "flex", gap: 2, background: inkA(0.05), borderRadius: 9, padding: 2 }}>
-            <button type="button" aria-pressed={view.level === "clusters"} onClick={() => { if (view.level !== "clusters") go({ level: "clusters" }, -1); }}
-              style={{ border: "none", borderRadius: 7, padding: "6px 12px", background: view.level === "clusters" ? UI.card : "transparent", color: view.level === "clusters" ? UI.ink : UI.ink3, boxShadow: view.level === "clusters" ? `0 1px 4px ${inkA(0.14)}` : "none", fontSize: TYPE.label2, fontWeight: 700, cursor: "pointer" }}>
-              클러스터 뷰
-            </button>
-            <button type="button" aria-pressed={view.level !== "clusters"}
-              disabled={clusters.length === 0}
-              onClick={() => {
-                const cluster = view.level === "clusters" ? clusters[0]?.id : view.cluster;
-                if (cluster) go({ level: "nodes", cluster }, view.level === "clusters" ? 1 : -1);
-              }}
-              style={{ border: "none", borderRadius: 7, padding: "6px 12px", background: view.level !== "clusters" ? UI.card : "transparent", color: view.level !== "clusters" ? UI.ink : UI.ink3, boxShadow: view.level !== "clusters" ? `0 1px 4px ${inkA(0.14)}` : "none", fontSize: TYPE.label2, fontWeight: 700, cursor: clusters.length ? "pointer" : "not-allowed", opacity: clusters.length ? 1 : 0.45 }}>
-              노드 뷰
-            </button>
-          </span>
-          <select aria-label="노드 뷰 클러스터 선택"
-            value={view.level === "clusters" ? "" : view.cluster}
-            onChange={(event) => { const cluster = event.currentTarget.value; if (cluster) go({ level: "nodes", cluster }, 1); }}
-            style={{ minWidth: 220, maxWidth: "100%", border: `1px solid ${UI.line}`, borderRadius: 9, background: UI.card, color: UI.ink, padding: "6px 10px", fontFamily: MONO, fontSize: TYPE.label2, fontWeight: 600 }}>
-            <option value="">노드 뷰 클러스터 선택</option>
-            {clusters.map((cluster) => <option key={cluster.id} value={cluster.id}>{cluster.id}</option>)}
-          </select>
-        </div>
-
         {/* 브레드크럼 */}
         <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 16, minHeight: 28 }}>
           {view.level !== "clusters" && (
@@ -526,7 +497,7 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
                   <div className="cluster-grid" style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 560px))", gap: 14, alignItems: "stretch" }}>
                     {clusters.map((cl, i) => (
                       <motion.div key={cl.id} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ ...SOFT, delay: i * 0.05 }} style={{ display: "flex" }}>
-                        <ClusterRow cl={cl} summary={clusterSummaries[cl.id]} topology={clusterTopologies[cl.id]}
+                        <ClusterRow cl={cl} summary={clusterSummaries[cl.id]}
                           onOpen={() => go({ level: "nodes", cluster: cl.id }, 1)} />
                       </motion.div>
                     ))}
