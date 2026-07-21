@@ -20,7 +20,12 @@ data:
         set $realtime_upstream http://realtime-gateway.management.svc.cluster.local:8000;
 
         location /api/live/ {
-            proxy_pass $realtime_upstream/live/;
+            # 변수 기반 proxy_pass에 URI(`/live/`)를 붙이면 그 URI가 원 요청 경로
+            # 전체를 대체해 `/api/live/browser`가 `/live/`로 뭉개진다(하위 경로와
+            # query 소실 → realtime-gateway 라우트 불일치 → handshake 403).
+            # rewrite로 접두만 치환해 하위 경로/query string을 보존한다.
+            rewrite ^/api/live/(.*)$ /live/$1 break;
+            proxy_pass $realtime_upstream;
             proxy_http_version 1.1;
             proxy_set_header Upgrade $http_upgrade;
             proxy_set_header Connection "upgrade";
