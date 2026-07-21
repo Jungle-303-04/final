@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 
-import { getClusterSummary } from "../api/cluster-summary";
-import type { ClusterSummaryDetail } from "../api/cluster-summary-schemas";
+import { getFleetSummary } from "../api/fleet";
+import type { FleetClusterSummary } from "../api/schemas";
 
 // UI-PHASE2-001 §5.2: a typed live adapter for the Home/cluster cards. Usage,
-// health and open-incident counts come from `GET /api/clusters/{id}/summary`.
+// health and open-incident counts come from the bounded workspace fleet rollup.
 // Missing CPU/MEM (`cpu_pct`/`mem_pct` null) stays null — an honest "not
 // observed" — and is never backfilled with a generated value.
 
@@ -34,18 +34,17 @@ const UNAVAILABLE: ClusterSummaryView = {
   openIncidents: 0,
 };
 
-export function toClusterSummaryView(detail: ClusterSummaryDetail): ClusterSummaryView {
-  const usage = detail.usage;
+export function toClusterSummaryView(detail: FleetClusterSummary): ClusterSummaryView {
   return {
     status: "ready",
     health: detail.health,
-    cpuPct: usage?.cpu_pct ?? null,
-    memPct: usage?.mem_pct ?? null,
-    podsRunning: usage?.pods_running ?? null,
-    podsTotal: usage?.pods_total ?? null,
-    nodesReady: usage?.nodes_ready ?? null,
-    nodesTotal: usage?.nodes_total ?? null,
-    openIncidents: detail.open_incidents.length,
+    cpuPct: detail.cpu_pct,
+    memPct: detail.mem_pct,
+    podsRunning: detail.pods_running,
+    podsTotal: detail.pods_total,
+    nodesReady: detail.nodes_ready,
+    nodesTotal: detail.nodes_total,
+    openIncidents: detail.open_incidents,
   };
 }
 
@@ -55,10 +54,10 @@ function isAbortError(error: unknown): boolean {
 }
 
 /**
- * Reads one live summary per cluster. A cluster with no entry yet is treated as
- * `loading` by consumers, and each response fills its own slot. A scope change
- * aborts obsolete requests so a stale response cannot overwrite the new
- * selection.
+ * Reads one bounded fleet rollup for every visible card. The previous per-card
+ * `/clusters/{id}/summary` fan-out returned full workload inventories and could
+ * saturate the shared gateway before Home rendered. One rollup keeps the card
+ * contract live while avoiding an N-request waterfall.
  */
 export function useClusterSummaries(
   clusterIds: readonly string[],
@@ -69,17 +68,19 @@ export function useClusterSummaries(
     const ids = key ? key.split(" ") : [];
     if (ids.length === 0) return undefined;
     const controller = new AbortController();
-    for (const id of ids) {
-      void getClusterSummary(id, controller.signal)
-        .then((detail) => {
-          if (controller.signal.aborted) return;
-          setSummaries((prev) => ({ ...prev, [id]: toClusterSummaryView(detail) }));
-        })
-        .catch((cause: unknown) => {
-          if (controller.signal.aborted || isAbortError(cause)) return;
-          setSummaries((prev) => ({ ...prev, [id]: UNAVAILABLE }));
-        });
-    }
+    void getFleetSummary(controller.signal)
+      .then((fleet) => {
+        if (controller.signal.aborted) return;
+        const byId = new Map(fleet.clusters.map((item) => [item.cluster_id, item]));
+        setSummaries(Object.fromEntries(ids.map((id) => {
+          const item = byId.get(id);
+          return [id, item === undefined ? UNAVAILABLE : toClusterSummaryView(item)];
+        })));
+      })
+      .catch((cause: unknown) => {
+        if (controller.signal.aborted || isAbortError(cause)) return;
+        setSummaries(Object.fromEntries(ids.map((id) => [id, UNAVAILABLE])));
+      });
     return () => controller.abort();
   }, [key]);
   return summaries;
