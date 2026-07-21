@@ -937,7 +937,6 @@ const NAV_ITEMS: { id: string; label: string; icon: typeof Home }[] = [
   { id: "deploy", label: "배포", icon: Rocket },
   { id: "issues", label: "이슈", icon: AlertTriangle },
   { id: "timeline", label: "타임라인", icon: Clock },
-  { id: "checks", label: "점검", icon: ShieldCheck },
   { id: "cost", label: "비용", icon: Coins },
   // 알림·AI 대화 = 내역 모아보기 서피스(벨·AI 패널의 "전체 보기" 목적지) — 주 내비 소속
   { id: "alerts", label: "알림", icon: Bell },
@@ -950,7 +949,7 @@ const NAV_BOTTOM: { id: string; label: string; icon: typeof Home }[] = [
 ];
 
 type Surface = "home" | "resources" | "connect" | "deploy" | "issues" | "timeline" | "checks" | "cost" | "alerts" | "ai" | "settings";
-const SURFACE_OF: Record<string, Surface> = { home: "home", resources: "resources", deploy: "deploy", issues: "issues", timeline: "timeline", checks: "checks", cost: "cost", alerts: "alerts", ai: "ai", settings: "settings" };
+const SURFACE_OF: Record<string, Surface> = { home: "home", resources: "resources", deploy: "deploy", issues: "issues", timeline: "timeline", cost: "cost", alerts: "alerts", ai: "ai", settings: "settings" };
 // 리소스 서피스의 관점(D18) — 한 서피스, 세 관점. 스코프는 관점을 넘어 보존된다.
 type ResView = "map" | "list" | "flow";
 

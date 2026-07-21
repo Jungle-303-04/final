@@ -65,6 +65,8 @@ const LOCAL_STATUS_KO: Record<string, string> = {
   port_sessions: "포트 세션",
   resource_list: "리소스 목록",
   resource_list_slow: "느린 리소스 목록",
+  rca_planned: "RCA 계획됨",
+  rca_in_progress: "RCA 분석 중",
 };
 function koLabel(raw: string | null | undefined): string {
   const key = raw?.trim().toLowerCase();
@@ -500,7 +502,7 @@ export function IssueDetail({ name, symptom, cluster, svc, ns, onClose, onOpenRe
   );
 }
 
-// ── 이슈 /issues — 탭: 이슈 | 알림 규칙 (5.8) ──
+// ── 이슈 /issues — 진행 중 | RCA | 예방 점검 (5.8 + 5.10 통합) ──
 // RcaIncident: 상세 드로어로 넘기는 이슈 식별자 + 서버가 준 관측 RCA 필드(전부 선택적).
 // 지도 등 상관관계 없는 진입점은 기본 5필드만 채우고, 상세는 정직한 "관측 안 됨"으로.
 export type RcaIncident = {
@@ -520,18 +522,22 @@ export type RcaIncident = {
 export function IssuesSurface({ incidentClusterIds, sessionRules: _sessionRules = [], onOpenRef: _onOpenRef, onAskAi, onOpenRca }: {
   incidentClusterIds: readonly string[]; sessionRules?: string[]; onOpenRef: (kind: string, name: string) => void; onAskAi: () => void; onOpenRca?: (i: RcaIncident) => void;
 }) {
-  const [tab, setTab] = useState("이슈");
+  const [tab, setTab] = useState("진행 중");
   // 이슈 탭 — 실 RCA 이슈 큐(GET /api/dashboard/rca/issues, 홈 W2와 동일 소스).
   // 큐 항목이 관측 RCA 필드(원인/확신도/증거/AI 요약)를 이미 실어주므로 상세 드로어로 그대로 전달한다.
   const issues = useRcaIssueDetails(incidentClusterIds);
-  // 알림 규칙 탭 — 실 GET /api/alert-rules(읽기 전용). 예전의 하드코딩 2개 규칙 +
-  // 세션 파생 규칙(고정 조건)을 로컬 state로 토글하던 가짜 상태를 제거했다. 규칙
-  // 생성/활성 토글은 CSRF가 필요한 mutation이라 이 데모에는 배선되어 있지 않으므로
-  // 서버가 준 규칙만 상태 pill로 렌더하고 편집 컨트롤은 두지 않는다(관측 전용).
-  const alertRules = useAlertRules();
   const openCount = issues.items.filter((i) => !/resolved/i.test(i.status)).length;
   const critCount = issues.items.filter((i) => i.severity === "critical").length;
   const warnCount = issues.items.filter((i) => i.severity === "warning").length;
+  const activeIssues = issues.items.filter((i) => !/resolved/i.test(i.status));
+  const rcaIssues = issues.items.filter((i) =>
+    /rca/i.test(i.status)
+    || Boolean(i.rootCause)
+    || i.confidence !== null
+    || i.supportingEvidence.length > 0
+    || i.missingEvidence.length > 0,
+  );
+  const visibleIssues = tab === "RCA" ? rcaIssues : activeIssues;
   const setRca = (iss: RcaIssueDetailView) => onOpenRca?.({
     name: iss.resourceName ?? iss.correlationId.slice(0, 12),
     symptom: iss.symptom ?? iss.status,
@@ -550,27 +556,26 @@ export function IssuesSurface({ incidentClusterIds, sessionRules: _sessionRules 
     evidenceSummary: iss.evidenceSummary,
     evidenceBundleSummary: iss.evidenceBundleSummary,
   });
-  const incCols: [string, string][] = [["심각도", "96px"], ["이슈", "minmax(200px,2fr)"], ["대상", "minmax(120px,1fr)"], ["네임스페이스", "96px"], ["상태", "80px"]];
-  const ruleCols: [string, string][] = [["규칙", "minmax(150px,1.4fr)"], ["조건", "minmax(150px,1.3fr)"], ["심각도", "80px"], ["채널", "56px"], ["활성", "72px"]];
+  const incCols: [string, string][] = [["심각도", "88px"], ["이슈", "minmax(230px,2fr)"], ["대상", "minmax(150px,1fr)"], ["네임스페이스", "96px"], ["상태", "104px"]];
   return (
-    <Page title="이슈" icon={AlertTriangle} tabs={["이슈", "알림 규칙"]} tab={tab} onTab={setTab}
-      action={tab === "이슈" ? <button onClick={onAskAi} style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${blueA(0.4)}`, background: blueA(0.07), color: BLUE, borderRadius: 9, padding: "6px 13px", fontSize: TYPE.label2, fontWeight: 700, cursor: "pointer" }}>AI로 원인 분석</button> : null}>
-      <ChipRow chips={[
+    <Page title="이슈" icon={AlertTriangle} tabs={["진행 중", "RCA", "예방 점검"]} tab={tab} onTab={setTab}
+      action={tab !== "예방 점검" ? <button onClick={onAskAi} style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${blueA(0.4)}`, background: blueA(0.07), color: BLUE, borderRadius: 9, padding: "6px 13px", fontSize: TYPE.label2, fontWeight: 700, cursor: "pointer" }}>AI로 원인 분석</button> : null}>
+      {tab !== "예방 점검" && <ChipRow chips={[
         { label: "장애", value: critCount, crit: critCount > 0 },
-        { label: "주의", value: warnCount, warn: true },
+        { label: "주의", value: warnCount, warn: warnCount > 0 },
         { label: "미해결", value: openCount },
-        { label: "규칙", value: alertRules.status === "ready" ? alertRules.items.length : "—" },
-      ]} />
-      {tab === "이슈" && (
+        { label: "RCA", value: rcaIssues.length },
+      ]} />}
+      {tab !== "예방 점검" && (
         <Card pad={0}>
           <THead cols={incCols} />
           {issues.status === "loading" ? (
             <div style={{ padding: "14px 15px", fontSize: TYPE.label2, color: UI.ink3 }}>불러오는 중…</div>
           ) : issues.status === "unavailable" ? (
             <div style={{ padding: "14px 15px", fontSize: TYPE.label2, color: UI.ink3 }}>이슈를 불러오지 못했습니다.</div>
-          ) : issues.items.length === 0 ? (
-            <div style={{ padding: "14px 15px", fontSize: TYPE.label2, color: UI.ink2 }}>관측된 이슈가 없습니다.</div>
-          ) : issues.items.map((iss, i) => {
+          ) : visibleIssues.length === 0 ? (
+            <div style={{ padding: "14px 15px", fontSize: TYPE.label2, color: UI.ink2 }}>{tab === "RCA" ? "RCA 분석이 필요한 이슈가 없습니다." : "진행 중인 이슈가 없습니다."}</div>
+          ) : visibleIssues.map((iss, i) => {
             const resolved = /resolved/i.test(iss.status);
             const label = iss.resourceName ?? iss.correlationId.slice(0, 12);
             return (
@@ -586,24 +591,7 @@ export function IssuesSurface({ incidentClusterIds, sessionRules: _sessionRules 
           })}
         </Card>
       )}
-      {tab === "알림 규칙" && (
-        <Card pad={0}>
-          <div style={{ padding: "10px 15px", borderBottom: `1px solid ${UI.line2}`, fontSize: TYPE.caption2, color: UI.ink3 }}>규칙은 보기 전용입니다 · 이 데모에서는 규칙 편집·활성 토글이 지원되지 않습니다</div>
-          <THead cols={ruleCols} />
-          {alertRules.status === "loading" ? emptyRow("불러오는 중…")
-            : alertRules.status === "unavailable" ? emptyRow("알림 규칙을 불러오지 못했습니다.")
-            : alertRules.items.length === 0 ? emptyRow("등록된 규칙 없음")
-            : alertRules.items.map((r, i) => (
-              <TRow key={r.ruleId} cols={ruleCols} i={i} cells={[
-                <span key="n" style={{ display: "flex", alignItems: "center", gap: 7 }}><Bell size={13} style={{ color: BLUE, flexShrink: 0 }} /><span style={{ fontSize: TYPE.label2, fontWeight: 600 }}>{r.name}</span></span>,
-                <span key="c" style={{ fontSize: TYPE.label, color: UI.ink2, fontFamily: MONO }}>{r.metric} {r.comparator} {r.threshold}</span>,
-                <Pill key="s" tone={severityTone(r.severity)} label={koLabel(r.severity)} />,
-                <Mono key="ch">{r.channels.length}</Mono>,
-                <Pill key="e" tone={r.enabled ? "ok" : "info"} label={r.enabled ? "활성" : "중지"} />,
-              ]} />
-            ))}
-        </Card>
-      )}
+      {tab === "예방 점검" && <ChecksContent />}
     </Page>
   );
 }
@@ -727,17 +715,17 @@ export function TimelineSurface({ onOpenRef: _onOpenRef }: { onOpenRef: (kind: s
 // UI-PHASE2-001: 실 GET /api/checks/overview. 현 dev 계약은 결과/카탈로그 관측
 // unavailable(collector 미통합)이며 실 스코프 커버리지만 제공. 미지원 점검을
 // "통과"로 위조하지 않고 정직한 unavailable + 스코프 커버리지를 렌더한다.
-export function ChecksSurface({ onOpenRef: _onOpenRef }: { onOpenRef: (kind: string, name: string) => void }) {
+function ChecksContent() {
   const checks = useChecksOverview();
   if (checks.status === "loading") {
-    return <Page title="점검" icon={ShieldCheck}><Card><span style={{ fontSize: TYPE.label2, color: UI.ink3 }}>불러오는 중…</span></Card></Page>;
+    return <Card><span style={{ fontSize: TYPE.label2, color: UI.ink3 }}>불러오는 중…</span></Card>;
   }
   if (checks.status === "error") {
-    return <Page title="점검" icon={ShieldCheck}><Card><span style={{ fontSize: TYPE.label2, color: UI.ink3 }}>점검 정보를 불러오지 못했습니다.</span></Card></Page>;
+    return <Card><span style={{ fontSize: TYPE.label2, color: UI.ink3 }}>점검 정보를 불러오지 못했습니다.</span></Card>;
   }
   const availabilityLabel = (a: string | null) => a === "available" ? "관측됨" : a === "partial" ? "부분 관측" : "관측 안 됨";
   return (
-    <Page title="점검" icon={ShieldCheck}>
+    <>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
         <Pill tone={checks.resultAvailability === "available" ? "ok" : "warn"} label={`점검 결과 ${availabilityLabel(checks.resultAvailability)}`} />
         <Pill tone={checks.catalogAvailability === "available" ? "ok" : "warn"} label={`카탈로그 ${availabilityLabel(checks.catalogAvailability)}`} />
@@ -764,6 +752,16 @@ export function ChecksSurface({ onOpenRef: _onOpenRef }: { onOpenRef: (kind: str
             </div>
           ))}
       </Card>
+    </>
+  );
+}
+
+// 이전 /checks 진입점은 호환성을 위해 남겨 두되, 주 내비게이션에서는 이슈의
+// '예방 점검' 탭을 사용한다. 두 진입점은 동일한 실 계약과 콘텐츠를 공유한다.
+export function ChecksSurface({ onOpenRef: _onOpenRef }: { onOpenRef: (kind: string, name: string) => void }) {
+  return (
+    <Page title="예방 점검" icon={ShieldCheck}>
+      <ChecksContent />
     </Page>
   );
 }
