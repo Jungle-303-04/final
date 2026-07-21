@@ -896,13 +896,11 @@ async function collectReleasedRoutes(page) {
 
 async function releasedRouteLink(page, pathname) {
   const links = page.locator(NAVIGATION_LINK_SELECTOR);
-  const count = await links.count();
-  for (let index = 0; index < count; index += 1) {
-    const link = links.nth(index);
-    const href = await link.getAttribute("href");
-    if (href && new URL(href, page.url()).pathname === pathname) return link;
-  }
-  throw new Error(`released route link disappeared: ${pathname}`);
+  const hrefs = await links.evaluateAll((items) => items
+    .map((item) => item.getAttribute("href"))
+    .filter((href) => href));
+  assert.ok(hrefs.some((href) => new URL(href, page.url()).pathname === pathname), `released route link disappeared: ${pathname}`);
+  return page.locator(`${SIDEBAR_SELECTOR} nav a[href="${pathname}"]`).first();
 }
 
 async function waitForRouteSurface(
