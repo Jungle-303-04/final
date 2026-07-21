@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
+import { getCommandStatus } from "../api/metrics";
+import type { CommandStatus } from "../api/metrics-schemas";
 import {
   applyResourceManifestEdit,
   approveResourceManifestEdit,
@@ -28,6 +30,7 @@ export function LiveResourceManifestEditor({ resourceId, resolving = false }: { 
   const [approval, setApproval] = useState<ResourceManifestApproveEndpoint | null>(null);
   const [emergencyApproval, setEmergencyApproval] = useState<ResourceManifestApproveEndpoint | null>(null);
   const [applyReceipt, setApplyReceipt] = useState<ResourceManifestApplyEndpoint | null>(null);
+  const [applyStatus, setApplyStatus] = useState<CommandStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const controller = useRef<AbortController | null>(null);
 
@@ -41,6 +44,7 @@ export function LiveResourceManifestEditor({ resourceId, resolving = false }: { 
     setApproval(null);
     setEmergencyApproval(null);
     setApplyReceipt(null);
+    setApplyStatus(null);
     try {
       const loaded = await getResourceManifestSource(resourceId, selectedApplicationId, next.signal);
       if (next.signal.aborted) return;
@@ -71,6 +75,7 @@ export function LiveResourceManifestEditor({ resourceId, resolving = false }: { 
         setApproval(null);
         setEmergencyApproval(null);
         setApplyReceipt(null);
+        setApplyStatus(null);
         setError(null);
         setPhase("ready");
       } catch (cause) {
@@ -82,6 +87,30 @@ export function LiveResourceManifestEditor({ resourceId, resolving = false }: { 
     })();
     return () => next.abort();
   }, [resourceId]);
+
+  useEffect(() => {
+    if (!applyReceipt?.command_id) return;
+    const abort = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const poll = async () => {
+      try {
+        const next = await getCommandStatus(applyReceipt.command_id, abort.signal);
+        if (abort.signal.aborted) return;
+        setApplyStatus(next);
+        if (next.status !== "completed" && next.status !== "failed") {
+          timer = setTimeout(() => void poll(), 1_500);
+        }
+      } catch {
+        // The immutable receipt remains visible. A transient status read must not
+        // turn a successfully queued operation into a fabricated failure.
+      }
+    };
+    void poll();
+    return () => {
+      abort.abort();
+      if (timer !== null) clearTimeout(timer);
+    };
+  }, [applyReceipt?.command_id]);
 
   const sourceIsCurrent = source?.resource_id === resourceId;
   const editInput = sourceIsCurrent && source?.base_sha && source.source_sha256 && applicationId && yaml
@@ -140,6 +169,7 @@ export function LiveResourceManifestEditor({ resourceId, resolving = false }: { 
         reason: reason.trim(),
       });
       setEmergencyApproval(recorded);
+      setApplyStatus(null);
       setApplyReceipt(await applyResourceManifestEdit(resourceId, {
         ...editInput,
         expectedDesiredSha256: preview.desired_sha256,
@@ -210,7 +240,7 @@ export function LiveResourceManifestEditor({ resourceId, resolving = false }: { 
       <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap", fontSize: TYPE.caption2, color: UI.ink2 }}>
         <Pill>{source.selected.repository_ref}</Pill><Pill>{source.selected.branch}</Pill>
         <span style={{ fontFamily: MONO }}>{source.selected.manifest_path}</span>
-        <span style={{ marginLeft: "auto", fontFamily: MONO, color: UI.ink3 }}>{source.base_sha?.slice(0, 12)}</span>
+        <span style={{ marginLeft: "auto", fontFamily: MONO, color: UI.ink3 }}>commit {source.base_sha?.slice(0, 12)}</span>
       </div>
       <textarea aria-label="Git YAML 원본 편집기" value={yaml} disabled={busy || !!approval || !!emergencyApproval || !!applyReceipt}
         onChange={(event) => { setYaml(event.currentTarget.value); setPreview(null); setConfirmed(false); }} spellCheck={false}
@@ -219,7 +249,7 @@ export function LiveResourceManifestEditor({ resourceId, resolving = false }: { 
         <ActionButton disabled={busy} onClick={() => void runPreview()}>
           {phase === "previewing" ? "검증 중…" : "변경 검증·미리보기"}
         </ActionButton>
-        {preview && <Pill tone={preview.valid ? "ok" : "warn"}>{preview.valid ? "YAML 유효" : "YAML 오류"}</Pill>}
+        {preview && <Pill tone={preview.valid ? "ok" : "warn"}>{preview.valid ? "서버 검증 통과" : "YAML 오류"}</Pill>}
         {preview?.valid && <Pill tone={preview.apply_availability === "available" ? "ok" : "warn"}>
           {preview.apply_availability === "available" ? "즉시 적용 가능" : "Safe PR만 가능"}
         </Pill>}
@@ -249,11 +279,42 @@ export function LiveResourceManifestEditor({ resourceId, resolving = false }: { 
           </div>
         </div>
       )}
-      {approval && <ManifestNotice tone="ok" title="Safe PR 요청 접수">승인 {approval.approval_id} · 워크플로 {approval.workflow_run_id}</ManifestNotice>}
-      {emergencyApproval && <ManifestNotice tone="warn" title="Git artifact 기록 · PR pending">승인 {emergencyApproval.approval_id} · 클러스터 직접 적용 후 PR 병합 전까지 drift 상태로 추적합니다.</ManifestNotice>}
+      {approval && <ManifestNotice tone="ok" title="Safe PR 요청 접수">승인 {approval.approval_id} · 워크플로 {approval.workflow_run_id} · 기준 commit {source.base_sha?.slice(0, 12)}</ManifestNotice>}
+      {emergencyApproval && <ManifestNotice tone="warn" title="Git artifact 기록 · PR pending">승인 {emergencyApproval.approval_id} · 기준 commit {source.base_sha?.slice(0, 12)} · 클러스터 직접 적용 후 PR 병합 전까지 drift 상태로 추적합니다.</ManifestNotice>}
       {applyReceipt && <ManifestNotice tone="ok" title="Owner controller 적용 명령 접수">명령 {applyReceipt.command_id} · 감사 이벤트 {applyReceipt.audit_event_id}</ManifestNotice>}
+      {applyStatus && (
+        <ManifestNotice
+          tone={applyStatus.status === "failed" ? "error" : applyStatus.status === "completed" ? "ok" : "neutral"}
+          title={`적용 상태 · ${commandStatusLabel(applyStatus.status)}`}
+        >
+          {commandResultSummary(applyStatus)}
+        </ManifestNotice>
+      )}
     </div>
   );
+}
+
+function commandStatusLabel(status: CommandStatus["status"]): string {
+  if (status === "queued") return "대기";
+  if (status === "leased") return "에이전트 수신";
+  if (status === "running") return "적용 중";
+  if (status === "completed") return "명령 완료";
+  return "실패";
+}
+
+function commandResultSummary(command: CommandStatus): string {
+  const message = typeof command.result.message === "string" ? command.result.message : null;
+  const resources = Array.isArray(command.result.resources) ? command.result.resources : [];
+  const rollout = resources
+    .filter((item): item is Record<string, unknown> => typeof item === "object" && item !== null)
+    .map((item) => item.rollout)
+    .find((item): item is Record<string, unknown> => typeof item === "object" && item !== null);
+  const phase = typeof rollout?.phase === "string" ? rollout.phase : null;
+  const resource = typeof rollout?.resource === "string" ? rollout.resource : null;
+  const rolloutText = phase ? `Rollout ${phase}${resource ? ` · ${resource}` : ""}` : null;
+  return [message, rolloutText, command.completed_at ? `완료 ${command.completed_at}` : null]
+    .filter((item): item is string => item !== null)
+    .join(" · ") || "에이전트의 실제 적용 결과를 기다리고 있습니다.";
 }
 
 function LiveManifestPanel({ source }: { source: ResourceManifestSourceEndpoint }) {

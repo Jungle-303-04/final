@@ -96,11 +96,32 @@ describe("LiveResourceManifestEditor", () => {
       command_id: "command-apply-1",
       status: "queued",
     };
+    const command = {
+      command_id: "command-apply-1",
+      cluster_id: "cluster-1",
+      correlation_id: "correlation-apply-1",
+      action: "apply_manifest",
+      status: "completed",
+      result: {
+        message: "all manifest documents applied",
+        resources: [{
+          resource: "Deployment/checkout-api",
+          rollout: {
+            resource: "deployment/checkout-api",
+            ready: null,
+            phase: "progressing",
+            waited: false,
+          },
+        }],
+      },
+      completed_at: "2026-07-22T10:00:00+00:00",
+    };
     const fetchMock = vi.spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(new Response(JSON.stringify(SOURCE), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify(preview), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify(approval), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify(receipt), { status: 202 }));
+      .mockResolvedValueOnce(new Response(JSON.stringify(receipt), { status: 202 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(command), { status: 200 }));
 
     render(<LiveResourceManifestEditor resourceId="pod-1" />);
     const editor = await screen.findByRole("textbox", { name: "Git YAML 원본 편집기" });
@@ -110,7 +131,7 @@ describe("LiveResourceManifestEditor", () => {
     await user.click(screen.getByRole("checkbox"));
     await user.click(screen.getByRole("button", { name: "Git 기록 후 긴급 적용" }));
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(4));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(5));
     expect(fetchMock.mock.calls[2][0]).toBe("/api/resource-manifests/pod-1/approve");
     expect(fetchMock.mock.calls[3][0]).toBe("/api/resource-manifests/pod-1/apply");
     const approvedBody = JSON.parse(String((fetchMock.mock.calls[2][1] as RequestInit).body));
@@ -119,5 +140,8 @@ describe("LiveResourceManifestEditor", () => {
     expect(appliedBody.edited_yaml).toBe(desired);
     expect(await screen.findByText("Git artifact 기록 · PR pending")).toBeTruthy();
     expect(screen.getByText("Owner controller 적용 명령 접수")).toBeTruthy();
+    expect(await screen.findByText("적용 상태 · 명령 완료")).toBeTruthy();
+    expect(screen.getByText(/Rollout progressing · deployment\/checkout-api/u)).toBeTruthy();
+    expect(screen.getByText(/기준 commit a{12}/u)).toBeTruthy();
   });
 });
