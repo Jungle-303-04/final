@@ -109,7 +109,14 @@ def latest_inventory_snapshot_id_for_incident(timeline: Any) -> Any:
                 True,
             ).is_(True),
         )
-        .order_by(snapshots.c.collected_at.desc(), snapshots.c.created_at.desc())
+        # ix_inventory_snapshots_live_scope_latest(ws, cluster, created_at DESC,
+        # snapshot_id DESC, partial live)와 정렬을 일치시킨다. collected_at 정렬은
+        # 이 correlated probe 를 후보 행마다 클러스터 스냅샷 전체 top-N 정렬로 만들어
+        # (live EXPLAIN: 3,507 buffers/probe vs 정렬 일치 4 buffers/0.089ms)
+        # rca-timeline-janitor sweep 이 statement timeout 으로 CrashLoop 했다.
+        # created_at 기준 'latest' 는 latest_inventory_snapshot·node_summary_read_model
+        # 과 동일한 코드베이스 표준 정의다.
+        .order_by(snapshots.c.created_at.desc(), snapshots.c.snapshot_id.desc())
         .limit(1)
         .correlate(timeline)
         .scalar_subquery()
