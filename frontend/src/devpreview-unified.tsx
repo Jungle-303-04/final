@@ -26,11 +26,13 @@ import { useInventoryNamespaces } from "./devpreview/inventoryNamespacesFeed";
 import { useChangeTimeline } from "./devpreview/changeTimelineFeed";
 import { useApplications } from "./devpreview/deployFeed";
 import { useAlertEvents } from "./devpreview/alertsFeed";
-import { useRelationTopology } from "./devpreview/relationTopologyFeed";
+import { useRelationTopology, type RelationNodeView } from "./devpreview/relationTopologyFeed";
 import { logout as logoutApi } from "./devpreview/sessionFeed";
 import { useInventoryResourcesAcrossClusters, useInventoryKindCounts, kindToResourceType } from "./devpreview/inventoryResourcesFeed";
 import { useWorkloadDetail } from "./devpreview/workloadDetailFeed";
 import { useResourceUsageSeries } from "./devpreview/resourceUsageFeed";
+import { useResourceAccess } from "./devpreview/resourceAccessFeed";
+import { ResourceAccessPanel } from "./devpreview/resourceAccessPanel";
 import { useNarrowViewport } from "./devpreview/useNarrowViewport";
 import { operationalMessageLabel, reasonLabel, statusLabel, isCriticalStatus } from "./devpreview/statusLabel";
 import { LiveResourceManifestEditor } from "./devpreview/resourceManifestEditor";
@@ -475,6 +477,14 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
     isPodKind && row.ns != null && String(row.ns) ? String(row.ns) : null,
     isPodKind ? name : "",
   );
+  // M18: 실제 retained RBAC reverse-index 계약. ServiceAccount/Role은 정확한 주체·역할을,
+  // 워크로드·파드는 리소스별 권한으로 꾸미지 않고 해당 네임스페이스 요약을 조회한다.
+  const access = useResourceAccess(
+    tabs.includes("rbac") && row.cluster != null && String(row.cluster) ? String(row.cluster) : null,
+    kind.id,
+    row.ns != null && String(row.ns) ? String(row.ns) : null,
+    name,
+  );
   // 드로어 폭 — 왼쪽 가장자리 드래그로 조절 (전체 화면일 땐 비활성)
   const [dw, setDw] = useState(560);
   const [dwDragging, setDwDragging] = useState(false);
@@ -765,9 +775,7 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
           )}
 
           {tab === "rbac" && (
-            <div style={{ padding: "18px 0", fontSize: TYPE.label, color: UI.ink3, lineHeight: 1.6 }}>
-              관측 안 됨 — 라이브 인벤토리 계약은 이 리소스의 RBAC(권한) 정보를 노출하지 않습니다.
-            </div>
+            <div style={{ padding: "14px 0" }}><ResourceAccessPanel view={access} /></div>
           )}
         </div>
         </div>
@@ -779,19 +787,18 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
 // ── 종류 탐색 — 우측 패널 '리소스' 탭 내용 (보조 사이드바를 통합·대체) ─────────────────────────────
 
 // ── 트래픽 보조 패널 — 서비스 호출 상태·포커스(D22: 세 관점 모두 같은 자리 보조 패널) ──
-function TrafficPanel({ focus, onFocus, onOpen, stickyTop }: {
-  focus: string | null; onFocus: (id: string | null) => void; onOpen: (id: string) => void; stickyTop: number;
+function TrafficPanel({ clusterIds, focus, onFocus, onOpen, stickyTop }: {
+  clusterIds: readonly string[]; focus: string | null; onFocus: (id: string | null) => void;
+  onOpen: (node: RelationNodeView) => void; stickyTop: number;
 }) {
   // 실 관계 토폴로지(GET /api/topology?view=relations)의 서비스 노드 — svcCatalog fixture·합성 RPS 제거.
   // 계약이 RPS/p99를 노출하지 않으므로 호출량 수치는 표기하지 않는다(관측 안 됨).
-  const { clusters } = useDevpreviewContracts();
-  const clusterIds = useMemo(() => clusters.map((c) => c.id), [clusters]);
   const topo = useRelationTopology(clusterIds);
   // M20: React key·포커스는 cluster 한정 합성 id(n.id)로 — 여러 클러스터의 동일 서비스명이
   // 충돌해 dup key가 나거나 한 행이 다른 클러스터 서비스를 가리키지 않게 한다. 표시·상세
   // 열기는 서비스 이름을 쓴다.
   const rows = useMemo(() => topo.status === "ready"
-    ? topo.nodes.map((n) => ({ id: n.id, name: n.name || n.id, ns: n.namespace, bad: /error|fail|crit|degrad|down|unhealthy/i.test(n.status) }))
+    ? topo.nodes.map((n) => ({ node: n, id: n.id, name: n.name || n.id, ns: n.namespace, bad: /error|fail|crit|degrad|down|unhealthy/i.test(n.status) }))
     : [], [topo]);
   const visibleRows = rows.slice(0, 40);
   const hiddenCount = Math.max(0, rows.length - visibleRows.length);
@@ -805,7 +812,7 @@ function TrafficPanel({ focus, onFocus, onOpen, stickyTop }: {
       {topo.status === "unavailable" && <span style={{ fontSize: TYPE.caption, color: UI.ink3, padding: "6px 2px" }}>관계 토폴로지 관측 안 됨</span>}
       {topo.status === "ready" && rows.length === 0 && <span style={{ fontSize: TYPE.caption, color: UI.ink3, padding: "6px 2px" }}>관측된 서비스가 없습니다</span>}
       {visibleRows.map((r) => (
-        <button type="button" aria-label={`${r.name} 서비스 그래프 포커스`} key={r.id} onClick={() => onFocus(focus === r.id ? null : r.id)} onDoubleClick={() => onOpen(r.name)} className="rrow"
+        <button type="button" aria-label={`${r.name} 서비스 그래프 포커스`} key={r.id} onClick={() => onFocus(focus === r.id ? null : r.id)} onDoubleClick={() => onOpen(r.node)} className="rrow"
           style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left", border: `1px solid ${focus === r.id ? TINT.blue.bd : "transparent"}`, background: focus === r.id ? TINT.blue.bg : "transparent", borderRadius: 9, padding: "7px 9px", cursor: "pointer" }}>
           <span style={{ width: 8, height: 8, borderRadius: 3, background: r.bad ? HP.crit : HP.ok, flexShrink: 0 }} />
           <span style={{ minWidth: 0, flex: 1 }}>
@@ -1404,6 +1411,14 @@ function App() {
       : undefined;
     setDetail({ kind: k, row: found ?? { name } });
   };
+  const openTrafficService = (node: RelationNodeView) => {
+    const serviceKind = KINDS.find((item) => item.id === "Service");
+    if (!serviceKind) return;
+    setDetail({
+      kind: serviceKind,
+      row: { _key: node.id, cluster: node.clusterId, name: node.name, ns: node.namespace ?? undefined },
+    });
+  };
   // 버스 구독은 마운트 1회만 — 최신 openRef를 ref로 참조해 재구독 없이 호출한다.
   const openRefRef = useRef(openRef);
   useEffect(() => { openRefRef.current = openRef; });
@@ -1732,9 +1747,9 @@ function App() {
             /* 트래픽 — 호출 그래프 + 보조 패널(서비스 상태·포커스, 세 관점 동일 문법). 서비스 클릭 = 상세 시트 */
             <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <TopologyView embedded clusterIds={scope.cluster ? [scope.cluster] : clusterIds} focusId={trafficFocus} onFocusService={setTrafficFocus} onOpenService={(id) => openRef("Service", id)} />
+                <TopologyView embedded clusterIds={scope.cluster ? [scope.cluster] : clusterIds} focusId={trafficFocus} onFocusService={setTrafficFocus} onOpenService={openTrafficService} />
               </div>
-              <TrafficPanel focus={trafficFocus} onFocus={setTrafficFocus} onOpen={(id) => openRef("Service", id)} stickyTop={topH + 12} />
+              <TrafficPanel clusterIds={scope.cluster ? [scope.cluster] : clusterIds} focus={trafficFocus} onFocus={setTrafficFocus} onOpen={openTrafficService} stickyTop={topH + 12} />
             </div>
           )}
         </main>

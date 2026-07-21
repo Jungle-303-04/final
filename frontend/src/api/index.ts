@@ -313,6 +313,11 @@ export {
 } from "./cluster-registration-schemas";
 export { getInventorySummary } from "./inventory-summary";
 export {
+  getKubernetesNamespaceAccess,
+  getKubernetesRoleAccess,
+  getKubernetesSubjectAccess,
+} from "./resource-access";
+export {
   listInventoryResourcesByType,
   type InventoryResourceTypeQuery,
 } from "./inventory-query";
@@ -409,6 +414,15 @@ export {
   inventorySummarySchema,
   type InventorySummary,
 } from "./inventory-summary-schemas";
+export {
+  kubernetesNamespaceAccessResponseSchema,
+  kubernetesRoleAccessResponseSchema,
+  kubernetesSubjectAccessResponseSchema,
+  type KubernetesNamespaceAccessResponse,
+  type KubernetesResourceAccessResponse,
+  type KubernetesRoleAccessResponse,
+  type KubernetesSubjectAccessResponse,
+} from "./resource-access-schemas";
 export {
   inventoryQueryResponseSchema,
   type InventoryQueryResponse,

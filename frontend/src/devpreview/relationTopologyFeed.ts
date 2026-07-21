@@ -27,6 +27,7 @@ export type RelationEdgeKind = "owns" | "runs_on" | "selects" | "routes_to";
 
 export interface RelationNodeView {
   id: string;
+  clusterId: string;
   name: string;
   kind: string;
   namespace: string | null;
@@ -104,6 +105,7 @@ export function toRelationTopologyView(
   const qualify = (rawId: string): string => `${cid}\u0000${rawId}`;
   const nodes: RelationNodeView[] = endpoint.nodes.map((node) => ({
     id: qualify(node.node_id),
+    clusterId: node.identity.cluster_id,
     name: node.identity.name,
     kind: node.identity.kind,
     namespace: node.identity.namespace,

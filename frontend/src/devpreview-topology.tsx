@@ -124,7 +124,7 @@ function edgeVerdictColor(tel: EdgeTelemetry | null, toHealth: RelationNodeHealt
 
 export function TopologyView({ embedded = false, onOpenService, focusId, onFocusService, clusterIds }: {
   embedded?: boolean;
-  onOpenService?: (id: string) => void;
+  onOpenService?: (node: RelationNodeView) => void;
   focusId?: string | null;
   onFocusService?: (id: string | null) => void;
   /** 관측 대상 클러스터 목록. 빈/미지정이면 전체 클러스터 관계를 조회한다(demo-server 축소 없음). */
@@ -211,9 +211,9 @@ export function TopologyView({ embedded = false, onOpenService, focusId, onFocus
   const endDrag = () => { dragRef.current = null; setDragId(null); };
 
   const openNode = (id: string) => {
-    // node.id는 cluster 한정 합성 id(dup key 방지). 서비스 상세는 이름으로 열어야 하므로
-    // 여기서 노드 이름으로 되돌려 전달한다(합성 id를 이름으로 오인해 빈 상세를 여는 것 방지).
-    if (onOpenService) onOpenService(nodeMap.get(id)?.name ?? id);
+    const node = nodeMap.get(id);
+    // cluster/namespace/name을 한 덩어리로 넘겨 동일명 서비스의 상세 identity를 보존한다.
+    if (onOpenService && node) onOpenService(node);
     else setGraphSel(id);
   };
   // TOP-04: 엣지 상호작용은 언제나 고정 상세 패널을 연다(onOpenService가 있어도 노드로 새지 않는다)
