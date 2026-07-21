@@ -60,6 +60,49 @@ describe("RCA rehearsal issue scope", () => {
     ]));
   });
 
+  it("deduplicates repeated correlations by unresolved incident identity and lets the newest terminal row close it", async () => {
+    const repeatedOlder = {
+      ...issue("repeat-older", "game-server", "approval_recommended"),
+      incident_resource_name: "game-room-1-dddcfdb68",
+      incident_symptom: "Readiness probe response failure",
+      updated_at: "2026-07-21T00:00:01Z",
+    };
+    const repeatedLatest = {
+      ...repeatedOlder,
+      correlation_id: "repeat-latest",
+      incident_id: "incident-repeat-latest",
+      updated_at: "2026-07-21T00:00:03Z",
+    };
+    const closedOlder = {
+      ...issue("closed-older", "game-server", "approval_recommended"),
+      incident_resource_name: "closed-room",
+      updated_at: "2026-07-21T00:00:02Z",
+    };
+    const closedLatest = {
+      ...closedOlder,
+      correlation_id: "closed-latest",
+      incident_id: "incident-closed-latest",
+      status: "incident_resolved",
+      updated_at: "2026-07-21T00:00:04Z",
+    };
+    const distinct = {
+      ...issue("distinct", "game-server", "incident_detected"),
+      incident_resource_name: "game-room-2",
+      updated_at: "2026-07-21T00:00:05Z",
+    };
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({
+      items: [repeatedOlder, closedOlder, repeatedLatest, closedLatest, distinct],
+    }));
+
+    const rendered = renderHook(() => useRcaIssues(["game-server"]));
+
+    await waitFor(() => expect(rendered.result.current.status).toBe("ready"));
+    expect(rendered.result.current.items.map((item) => item.correlationId)).toEqual([
+      "distinct",
+      "repeat-latest",
+    ]);
+  });
+
   it("does not query an unscoped queue when there is no eligible target", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch");
     const rendered = renderHook(() => useRcaIssues([]));

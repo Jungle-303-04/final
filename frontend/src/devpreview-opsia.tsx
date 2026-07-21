@@ -6,7 +6,7 @@
 // 지어내지 않는다. 관측이 없으면 "관측 안 됨"/"관측된 리소스가 없습니다"를 렌더한다.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Activity, AlertTriangle, Box, ChevronLeft, ChevronRight, Cpu, EllipsisVertical, ExternalLink, FileCog, Network, Plug, RotateCcw, Server, Settings, Unplug } from "lucide-react";
+import { Activity, AlertTriangle, Box, ChevronLeft, ChevronRight, Clock3, Cpu, EllipsisVertical, ExternalLink, FileCog, Network, Plug, RotateCcw, Server, Settings, Unplug } from "lucide-react";
 import { UI, BLUE, HP, TINT, MONO, TYPE, SOFT, SPRING, PAGE, PRESENT_SCALE, DUR, inkA, blueA, LINE3, INK4, BRAND, cardA } from "./devpreview/theme";
 import { AwsIcon, GithubIcon } from "./devpreview/brandIcons";
 import { statusLabel, reasonLabel } from "./devpreview/statusLabel";
@@ -216,20 +216,26 @@ function CompactClusterRow({ cl, summary, onOpen, onSettings, onDisconnect }: {
         ) : connectionWarning ? (
           <span style={{ marginLeft: "auto", flexShrink: 0, fontSize: TYPE.micro, fontWeight: 700, color: TINT.warn.fg, background: TINT.warn.bg, borderRadius: 999, padding: "2px 6px" }}>{statusLabel(cl.connectionStage ?? cl.connectionStatus)}</span>
         ) : unavailable ? (
-          <span style={{ marginLeft: "auto", flexShrink: 0, fontSize: TYPE.micro, fontWeight: 700, color: TINT.warn.fg }}>일부 관측</span>
+          <span
+            aria-label="메트릭 수집 대기: CPU·메모리 최신 샘플 미수신"
+            title="CPU·메모리 최신 샘플을 아직 수신하지 못했습니다."
+            style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 4, flexShrink: 0, fontSize: TYPE.micro, fontWeight: 700, lineHeight: 1, color: TINT.warn.fg }}
+          >
+            <Clock3 size={11} aria-hidden="true" />메트릭 수집 대기
+          </span>
         ) : null}
       </span>
-      <span className="home-cluster-compact-facts" style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, auto))", alignItems: "center", gap: 12, minWidth: 0, fontSize: TYPE.caption2, color: UI.ink3 }}>
-        <span>노드 <b style={{ color: UI.ink, fontFamily: MONO }}>{fmt(ready)}/{fmt(nodes)}</b></span>
-        <span>파드 <b style={{ color: UI.ink, fontFamily: MONO }}>{fmt(pods)}</b></span>
-        <span>NS <b style={{ color: UI.ink, fontFamily: MONO }}>{cl.namespaceCount ?? "—"}</b></span>
-        <span>슬롯 <b style={{ color: UI.ink, fontFamily: MONO }}>{fmt(pods)}/{fmt(slots)}</b></span>
+      <span className="home-cluster-compact-facts" style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, auto))", alignItems: "baseline", gap: 12, minWidth: 0, fontSize: TYPE.caption2, lineHeight: 1.2, color: UI.ink3, fontVariantNumeric: "tabular-nums" }}>
+        <span style={{ display: "inline-flex", alignItems: "baseline", gap: 4, whiteSpace: "nowrap" }}>노드 <b style={{ color: UI.ink, fontFamily: MONO }}>{fmt(ready)}/{fmt(nodes)}</b></span>
+        <span style={{ display: "inline-flex", alignItems: "baseline", gap: 4, whiteSpace: "nowrap" }}>파드 <b style={{ color: UI.ink, fontFamily: MONO }}>{fmt(pods)}</b></span>
+        <span style={{ display: "inline-flex", alignItems: "baseline", gap: 4, whiteSpace: "nowrap" }}>NS <b style={{ color: UI.ink, fontFamily: MONO }}>{cl.namespaceCount ?? "—"}</b></span>
+        <span style={{ display: "inline-flex", alignItems: "baseline", gap: 4, whiteSpace: "nowrap" }}>슬롯 <b style={{ color: UI.ink, fontFamily: MONO }}>{fmt(pods)}/{fmt(slots)}</b></span>
       </span>
       <span className="home-cluster-compact-usage" style={{ display: "grid", gap: 4, minWidth: 0 }}>
         <CompactUsage label="CPU" value={summaryLoading ? null : summary?.cpuPct ?? null} />
         <CompactUsage label="MEM" value={summaryLoading ? null : summary?.memPct ?? null} />
       </span>
-      <span ref={menuRef} style={{ position: "relative" }} onClick={(event) => event.stopPropagation()}>
+      <span ref={menuRef} style={{ position: "relative", display: "grid", placeItems: "center", alignSelf: "center" }} onClick={(event) => event.stopPropagation()}>
         <button type="button" aria-label={`${cl.displayName} 클러스터 메뉴`} aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}
           style={{ width: 28, height: 28, display: "grid", placeItems: "center", border: "none", borderRadius: 7, background: menuOpen ? inkA(0.06) : "transparent", color: UI.ink3, cursor: "pointer" }}><EllipsisVertical size={15} /></button>
         {menuOpen && (

@@ -66,6 +66,31 @@ export function isActiveRcaIssue(item: Pick<RcaIssueItem, "status">): boolean {
   return !TERMINAL_ISSUE_STATUSES.has(normalizeStatus(item.status));
 }
 
+/**
+ * RCA emits a new correlation id whenever the same observed failure is
+ * re-evaluated. The dashboard identity is the affected resource plus symptom,
+ * not that processing-attempt id. Missing resource evidence stays conservative
+ * and falls back to the incident/correlation id so unrelated unknowns are never
+ * merged.
+ */
+export function rcaIssueIdentity(item: Pick<RcaIssueItem,
+  "cluster_id" | "incident_namespace" | "incident_resource_kind" |
+  "incident_resource_name" | "incident_symptom" | "incident_id" | "correlation_id"
+>): string {
+  const resourceName = normalizeIdentityPart(item.incident_resource_name);
+  const symptom = normalizeIdentityPart(item.incident_symptom);
+  if (resourceName === "" || symptom === "") {
+    return `event:${item.incident_id ?? item.correlation_id}`;
+  }
+  return [
+    normalizeIdentityPart(item.cluster_id),
+    normalizeIdentityPart(item.incident_namespace),
+    normalizeIdentityPart(item.incident_resource_kind),
+    resourceName,
+    symptom,
+  ].join("\u0000");
+}
+
 export async function loadActiveRcaIssueItems(
   clusterIds: readonly string[] | undefined,
   signal: AbortSignal,
@@ -78,16 +103,24 @@ export async function loadActiveRcaIssueItems(
     : scopedClusterIds.map((clusterId) => listRcaIssues({ clusterId, limit: 100, signal }));
   const responses = await Promise.all(requests);
   const allowedClusters = scopedClusterIds === null ? null : new Set(scopedClusterIds);
-  const seen = new Set<string>();
-  return responses
+  const candidates = responses
     .flatMap((response) => response.items)
-    .filter((item) => {
-      if (!isActiveRcaIssue(item)) return false;
-      if (allowedClusters !== null && (item.cluster_id === null || !allowedClusters.has(item.cluster_id))) return false;
-      if (seen.has(item.correlation_id)) return false;
-      seen.add(item.correlation_id);
-      return true;
-    });
+    .filter((item) => allowedClusters === null || (item.cluster_id !== null && allowedClusters.has(item.cluster_id)));
+  const latestByIdentity = new Map<string, { item: RcaIssueItem; index: number; updatedMs: number }>();
+  candidates.forEach((item, index) => {
+    const identity = rcaIssueIdentity(item);
+    const updatedMs = parseUpdatedMs(item.updated_at);
+    const previous = latestByIdentity.get(identity);
+    if (previous === undefined || updatedMs > previous.updatedMs) {
+      latestByIdentity.set(identity, { item, index, updatedMs });
+    }
+  });
+  return [...latestByIdentity.values()]
+    .sort((a, b) => b.updatedMs - a.updatedMs || a.index - b.index)
+    .map(({ item }) => item)
+    // Resolve/close is applied after identity reduction: the newest terminal
+    // row ends every older correlation for that same active incident.
+    .filter(isActiveRcaIssue);
 }
 
 export function toRcaIssueView(item: RcaIssueItem): RcaIssueView {
@@ -143,4 +176,14 @@ export function useRcaIssues(clusterIds?: readonly string[]): RcaIssuesFeed {
 
 function normalizeStatus(status: string): string {
   return status.trim().toLocaleLowerCase().replace(/[.\s-]+/gu, "_");
+}
+
+function normalizeIdentityPart(value: string | null): string {
+  return (value ?? "").trim().toLocaleLowerCase().replace(/[\s_-]+/gu, " ");
+}
+
+function parseUpdatedMs(value: string | null): number {
+  if (value === null) return Number.NEGATIVE_INFINITY;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : Number.NEGATIVE_INFINITY;
 }

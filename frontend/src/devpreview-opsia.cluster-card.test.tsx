@@ -27,6 +27,24 @@ vi.mock("./devpreview/contracts", () => ({
       incidentCount: null,
       role: "target",
       readOnly: false,
+    }, {
+      id: "registration-waiting",
+      workspaceId: "workspace-1",
+      name: "management-internal-name",
+      displayName: "management-server",
+      environment: "production",
+      provider: "eks",
+      connectionStatus: "online",
+      connectionStage: "ready",
+      observationMode: "agent",
+      lastObservedAt: "2026-07-22T00:00:00Z",
+      kubernetesVersion: "v1.32.0-eks",
+      nodeCount: null,
+      podCount: null,
+      namespaceCount: 4,
+      incidentCount: null,
+      role: "management",
+      readOnly: false,
     }],
   }),
 }));
@@ -47,6 +65,18 @@ vi.mock("./devpreview/clusterSummaryFeed", () => ({
         { name: "node-a", ready: true, health: "healthy", cpuPct: 25, memPct: 40, podsRunning: 4, podsCapacity: 29, restartsRecent: 0, conditions: [] },
         { name: "node-b", ready: true, health: "healthy", cpuPct: 25, memPct: 40, podsRunning: 5, podsCapacity: 29, restartsRecent: 0, conditions: [] },
       ],
+    },
+    "registration-waiting": {
+      status: "unavailable",
+      health: null,
+      cpuPct: null,
+      memPct: null,
+      podsRunning: null,
+      podsTotal: null,
+      nodesReady: null,
+      nodesTotal: null,
+      openIncidents: null,
+      nodes: [],
     },
   }),
 }));
@@ -73,6 +103,9 @@ describe("HomeClustersWidget", () => {
     expect(screen.queryByText("정상")).toBeNull();
     expect(screen.queryByText("노드 보기")).toBeNull();
     expect(screen.queryByText("v1.32.0-eks")).toBeNull();
+    expect(screen.getByText("메트릭 수집 대기")).toBeTruthy();
+    expect(screen.getByLabelText("메트릭 수집 대기: CPU·메모리 최신 샘플 미수신").getAttribute("title")).toBe("CPU·메모리 최신 샘플을 아직 수신하지 못했습니다.");
+    expect(screen.queryByText("일부 관측")).toBeNull();
 
     const compact = rendered.container.querySelector("[data-home-clusters='compact']") as HTMLElement;
     expect(compact.style.overflowY).toBe("auto");

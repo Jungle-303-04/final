@@ -3,7 +3,7 @@
 // 위젯별 자체 시각 신설 금지 — 제품 이식 시 shared/ui/charts/로 재구현되는 사양 원본.
 import { useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
-import { ChevronRight, EllipsisVertical, Info, Pencil, Trash2 } from "lucide-react";
+import { ChevronRight, EllipsisVertical, Info, LayoutGrid, Pencil, Trash2 } from "lucide-react";
 import { UI, BLUE, HP, TINT, MONO, TYPE, SOFT, DUR, inkA, blueA, critA, okA, warnA, IDENT } from "./theme";
 
 export const HOME_CARD_GRID_CLASS = "home-card-grid";
@@ -119,7 +119,7 @@ export function WidgetFrame({ title, info, onDeepLink, editing, span, widgetType
             </button>
           )}
           {menuOpen && (
-            <span role="menu" aria-label={`${title} 위젯 설정`} style={{ position: "absolute", top: 30, right: 0, zIndex: 45, width: 214, display: "flex", flexDirection: "column", gap: 8, padding: 9, borderRadius: 11, border: `1px solid ${UI.line}`, background: UI.card, boxShadow: `0 16px 40px -18px ${inkA(0.35)}` }}>
+            <span role="menu" aria-label={`${title} 위젯 설정`} style={{ position: "absolute", top: 30, right: 0, zIndex: 45, width: 246, display: "flex", flexDirection: "column", gap: 9, padding: 10, borderRadius: 12, border: `1px solid ${UI.line}`, background: UI.card, boxShadow: `0 16px 40px -18px ${inkA(0.35)}` }}>
               {onSpanChange && (
                 <span style={{ display: "flex", flexDirection: "column", gap: 5 }}>
                   <span style={{ fontSize: TYPE.micro, fontWeight: 700, color: UI.ink3 }}>너비</span>
@@ -127,29 +127,39 @@ export function WidgetFrame({ title, info, onDeepLink, editing, span, widgetType
                     {([1, 2, 3, 4] as const).map((nextSpan) => (
                       <button key={nextSpan} type="button" aria-label={`${title} 너비 ${nextSpan}/4`} aria-pressed={span === nextSpan}
                         onClick={() => { onSpanChange(nextSpan); setMenuOpen(false); }}
-                        style={{ border: `1px solid ${span === nextSpan ? blueA(0.5) : UI.line}`, borderRadius: 7, background: span === nextSpan ? blueA(0.08) : UI.card, color: span === nextSpan ? BLUE : UI.ink2, padding: "5px 0", fontSize: TYPE.caption2, fontWeight: 700, cursor: "pointer" }}>{nextSpan}/4</button>
+                        style={{ position: "relative", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, border: `1px solid ${span === nextSpan ? blueA(0.55) : UI.line}`, borderRadius: 8, background: span === nextSpan ? blueA(0.09) : UI.card, color: span === nextSpan ? BLUE : UI.ink2, padding: "6px 3px 5px", fontSize: TYPE.micro, fontWeight: 700, cursor: "pointer", boxShadow: span === nextSpan ? `inset 0 0 0 1px ${blueA(0.12)}` : "none" }}>
+                        <span aria-hidden="true" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 2, width: 28, height: 10 }}>
+                          {[1, 2, 3, 4].map((unit) => <span key={unit} style={{ borderRadius: 2, background: unit <= nextSpan ? (span === nextSpan ? BLUE : UI.ink3) : inkA(0.08) }} />)}
+                        </span>
+                        <span>{nextSpan}/4</span>
+                      </button>
                     ))}
                   </span>
                 </span>
               )}
               {onTypeChange && widgetTypes && widgetTypes.length > 0 && (
                 <label style={{ display: "flex", flexDirection: "column", gap: 5, fontSize: TYPE.micro, fontWeight: 700, color: UI.ink3 }}>
-                  위젯 유형
-                  <select aria-label={`${title} 위젯 유형`} value={widgetType} onChange={(event) => { onTypeChange(event.target.value); setMenuOpen(false); }}
-                    style={{ minWidth: 0, width: "100%", border: `1px solid ${UI.line}`, borderRadius: 7, background: UI.card, color: UI.ink, padding: "6px 8px", fontSize: TYPE.caption2 }}>
-                    {widgetTypes.map((type) => <option key={type.id} value={type.id}>{type.title}</option>)}
-                  </select>
+                  <span style={{ display: "flex", alignItems: "center", gap: 5 }}><LayoutGrid size={12} />위젯 유형</span>
+                  <span style={{ position: "relative", display: "flex", alignItems: "center" }}>
+                    <LayoutGrid size={13} aria-hidden="true" style={{ position: "absolute", left: 8, color: UI.ink3, pointerEvents: "none" }} />
+                    <select aria-label={`${title} 위젯 유형`} value={widgetType} onChange={(event) => { onTypeChange(event.target.value); setMenuOpen(false); }}
+                      style={{ minWidth: 0, width: "100%", border: `1px solid ${UI.line}`, borderRadius: 8, background: UI.card, color: UI.ink, padding: "7px 28px", fontSize: TYPE.caption2, fontWeight: 650, cursor: "pointer" }}>
+                      {widgetTypes.map((type) => <option key={type.id} value={type.id}>{type.title}</option>)}
+                    </select>
+                  </span>
                 </label>
               )}
               {(onEdit || onRemove) && <span style={{ height: 1, background: UI.line2 }} />}
-              {onEdit && (
-                <button type="button" role="menuitem" onClick={() => { onEdit(); setMenuOpen(false); }}
-                  style={{ display: "flex", alignItems: "center", gap: 7, border: "none", borderRadius: 7, background: "transparent", color: UI.ink2, padding: "6px 7px", textAlign: "left", fontSize: TYPE.caption2, fontWeight: 600, cursor: "pointer" }}><Pencil size={13} />레이아웃 편집</button>
-              )}
-              {onRemove && (
-                <button type="button" role="menuitem" onClick={() => { onRemove(); setMenuOpen(false); }}
-                  style={{ display: "flex", alignItems: "center", gap: 7, border: "none", borderRadius: 7, background: "transparent", color: HP.crit, padding: "6px 7px", textAlign: "left", fontSize: TYPE.caption2, fontWeight: 600, cursor: "pointer" }}><Trash2 size={13} />위젯 삭제</button>
-              )}
+              <span style={{ display: "grid", gridTemplateColumns: onEdit && onRemove ? "1fr 1fr" : "1fr", gap: 5 }}>
+                {onEdit && (
+                  <button type="button" role="menuitem" onClick={() => { onEdit(); setMenuOpen(false); }}
+                    style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, border: `1px solid ${UI.line}`, borderRadius: 8, background: UI.bg2, color: UI.ink2, padding: "7px 6px", fontSize: TYPE.caption2, fontWeight: 650, cursor: "pointer" }}><Pencil size={13} />레이아웃 편집</button>
+                )}
+                {onRemove && (
+                  <button type="button" role="menuitem" onClick={() => { onRemove(); setMenuOpen(false); }}
+                    style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, border: `1px solid ${critA(0.2)}`, borderRadius: 8, background: critA(0.05), color: HP.crit, padding: "7px 6px", fontSize: TYPE.caption2, fontWeight: 650, cursor: "pointer" }}><Trash2 size={13} />위젯 삭제</button>
+                )}
+              </span>
             </span>
           )}
         </span>

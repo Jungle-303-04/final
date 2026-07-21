@@ -71,6 +71,8 @@ describe("WidgetFrame navigation", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "이슈 위젯 메뉴" }));
+    expect(screen.getByRole("button", { name: "이슈 너비 2/4" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: "이슈 너비 3/4" }).getAttribute("aria-pressed")).toBe("false");
     fireEvent.click(screen.getByRole("button", { name: "이슈 너비 3/4" }));
     expect(resize).toHaveBeenCalledWith(3);
 
