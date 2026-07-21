@@ -108,7 +108,7 @@ const allowedStandaloneUiTerms = new Set([
   'Ingress',
   'Job',
   'JSON',
-  'Opsia',
+  'Kyro',
   'Kubernetes',
   'KiB',
   'MiB',

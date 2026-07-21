@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/exhaustive-deps */
-// ⚠ 데모 · Opsia 통합 맵 v5 — 실 인벤토리 계약 배선.
+// ⚠ 데모 · Kyro 통합 맵 v5 — 실 인벤토리 계약 배선.
 // 원칙: 뉴트럴 표면 + 헤어라인, 색은 데이터에만, 모노 숫자, 4pt 그리드.
 // 구조: 클러스터(리스트) → 노드(관측 목록) → 파드(관측 목록).
 // no backfill: 계약이 노출하지 않는 값(CPU/MEM/용량/파드→노드 귀속 등)은 절대
@@ -114,7 +114,7 @@ function ClusterRow({ cl, summary, topology, onOpen }: {
         </span>
         <span style={{ minWidth: 0, flex: 1 }}>
           <span style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
-            <span style={{ fontSize: TYPE.title3, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink, fontFamily: MONO, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cl.displayName}</span>
+            <span title={cl.displayName} style={{ fontSize: TYPE.title3, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink, fontFamily: MONO, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cl.displayName}</span>
             {cl.environment === "production" && <span style={{ fontSize: TYPE.micro, fontWeight: 600, color: TINT.warn.fg, border: `1px solid ${TINT.warn.bd}`, background: TINT.warn.bg, borderRadius: 5, padding: "1px 6px", flexShrink: 0 }}>prod</span>}
             {cl.readOnly && <span style={{ fontSize: TYPE.micro, fontWeight: 600, color: UI.ink2, border: `1px solid ${UI.line}`, background: UI.bg2, borderRadius: 5, padding: "1px 6px", flexShrink: 0 }}>읽기 전용</span>}
           </span>
@@ -570,7 +570,7 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
         {!embedded && (
         <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 14 }}>
-            <h1 style={{ margin: 0, fontSize: TYPE.title1, fontWeight: 800, letterSpacing: "-0.03em", color: UI.ink }}>통합 맵</h1>
+            <h1 style={{ margin: 0, fontSize: TYPE.title1, fontWeight: 700, letterSpacing: "-0.03em", color: UI.ink }}>통합 맵</h1>
             <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: TYPE.label2, fontWeight: 600, color: UI.ink2 }}>
               <span className="pulsedot" style={{ width: 6, height: 6, borderRadius: 999, background: HP.ok }} />
               실시간 · {clusters.length} 클러스터
@@ -754,7 +754,7 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
 
       <style>{`
         html, body { background: ${UI.bg}; }
-        .op { min-height: 100vh; background: ${UI.bg}; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Pretendard", "Apple SD Gothic Neo", "Helvetica Neue", sans-serif; -webkit-font-smoothing: antialiased; }
+        .op { min-height: 100vh; background: ${UI.bg}; font-family: var(--font-sans); font-weight: var(--font-weight-body); -webkit-font-smoothing: antialiased; }
         .op .podrow { position: relative; transition: background .15s ease; }
         .op .podrow:hover { background: ${inkA(0.035)} !important; }
         @media (max-width: 760px) {

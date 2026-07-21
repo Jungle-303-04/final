@@ -118,7 +118,7 @@ function Page({ title, icon: I, action, tabs, tab, onTab, children }: {
     <main style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 16, padding: "14px 18px 40px" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
         <I size={17} style={{ color: BLUE }} />
-        <span style={{ fontSize: TYPE.heading, fontWeight: 800, letterSpacing: "-0.02em", color: UI.ink }}>{title}</span>
+        <span style={{ fontSize: TYPE.heading, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink }}>{title}</span>
         <span style={{ marginLeft: "auto" }}>{action}</span>
       </div>
       {tabs && (
@@ -465,7 +465,7 @@ export function IssueDetail({ name, symptom, cluster, svc, ns, onClose, onOpenRe
                     <div key={r.action_id} style={{ border: `1px solid ${picked ? blueA(0.35) : UI.line}`, background: picked ? blueA(0.03) : UI.card, borderRadius: 12, padding: 13 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 6 }}>
                         <span style={{ fontSize: TYPE.body, fontWeight: 700, color: UI.ink }}>{r.title}</span>
-                        {picked && <span style={{ fontSize: TYPE.micro, fontWeight: 800, color: BLUE, background: blueA(0.1), borderRadius: 4, padding: "1px 6px" }}>권고</span>}
+                        {picked && <span style={{ fontSize: TYPE.micro, fontWeight: 700, color: BLUE, background: blueA(0.1), borderRadius: 4, padding: "1px 6px" }}>권고</span>}
                         {r.risk_level && <span style={{ marginLeft: "auto", fontSize: TYPE.caption, fontWeight: 700, color: rt.fg, background: rt.bg, border: `1px solid ${rt.bd}`, borderRadius: 999, padding: "2px 9px" }}>위험 {r.risk_level}</span>}
                         {r.approval_required && <span style={{ fontSize: TYPE.caption, fontWeight: 700, color: TINT.warn.fg, background: TINT.warn.bg, border: `1px solid ${TINT.warn.bd}`, borderRadius: 999, padding: "2px 9px" }}>승인 필요</span>}
                       </div>
@@ -842,7 +842,7 @@ export function SettingsSurface() {
         <SettingsRow icon={Building2} title="계정" sub={accountSub}
           right={<span style={{ display: "flex", alignItems: "center", gap: 7 }}>
             <span style={{ fontSize: TYPE.label2, color: UI.ink2, maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{accountName}</span>
-            <span style={{ width: 26, height: 26, borderRadius: 999, background: inkA(0.08), display: "grid", placeItems: "center", fontSize: TYPE.label, fontWeight: 800, color: UI.ink2 }}>{session.status === "ready" ? sessionInitial(session) : "?"}</span>
+            <span style={{ width: 26, height: 26, borderRadius: 999, background: inkA(0.08), display: "grid", placeItems: "center", fontSize: TYPE.label, fontWeight: 700, color: UI.ink2 }}>{session.status === "ready" ? sessionInitial(session) : "?"}</span>
           </span>} />
         <SettingsRow icon={Palette} title="테마" sub={prefsSub} right={
           <Segmented value={prefsReady ? prefs.theme : null} disabled={prefsDisabled}
@@ -907,7 +907,7 @@ export function SettingsSurface() {
       {/* 정직한 표기 — 테마·언어는 실 PUT /api/settings 저장(낙관적, 실패 시 롤백).
           접근·자동 갱신 정책은 실 조회. 토스트 토글만 이 브라우저 로컬 데모 설정. */}
       <span style={{ fontSize: TYPE.caption2, color: UI.ink3 }}>테마·언어는 서버에 저장됩니다(실패 시 이전 값으로 되돌림) · 접근·자동 갱신 정책은 실시간 조회</span>
-      <span style={{ fontSize: TYPE.caption2, fontFamily: MONO, color: UI.ink3 }}>Opsia Console 0.1.0{prefs.revision !== null ? ` · prefs r${prefs.revision}` : ""}</span>
+      <span style={{ fontSize: TYPE.caption2, fontFamily: MONO, color: UI.ink3 }}>Kyro Console 0.1.0{prefs.revision !== null ? ` · prefs r${prefs.revision}` : ""}</span>
     </Page>
   );
 }

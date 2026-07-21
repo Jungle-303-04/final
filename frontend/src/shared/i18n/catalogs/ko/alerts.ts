@@ -31,7 +31,7 @@ export const alertsKo = {
   "alerts.status.firing": "발생 중",
   "alerts.status.resolved": "해소",
   "alerts.status.acked": "확인됨",
-  "alerts.source.opsia": "Opsia 감시",
+  "alerts.source.opsia": "Kyro 감시",
   "alerts.source.alertmanager": "외부 Alertmanager",
   "alerts.measurement.unavailable": "측정값 없음",
   "alerts.toast.new": "새 알림이 발생했습니다",

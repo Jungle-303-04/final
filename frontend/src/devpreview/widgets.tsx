@@ -166,7 +166,7 @@ export function KpiValue({ value, unit, delta, deltaTone, summary }: {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
       <span style={{ display: "flex", alignItems: "baseline", gap: 7 }}>
-        <span style={{ fontSize: TYPE.kpi, fontWeight: 800, letterSpacing: "-0.02em", fontFamily: MONO, color: UI.ink, fontVariantNumeric: "tabular-nums" }}>{value}</span>
+        <span style={{ fontSize: TYPE.kpi, fontWeight: 700, letterSpacing: "-0.02em", fontFamily: MONO, color: UI.ink, fontVariantNumeric: "tabular-nums" }}>{value}</span>
         {unit && <span style={{ fontSize: TYPE.label2, fontWeight: 600, color: UI.ink3 }}>{unit}</span>}
         {delta && (
           <span style={{ fontSize: TYPE.caption2, fontWeight: 700, fontFamily: MONO, color: deltaTone === "warn" ? TINT.warn.fg : TINT.ok.fg, background: deltaTone === "warn" ? warnA(0.14) : okA(0.12), borderRadius: 999, padding: "2px 8px" }}>{delta}</span>

@@ -31,7 +31,7 @@ export const alertsEn = {
   "alerts.status.firing": "Firing",
   "alerts.status.resolved": "Resolved",
   "alerts.status.acked": "Acknowledged",
-  "alerts.source.opsia": "Opsia watch",
+  "alerts.source.opsia": "Kyro watch",
   "alerts.source.alertmanager": "External Alertmanager",
   "alerts.measurement.unavailable": "Measurement unavailable",
   "alerts.toast.new": "A new alert fired",

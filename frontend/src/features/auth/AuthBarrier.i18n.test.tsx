@@ -48,15 +48,15 @@ describe("localized authentication boundary", () => {
   it("renders the complete login contract in English", async () => {
     renderBarrier(unauthenticatedPort(), "en");
 
-    expect(await screen.findByRole("heading", { name: "Sign in to Opsia" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Sign in to Kyro" })).toBeTruthy();
     expect(screen.getByRole("textbox", { name: "ID or email" })).toBeTruthy();
     expect(screen.getByLabelText("Password")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Sign in" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Choose theme" })).toBeTruthy();
     const publicHeader = screen.getByRole("banner");
-    const loginCard = screen.getByRole("heading", { name: "Sign in to Opsia" })
+    const loginCard = screen.getByRole("heading", { name: "Sign in to Kyro" })
       .closest('[data-slot="card"]');
-    expect(publicHeader.textContent).toContain("Opsia");
+    expect(publicHeader.textContent).toContain("Kyro");
     expect(publicHeader.querySelector('[aria-label="Current language: English"]')).toBeTruthy();
     expect(loginCard?.querySelector('[aria-label="Current language: English"]')).toBeNull();
   });
@@ -65,18 +65,18 @@ describe("localized authentication boundary", () => {
     const user = userEvent.setup();
     const view = renderBarrier(unauthenticatedPort(), "ko", window.localStorage);
 
-    await screen.findByRole("heading", { name: "Opsia에 로그인" });
+    await screen.findByRole("heading", { name: "Kyro에 로그인" });
     await user.click(screen.getByRole("combobox", { name: "현재 언어: 한국어" }));
     await user.click(await screen.findByRole("option", { name: "영어" }));
 
-    expect(screen.getByRole("heading", { name: "Sign in to Opsia" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Sign in to Kyro" })).toBeTruthy();
     expect(screen.getByRole("combobox", { name: "Current language: English" })).toBeTruthy();
     expect(window.localStorage.getItem("opsia.locale")).toBe("en");
 
     view.unmount();
     await Promise.resolve();
     renderBarrier(unauthenticatedPort(), "ko", window.localStorage);
-    expect(await screen.findByRole("heading", { name: "Sign in to Opsia" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Sign in to Kyro" })).toBeTruthy();
   });
 
   it.each([

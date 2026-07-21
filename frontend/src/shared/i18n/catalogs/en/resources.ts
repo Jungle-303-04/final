@@ -302,7 +302,7 @@ export const resourcesEn = {
   "resources.detail.terminal.inputFailed": "Standard input could not be delivered.",
   "resources.manifest.open": "Edit YAML via Git",
   "resources.manifest.title": "Edit {name} manifest",
-  "resources.manifest.description": "Edit the commit-pinned Git source, validate the exact diff, then create a human-approved Safe PR. Opsia never patches the cluster from this editor.",
+  "resources.manifest.description": "Edit the commit-pinned Git source, validate the exact diff, then create a human-approved Safe PR. Kyro never patches the cluster from this editor.",
   "resources.manifest.loading": "Resolving the live resource to its GitOps source…",
   "resources.manifest.application": "Owning application",
   "resources.manifest.chooseApplication": "Choose an application source",

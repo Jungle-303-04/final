@@ -12,7 +12,7 @@ if (/^[0-9a-f]{40}$/.test(deployedSourceSha ?? "")) {
 // root graph has been removed (§5.5); this is the only production root.
 const rootContainer = document.getElementById("root");
 if (!(rootContainer instanceof HTMLElement)) {
-  throw new Error("Opsia root container is missing.");
+  throw new Error("Kyro root container is missing.");
 }
 
 // Bootstrap the retained root once; HMR must preserve the active surface and tab.

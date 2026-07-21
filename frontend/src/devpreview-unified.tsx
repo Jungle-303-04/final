@@ -969,12 +969,12 @@ function GlobalNav({ collapsed, setCollapsed, surface, onSurface }: {
     <motion.nav initial={false} animate={{ width: collapsed ? 60 : 208 }} transition={SOFT}
       style={{ flexShrink: 0, background: UI.card, borderRight: `1px solid ${UI.line}`, display: "flex", flexDirection: "column",
         padding: "14px 10px 12px", position: "sticky", top: 0, height: `calc(100vh / ${PRESENT_SCALE})`, overflow: "hidden" }}>
-      {/* 브랜드 — Opsia 워드마크 */}
+      {/* 브랜드 — Kyro 워드마크 */}
       <div style={{ display: "flex", alignItems: "center", gap: 9, padding: collapsed ? "0 0 16px" : "0 4px 16px", justifyContent: collapsed ? "center" : "flex-start" }}>
         <span style={{ width: 26, height: 26, borderRadius: 8, background: `linear-gradient(135deg, ${BLUE}, ${BLUE2})`, display: "grid", placeItems: "center", flexShrink: 0 }}>
           <span style={{ width: 9, height: 9, borderRadius: 999, border: `2px solid ${UI.card}` }} />
         </span>
-        {!collapsed && <span style={{ fontSize: TYPE.title3, fontWeight: 800, letterSpacing: "-0.02em", color: UI.ink }}>Opsia</span>}
+        {!collapsed && <span style={{ fontSize: TYPE.title3, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink }}>Kyro</span>}
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>{NAV_ITEMS.map((it) => <Item key={it.id} it={it} />)}</div>
       <div style={{ marginTop: "auto", display: "flex", flexDirection: "column", gap: 1, borderTop: `1px solid ${UI.line2}`, paddingTop: 8 }}>
@@ -1684,7 +1684,7 @@ function App() {
                 style={{ position: "absolute", top: 38, right: 0, width: 344, zIndex: 65, background: GLASS, backdropFilter: "blur(26px)", WebkitBackdropFilter: "blur(26px)",
                   border: `1px solid ${inkA(0.08)}`, borderRadius: 18, boxShadow: `0 28px 70px -24px ${inkA(0.38)}`, padding: 10, maxHeight: `min(calc(70vh / ${PRESENT_SCALE}), 560px)`, overflowY: "auto", scrollbarGutter: "stable" }}>
                 <div style={{ display: "flex", alignItems: "baseline", gap: 7, padding: "2px 8px 8px" }}>
-                  <span style={{ fontSize: 15, fontWeight: 800, letterSpacing: "-0.02em", color: UI.ink }}>알림</span>
+                  <span style={{ fontSize: 15, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink }}>알림</span>
                   <span style={{ fontSize: TYPE.caption2, fontWeight: 600, color: UI.ink3 }}>{alertTotal}</span>
                 </div>
                 {(pendingCl.length + pendingRepo.length > 0) && (
@@ -1748,7 +1748,7 @@ function App() {
         {/* 계정 — 맨 오른쪽(D20). 로그아웃 = 데모 세션 초기화(실동작) */}
         <span style={{ position: "relative" }}>
           <button type="button" className="gnav" aria-label="계정 메뉴 열기" aria-expanded={meOpen} onClick={() => { setMeOpen((open) => !open); setBellOpen(false); }}
-            style={{ width: 30, height: 30, borderRadius: 999, border: meOpen ? `1.5px solid ${BLUE}` : "1.5px solid transparent", background: blueA(0.12), color: BLUE, cursor: "pointer", display: "grid", placeItems: "center", fontSize: TYPE.label, fontWeight: 800 }}>{sessionInitial(session)}</button>
+            style={{ width: 30, height: 30, borderRadius: 999, border: meOpen ? `1.5px solid ${BLUE}` : "1.5px solid transparent", background: blueA(0.12), color: BLUE, cursor: "pointer", display: "grid", placeItems: "center", fontSize: TYPE.label, fontWeight: 700 }}>{sessionInitial(session)}</button>
           <AnimatePresence>
             {meOpen && (
               <motion.div key="me" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={SOFT}
@@ -1971,7 +1971,7 @@ function App() {
       </div>
 
       <style>{`
-        .uni { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Pretendard", "Apple SD Gothic Neo", "Helvetica Neue", sans-serif; -webkit-font-smoothing: antialiased; }
+        .uni { font-family: var(--font-sans); font-weight: var(--font-weight-body); -webkit-font-smoothing: antialiased; }
         .uni .krow { transition: background .14s ease; }
         .uni .krow:hover { background: ${inkA(0.045)}; }
         .uni .krow:hover .kpin { opacity: .5 !important; }

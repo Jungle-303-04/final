@@ -252,7 +252,7 @@ export function TopologyView({ embedded = false, onOpenService, focusId, onFocus
     <div className="tp" style={{ minHeight: embedded ? undefined : "100vh", padding: embedded ? 0 : "44px 24px", display: "flex", justifyContent: "center" }}>
       <div style={{ width: embedded ? "100%" : 992, maxWidth: "100%" }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginBottom: 18 }}>
-          {!embedded && <div style={{ fontSize: TYPE.title1, fontWeight: 800, letterSpacing: "-0.03em", color: UI.ink }}>서비스 토폴로지</div>}
+          {!embedded && <div style={{ fontSize: TYPE.title1, fontWeight: 700, letterSpacing: "-0.03em", color: UI.ink }}>서비스 토폴로지</div>}
           {!embedded && <div style={{ fontSize: TYPE.body, color: UI.ink3 }}>관계 그래프 — {scopeLabel}</div>}
         </div>
 
@@ -401,7 +401,7 @@ export function TopologyView({ embedded = false, onOpenService, focusId, onFocus
       })()}
 
       <style>{`
-        .tp { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Pretendard", "Apple SD Gothic Neo", "Helvetica Neue", sans-serif; -webkit-font-smoothing: antialiased; }
+        .tp { font-family: var(--font-sans); font-weight: var(--font-weight-body); -webkit-font-smoothing: antialiased; }
         .tp .flow { animation: flowmove 1.4s linear infinite; }
         @keyframes flowmove { to { stroke-dashoffset: -28; } }
         .tp svg text { user-select: none; }

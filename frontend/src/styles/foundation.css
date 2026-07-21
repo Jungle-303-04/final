@@ -13,6 +13,7 @@
   body {
     min-height: 100vh;
     margin: 0;
+    font-weight: var(--font-weight-body);
     color: var(--foreground);
     background: var(--background);
     text-rendering: optimizeLegibility;
@@ -28,9 +29,23 @@
 
   h1,
   h2,
-  h3,
+  h3 {
+    font-family: var(--font-heading);
+    font-weight: var(--font-weight-title);
+  }
+
+  strong,
+  b {
+    font-weight: var(--font-weight-numeric);
+  }
+
   p {
     margin: 0;
+  }
+
+  .tabular-nums,
+  [data-numeric="true"] {
+    font-variant-numeric: tabular-nums;
   }
 
   ::selection {

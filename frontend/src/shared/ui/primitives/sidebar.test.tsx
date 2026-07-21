@@ -43,7 +43,7 @@ describe("product Sidebar primitive", () => {
     expect(sidebar?.tagName).toBe("ASIDE");
     expect(sidebar?.getAttribute("data-state")).toBe("expanded");
     expect(container.querySelector('[data-slot="sidebar-inset"]')?.tagName).toBe("DIV");
-    expect(screen.getByText("Opsia").className).not.toContain("sr-only");
+    expect(screen.getByText("Kyro").className).not.toContain("sr-only");
   });
 
   it("supports uncontrolled desktop state and keeps trigger focus", async () => {
@@ -56,7 +56,7 @@ describe("product Sidebar primitive", () => {
     await user.click(trigger);
     expect(screen.getByRole("button", { name: "사이드바 접기" }).getAttribute("aria-expanded")).toBe("true");
     expect(document.activeElement).toBe(trigger);
-    expect(screen.getByText("Opsia").className).not.toContain("sr-only");
+    expect(screen.getByText("Kyro").className).not.toContain("sr-only");
   });
 
   it("supports controlled desktop and mobile state without optimistic mutation", async () => {
@@ -216,7 +216,7 @@ function SidebarFixtureBody({ duplicateName, expandLabel = "사이드바 펼치�
   const nameProps = omitName ? {} : duplicateName ? { "aria-label": "제품 메뉴", "aria-labelledby": "menu-title" } : { "aria-label": "제품 메뉴" };
   return <>
     <Sidebar {...(nameProps as unknown as SidebarProps)} id="product-navigation" mobileCloseLabel="모바일 사이드바 닫기" mobileDescription="모바일 제품 메뉴입니다." mobileTitle={mobileTitle}>
-      <SidebarHeader><SidebarText>Opsia</SidebarText></SidebarHeader>
+      <SidebarHeader><SidebarText>Kyro</SidebarText></SidebarHeader>
       <SidebarContent><button type="button">메뉴 동작</button></SidebarContent>
       <SidebarFooter>바닥글</SidebarFooter>
     </Sidebar>

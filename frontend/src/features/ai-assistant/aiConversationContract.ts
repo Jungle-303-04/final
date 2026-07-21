@@ -1,4 +1,4 @@
-// VP-021 — Opsia AI 어시스턴트 대화·파트 계약.
+// VP-021 — Kyro AI 어시스턴트 대화·파트 계약.
 import type { AiChatActionProposal, AiEvidenceLink } from "./aiAssistantContract";
 
 export type AiMessagePart =

@@ -207,7 +207,7 @@ describe("ProductShell keyboard and help interaction", () => {
     expect(screen.getByRole("link", { name: "홈" })).toBeTruthy();
     expect(container.querySelectorAll("[data-slot='unified-filter-bar']")).toHaveLength(1);
     expect(sidebar.className).toContain("--motion-layout");
-    expect(screen.getByText("Opsia").className.split(/\s+/u)).not.toContain("w-0");
+    expect(screen.getByText("Kyro").className.split(/\s+/u)).not.toContain("w-0");
 
     await user.click(screen.getByRole("link", { name: "홈" }));
     expect(sidebar.getAttribute("data-state")).toBe("expanded");

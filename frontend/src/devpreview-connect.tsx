@@ -839,7 +839,7 @@ function ClusterInstallStep({ providers, platform, name, env, providerConfig, on
         <>
           <div className="cmd overflow-hidden" style={{ borderRadius: 16 }}>
             <div className="flex items-center justify-between" style={{ padding: "10px 14px", borderBottom: "1px solid var(--line)" }}>
-              <span className="flex items-center gap-2 text-[12px] font-semibold c-2"><Icon size={15} stroke={2} style={{ color: pf.color }} />opsia-agent · {pf.name}</span>
+              <span className="flex items-center gap-2 text-[12px] font-semibold c-2"><Icon size={15} stroke={2} style={{ color: pf.color }} />Kyro Agent · {pf.name}</span>
               <button onClick={copy} className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-semibold transition-colors" style={{ color: copied ? "var(--green)" : "var(--ink-2)", background: copied ? "rgba(34,197,94,0.12)" : "rgba(17,19,24,0.05)" }}>
                 {copied ? <><Check className="size-3.5" strokeWidth={3} />복사됨</> : <><Copy className="size-3.5" />복사</>}
               </button>
@@ -925,7 +925,7 @@ function ClusterDoneStep({ name, env, connection, onDone }: { name: string; env:
         <motion.span initial={{ scale: 0, rotate: -18 }} animate={{ scale: 1, rotate: 0 }} transition={{ type: "spring", visualDuration: 0.45, bounce: 0.5 }} className="grid size-16 place-items-center rounded-full lime-bg"><Check className="size-8 c-ink" strokeWidth={3} /></motion.span>
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.14 }}>
           <div className="text-[19px] font-bold tracking-[-0.02em] c-ink">클러스터가 연결됐어요</div>
-          <div className="mt-1 text-[13.5px] c-2"><span className="font-mono c-ink">{name}</span> · {env} · opsia-agent 실행 중</div>
+          <div className="mt-1 text-[13.5px] c-2"><span className="font-mono c-ink">{name}</span> · {env} · Kyro Agent 실행 중</div>
         </motion.div>
       </div>
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.22 }} className="stat">
@@ -1058,7 +1058,8 @@ export function ConnectWizard({ embedded = false, initialView = null, onDismiss 
           --green: #30D158; --orange: #FFB340; --red: #FF5F55;
           --soft: rgba(10,132,255,0.06); --soft-b: rgba(10,132,255,0.32);
           --fill: #F2F3F7; --fill-2: #E9EBF1;
-          font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Pretendard", "Apple SD Gothic Neo", "Helvetica Neue", sans-serif;
+          font-family: var(--font-sans);
+          font-weight: var(--font-weight-body);
           color: var(--ink);
         }
         .c-ink { color: var(--ink); } .c-2 { color: var(--ink-2); } .c-3 { color: var(--ink-3); }

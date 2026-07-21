@@ -10,11 +10,14 @@ describe("product document bootstrap", () => {
     const documentSource = await readFile(resolve(frontendRoot, "index.html"), "utf8");
 
     expect(documentSource).toContain('<html lang="en">');
-    expect(documentSource).toContain('<title>Opsia</title>');
+    expect(documentSource).toContain('<title>Kyro</title>');
     expect(documentSource).toContain(
-      'content="Provider-neutral Kubernetes operations and GitOps control plane."',
+      'content="Kyro — provider-neutral Kubernetes operations and GitOps control plane."',
     );
+    expect(documentSource).toContain('name="application-name" content="Kyro"');
+    expect(documentSource).toContain('name="theme-color"');
     expect(documentSource).toContain('href="/favicon.svg"');
+    expect(documentSource).toContain('href="/site.webmanifest"');
     expect(documentSource).toContain('getItem("opsia-theme")');
     expect(documentSource).toContain('getItem("opsia.locale")');
     expect(documentSource).toContain("document.documentElement.lang = locale");
@@ -25,5 +28,14 @@ describe("product document bootstrap", () => {
     expect(documentSource).toContain('storedTheme === "system"');
     expect(documentSource).toContain("prefers-color-scheme: dark");
     expect(documentSource).toContain('selectedTheme === "system" && systemDark');
+  });
+
+  it("publishes Kyro install metadata without renaming legacy browser storage", async () => {
+    const manifest = JSON.parse(
+      await readFile(resolve(frontendRoot, "public/site.webmanifest"), "utf8"),
+    ) as { name: string; short_name: string; start_url: string; icons: unknown[] };
+
+    expect(manifest).toMatchObject({ name: "Kyro", short_name: "Kyro", start_url: "/" });
+    expect(manifest.icons).toHaveLength(1);
   });
 });
