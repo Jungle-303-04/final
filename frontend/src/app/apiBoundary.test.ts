@@ -15,6 +15,7 @@ const apiRoot = resolve(productRoot, "api");
 const compositionRoot = resolve(appRoot, "apiComposition.ts");
 const authBootstrapRoot = resolve(appRoot, "authBootstrap.ts");
 const compositionDirectory = resolve(appRoot, "composition");
+const activeContractRoot = resolve(productRoot, "devpreview/contracts.tsx");
 // UI-PHASE2-001 §5.2: devpreview 셸의 도메인별 typed adapter(src/devpreview/*Feed.ts)는
 // api 함수를 감싸 UI에 타입 훅을 제공하는 인증 경유 boundary다(credentials/csrf는 api 레이어가 처리).
 const adapterDirectory = resolve(productRoot, "devpreview");
@@ -136,7 +137,8 @@ function internalImportEscapes(filePath: string, source: string): string[] {
 }
 
 function isCompositionBoundary(filePath: string): boolean {
-  return filePath === compositionRoot || filePath === authBootstrapRoot || isWithin(filePath, compositionDirectory)
+  return filePath === compositionRoot || filePath === authBootstrapRoot || filePath === activeContractRoot
+    || isWithin(filePath, compositionDirectory)
     || (isWithin(filePath, adapterDirectory) && filePath.endsWith("Feed.ts"));
 }
 

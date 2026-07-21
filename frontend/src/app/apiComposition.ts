@@ -35,14 +35,6 @@ import { createPortRegistry } from "./composition/PortRegistry";
 import { createProductComposition, type ProductComposition } from "./productComposition";
 
 /**
- * Gives the unified shell the same authenticated cluster wire contract as the
- * product composition without letting the shell bypass the API boundary.
- */
-export function listDevpreviewClusters(signal?: AbortSignal) {
-  return listClusters({}, signal);
-}
-
-/**
  * The authenticated composition is intentionally small: global providers and
  * their one-owner ports are created here, while every page factory is loaded
  * only through its registered route module.

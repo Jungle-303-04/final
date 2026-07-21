@@ -8,9 +8,9 @@ import {
   type ReactNode,
 } from "react";
 
-import { listDevpreviewClusters } from "../app/apiComposition";
+import { listClusters } from "../api/clusters";
 
-type DevpreviewClusterList = Awaited<ReturnType<typeof listDevpreviewClusters>>;
+type DevpreviewClusterList = Awaited<ReturnType<typeof listClusters>>;
 type DevpreviewClusterSummary = DevpreviewClusterList["clusters"][number];
 
 // UI-PHASE2-001: fixture 모드가 완전히 제거되어 소스는 항상 실제 계약("live")이다.
@@ -72,7 +72,7 @@ export function DevpreviewContractProvider({ children }: { children: ReactNode }
     const controller = new AbortController();
 
     // UI-PHASE2-001 §6: fixture-fallback 제거 — 항상 실제 계약(/api/clusters)만 조회.
-    const request = listDevpreviewClusters(controller.signal);
+    const request = listClusters({}, controller.signal);
 
     void request.then((response) => {
       if (controller.signal.aborted) return;
