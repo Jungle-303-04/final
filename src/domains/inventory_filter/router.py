@@ -159,7 +159,7 @@ async def list_global_filter_facets(
         limit=limit,
         snapshot_revision=snapshot_revision,
     )
-    if request is not None and request.headers.get("if-none-match") == etag:
+    if request is not None and _if_none_match_matches(request.headers.get("if-none-match"), etag):
         return Response(status_code=304, headers={"ETag": etag, "Cache-Control": "no-cache"})
     started = time.monotonic()
 
@@ -261,6 +261,25 @@ def _global_facets_etag(
         ensure_ascii=True,
     )
     return '"' + hashlib.sha256(payload.encode("utf-8")).hexdigest() + '"'
+
+
+def _if_none_match_matches(header: str | None, etag: str) -> bool:
+    """RFC 7232 weak comparison — 배포 실측에서 edge(Cloudflare)가 압축하며 강한
+    ETag 를 `W/"…"` 로 약화시켜 브라우저 If-None-Match 가 엄격 문자열 비교와 절대
+    일치하지 않았다(항상 200). W/ 접두를 벗긴 opaque tag 로 비교하고 목록/`*` 를
+    수용한다. ETag 는 hex 해시라 값 안에 콤마가 없어 콤마 분리가 안전하다."""
+    if not header:
+        return False
+    if header.strip() == "*":
+        return True
+    opaque = etag[2:] if etag.startswith("W/") else etag
+    for candidate in header.split(","):
+        candidate = candidate.strip()
+        if candidate.startswith("W/"):
+            candidate = candidate[2:]
+        if candidate == opaque:
+            return True
+    return False
 
 
 @router.get(
