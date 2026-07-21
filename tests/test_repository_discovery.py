@@ -1572,3 +1572,74 @@ def test_list_branches_reuses_provided_metadata_and_skips_repository_get() -> No
     assert result.default_branch == "main"
     # metadata를 넘겼으므로 bare repository GET은 발생하지 않고 /branches만 호출된다.
     assert seen_paths == ["/repos/owner/service/branches"]
+
+
+def _client_error(handler, call) -> RepositoryDiscoveryError:
+    client = _github_client(handler)
+
+    async def run() -> RepositoryDiscoveryError:
+        with pytest.raises(RepositoryDiscoveryError) as exc:
+            await call(client)
+        return exc.value
+
+    return asyncio.run(run())
+
+
+def test_github_upstream_500_maps_to_502_upstream_status() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500, json={"message": "boom"}, request=request)
+
+    error = _repository_error(handler)
+    assert error.status_code == 502
+    assert error.observability is not None
+    assert error.observability["error_class"] == "upstream_status"
+    assert error.observability["upstream_status"] == 500
+
+
+def test_github_read_timeout_maps_to_502_read_timeout() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ReadTimeout("slow", request=request)
+
+    error = _repository_error(handler)
+    assert error.status_code == 502
+    assert error.observability is not None
+    assert error.observability["error_class"] == "read_timeout"
+
+
+def test_github_repository_invalid_shape_taxonomy() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=[1, 2, 3], request=request)  # list, not Mapping
+
+    error = _repository_error(handler)
+    assert error.status_code == 502
+    assert error.detail == "github repository response was invalid"  # 하위호환: detail 불변
+    assert error.observability is not None
+    assert error.observability["error_class"] == "invalid_shape"
+    assert error.observability["shape"] == "repository"
+
+
+def test_github_branches_invalid_shape_taxonomy() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"not": "a list"}, request=request)
+
+    error = _client_error(handler, lambda c: c.branches("owner/service"))
+    assert error.status_code == 502
+    assert error.detail == "github branch response was invalid"
+    assert error.observability is not None
+    assert error.observability["shape"] == "branches"
+
+
+def test_github_content_invalid_shape_taxonomy() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={"type": "file", "size": 3, "encoding": "utf-8", "content": "abc"},
+            request=request,
+        )
+
+    error = _client_error(handler, lambda c: c.content("owner/service", "main", "deploy.yaml"))
+    assert error.status_code == 502
+    assert error.detail == "github content response was invalid"
+    assert error.observability is not None
+    assert error.observability["error_class"] == "invalid_shape"
+    assert error.observability["shape"] == "content"

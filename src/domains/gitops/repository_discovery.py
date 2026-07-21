@@ -164,7 +164,7 @@ class GitHubRepositoryClient:
     async def repository(self, repo_ref: str) -> JsonMap:
         data = await self._get(f"/repos/{quote(repo_ref, safe='/')}")
         if not isinstance(data, Mapping):
-            raise RepositoryDiscoveryError(502, "github repository response was invalid")
+            raise _invalid_shape_error("repository", "github repository response was invalid")
         return dict(data)
 
     async def branches(self, repo_ref: str) -> list[JsonMap]:
@@ -173,7 +173,7 @@ class GitHubRepositoryClient:
             params={"per_page": str(MAX_BRANCHES)},
         )
         if not isinstance(data, list):
-            raise RepositoryDiscoveryError(502, "github branch response was invalid")
+            raise _invalid_shape_error("branches", "github branch response was invalid")
         return [dict(item) for item in data if isinstance(item, Mapping)]
 
     async def tree(self, repo_ref: str, branch: str) -> tuple[list[JsonMap], list[str]]:
@@ -181,7 +181,7 @@ class GitHubRepositoryClient:
             f"/repos/{quote(repo_ref, safe='/')}/branches/{quote(branch, safe='')}"
         )
         if not isinstance(branch_data, Mapping):
-            raise RepositoryDiscoveryError(502, "github branch response was invalid")
+            raise _invalid_shape_error("branch", "github branch response was invalid")
         commit = branch_data.get("commit")
         commit_map = commit if isinstance(commit, Mapping) else {}
         nested_commit = commit_map.get("commit")
@@ -190,7 +190,7 @@ class GitHubRepositoryClient:
         tree_map = tree if isinstance(tree, Mapping) else {}
         tree_sha = str(tree_map.get("sha") or "").strip()
         if not tree_sha:
-            raise RepositoryDiscoveryError(502, "github branch tree response was invalid")
+            raise _invalid_shape_error("branch_tree", "github branch tree response was invalid")
         return await self._tree(repo_ref, tree_sha)
 
     async def tree_at_revision(
@@ -204,11 +204,11 @@ class GitHubRepositoryClient:
             f"/repos/{quote(repo_ref, safe='/')}/git/commits/{quote(revision, safe='')}"
         )
         if not isinstance(commit_data, Mapping):
-            raise RepositoryDiscoveryError(502, "github commit response was invalid")
+            raise _invalid_shape_error("commit", "github commit response was invalid")
         tree = commit_data.get("tree")
         tree_sha = str(tree.get("sha") or "") if isinstance(tree, Mapping) else ""
         if not tree_sha:
-            raise RepositoryDiscoveryError(502, "github commit tree response was invalid")
+            raise _invalid_shape_error("commit_tree", "github commit tree response was invalid")
         return await self._tree(repo_ref, tree_sha)
 
     async def _tree(self, repo_ref: str, tree_sha: str) -> tuple[list[JsonMap], list[str]]:
@@ -217,10 +217,10 @@ class GitHubRepositoryClient:
             params={"recursive": "1"},
         )
         if not isinstance(tree_data, Mapping):
-            raise RepositoryDiscoveryError(502, "github tree response was invalid")
+            raise _invalid_shape_error("tree", "github tree response was invalid")
         raw_tree = tree_data.get("tree")
         if not isinstance(raw_tree, list):
-            raise RepositoryDiscoveryError(502, "github tree response was invalid")
+            raise _invalid_shape_error("tree", "github tree response was invalid")
         warnings = []
         if bool(tree_data.get("truncated")):
             warnings.append(
@@ -247,11 +247,11 @@ class GitHubRepositoryClient:
         encoding = str(data.get("encoding") or "")
         raw_content = data.get("content")
         if encoding != "base64" or not isinstance(raw_content, str):
-            raise RepositoryDiscoveryError(502, "github content response was invalid")
+            raise _invalid_shape_error("content", "github content response was invalid")
         try:
             decoded = base64.b64decode(raw_content, validate=False)
         except (binascii.Error, ValueError) as exc:
-            raise RepositoryDiscoveryError(502, "github content response was invalid") from exc
+            raise _invalid_shape_error("content", "github content response was invalid") from exc
         if len(decoded) > MAX_MANIFEST_BYTES:
             raise RepositoryDiscoveryError(422, "selected manifest exceeds the scan size limit")
         return decoded
@@ -261,11 +261,11 @@ class GitHubRepositoryClient:
             f"/repos/{quote(repo_ref, safe='/')}/git/ref/heads/{quote(branch, safe='')}"
         )
         if not isinstance(data, Mapping):
-            raise RepositoryDiscoveryError(502, "github branch response was invalid")
+            raise _invalid_shape_error("branch_ref", "github branch response was invalid")
         target = data.get("object")
         sha = str(target.get("sha") or "") if isinstance(target, Mapping) else ""
         if not re.fullmatch(r"[0-9a-f]{40,64}", sha):
-            raise RepositoryDiscoveryError(502, "github branch response was invalid")
+            raise _invalid_shape_error("branch_ref", "github branch response was invalid")
         return sha
 
     async def _get(self, path: str, params: Mapping[str, str] | None = None) -> Any:
@@ -1378,6 +1378,18 @@ def _log_origin_failure(path: str, observability: Mapping[str, Any]) -> None:
         "github_origin_request_failed",
         extra={"action": "github_origin_request_failed", "path": path, **dict(observability)},
     )
+
+
+def _invalid_shape_error(shape: str, detail: str) -> RepositoryDiscoveryError:
+    """200이지만 기대 shape가 아닌 응답의 502를 shape별 taxonomy로 분해한다.
+
+    HTTP status(502)와 detail 문자열은 기존과 동일하게 유지해 UI 하위호환을 보장하고,
+    분류(`error_class="invalid_shape"`, `shape=<repository|branches|branch|tree|...>`)는
+    secret-free observability로 서버 로그와 에러 객체에만 남긴다.
+    """
+    observability = {"error_class": "invalid_shape", "shape": shape}
+    _log_origin_failure(f"github:shape:{shape}", observability)
+    return RepositoryDiscoveryError(502, detail, observability=observability)
 
 
 def github_http_error(

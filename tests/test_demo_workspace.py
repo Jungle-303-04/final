@@ -783,7 +783,10 @@ class FakeRepositoryDiscovery:
             errors=[] if self.reachable else ["unreachable"],
         )
 
-    async def list_branches(self, repo_ref: str) -> RepositoryBranchListResponse:
+    async def list_branches(
+        self, repo_ref: str, *, metadata: dict[str, object] | None = None
+    ) -> RepositoryBranchListResponse:
+        self.list_branches_metadata = metadata
         return RepositoryBranchListResponse(
             repo_ref=repo_ref,
             default_branch="main",

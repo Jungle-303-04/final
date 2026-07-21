@@ -108,7 +108,11 @@ async def validate_demo_gitops_sources(
     ]
     try:
         branches, batch = await asyncio.gather(
-            discovery.list_branches(normalized_repo_ref),
+            # probe(89행)가 이미 repository metadata를 조회했으므로 default_branch를 재사용해
+            # list_branches의 중복 GitHub repository GET을 생략한다(rate-limit 완화).
+            discovery.list_branches(
+                normalized_repo_ref, metadata={"default_branch": probe.default_branch}
+            ),
             discovery.validate_manifests_at_revision(
                 validation_requests,
                 expected_revision=gitops.revision,
