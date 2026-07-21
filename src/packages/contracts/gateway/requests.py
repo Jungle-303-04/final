@@ -889,6 +889,7 @@ class CommandResultRequest(StrictModel):
     # cluster.agent.uninstall 전용 완료 증적. 단순 ACK/예약과 구분해 서버가
     # 실제 allowlist 정리 완료에만 등록 토큰을 폐기한다.
     cleanup_completed: bool = False
+    cleanup_resources: list[str] = Field(default_factory=list)
     residual_resources: list[str] = Field(default_factory=list)
     resource_file: ResourceFileResult | None = None
 

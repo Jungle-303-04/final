@@ -109,15 +109,6 @@ export function createClustersAdapter(
         await endpoints.getCommandStatus(commandId, signal),
       ));
     },
-    async confirmManualCleanup(clusterId, signal) {
-      return withFailure(async () => disconnectReceipt(
-        await endpoints.unregisterCluster(
-          clusterId,
-          { manualCleanupAttested: true },
-          signal,
-        ),
-      ));
-    },
   };
 }
 
@@ -159,16 +150,14 @@ function disconnectProgress(response: CommandStatusWire): ClusterDisconnectProgr
   return {
     status: response.status,
     cleanupCompleted: result.cleanup_completed === true,
-    cleanupResources: stringArray(result.resources),
+    cleanupResources: stringArray(result.cleanup_resources),
     residualResources: stringArray(result.residual_resources),
     failureReason,
   };
 }
 
 function stringArray(value: unknown): string[] {
-  return Array.isArray(value)
-    ? value.filter((item): item is string => typeof item === "string")
-    : [];
+  return Array.isArray(value) && value.every((item) => typeof item === "string") ? value : [];
 }
 
 async function withFailure<T>(operation: () => Promise<T>): Promise<T> {

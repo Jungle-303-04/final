@@ -2801,7 +2801,10 @@ class ClusterUnregisterResponse(StrictModel):
     ]
     command_id: str | None = None
     command_status_path: str | None = None
+    uninstall_command: str | None = None
     cleanup_verified: bool = False
+    resources: list[str] = Field(default_factory=list)
+    residual_resources: list[str] = Field(default_factory=list)
     failure_reason: str | None = None
 
 

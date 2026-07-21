@@ -35,6 +35,7 @@ from packages.contracts.target import (
 
 UNINSTALL_CONTRACT_VERSION = 1
 UNINSTALL_PRIORITY = 1_000
+UNINSTALL_COMMAND_REFERENCE = Command.CLUSTER_AGENT_UNINSTALL_ACTION
 
 
 @dataclass(frozen=True)
@@ -176,15 +177,46 @@ PRE_ACK_CLUSTER_CLEANUP = (
 FINAL_AGENT_DEPLOYMENT = NamespacedCleanupResource(
     "apps", "v1", TARGET_NAMESPACE, "deployments", "cluster-agent"
 )
+FINAL_AGENT_SERVICE_ACCOUNT = NamespacedCleanupResource(
+    "core", "v1", TARGET_NAMESPACE, "serviceaccounts", "cluster-agent"
+)
+FINAL_UNINSTALL_CLUSTER_ROLE_BINDING = ClusterCleanupResource(
+    "rbac.authorization.k8s.io",
+    "v1",
+    "clusterrolebindings",
+    "cluster-agent-uninstall",
+)
+FINAL_UNINSTALL_CLUSTER_ROLE = ClusterCleanupResource(
+    "rbac.authorization.k8s.io", "v1", "clusterroles", "cluster-agent-uninstall"
+)
+FINAL_CASCADE_NAMESPACED_CLEANUP = (
+    FINAL_AGENT_DEPLOYMENT,
+    FINAL_AGENT_SERVICE_ACCOUNT,
+)
+FINAL_CASCADE_CLUSTER_CLEANUP = (FINAL_UNINSTALL_CLUSTER_ROLE_BINDING,)
 
-# A running service account cannot reliably delete the binding that grants the
-# deletion and then delete the role behind it.  The completion receipt records
-# these inert residuals without turning them into a browser-side direct command
-# escape hatch; follow-up cleanup remains an agent contract concern.
-SELF_CLEANUP_RESIDUALS = (
-    f"{TARGET_NAMESPACE}:serviceaccount/cluster-agent",
-    "cluster:clusterrolebinding/cluster-agent-uninstall",
-    "cluster:clusterrole/cluster-agent-uninstall",
+
+def namespaced_cleanup_ref(item: NamespacedCleanupResource) -> str:
+    kind = item.resource.removesuffix("s")
+    return f"{item.namespace}:{kind}/{item.name}"
+
+
+def cluster_cleanup_ref(item: ClusterCleanupResource) -> str:
+    kind = item.resource.removesuffix("s")
+    return f"cluster:{kind}/{item.name}"
+
+
+UNINSTALL_CLEANUP_RESOURCE_REFS = tuple(
+    [*(namespaced_cleanup_ref(item) for item in PRE_ACK_NAMESPACED_CLEANUP)]
+    + [*(cluster_cleanup_ref(item) for item in PRE_ACK_CLUSTER_CLEANUP)]
+    + [*(namespaced_cleanup_ref(item) for item in FINAL_CASCADE_NAMESPACED_CLEANUP)]
+    + [*(cluster_cleanup_ref(item) for item in FINAL_CASCADE_CLUSTER_CLEANUP)]
+    + [cluster_cleanup_ref(FINAL_UNINSTALL_CLUSTER_ROLE)]
+)
+FINAL_CLEANUP_RESOURCE_REFS = tuple(
+    [*(namespaced_cleanup_ref(item) for item in FINAL_CASCADE_NAMESPACED_CLEANUP)]
+    + [*(cluster_cleanup_ref(item) for item in FINAL_CASCADE_CLUSTER_CLEANUP)]
+    + [cluster_cleanup_ref(FINAL_UNINSTALL_CLUSTER_ROLE)]
 )
 
 

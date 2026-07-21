@@ -55,10 +55,6 @@ export interface ClustersPort {
 export interface ClusterDisconnectPort {
   disconnect(clusterId: string, signal?: AbortSignal): Promise<ClusterDisconnectReceipt>;
   loadDisconnect(commandId: string, signal?: AbortSignal): Promise<ClusterDisconnectProgress>;
-  confirmManualCleanup(
-    clusterId: string,
-    signal?: AbortSignal,
-  ): Promise<ClusterDisconnectReceipt>;
 }
 
 export interface ClusterDisconnectReceipt {

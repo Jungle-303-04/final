@@ -25,10 +25,17 @@ describe("Clusters adapter", () => {
     await expect(port.disconnect("production-a1b2")).resolves.toMatchObject({
       status: "cleanup-required",
       stage: "agent_cleanup_pending",
-      uninstallCommand: "kubectl delete deployment/cluster-agent",
+      uninstallCommand: "cluster.agent.uninstall",
       cleanupVerified: false,
       cleanupResources: ["target:deployment/cluster-agent"],
       residualResources: ["target:serviceaccount/cluster-agent"],
+    });
+    await expect(port.loadDisconnect("cmd-uninstall-1")).resolves.toEqual({
+      status: "completed",
+      cleanupCompleted: true,
+      cleanupResources: ["target:deployment/cluster-agent"],
+      residualResources: [],
+      failureReason: null,
     });
     expect(endpoints.unregisterCluster).toHaveBeenCalledWith(
       "production-a1b2",
@@ -80,8 +87,8 @@ function dependencies() {
       status: "completed" as const,
       result: {
         cleanup_completed: true,
-        resources: ["target:deployment/cluster-agent"],
-        residual_resources: ["target:serviceaccount/cluster-agent"],
+        cleanup_resources: ["target:deployment/cluster-agent"],
+        residual_resources: [],
       },
       completed_at: "2026-07-15T01:02:04Z",
     })),
@@ -91,7 +98,7 @@ function dependencies() {
       stage: "agent_cleanup_pending" as const,
       command_id: null,
       command_status_path: null,
-      uninstall_command: "kubectl delete deployment/cluster-agent",
+      uninstall_command: "cluster.agent.uninstall",
       cleanup_verified: false,
       resources: ["target:deployment/cluster-agent"],
       residual_resources: ["target:serviceaccount/cluster-agent"],

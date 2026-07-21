@@ -70,6 +70,9 @@ from domains.target.management_guard import (
 from domains.target.policy_upgrade import target_desired_components
 from domains.target.reconciler import desired_state_version
 from domains.target.uninstall import (
+    FINAL_CLEANUP_RESOURCE_REFS,
+    UNINSTALL_CLEANUP_RESOURCE_REFS,
+    UNINSTALL_COMMAND_REFERENCE,
     queue_agent_uninstall,
 )
 from packages.config.security import (
@@ -1825,6 +1828,8 @@ async def unregister_cluster(
     db: Any = Depends(get_db),
 ) -> ClusterUnregisterResponse:
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    cleanup_resources = list(UNINSTALL_CLEANUP_RESOURCE_REFS)
+    pending_residuals = list(FINAL_CLEANUP_RESOURCE_REFS)
     if purge:
         # 테스트 fixture 물리 삭제만 별도 UoW로 묶고 운영 soft-delete 경로는 그대로 둔다.
         with unit_of_work_or_null(db):
@@ -1848,32 +1853,14 @@ async def unregister_cluster(
             cleanup_verified=True,
         )
 
-    registration = unregisterable_registration(db, workspace_id, cluster_id)
+    unregisterable_registration(db, workspace_id, cluster_id)
     if manual_cleanup_attested:
-        if str(registration.get("status") or "") != (
-            ClusterRegistrationStatus.UNINSTALL_REQUESTED.value
-        ):
-            raise HTTPException(
-                status_code=409,
-                detail={
-                    "code": "manual_cleanup_not_requested",
-                    "detail": "에이전트 제거 요청 후에만 수동 정리 완료를 확인할 수 있습니다",
-                },
-            )
-        unregister = getattr(db, "unregister_target_cluster", None)
-        if not callable(unregister):
-            raise HTTPException(
-                status_code=500,
-                detail="cluster registration cleanup is unavailable",
-            )
-        with unit_of_work_or_null(db):
-            if not unregister(workspace_id, cluster_id):
-                raise HTTPException(status_code=NOT_FOUND_CODE, detail=CLUSTER_NOT_FOUND)
-        return ClusterUnregisterResponse(
-            cluster_id=cluster_id,
-            status="disconnected",
-            stage="registration_revoked",
-            cleanup_verified=True,
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "manual_cleanup_attestation_unsupported",
+                "detail": "등록 해제는 인증된 에이전트의 잔여 리소스 0 완료 증적이 필요합니다",
+            },
         )
     agents = visible_cluster_agent_statuses(
         db.list_cluster_agent_statuses(workspace_id, cluster_id)
@@ -1897,6 +1884,8 @@ async def unregister_cluster(
             status="disconnected",
             stage="registration_revoked",
             cleanup_verified=True,
+            resources=cleanup_resources,
+            residual_resources=[],
         )
     latest_agent = agents[0] if agents else None
     online = cluster_connection_status(latest_agent) == AGENT_STATUS_ONLINE
@@ -1913,6 +1902,9 @@ async def unregister_cluster(
             cluster_id=cluster_id,
             status="cleanup_required",
             stage="agent_cleanup_pending",
+            uninstall_command=UNINSTALL_COMMAND_REFERENCE,
+            resources=cleanup_resources,
+            residual_resources=pending_residuals,
             failure_reason="agent cleanup queue is unavailable",
         )
     try:
@@ -1927,6 +1919,9 @@ async def unregister_cluster(
             cluster_id=cluster_id,
             status="cleanup_required",
             stage="agent_cleanup_pending",
+            uninstall_command=UNINSTALL_COMMAND_REFERENCE,
+            resources=cleanup_resources,
+            residual_resources=pending_residuals,
             failure_reason=f"agent cleanup queue failed: {type(exc).__name__}",
         )
     if not queued.inserted:
@@ -1938,6 +1933,9 @@ async def unregister_cluster(
             command_status_path=gateway_routes.COMMAND_STATUS_PATH.format(
                 command_id=queued.command_id
             ),
+            uninstall_command=UNINSTALL_COMMAND_REFERENCE,
+            resources=cleanup_resources,
+            residual_resources=pending_residuals,
             failure_reason="agent cleanup command is already pending",
         )
     return ClusterUnregisterResponse(
@@ -1946,6 +1944,9 @@ async def unregister_cluster(
         stage="agent_cleanup_queued" if online else "agent_cleanup_pending",
         command_id=queued.command_id,
         command_status_path=gateway_routes.COMMAND_STATUS_PATH.format(command_id=queued.command_id),
+        uninstall_command=UNINSTALL_COMMAND_REFERENCE,
+        resources=cleanup_resources,
+        residual_resources=pending_residuals,
         failure_reason=None if online else "agent is offline; cleanup waits for agent reconnect",
     )
 

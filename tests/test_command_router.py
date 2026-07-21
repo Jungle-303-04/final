@@ -41,6 +41,7 @@ from domains.command.router import (
 from domains.identity.dependencies import ClusterAgentIdentity
 from domains.inventory.capabilities import resource_capabilities_response
 from domains.inventory.workload_revisions import workload_revision_history_response
+from domains.target.uninstall import UNINSTALL_CLEANUP_RESOURCE_REFS
 from packages.config.constants import Command
 from packages.contracts.gateway.requests import (
     AgentDebugQueryRequest,
@@ -786,6 +787,7 @@ def test_uninstall_completed_ack_revokes_registration() -> None:
                 agent_id="agent-1",
                 lease_id="lease-1",
                 cleanup_completed=True,
+                cleanup_resources=list(UNINSTALL_CLEANUP_RESOURCE_REFS),
             ),
             identity=AGENT_IDENTITY,
             db=db,
@@ -793,6 +795,52 @@ def test_uninstall_completed_ack_revokes_registration() -> None:
 
         assert response.accepted is True
         assert db.unregistered == [("trusted-workspace", "trusted-cluster")]
+
+    asyncio.run(run())
+
+
+def test_uninstall_completed_ack_with_residuals_keeps_registration() -> None:
+    async def run() -> None:
+        db = SpyUninstallResultDb(action=Command.CLUSTER_AGENT_UNINSTALL_ACTION)
+        response = await command_result(
+            "cmd-uninstall-1",
+            CommandResultRequest(
+                status="completed",
+                agent_id="agent-1",
+                lease_id="lease-1",
+                cleanup_completed=True,
+                cleanup_resources=list(UNINSTALL_CLEANUP_RESOURCE_REFS),
+                residual_resources=["target:serviceaccount/cluster-agent"],
+            ),
+            identity=AGENT_IDENTITY,
+            db=db,
+        )
+
+        assert response.accepted is True
+        assert db.unregistered == []
+
+    asyncio.run(run())
+
+
+def test_uninstall_completed_ack_without_exact_cleanup_inventory_keeps_registration() -> None:
+    async def run() -> None:
+        db = SpyUninstallResultDb(action=Command.CLUSTER_AGENT_UNINSTALL_ACTION)
+        response = await command_result(
+            "cmd-uninstall-1",
+            CommandResultRequest(
+                status="completed",
+                agent_id="agent-1",
+                lease_id="lease-1",
+                cleanup_completed=True,
+                cleanup_resources=["target:deployment/cluster-agent"],
+                residual_resources=[],
+            ),
+            identity=AGENT_IDENTITY,
+            db=db,
+        )
+
+        assert response.accepted is True
+        assert db.unregistered == []
 
     asyncio.run(run())
 

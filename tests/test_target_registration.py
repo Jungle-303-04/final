@@ -786,7 +786,23 @@ def test_target_uninstall_rbac_is_exact_name_scoped_and_cannot_delete_namespaces
     assert all(rule.get("resourceNames") for rule in role["rules"])
     assert all("namespaces" not in rule.get("resources", []) for rule in role["rules"])
     assert all("pods" not in rule.get("resources", []) for rule in role["rules"])
-    assert all(rule["verbs"] == ["delete"] for rule in role["rules"])
+    assert all(set(rule["verbs"]) <= {"get", "patch", "delete"} for rule in role["rules"])
+    self_role = next(
+        rule
+        for rule in role["rules"]
+        if rule.get("resources") == ["clusterroles"]
+        and rule.get("resourceNames") == ["cluster-agent-uninstall"]
+    )
+    assert self_role["verbs"] == ["get", "delete"]
+    final_patch_targets = {
+        (tuple(rule["resources"]), tuple(rule["resourceNames"])): tuple(rule["verbs"])
+        for rule in role["rules"]
+        if rule.get("resourceNames") == ["cluster-agent"]
+        or rule.get("resourceNames") == ["cluster-agent-uninstall"]
+    }
+    assert final_patch_targets[("deployments",), ("cluster-agent",)] == ("patch",)
+    assert final_patch_targets[("serviceaccounts",), ("cluster-agent",)] == ("patch",)
+    assert final_patch_targets[("clusterrolebindings",), ("cluster-agent-uninstall",)] == ("patch",)
 
 
 def test_target_install_manifest_uses_agent_proxy_root_for_secure_realtime() -> None:
@@ -2856,12 +2872,15 @@ def test_offline_target_requires_actual_cleanup_before_registration_revocation()
     assert response.status == "cleanup_required"
     assert response.stage == "agent_cleanup_pending"
     assert response.command_id.startswith("cmd-uninstall-")
+    assert response.uninstall_command == "cluster.agent.uninstall"
+    assert response.resources
+    assert response.residual_resources
     assert db.registration_status_updates == [ClusterRegistrationStatus.UNINSTALL_REQUESTED.value]
     assert len(db.queued) == 1
     assert db.unregistered == []
 
 
-def test_manual_cleanup_attestation_revokes_pending_registration() -> None:
+def test_manual_cleanup_attestation_cannot_bypass_agent_residual_verification() -> None:
     db = StubUnregisterDb(cluster_role="target")
     original_get_registration = db.get_cluster_registration
 
@@ -2872,19 +2891,19 @@ def test_manual_cleanup_attestation_revokes_pending_registration() -> None:
 
     db.get_cluster_registration = uninstall_requested_registration  # type: ignore[method-assign]
 
-    response = asyncio.run(
-        unregister_cluster(
-            "cluster-1",
-            manual_cleanup_attested=True,
-            current=SimpleNamespace(workspace_id="default", user_id="admin"),
-            db=db,
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(
+            unregister_cluster(
+                "cluster-1",
+                manual_cleanup_attested=True,
+                current=SimpleNamespace(workspace_id="default", user_id="admin"),
+                db=db,
+            )
         )
-    )
 
-    assert response.status == "disconnected"
-    assert response.stage == "registration_revoked"
-    assert response.cleanup_verified is True
-    assert db.unregistered == [("default", "cluster-1")]
+    assert exc.value.status_code == 409
+    assert exc.value.detail["code"] == "manual_cleanup_attestation_unsupported"
+    assert db.unregistered == []
     assert db.queued == []
 
 
@@ -2902,7 +2921,7 @@ def test_manual_cleanup_attestation_requires_prior_uninstall_request() -> None:
         )
 
     assert exc.value.status_code == 409
-    assert exc.value.detail["code"] == "manual_cleanup_not_requested"
+    assert exc.value.detail["code"] == "manual_cleanup_attestation_unsupported"
     assert db.unregistered == []
 
 

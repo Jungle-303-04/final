@@ -131,7 +131,7 @@ describe("clusters API", () => {
         stage: "agent_cleanup_queued",
         command_id: "cmd-uninstall-1",
         command_status_path: "/api/commands/cmd-uninstall-1",
-        uninstall_command: "kubectl delete deployment/cluster-agent",
+        uninstall_command: "cluster.agent.uninstall",
         cleanup_verified: false,
         resources: ["target:deployment/cluster-agent"],
         residual_resources: ["target:serviceaccount/cluster-agent"],
@@ -143,6 +143,7 @@ describe("clusters API", () => {
     await expect(unregisterCluster("target/blue", {}, controller.signal)).resolves.toMatchObject({
       status: "uninstalling",
       command_id: "cmd-uninstall-1",
+      uninstall_command: "cluster.agent.uninstall",
     });
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/clusters/target%2Fblue?purge=false",

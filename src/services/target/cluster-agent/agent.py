@@ -155,10 +155,12 @@ from domains.rca.test_scenarios import (
 )
 from domains.target.management_guard import MANAGEMENT_CLUSTER_ROLE, MANAGEMENT_READONLY_CODE
 from domains.target.uninstall import (
-    FINAL_AGENT_DEPLOYMENT,
+    FINAL_CASCADE_CLUSTER_CLEANUP,
+    FINAL_CASCADE_NAMESPACED_CLEANUP,
+    FINAL_UNINSTALL_CLUSTER_ROLE,
     PRE_ACK_CLUSTER_CLEANUP,
     PRE_ACK_NAMESPACED_CLEANUP,
-    SELF_CLEANUP_RESIDUALS,
+    UNINSTALL_CLEANUP_RESOURCE_REFS,
     UNINSTALL_CONTRACT_VERSION,
 )
 from packages.config.constants import (
@@ -236,7 +238,6 @@ RCA_TEST_CLEANUP_INTERVAL_SECONDS = 30
 RCA_TEST_CLEANUP_TIMEOUT_SECONDS = 30.0
 RCA_TEST_CLEANUP_POLL_SECONDS = 0.25
 RCA_TEST_OWNER_CONFLICT_STATUSES = frozenset({409, 422})
-AGENT_UNINSTALL_FINAL_DELETE_RETRY_DELAYS = (0.5, 1.0, 2.0)
 
 
 def parse_provider_worker_counts(raw_counts: str) -> dict[str, int]:
@@ -1380,14 +1381,7 @@ class TargetClusterAgent:
                         attempt_id=str(attempt_id) if attempt_id else None,
                         result=result,
                     )
-                    result_flushed = await self.flush_command_results_once(client)
-                    if (
-                        result_flushed
-                        and action == Command.CLUSTER_AGENT_UNINSTALL_ACTION
-                        and result.get(Gateway.STATUS) == AgentConfig.COMMAND_COMPLETED_STATUS
-                        and result.get("cleanup_completed") is True
-                    ):
-                        await self.delete_agent_deployment_after_ack()
+                    await self.flush_command_results_once(client)
             except Exception as exc:
                 LOGGER.warning(
                     "command_polling_failed",
@@ -3140,11 +3134,13 @@ class TargetClusterAgent:
         if ctx.payload.contract_version != UNINSTALL_CONTRACT_VERSION:
             return ctx.fail("unsupported agent uninstall contract version")
         await self.prepare_agent_installation_cleanup()
+        await self.finalize_agent_installation_cleanup()
         return ctx.ok(
-            "allowlisted agent runtime cleaned; deployment removal waits for result delivery",
+            "allowlisted agent runtime cleanup accepted with no residual resources",
             applied=True,
             cleanup_completed=True,
-            residual_resources=list(SELF_CLEANUP_RESIDUALS),
+            cleanup_resources=list(UNINSTALL_CLEANUP_RESOURCE_REFS),
+            residual_resources=[],
         )
 
     async def prepare_agent_installation_cleanup(self) -> None:
@@ -3171,46 +3167,61 @@ class TargetClusterAgent:
                 name=item.name,
             )
 
-    async def delete_agent_deployment_after_ack(self) -> bool:
-        """Remove the running agent only after its durable completion ACK."""
+    async def finalize_agent_installation_cleanup(self) -> None:
+        """Delegate the final credential-bearing resources to Kubernetes GC.
 
-        attempts = len(AGENT_UNINSTALL_FINAL_DELETE_RETRY_DELAYS)
-        for attempt in range(attempts):
-            try:
-                await self.kubernetes.delete_namespaced_resource(
-                    api_group=FINAL_AGENT_DEPLOYMENT.api_group,
-                    version=FINAL_AGENT_DEPLOYMENT.version,
-                    namespace=FINAL_AGENT_DEPLOYMENT.namespace,
-                    resource=FINAL_AGENT_DEPLOYMENT.resource,
-                    name=FINAL_AGENT_DEPLOYMENT.name,
-                )
-                LOGGER.info(
-                    "agent_uninstall_runtime_deleted",
-                    extra={
-                        CONTEXT_KEY: {
-                            Gateway.CLUSTER_ID: self.cluster_id,
-                            "attempt": attempt + 1,
-                        }
-                    },
-                )
-                return True
-            except Exception as exc:
-                final_attempt = attempt + 1 >= attempts
-                log = LOGGER.error if final_attempt else LOGGER.warning
-                log(
-                    "agent_uninstall_final_delete_failed",
-                    extra={
-                        CONTEXT_KEY: {
-                            Gateway.CLUSTER_ID: self.cluster_id,
-                            "attempt": attempt + 1,
-                            "max_attempts": attempts,
-                            "exception_type": type(exc).__name__,
-                        }
-                    },
-                )
-                if not final_attempt:
-                    await asyncio.sleep(AGENT_UNINSTALL_FINAL_DELETE_RETRY_DELAYS[attempt])
-        return False
+        The exact uninstall ClusterRole is the cluster-scoped owner.  Once every
+        final resource has that owner reference, deleting the owner with
+        background propagation atomically hands the remaining cleanup to the
+        Kubernetes garbage collector.  No browser-side kubectl escape hatch or
+        broad namespace deletion is involved.
+        """
+
+        owner = await self.kubernetes.get_cluster_resource(
+            api_group=FINAL_UNINSTALL_CLUSTER_ROLE.api_group,
+            version=FINAL_UNINSTALL_CLUSTER_ROLE.version,
+            resource=FINAL_UNINSTALL_CLUSTER_ROLE.resource,
+            name=FINAL_UNINSTALL_CLUSTER_ROLE.name,
+        )
+        metadata = owner.get("metadata")
+        uid = str(metadata.get("uid") or "") if isinstance(metadata, dict) else ""
+        if not uid:
+            raise RuntimeError("uninstall ClusterRole UID is unavailable")
+        owner_reference = {
+            "apiVersion": "rbac.authorization.k8s.io/v1",
+            "kind": "ClusterRole",
+            "name": FINAL_UNINSTALL_CLUSTER_ROLE.name,
+            "uid": uid,
+            "controller": False,
+            "blockOwnerDeletion": False,
+        }
+        owner_patch = {"metadata": {"ownerReferences": [owner_reference]}}
+        for item in FINAL_CASCADE_NAMESPACED_CLEANUP:
+            await self.kubernetes.patch_namespaced_resource(
+                api_group=item.api_group,
+                version=item.version,
+                namespace=item.namespace,
+                resource=item.resource,
+                name=item.name,
+                body=owner_patch,
+            )
+        for item in FINAL_CASCADE_CLUSTER_CLEANUP:
+            await self.kubernetes.patch_cluster_resource(
+                api_group=item.api_group,
+                version=item.version,
+                resource=item.resource,
+                name=item.name,
+                body=owner_patch,
+            )
+        result = await self.kubernetes.delete_cluster_resource(
+            api_group=FINAL_UNINSTALL_CLUSTER_ROLE.api_group,
+            version=FINAL_UNINSTALL_CLUSTER_ROLE.version,
+            resource=FINAL_UNINSTALL_CLUSTER_ROLE.resource,
+            name=FINAL_UNINSTALL_CLUSTER_ROLE.name,
+            propagation_policy="Background",
+        )
+        if result.get("deleted") is not True:
+            raise RuntimeError("uninstall ClusterRole cleanup was not accepted")
 
     def command_payload(self, command: CommandRecord) -> JsonObject:
         payload = command.get(Gateway.PAYLOAD)

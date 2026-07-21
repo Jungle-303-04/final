@@ -103,9 +103,14 @@ class StubKubernetesClient:
         self.creates: list[dict[str, object]] = []
         self.namespaced_deletes: list[dict[str, object]] = []
         self.cluster_deletes: list[dict[str, object]] = []
+        self.cluster_gets: list[dict[str, object]] = []
 
     async def get_namespaced_resource(self, **_kwargs: object) -> dict[str, object]:
         return {}
+
+    async def get_cluster_resource(self, **kwargs: object) -> dict[str, object]:
+        self.cluster_gets.append(kwargs)
+        return {"metadata": {"uid": "uninstall-role-uid-1"}}
 
     async def patch_namespaced_resource(self, **kwargs: object) -> dict[str, object]:
         self.patches.append(kwargs)
@@ -159,19 +164,6 @@ class FailingDeleteKubernetesClient(StubKubernetesClient):
     async def delete_namespaced_resource(self, **kwargs: object) -> dict[str, object]:
         if kwargs.get("name") == "target-runtime-config":
             raise RuntimeError("delete forbidden")
-        return await super().delete_namespaced_resource(**kwargs)
-
-
-class RetryingDeploymentDeleteClient(StubKubernetesClient):
-    def __init__(self, failures: int) -> None:
-        super().__init__()
-        self.failures = failures
-        self.attempts = 0
-
-    async def delete_namespaced_resource(self, **kwargs: object) -> dict[str, object]:
-        self.attempts += 1
-        if self.attempts <= self.failures:
-            raise RuntimeError("temporary Kubernetes API failure")
         return await super().delete_namespaced_resource(**kwargs)
 
 
@@ -2351,6 +2343,8 @@ def test_agent_uninstall_cleans_allowlist_before_completed_ack() -> None:
 
     assert result["status"] == "completed"
     assert result["cleanup_completed"] is True
+    assert result["cleanup_resources"]
+    assert result["residual_resources"] == []
     assert agent.kubernetes.namespaced_deletes
     assert agent.kubernetes.cluster_deletes
     assert all(
@@ -2375,37 +2369,45 @@ def test_agent_cleanup_never_deletes_namespaces_or_user_workloads() -> None:
     assert all(item["resource"] != "deployments" for item in agent.kubernetes.namespaced_deletes)
 
 
-def test_agent_deletes_own_deployment_only_after_ack_path() -> None:
+def test_agent_final_cleanup_delegates_exact_resources_to_kubernetes_gc() -> None:
     module = load_agent_module()
     agent = object.__new__(module.TargetClusterAgent)
     agent.cluster_id = "cluster-1"
     agent.kubernetes = StubKubernetesClient()
 
-    asyncio.run(agent.delete_agent_deployment_after_ack())
+    asyncio.run(agent.finalize_agent_installation_cleanup())
 
-    assert agent.kubernetes.namespaced_deletes == [
+    assert agent.kubernetes.cluster_gets == [
         {
-            "api_group": "apps",
+            "api_group": "rbac.authorization.k8s.io",
             "version": "v1",
-            "namespace": "target",
-            "resource": "deployments",
-            "name": "cluster-agent",
+            "resource": "clusterroles",
+            "name": "cluster-agent-uninstall",
         }
     ]
-
-
-def test_agent_final_deployment_delete_retries_bounded_failures(monkeypatch) -> None:
-    module = load_agent_module()
-    monkeypatch.setattr(module, "AGENT_UNINSTALL_FINAL_DELETE_RETRY_DELAYS", (0, 0, 0))
-    agent = object.__new__(module.TargetClusterAgent)
-    agent.cluster_id = "cluster-1"
-    agent.kubernetes = RetryingDeploymentDeleteClient(failures=2)
-
-    deleted = asyncio.run(agent.delete_agent_deployment_after_ack())
-
-    assert deleted is True
-    assert agent.kubernetes.attempts == 3
-    assert agent.kubernetes.namespaced_deletes[-1]["name"] == "cluster-agent"
+    assert {(item["resource"], item["name"]) for item in agent.kubernetes.patches} == {
+        ("deployments", "cluster-agent"),
+        ("serviceaccounts", "cluster-agent"),
+    }
+    assert agent.kubernetes.cluster_patches[0]["resource"] == "clusterrolebindings"
+    owner_reference = agent.kubernetes.patches[0]["body"]["metadata"]["ownerReferences"][0]
+    assert owner_reference == {
+        "apiVersion": "rbac.authorization.k8s.io/v1",
+        "kind": "ClusterRole",
+        "name": "cluster-agent-uninstall",
+        "uid": "uninstall-role-uid-1",
+        "controller": False,
+        "blockOwnerDeletion": False,
+    }
+    assert agent.kubernetes.cluster_deletes == [
+        {
+            "api_group": "rbac.authorization.k8s.io",
+            "version": "v1",
+            "resource": "clusterroles",
+            "name": "cluster-agent-uninstall",
+            "propagation_policy": "Background",
+        }
+    ]
 
 
 def test_agent_uninstall_cleanup_failure_returns_failed_and_keeps_deployment() -> None:

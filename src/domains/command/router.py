@@ -61,6 +61,7 @@ from domains.target.management_guard import (
     is_management_role,
     management_readonly_detail,
 )
+from domains.target.uninstall import UNINSTALL_CLEANUP_RESOURCE_REFS
 from packages.config.constants import RCA_TEST_COMMAND_ACTIONS, Command, CommandStatus, Sandbox
 from packages.config.control import (
     CONTROL_NAMESPACE_DENIED_MESSAGE,
@@ -2554,6 +2555,8 @@ async def command_result(
         uninstall_result
         and payload.status == CommandStatus.COMPLETED
         and payload.cleanup_completed is True
+        and payload.cleanup_resources == list(UNINSTALL_CLEANUP_RESOURCE_REFS)
+        and payload.residual_resources == []
     ):
         unregister = getattr(db, "unregister_target_cluster", None)
         if not callable(unregister) or not unregister(identity.workspace_id, identity.cluster_id):
