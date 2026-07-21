@@ -39,8 +39,16 @@ export function useBoundedPoll<T>(options: {
   useEffect(() => {
     if (scopeKey === "" || !Number.isFinite(intervalMs) || intervalMs <= 0) return undefined;
     let disposed = false;
-    let inFlight = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
+    // 시도 세대(generation): 각 poll attempt 에 단조 증가 id 를 부여한다. 커밋(onResult/
+    // onError)은 **자신이 최신 세대일 때만** 허용 — 타임아웃으로 버려진 이전 시도의
+    // 늦은 성공/실패가 새 시도의 결과를 덮지 못한다(stale response 무시).
+    let attemptSeq = 0;
+    // 정착을 기다리는 최신 시도의 세대. null 이면 새 시도를 시작할 수 있다.
+    // (행잉 시도는 타임아웃 시 소유권을 잃어 backpressure 를 영구 점유하지 못한다.)
+    let pendingGeneration: number | null = null;
+    // scope 당 quick-retry burst 상한(연속 실패 metric). 성공 시 리셋.
+    let quickRetriesUsed = 0;
     // 스코프 단위 abort — 스코프가 유지되는 동안의 모든 폴링을 함께 취소한다.
     const scopeController = new AbortController();
 
@@ -48,30 +56,58 @@ export function useBoundedPoll<T>(options: {
       if (timer !== null) { clearTimeout(timer); timer = null; }
     };
     const schedule = () => {
-      if (timer !== null || disposed || inFlight || document.hidden) return;
+      if (timer !== null || disposed || pendingGeneration !== null || document.hidden) return;
       timer = setTimeout(() => { timer = null; run(); }, intervalMs);
     };
+    const scheduleQuickRetry = () => {
+      // 실패 직후 1초 재시도(상한 QUICK_RETRY_LIMIT/scope). 늦은 200 은 그 시도의
+      // 세대가 최신일 때만 상태를 채운다. 상한 초과 시 평시 캐던스로 후퇴.
+      if (disposed || document.hidden) return;
+      if (quickRetriesUsed >= QUICK_RETRY_LIMIT) { schedule(); return; }
+      quickRetriesUsed += 1;
+      clearTimer();
+      timer = setTimeout(() => { timer = null; run(); }, QUICK_RETRY_MS);
+    };
     const run = () => {
-      if (inFlight || disposed || document.hidden || scopeController.signal.aborted) return;
-      inFlight = true;
-      loadRef.current(scopeController.signal)
+      if (disposed || document.hidden || scopeController.signal.aborted) return;
+      if (pendingGeneration !== null) return; // 최신 시도가 아직 정착 대기(backpressure)
+      const generation = ++attemptSeq;
+      pendingGeneration = generation;
+      const isCurrent = () =>
+        !disposed && !scopeController.signal.aborted && generation === attemptSeq;
+      // 시도 단위 abort: 행잉 요청은 타임아웃으로 절단하고 소유권을 회수한다.
+      const attempt = new AbortController();
+      const onScopeAbort = () => attempt.abort();
+      scopeController.signal.addEventListener("abort", onScopeAbort);
+      const attemptTimeout = setTimeout(() => {
+        attempt.abort();
+        // 정착하지 않는 promise 가 소유권을 영구 점유하지 못하게 즉시 회수 후 재시도.
+        if (pendingGeneration === generation) pendingGeneration = null;
+        if (isCurrent()) scheduleQuickRetry();
+      }, ATTEMPT_TIMEOUT_MS);
+      loadRef.current(attempt.signal)
         .then((value) => {
-          if (disposed || scopeController.signal.aborted) return;
+          if (!isCurrent()) return; // 이전 세대의 늦은 성공 — 무시(stale overwrite 금지)
+          quickRetriesUsed = 0;
           onResultRef.current(value);
         })
         .catch((error: unknown) => {
-          if (disposed || scopeController.signal.aborted) return;
-          if (isAbortError(error)) return;
+          if (!isCurrent()) return; // 이전 세대의 늦은 실패 — 무시
+          if (isAbortError(error)) { scheduleQuickRetry(); return; } // 시도 절단 → 즉시 재시도
           onErrorRef.current?.(error);
+          scheduleQuickRetry();
         })
         .finally(() => {
-          inFlight = false;
-          schedule(); // 다음 폴링은 완료 후에만 예약(backpressure).
+          clearTimeout(attemptTimeout);
+          scopeController.signal.removeEventListener("abort", onScopeAbort);
+          // 소유권은 자기 세대가 아직 갖고 있을 때만 반납한다(타임아웃이 이미 회수했으면 no-op).
+          if (pendingGeneration === generation) pendingGeneration = null;
+          schedule(); // 다음 폴링은 정착 후에만 예약. quick-retry 가 잡았으면 no-op.
         });
     };
     const onVisibility = () => {
       if (document.hidden) { clearTimer(); return; }
-      if (!inFlight) run(); // 복귀 즉시 1회(중복은 inFlight로 차단)
+      if (pendingGeneration === null) run(); // 복귀 즉시 1회
     };
     document.addEventListener("visibilitychange", onVisibility);
     run(); // 최초 로드
@@ -80,10 +116,15 @@ export function useBoundedPoll<T>(options: {
       disposed = true;
       clearTimer();
       document.removeEventListener("visibilitychange", onVisibility);
-      scopeController.abort();
+      scopeController.abort(); // scope 변경/언마운트 — 이전 응답은 isCurrent() 로 전부 무시된다
     };
   }, [scopeKey, intervalMs]);
 }
+
+// 시도 타임아웃/즉시 재시도 상수 — 첫 화면 실값 수렴(ellipsis 고착 방지).
+const ATTEMPT_TIMEOUT_MS = 8_000;
+const QUICK_RETRY_MS = 1_000;
+const QUICK_RETRY_LIMIT = 3;
 
 function isAbortError(error: unknown): boolean {
   return typeof error === "object" && error !== null && "name" in error
