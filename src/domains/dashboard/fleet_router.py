@@ -944,7 +944,9 @@ def build_nodes_summary(
         )
     )
     latest_snapshot = db.latest_inventory_snapshot(workspace_id, cluster_id)
-    latest_summary = _summary(latest_snapshot or {})
+    latest_payload = _summary(latest_snapshot or {})
+    nested_summary = latest_payload.get("summary")
+    latest_summary = dict(nested_summary) if isinstance(nested_summary, dict) else latest_payload
     snapshot_nodes = latest_summary.get("nodes")
     if latest_summary.get("live_inventory") is True and isinstance(snapshot_nodes, list):
         observed_node_names = {

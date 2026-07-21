@@ -1267,8 +1267,11 @@ def test_nodes_summary_excludes_nodes_absent_from_latest_live_snapshot() -> None
             "snapshot_id": "snapshot-current",
             "collected_at": "2026-07-21T14:58:43+00:00",
             "summary": {
-                "live_inventory": True,
-                "nodes": [{"name": "node-current", "ready": True}],
+                "usage": {"nodes": {"node-current": {"cpu_ratio": 0.2}}},
+                "summary": {
+                    "live_inventory": True,
+                    "nodes": [{"name": "node-current", "ready": True}],
+                },
             },
         },
     )
