@@ -40,6 +40,16 @@ SAFE_REFERENCE_KEYS = frozenset(
         "valuefrom",
     }
 )
+SENSITIVE_GATE_PREFIXES = (
+    "allow_",
+    "disable_",
+    "enable_",
+    "require_",
+    "use_",
+    "validate_",
+    "verify_",
+)
+BOOLEAN_GATE_LITERALS = frozenset({"0", "1", "false", "no", "off", "on", "true", "yes"})
 
 
 @dataclass(frozen=True, order=True)
@@ -222,6 +232,7 @@ def contains_sensitive_literal(value: Any) -> bool:
             and SENSITIVE_NAME.search(env_name)
             and "value" in value
             and value.get("value") not in (None, "")
+            and not is_sensitive_gate_flag(env_name, value.get("value"))
         ):
             return True
         for raw_key, child in value.items():
@@ -240,6 +251,25 @@ def contains_sensitive_literal(value: Any) -> bool:
     if isinstance(value, list):
         return any(contains_sensitive_literal(item) for item in value)
     return False
+
+
+def is_sensitive_gate_flag(name: str, value: Any) -> bool:
+    """Allow explicit boolean feature gates without weakening secret detection.
+
+    Kubernetes manifests commonly pair a secret-backed variable such as
+    ``OPS_CONTROL_TOKEN`` with ``REQUIRE_CONTROL_TOKEN=true``.  The latter is a
+    policy switch, not credential material.  Only an allowlisted gate prefix
+    plus an exact boolean literal qualifies; arbitrary values remain blocked.
+    """
+
+    normalized_name = name.strip().casefold().replace("-", "_")
+    if not normalized_name.startswith(SENSITIVE_GATE_PREFIXES):
+        return False
+    if isinstance(value, bool):
+        return True
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value in {0, 1}
+    return isinstance(value, str) and value.strip().casefold() in BOOLEAN_GATE_LITERALS
 
 
 def server_owned_field_errors(source: Sequence[Any], desired: Sequence[Any]) -> list[str]:

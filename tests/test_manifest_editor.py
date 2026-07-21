@@ -100,6 +100,50 @@ def test_manifest_source_allows_namespace_to_be_supplied_by_binding() -> None:
     assert validate_manifest_source(source, selected_identity=IDENTITY) == ()
 
 
+def test_manifest_source_allows_secret_references_and_boolean_security_gates() -> None:
+    source = SOURCE.replace(
+        "          image: ghcr.io/project/checkout-api:v2",
+        "          image: ghcr.io/project/checkout-api:v2\n"
+        "          env:\n"
+        "            - name: OPS_CONTROL_TOKEN\n"
+        "              valueFrom:\n"
+        "                secretKeyRef:\n"
+        "                  name: checkout-control\n"
+        "                  key: token\n"
+        "            - name: OPTIONAL_API_KEY\n"
+        "              valueFrom:\n"
+        "                configMapKeyRef:\n"
+        "                  name: checkout-flags\n"
+        "                  key: api-key-name\n"
+        "            - name: REQUIRE_CONTROL_TOKEN\n"
+        '              value: "true"',
+    )
+
+    assert validate_manifest_source(source, selected_identity=IDENTITY) == ()
+
+
+@pytest.mark.parametrize(
+    ("name", "value"),
+    [
+        ("OPS_CONTROL_TOKEN", "actual-token-value"),
+        ("REQUIRE_CONTROL_TOKEN", "actual-token-value"),
+        ("DATABASE_PASSWORD", "false"),
+    ],
+)
+def test_manifest_source_still_rejects_sensitive_env_literals(name: str, value: str) -> None:
+    source = SOURCE.replace(
+        "          image: ghcr.io/project/checkout-api:v2",
+        "          image: ghcr.io/project/checkout-api:v2\n"
+        "          env:\n"
+        f"            - name: {name}\n"
+        f'              value: "{value}"',
+    )
+
+    errors = validate_manifest_source(source, selected_identity=IDENTITY)
+
+    assert any("secret-like" in error for error in errors)
+
+
 def test_source_pinning_rejects_branch_or_content_drift() -> None:
     with pytest.raises(HTTPException) as error:
         ensure_source_is_current(
