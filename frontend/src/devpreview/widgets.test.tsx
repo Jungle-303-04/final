@@ -110,7 +110,6 @@ describe("home card layout contract", () => {
     expect(DASHBOARD_WIDGET_GRID_CLASS).toBe("dashboard-widget-grid");
     expect(DASHBOARD_WIDGET_GRID_ITEM_CLASS).toBe("dashboard-widget-grid-item");
     expect(dashboardWidgetGridStyle()).toMatchObject({
-      gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
       gridAutoRows: 220,
       gap: 12,
     });

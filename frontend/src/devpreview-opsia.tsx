@@ -204,7 +204,7 @@ function CompactClusterRow({ cl, summary, onOpen, onSettings, onDisconnect }: {
       onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); activate(); } }}
       whileHover={{ backgroundColor: inkA(0.025) }}
       className="home-cluster-compact-row"
-      style={{ position: "relative", display: "grid", gridTemplateColumns: "minmax(170px, 1.35fr) minmax(210px, 1.25fr) minmax(180px, 1fr) auto", alignItems: "center", gap: 14, minHeight: 54, padding: "8px 4px", borderTop: `1px solid ${UI.line2}`, cursor: "pointer", outline: "none" }}>
+      style={{ position: "relative", display: "grid", alignItems: "center", minHeight: 54, padding: "8px 4px", borderTop: `1px solid ${UI.line2}`, cursor: "pointer", outline: "none" }}>
       <span style={{ display: "flex", alignItems: "center", gap: 9, minWidth: 0 }}>
         <span style={{ width: 27, height: 27, borderRadius: 8, background: `linear-gradient(135deg, ${BRAND.awsA}, ${BRAND.awsB})`, display: "grid", placeItems: "center", flexShrink: 0 }}><AwsIcon size={15} style={{ color: UI.card }} /></span>
         <span style={{ minWidth: 0 }}>

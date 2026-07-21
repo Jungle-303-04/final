@@ -35,7 +35,6 @@ export function homeCardGridItemStyle(narrow: boolean): React.CSSProperties {
 export function dashboardWidgetGridStyle(): React.CSSProperties {
   return {
     display: "grid",
-    gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
     gridAutoRows: 220,
     gridAutoFlow: "row dense",
     alignItems: "stretch",
