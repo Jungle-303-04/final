@@ -214,6 +214,9 @@ def test_deploy_orders_auth_migration_rollout_smoke_and_status_recording() -> No
         "Roll out immutable service digest"
     )
     assert names.index("Roll out immutable service digest") < names.index(
+        "Reconcile canonical console runtime config"
+    )
+    assert names.index("Reconcile canonical console runtime config") < names.index(
         "Roll out immutable console digest"
     )
     service_rollout = steps_by_name()["Roll out immutable service digest"]["run"]
@@ -869,6 +872,33 @@ def test_deploy_reconciles_exact_canonical_services_after_rollback_capture() -> 
     )
     assert names.index("Reconcile canonical management services") < names.index(
         "Run post-deploy smoke"
+    )
+
+
+def test_deploy_reconciles_console_configmap_before_console_rollout() -> None:
+    steps = steps_by_name()
+    names = [step["name"] for step in deploy_job()["steps"]]
+    reconcile = steps["Reconcile canonical console runtime config"]
+    source = reconcile["run"]
+
+    assert reconcile["if"] == "steps.release_lease.outputs.mode == 'deploy'"
+    assert "scripts/select_kubernetes_resources.py" in source
+    assert "--input deploy/management/console-dev.yaml" in source
+    assert "--kind ConfigMap" in source
+    assert "--name console-dev-nginx" in source
+    assert 'kubectl --context "${MGMT_CONTEXT}" diff' in source
+    assert "console ConfigMap server-side diff failed" in source
+    assert 'kubectl --context "${MGMT_CONTEXT}" apply' in source
+    assert "get configmap console-dev-nginx" in source
+    assert 'test "${live_template}" = "${desired_template}"' in source
+    assert names.index("Capture current console digest rollback plan") < names.index(
+        "Reconcile canonical console runtime config"
+    )
+    assert names.index("Reconcile canonical console runtime config") < names.index(
+        "Roll out immutable console digest"
+    )
+    assert names.index("Reconcile canonical console runtime config") < names.index(
+        "Run authenticated browser route smoke"
     )
 
 

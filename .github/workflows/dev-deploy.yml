@@ -886,6 +886,46 @@ jobs:
             --image "${DEPLOY_IMAGE}" \
             --timeout 600s
 
+      - name: Reconcile canonical console runtime config
+        if: steps.release_lease.outputs.mode == 'deploy'
+        shell: bash
+        run: |
+          set -euo pipefail
+          console_config="${RUNNER_TEMP}/console-runtime-config.yaml"
+          uv run python scripts/select_kubernetes_resources.py \
+            --input deploy/management/console-dev.yaml \
+            --kind ConfigMap \
+            --name console-dev-nginx \
+            >"${console_config}"
+
+          diff_exit=0
+          kubectl --context "${MGMT_CONTEXT}" diff \
+            --field-manager=opsia-dev-deploy \
+            --filename "${console_config}" || diff_exit=$?
+          case "${diff_exit}" in
+            0|1) ;;
+            *) echo "console ConfigMap server-side diff failed" >&2; exit "${diff_exit}" ;;
+          esac
+          kubectl --context "${MGMT_CONTEXT}" apply \
+            --field-manager=opsia-dev-deploy \
+            --filename "${console_config}"
+
+          desired_template="$(uv run python - "${console_config}" <<'PY'
+          import sys
+          from pathlib import Path
+
+          import yaml
+
+          document = yaml.safe_load(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          print(document["data"]["default.conf.template"], end="")
+          PY
+          )"
+          live_template="$(kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+            get configmap console-dev-nginx \
+            --output jsonpath='{.data.default\.conf\.template}')"
+          test "${live_template}" = "${desired_template}"
+          unset console_config desired_template live_template diff_exit
+
       - name: Roll out immutable console digest
         id: console_rollout
         if: steps.release_lease.outputs.mode == 'deploy'
