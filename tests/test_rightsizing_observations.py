@@ -228,7 +228,7 @@ def test_repository_scan_reads_persisted_inventory_and_agent_usage_without_targe
     revision, pod_a, pod_b = _dependents()
     connection = _Connection(
         [
-            None,
+            # advisory lock 실행을 제거했으므로 첫 execute는 snapshot SELECT다(선두 None 제거).
             {
                 "snapshot_id": "snapshot-current",
                 "collected_at": datetime(2026, 7, 16, tzinfo=UTC),
@@ -274,5 +274,7 @@ def test_repository_scan_reads_persisted_inventory_and_agent_usage_without_targe
     assert connection.results == []
     assert sum("cluster_inventory_snapshots" in sql for sql in connection.statements) == 1
     assert sum("cluster_usage_samples" in sql for sql in connection.statements) == 1
-    assert sum("pg_advisory_xact_lock" in sql for sql in connection.statements) == 1
+    # rightsizing READ는 writer 직렬화용 advisory lock을 잡지 않는다(MVCC 스냅샷으로 충분).
+    # writer의 lock 장기보유와의 cascade 경합을 없애기 위한 의도된 동작.
+    assert sum("pg_advisory_xact_lock" in sql for sql in connection.statements) == 0
     assert all("prometheus" not in sql for sql in connection.statements)

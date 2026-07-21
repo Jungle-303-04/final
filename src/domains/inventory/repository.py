@@ -2053,13 +2053,10 @@ class InventoryRepository(DatabaseConnection):
             .limit(1)
         )
         with self.connection() as conn:
-            conn.execute(
-                select(
-                    func.pg_advisory_xact_lock(
-                        inventory_snapshot_lock_key(workspace_id, cluster_id)
-                    )
-                )
-            )
+            # 이 rightsizing READ는 완결된 cut 하나를 읽을 뿐 ordered write transition을 만들지
+            # 않으므로 writer 직렬화용 inventory_snapshot advisory lock이 불필요하다. 단일 트랜잭션
+            # SELECT는 MVCC 스냅샷으로 일관성이 보장된다. writer가 이 lock을 slow event-batch 쿼리
+            # 동안 장기 보유할 때 이 READ가 대기하며 발생하던 cascade 경합(/api/clusters 지연)을 없앤다.
             snapshot_row = conn.execute(snapshot_statement).mappings().first()
             if snapshot_row is None or not _rightsizing_snapshot_complete(snapshot_row["summary"]):
                 return None
