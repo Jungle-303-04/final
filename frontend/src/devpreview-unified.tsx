@@ -1198,11 +1198,12 @@ function App() {
   const [showEmpty, setShowEmpty] = useState(false);
   const [pinned, setPinned] = useState<string[]>([]);
   const [q, setQ] = useState(""); // 단일 검색 — 종류 인덱스와 표 행을 동시에 필터
+  const [surface, setSurface] = useState<Surface>("home"); // 셸 내 서피스 전환 — 홈이 랜딩(D19)
   const [ns, setNs] = useState("모든 네임스페이스");
   const [nsOpen, setNsOpen] = useState(false);
   // 네임스페이스 셀렉트 — 실 관측 네임스페이스(파드 관측 기반)로 구동. 하드코딩 목록 제거.
   // 계약이 unavailable/빈이면 "모든 네임스페이스"만 남는다.
-  const nsFeed = useInventoryNamespaces(clusterIds);
+  const nsFeed = useInventoryNamespaces(surface === "resources" ? clusterIds : []);
   const nsOptions = useMemo(() => ["모든 네임스페이스", ...nsFeed.items.map((item) => item.namespace)], [nsFeed.items]);
   const [meOpen, setMeOpen] = useState(false); // 계정 메뉴 (헤더 맨 오른쪽, D20)
   const [detail, setDetail] = useState<{ kind: Kind; row: Row } | null>(null);
@@ -1211,7 +1212,6 @@ function App() {
   const [aiOpen, setAiOpen] = useState(false);
   const [aiW, setAiW] = useState(440);                 // 실제 제품처럼 리사이즈 가능한 도킹 폭
   const [aiDragging, setAiDragging] = useState(false);
-  const [surface, setSurface] = useState<Surface>("home"); // 셸 내 서피스 전환 — 홈이 랜딩(D19)
   const [drillCl, setDrillCl] = useState<string | null>(null); // 홈 카드 → 지도 드릴 스코프 전달(D21)
   const [connectView, setConnectView] = useState<null | "repo" | "cluster">(null); // 연결 위저드 딥오픈 대상 (설정 서피스)
   const [connectModal, setConnectModal] = useState<null | "repo" | "cluster">(null); // 문맥 진입 = 모달 팝업
@@ -1276,7 +1276,9 @@ function App() {
   // 표 데이터: gateway가 단일 클러스터 경로만 제공하므로 전체 범위는 실제 클러스터별
   // 요청을 병렬 수행한 합집합이다. 카운트와 표가 같은 clusterIds를 사용해 2029/0 같은
   // 불일치가 생기지 않는다.
-  const resourceClusterIds = scope.cluster ? [scope.cluster] : clusterIds;
+  const resourceClusterIds = surface === "resources"
+    ? (scope.cluster ? [scope.cluster] : clusterIds)
+    : [];
   const resourcesView = useInventoryResourcesAcrossClusters(resourceClusterIds, kindToResourceType(kindId));
   const allRows = resourcesView.rows;
   const inScope = scope.level !== "clusters" && !!scope.cluster;
@@ -1300,7 +1302,7 @@ function App() {
   // 클러스터 카드 메타 — 라이브 인벤토리 요약(GET .../inventory/summary)의 종류별 카운트.
   // useInventoryKindCounts는 resource_type 키(소문자) 맵을 주므로, 소비처가 기대하는
   // kind 표기(Deployment 등)로 kindToResourceType 매핑을 통해 조회한다.
-  const kindCountsView = useInventoryKindCounts(clusterIds);
+  const kindCountsView = useInventoryKindCounts(surface === "resources" ? clusterIds : []);
   const clusterMeta = useMemo(() => {
     const kinds = ["Deployment", "StatefulSet", "DaemonSet", "Service", "Ingress", "Job", "CronJob", "Namespace"] as const;
     const meta: Record<string, Record<string, number>> = {};

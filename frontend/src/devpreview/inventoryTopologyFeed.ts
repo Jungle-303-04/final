@@ -62,9 +62,13 @@ interface TopologyChannel {
   disposeTimer: number | null;
 }
 
-const CACHE_TTL_MS = 30_000;
-const PARTIAL_CACHE_TTL_MS = 15_000;
-const ERROR_CACHE_TTL_MS = 10_000;
+// Physical topology is a database-heavy snapshot projection. Its observed
+// p95 can exceed 25 s on the live management cluster, so a shorter poll period
+// overlaps queries and recreates lock pressure. Live websocket deltas animate
+// independently; this snapshot is the one-minute reconciliation safety net.
+const CACHE_TTL_MS = 60_000;
+const PARTIAL_CACHE_TTL_MS = 60_000;
+const ERROR_CACHE_TTL_MS = 30_000;
 const STRICT_MODE_GRACE_MS = 50;
 
 const EMPTY_READY: ClusterTopologyView = {

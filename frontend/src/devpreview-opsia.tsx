@@ -129,16 +129,18 @@ function ClusterRow({ cl, summary, topology, onOpen }: {
   onOpen: () => void;
 }) {
   // Live: identity/version from `GET /api/clusters`; usage/health/open incidents
-  // from summary; node/pod counts from the same physical topology used by drill.
+  // from the bounded fleet summary. A drill topology may refine those counts,
+  // but Home does not start five heavy topology projections just to paint cards.
   const incidentsObserved = isActiveIncidentCluster(cl);
   const incidents = incidentsObserved ? cl.incidentCount ?? summary?.openIncidents ?? 0 : 0;
   const healthy = incidentsObserved && incidents === 0;
-  const topologyLoading = topology === undefined || topology.status === "loading";
-  const nodesReady = topology?.nodesReady ?? null;
-  const nodesTotal = topology?.nodesTotal ?? null;
-  const podCount = topology?.podsTotal ?? null;
-  const fmt = (n: number | null) => (topologyLoading ? "…" : n ?? "—");
   const summaryLoading = summary === undefined || summary.status === "loading";
+  const topologyLoading = topology?.status === "loading";
+  const nodesReady = topology?.nodesReady ?? summary?.nodesReady ?? null;
+  const nodesTotal = topology?.nodesTotal ?? summary?.nodesTotal ?? null;
+  const podCount = topology?.podsTotal ?? summary?.podsTotal ?? null;
+  const countsLoading = topologyLoading || (topology === undefined && summaryLoading);
+  const fmt = (n: number | null) => (countsLoading ? "…" : n ?? "—");
   const cpuPct = summaryLoading ? null : summary?.cpuPct ?? null;
   const memPct = summaryLoading ? null : summary?.memPct ?? null;
   return (
@@ -241,7 +243,6 @@ export function HomeClusterSection({ meta: _meta, onOpen, pending = [] }: {
   const { clusters } = useDevpreviewContracts();
   const clusterIds = useMemo(() => clusters.map((cl) => cl.id), [clusters]);
   const summaries = useClusterSummaries(clusterIds);
-  const topologies = useClusterTopologies(clusterIds);
   // priority 14: 홈은 OpsiaMap의 `.op` 스타일 블록(반응형 media query 포함) 밖에서
   // 렌더되므로 그 media query가 적용되지 않는다. 좁은 화면 1열 전환을 인라인으로 보장한다.
   const narrow = useNarrowViewport();
@@ -251,7 +252,7 @@ export function HomeClusterSection({ meta: _meta, onOpen, pending = [] }: {
     <div className="home-cluster-grid" style={{ display: "grid", gridTemplateColumns: narrow ? "minmax(0, 1fr)" : "repeat(4, minmax(0, 1fr))", gridAutoFlow: "row dense", gap: 14 }}>
       {clusters.map((cl) => (
         <div key={cl.id} style={{ gridColumn: span, minWidth: 0 }}>
-          <ClusterRow cl={cl} summary={summaries[cl.id]} topology={topologies[cl.id]} onOpen={() => onOpen(cl.id)} />
+          <ClusterRow cl={cl} summary={summaries[cl.id]} onOpen={() => onOpen(cl.id)} />
         </div>
       ))}
       {pending.map((n, i) => (

@@ -1,12 +1,11 @@
 import { useEffect, useState } from "react";
 
-import { getInventorySummary } from "../api/inventory-summary";
+import { listGlobalFilterFacets } from "../api/global-filter";
 
 // UI-PHASE2-001 §5.2: typed live adapter for the Home W5 namespace distribution.
-// Aggregates per-namespace pod counts from each cluster's
-// `GET /api/clusters/{id}/inventory/summary` (`namespaces[].counts` where
-// resource_type === "pod"). A cluster whose inventory is unavailable simply
-// contributes nothing — counts are never fabricated.
+// Uses one authorized global facet aggregation instead of starting one heavy
+// inventory projection per cluster. Restricting the facet query to Pod keeps
+// the widget's meaning while avoiding a database request fan-out.
 
 export type NamespacesFeedStatus = "loading" | "ready" | "unavailable";
 
@@ -32,39 +31,26 @@ export function useInventoryNamespaces(
   const key = clusterIds.join(" ");
   useEffect(() => {
     const ids = key ? key.split(" ") : [];
-    if (ids.length === 0) return;
+    if (ids.length === 0) return undefined;
     const controller = new AbortController();
-    const totals = new Map<string, number>();
-    let remaining = ids.length;
-    let anyReady = false;
-    for (const id of ids) {
-      void getInventorySummary(id, controller.signal)
-        .then((summary) => {
-          if (controller.signal.aborted) return;
-          anyReady = true;
-          for (const ns of summary.namespaces) {
-            const pods = ns.counts
-              .filter((count) => count.resource_type === "pod")
-              .reduce((sum, count) => sum + count.count, 0);
-            if (pods > 0) totals.set(ns.namespace, (totals.get(ns.namespace) ?? 0) + pods);
-          }
-        })
-        .catch((cause: unknown) => {
-          if (isAbortError(cause)) return;
-          // A single cluster's unavailable inventory contributes nothing.
-        })
-        .finally(() => {
-          if (controller.signal.aborted) return;
-          remaining -= 1;
-          if (remaining === 0) {
-            const items = [...totals.entries()]
-              .sort((a, b) => b[1] - a[1])
-              .map(([namespace, podCount]) => ({ namespace, podCount }));
-            setView({ status: anyReady ? "ready" : "unavailable", items });
-          }
-        });
-    }
+    void listGlobalFilterFacets({ clusters: ids, resourceTypes: ["pod"] }, controller.signal)
+      .then((facets) => {
+        if (controller.signal.aborted) return;
+        const totals = new Map<string, number>();
+        for (const item of facets.namespaces) {
+          if (item.count === null) continue;
+          totals.set(item.label, (totals.get(item.label) ?? 0) + item.count);
+        }
+        const items = [...totals.entries()]
+          .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+          .map(([namespace, podCount]) => ({ namespace, podCount }));
+        setView({ status: "ready", items });
+      })
+      .catch((cause: unknown) => {
+        if (controller.signal.aborted || isAbortError(cause)) return;
+        setView({ status: "unavailable", items: [] });
+      });
     return () => controller.abort();
   }, [key]);
-  return view;
+  return key === "" ? { status: "ready", items: [] } : view;
 }

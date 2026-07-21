@@ -28,6 +28,13 @@ describe("useInventoryResourcesAcrossClusters", () => {
       expect.stringContaining("/api/clusters/cluster-b/inventory/resources?"),
     ]));
   });
+
+  it("does not request a malformed cluster route while the Resources surface is inactive", () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+    const rendered = renderHook(() => useInventoryResourcesAcrossClusters([], "deployment"));
+    expect(rendered.result.current).toEqual({ status: "ready", rows: [] });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });
 
 function resource(cluster: string, name: string) {

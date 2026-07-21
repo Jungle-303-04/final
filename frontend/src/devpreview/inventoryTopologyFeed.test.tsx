@@ -105,7 +105,7 @@ describe("useClusterTopology", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(15_100);
+      await vi.advanceTimersByTimeAsync(60_100);
     });
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });

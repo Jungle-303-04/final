@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { listInventoryResourcesByType } from "../api/inventory-query";
-import { getInventorySummary } from "../api/inventory-summary";
+import { getSharedInventorySummary } from "./inventorySummaryRequest";
 
 // UI-PHASE2-001: typed live adapter for the 통합 리소스 37종 테이블.
 // Reads only `GET /api/clusters/{id}/inventory/resources?resource_type=` and
@@ -135,7 +135,7 @@ export function useInventoryResourcesAcrossClusters(
   });
   const type = resourceType?.trim() ?? "";
   const ids = [...new Set(clusterIds.filter(Boolean))];
-  const key = type ? `${type}\u0000${ids.join("\u0000")}` : "";
+  const key = type && ids.length > 0 ? `${type}\u0000${ids.join("\u0000")}` : "";
   useEffect(() => {
     if (!key) return;
     const [requestedType, ...requestedIds] = key.split("\u0000");
@@ -175,7 +175,7 @@ export function useInventoryKindCounts(
     let remaining = ids.length;
     let anyReady = false;
     for (const id of ids) {
-      void getInventorySummary(id, controller.signal)
+      void getSharedInventorySummary(id)
         .then((summary) => {
           if (controller.signal.aborted) return;
           anyReady = true;
