@@ -23,6 +23,18 @@ describe("NodeCard observed health details", () => {
           restartsRecent: 2,
           conditions: ["DiskPressure"],
         }}
+        pods={[
+          {
+            name: "broken-pod", namespace: "game", status: "CrashLoopBackOff", health: "critical",
+            cluster: "game-server-live", key: "pod-broken", serverId: "worker-warning-id",
+            cpuMillicores: null, memoryMebibytes: null, restartCount: 4,
+          },
+          {
+            name: "pending-pod", namespace: "game", status: "Pending", health: "unknown",
+            cluster: "game-server-live", key: "pod-pending", serverId: "worker-warning-id",
+            cpuMillicores: null, memoryMebibytes: null, restartCount: 0,
+          },
+        ]}
         problemPodCount={1}
         onOpen={onOpen}
         onTip={() => undefined}
@@ -35,6 +47,12 @@ describe("NodeCard observed health details", () => {
     expect(screen.queryByText(/⚠/u)).toBeNull();
     expect(screen.getByText("71.2%")).toBeTruthy();
     expect(screen.getByText("63.4%")).toBeTruthy();
+    const slots = screen.getByRole("img", { name: "파드 슬롯 7/29" });
+    expect(slots.querySelectorAll("[data-slot-state]")).toHaveLength(29);
+    expect(slots.querySelectorAll('[data-slot-state="critical"]')).toHaveLength(1);
+    expect(slots.querySelectorAll('[data-slot-state="pending"]')).toHaveLength(1);
+    expect(slots.querySelectorAll('[data-slot-state="occupied"]')).toHaveLength(5);
+    expect(slots.querySelectorAll('[data-slot-state="empty"]')).toHaveLength(22);
 
     fireEvent.click(screen.getByRole("button", { name: /worker-warning/u }));
     expect(onOpen).toHaveBeenCalledTimes(1);

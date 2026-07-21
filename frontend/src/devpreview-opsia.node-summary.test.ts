@@ -81,9 +81,25 @@ describe("nodesWithSummaryMetrics", () => {
     });
   });
 
-  it("does not fall back to topology percentages when node summary is unavailable", () => {
+  it("retains observed topology percentages when node summary is unavailable", () => {
     const nodes = nodesWithSummaryMetrics([topologyNode], undefined, "game-server-live");
 
-    expect(nodes[0]).toMatchObject({ cpuPercent: null, memoryPercent: null });
+    expect(nodes[0]).toMatchObject({ cpuPercent: 99, memoryPercent: 98 });
+  });
+
+  it("fills only missing summary metrics from the same node's observed topology evidence", () => {
+    const nodes = nodesWithSummaryMetrics([topologyNode], summary([{
+      name: "worker-a",
+      ready: true,
+      health: "healthy",
+      cpuPct: null,
+      memPct: 22.5,
+      podsRunning: 4,
+      podsCapacity: 29,
+      restartsRecent: 0,
+      conditions: [],
+    }]), "game-server-live");
+
+    expect(nodes[0]).toMatchObject({ cpuPercent: 99, memoryPercent: 22.5 });
   });
 });

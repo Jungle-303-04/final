@@ -356,8 +356,8 @@ export function HomeClusterSection({ meta: _meta, onOpen, pending = [] }: {
 }
 
 // ── 노드 카드 — 정본 physical topology 계약의 서버·측정값·pod count만 렌더한다.
-export function NodeCard({ node, problemPodCount, onOpen, onTip }: {
-  node: InvNode; problemPodCount: number | null; onOpen: () => void; onTip: (t: TipData) => void;
+export function NodeCard({ node, pods, problemPodCount, onOpen, onTip }: {
+  node: InvNode; pods: readonly InvPod[]; problemPodCount: number | null; onOpen: () => void; onTip: (t: TipData) => void;
 }) {
   const sev = healthSev(node.health);
   const statusText = node.status ? statusLabel(node.status) : "상태 관측 안 됨";
@@ -411,13 +411,96 @@ export function NodeCard({ node, problemPodCount, onOpen, onTip }: {
         <ClusterMiniUsage label="CPU" value={node.cpuPercent} />
         <ClusterMiniUsage label="MEM" value={node.memoryPercent} />
       </div>
+      <NodePodSlotGrid node={node} pods={pods} />
     </motion.button>
   );
 }
 
+type NodePodSlotState = "occupied" | "critical" | "pending" | "empty";
+
 /**
- * The node-summary endpoint is the canonical CPU/MEM source used by the Home
- * cards. Reconcile by exact node name and never substitute topology metrics.
+ * Compact capacity map restored from the original node drill. Every square is
+ * backed by the observed node-summary running/capacity counts. When physical
+ * topology contains the corresponding Pod, its actual health/phase refines the
+ * occupied square; unreturned occupied Pods stay green because `pods_running`
+ * is itself observed evidence. Empty capacity is neutral and never fabricated.
+ */
+export function NodePodSlotGrid({ node, pods }: { node: InvNode; pods: readonly InvPod[] }) {
+  const capacity = node.totalPodCount;
+  const occupied = node.matchedPodCount;
+  if (capacity === null || occupied === null || capacity <= 0) return null;
+
+  const safeCapacity = Math.max(0, Math.floor(capacity));
+  const safeOccupied = Math.min(safeCapacity, Math.max(0, Math.floor(occupied)));
+  const observedStates = [...pods]
+    .sort((left, right) => slotRank(left) - slotRank(right)
+      || left.namespace?.localeCompare(right.namespace ?? "")
+      || left.name.localeCompare(right.name))
+    .slice(0, safeOccupied)
+    .map(podSlotState);
+  const columns = slotColumnCount(safeCapacity);
+  const states = Array.from({ length: safeCapacity }, (_, index): NodePodSlotState => {
+    if (index >= safeOccupied) return "empty";
+    return observedStates[index] ?? "occupied";
+  });
+
+  return (
+    <div
+      role="img"
+      aria-label={`파드 슬롯 ${safeOccupied}/${safeCapacity}`}
+      title={`파드 슬롯 ${safeOccupied}/${safeCapacity} · 실제 관측 상태`}
+      style={{ display: "grid", gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, gap: 4 }}
+    >
+      {states.map((state, index) => (
+        <span
+          aria-hidden="true"
+          data-slot-state={state}
+          key={index}
+          style={{
+            position: "relative",
+            aspectRatio: "1",
+            minHeight: 7,
+            borderRadius: 3,
+            border: `1px solid ${state === "empty" ? UI.line2 : slotColor(state)}`,
+            background: state === "empty" ? HP.ghost : slotColor(state),
+          }}
+        >
+          {state === "pending" && (
+            <span className="pulsedot" style={{ position: "absolute", inset: "35%", borderRadius: 999, background: UI.ink3 }} />
+          )}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function podSlotState(pod: InvPod): NodePodSlotState {
+  if (isBadHealth(pod.health) || /crash|error|fail|evict/i.test(`${pod.status} ${pod.health}`)) return "critical";
+  if (!/running/i.test(pod.status) || /pending|unknown|progress|creating/i.test(pod.health)) return "pending";
+  return "occupied";
+}
+
+function slotRank(pod: InvPod): number {
+  const state = podSlotState(pod);
+  return state === "critical" ? 0 : state === "pending" ? 1 : 2;
+}
+
+function slotColor(state: Exclude<NodePodSlotState, "empty">): string {
+  return state === "critical" ? HP.crit : state === "pending" ? HP.pending : HP.ok;
+}
+
+function slotColumnCount(capacity: number): number {
+  if (capacity <= 10) return Math.max(1, capacity);
+  if (capacity <= 20) return 10;
+  if (capacity <= 30) return 15;
+  return 20;
+}
+
+/**
+ * The node-summary endpoint is the preferred CPU/MEM source used by the Home
+ * cards. The physical topology endpoint also carries observed CPU/MEM evidence;
+ * retain it when the summary is unavailable or one summary metric is absent.
+ * This is not a generated fallback: both values come from typed live APIs.
  * Summary-only nodes remain visible while the heavier topology projection is
  * partial; duplicate summary names collapse to one honest card.
  */
@@ -428,11 +511,7 @@ export function nodesWithSummaryMetrics(
 ): InvNode[] {
   const topologyByName = new Map(topologyNodes.map((node) => [node.name, node]));
   if (summary?.status !== "ready") {
-    return topologyNodes.map((node) => ({
-      ...node,
-      cpuPercent: null,
-      memoryPercent: null,
-    }));
+    return [...topologyNodes];
   }
 
   const summaryByName = new Map(summary.nodes.map((node) => [node.name, node]));
@@ -444,8 +523,8 @@ export function nodesWithSummaryMetrics(
       health: node.health,
       cluster: clusterId,
       key: topologyNode?.key ?? node.name,
-      cpuPercent: node.cpuPct,
-      memoryPercent: node.memPct,
+      cpuPercent: node.cpuPct ?? topologyNode?.cpuPercent ?? null,
+      memoryPercent: node.memPct ?? topologyNode?.memoryPercent ?? null,
       matchedPodCount: node.podsRunning,
       totalPodCount: node.podsCapacity,
       restartsRecent: node.restartsRecent,
@@ -454,14 +533,14 @@ export function nodesWithSummaryMetrics(
   });
 }
 
-function problemPodsForNode(
+function observedPodsForNode(
   node: InvNode,
   topologyNodes: readonly InvNode[],
   pods: readonly InvPod[],
-): number | null {
+): InvPod[] | null {
   const topologyNode = topologyNodes.find((candidate) => candidate.name === node.name);
   if (topologyNode === undefined) return null;
-  return podsForNode(pods, topologyNode.key).filter((pod) => isBadHealth(pod.health)).length;
+  return podsForNode(pods, topologyNode.key);
 }
 
 // ── 파드 행 — 관측된 파드 하나. name/ns/status/health 만. CPU/MEM/재시작/나이/QoS는
@@ -514,13 +593,20 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
 } = {}) {
   const { clusters } = useDevpreviewContracts();
   const clusterIds = useMemo(() => clusters.map((cl) => cl.id), [clusters]);
-  const clusterSummaries = useClusterSummaries(clusterIds);
 
   const [view, setView] = useState<View>(initialCluster ? { level: "nodes", cluster: initialCluster } : { level: "clusters" });
   useEffect(() => { onScopeChange?.(view); }, [view]);
 
   // 드릴된 클러스터의 관측된 노드·파드(실 인벤토리 계약). 클러스터 뷰에선 null → 무요청.
   const activeCluster = view.level === "clusters" ? null : view.cluster;
+  // 클러스터 목록에서는 모든 카드 요약을 병렬 조회하지만, 한 클러스터를 드릴한
+  // 뒤에는 그 클러스터만 조회한다. 노드 화면 진입 때 보이지 않는 다른 클러스터의
+  // node-summary 요청을 반복하지 않아 첫 유효 화면을 방해하지 않는다.
+  const summaryClusterIds = useMemo(
+    () => activeCluster === null ? clusterIds : [activeCluster],
+    [activeCluster, clusterIds],
+  );
+  const clusterSummaries = useClusterSummaries(summaryClusterIds);
   const topology = useClusterTopology(activeCluster);
   const { nodes: topologyNodes, pods } = topology;
   const activeSummary = activeCluster ? clusterSummaries[activeCluster] : undefined;
@@ -679,13 +765,18 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
                         ? "불완전한 스냅샷을 수신했습니다. 다음 라이브 관측을 기다립니다."
                         : "이 클러스터에서 준비된 노드가 아직 관측되지 않았습니다."} />
                   ) : (
-                    /* 노드: 4칸 그리드. 계약이 주는 정체성·상태만 — 용량 병합/파드 밀도 표기 없음 */
+                    /* 노드: 2열 반응형 카드 + 실제 running/capacity 기반 파드 슬롯 격자. */
                     <div className="node-grid" style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 12 }}>
-                      {nodes.map((node, i) => (
-                        <motion.div key={node.key} style={{ minWidth: 0, maxWidth: "100%" }} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ ...SOFT, delay: i * 0.04 }}>
-                          <NodeCard node={node} problemPodCount={problemPodsForNode(node, topologyNodes, pods)} onOpen={() => go({ level: "pods", cluster: view.cluster, node: node.name }, 1)} onTip={onTip} />
-                        </motion.div>
-                      ))}
+                      {nodes.map((node, i) => {
+                        const observedPods = observedPodsForNode(node, topologyNodes, pods);
+                        return (
+                          <motion.div key={node.key} style={{ minWidth: 0, maxWidth: "100%" }} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ ...SOFT, delay: i * 0.04 }}>
+                            <NodeCard node={node} pods={observedPods ?? []}
+                              problemPodCount={observedPods === null ? null : observedPods.filter((pod) => isBadHealth(pod.health)).length}
+                              onOpen={() => go({ level: "pods", cluster: view.cluster, node: node.name }, 1)} onTip={onTip} />
+                          </motion.div>
+                        );
+                      })}
                     </div>
                   )}
                 </>)}

@@ -60,7 +60,6 @@ export interface ClusterTopologyView {
 type TopologyListener = (view: ClusterTopologyView) => void;
 interface TopologyChannel {
   controller: AbortController | null;
-  generation: number;
   listeners: Set<TopologyListener>;
   pendingInvalidation: boolean;
   refreshTimer: number | null;
@@ -184,7 +183,6 @@ function subscribeClusterTopology(clusterId: string, listener: TopologyListener)
   if (channel === undefined) {
     channel = {
       controller: null,
-      generation: 0,
       listeners: new Set(),
       pendingInvalidation: false,
       refreshTimer: null,
@@ -259,27 +257,28 @@ function loadClusterTopology(clusterId: string, channel: TopologyChannel): void 
     || document.visibilityState === "hidden"
   ) return;
   const controller = new AbortController();
-  const requestGeneration = channel.generation;
   channel.controller = controller;
   channel.pendingInvalidation = false;
   void getPhysicalTopology({ clusters: [clusterId] }, controller.signal)
     .then((topology) => {
       if (
         controller.signal.aborted
-        || channel.generation !== requestGeneration
         || channels.get(clusterId) !== channel
       ) return;
       const view = toClusterTopologyView(topology);
       const ttl = view.partial ? PARTIAL_CACHE_TTL_MS : CACHE_TTL_MS;
       cache.set(clusterId, { view, expiresAt: Date.now() + ttl });
       channel.listeners.forEach((notify) => notify(view));
-      scheduleClusterRefresh(clusterId, channel, ttl);
+      // A live delta may arrive while this database-heavy snapshot is in
+      // flight. The completed response is still observed evidence and is
+      // useful immediately; publish it, then let `finally` perform one
+      // trailing refresh instead of keeping the UI blank indefinitely.
+      if (!channel.pendingInvalidation) scheduleClusterRefresh(clusterId, channel, ttl);
     })
     .catch((cause: unknown) => {
       if (
         isAbortError(cause)
         || controller.signal.aborted
-        || channel.generation !== requestGeneration
         || channels.get(clusterId) !== channel
       ) return;
       cache.set(clusterId, { view: UNAVAILABLE, expiresAt: Date.now() + ERROR_CACHE_TTL_MS });
@@ -288,10 +287,7 @@ function loadClusterTopology(clusterId: string, channel: TopologyChannel): void 
     })
     .finally(() => {
       if (channel.controller === controller) channel.controller = null;
-      if (
-        channel.generation !== requestGeneration
-        || channel.pendingInvalidation
-      ) {
+      if (channel.pendingInvalidation) {
         if (
           channel.listeners.size > 0
           && channels.get(clusterId) === channel
@@ -326,14 +322,14 @@ function scheduleClusterRefresh(
 /**
  * 실시간 델타가 알려 준 한 클러스터만 다시 검증한다. 기존 화면 값은 React state에
  * 남겨 두고 캐시/다음 예약만 무효화하므로 새 응답 전까지 빈 화면으로 바뀌지 않는다.
- * 진행 중 요청은 중복하지 않는다. 대신 generation을 올려 오래된 응답을 폐기하고,
- * 요청 완료 직후 누적된 무효화를 한 번의 후속 조회로 합친다.
+ * 진행 중 요청은 중복하거나 폐기하지 않는다. 이미 완료된 관측 응답을 먼저 게시하고,
+ * 요청 중 누적된 무효화는 완료 직후 한 번의 후속 조회로 합친다. 백엔드 응답 시간이
+ * 실시간 신호 간격보다 길어도 화면이 영원히 loading에 머무르지 않는다.
  */
 function invalidateClusterTopology(clusterId: string): void {
   cache.delete(clusterId);
   const channel = channels.get(clusterId);
   if (channel === undefined) return;
-  channel.generation += 1;
   channel.pendingInvalidation = true;
   if (channel.refreshTimer !== null) {
     window.clearTimeout(channel.refreshTimer);

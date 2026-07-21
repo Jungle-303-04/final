@@ -124,7 +124,7 @@ describe("useClusterTopology", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it("discards an in-flight stale response and performs one follow-up after live invalidation", async () => {
+  it("publishes an in-flight observed response and performs one follow-up after live invalidation", async () => {
     let resolveStale: ((response: Response) => void) | undefined;
     let resolveFresh: ((response: Response) => void) | undefined;
     const fetchMock = vi.spyOn(globalThis, "fetch")
@@ -148,7 +148,7 @@ describe("useClusterTopology", () => {
     });
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(rendered.result.current.nodes).toEqual([]);
+    expect(rendered.result.current.nodes[0]?.name).toBe("stale-worker");
 
     await act(async () => {
       resolveFresh?.(new Response(JSON.stringify({
