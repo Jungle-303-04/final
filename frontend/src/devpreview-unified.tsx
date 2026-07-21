@@ -39,6 +39,7 @@ import { useNarrowViewport } from "./devpreview/useNarrowViewport";
 import { operationalMessageLabel, reasonLabel, statusLabel, isCriticalStatus } from "./devpreview/statusLabel";
 import { LiveResourceManifestEditor } from "./devpreview/resourceManifestEditor";
 import { podsForNode, useClusterTopology } from "./devpreview/inventoryTopologyFeed";
+import { presentEventMessage } from "./devpreview/eventPresentation";
 import { UI, BLUE, BLUE2, HP, TINT, MONO, TYPE, SOFT, SPRING, PRESENT_SCALE, DUR, inkA, blueA, MARK, cardA, GLASS, critA } from "./devpreview/theme";
 import "./styles/tokens.css";
 import "./styles/foundation.css";
@@ -330,7 +331,7 @@ function ResourceTable({ kind, rows, q, filterDesc = "", onClearFilter, onOpen }
           ) : null}
         </div>
       ) : filtered.map((row, i) => (
-        <motion.div key={`${kind.id}-${String(row.cluster ?? "")}-${String(row._key ?? row.name)}`} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} transition={{ ...SOFT, delay: Math.min(i, 10) * 0.022 }}
+        <motion.div key={`${kind.id}-${String(row.cluster ?? "")}-${String(row._key ?? row.name)}`} role="button" tabIndex={0} aria-label={`${kind.label} ${String(row.name ?? row._key ?? "")}`} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpen(row); } }} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} transition={{ ...SOFT, delay: Math.min(i, 10) * 0.022 }}
           className="rrow" onClick={() => onOpen(row)} style={{ display: "grid", gridTemplateColumns: grid, gap: 14, alignItems: "center", padding: rowPad, borderTop: i ? `1px solid ${UI.line2}` : "none", cursor: "pointer" }}>
           {spec.cols.map((c, ci) => (
             <span key={c.k} style={{ minWidth: 0, fontWeight: ci === 0 ? 600 : 400, color: ci === 0 ? UI.ink : undefined, fontSize: ci === 0 ? 12 : undefined, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: ci === 0 ? "nowrap" : undefined }}>
@@ -782,7 +783,10 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
                       <div key={event.id} style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, border: `1px solid ${UI.line2}`, background: UI.bg2, borderRadius: 8, padding: "8px 12px" }}>
                         <span style={{ minWidth: 0 }}>
                           <span style={{ display: "block", fontSize: TYPE.label, color: UI.ink }}>{statusLabel(event.reason)}{event.type ? ` · ${statusLabel(event.type)}` : ""}{event.count != null && event.count > 1 ? ` ×${event.count}` : ""}</span>
-                          {event.message && <span style={{ color: UI.ink3, display: "block", fontSize: TYPE.caption2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{event.message}</span>}
+                          {event.message && (() => {
+                            const presented = presentEventMessage(event.message);
+                            return <span title={presented.original || presented.label} aria-label={presented.label} style={{ color: UI.ink3, display: "block", fontSize: TYPE.caption2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{presented.label}</span>;
+                          })()}
                         </span>
                         {event.lastAt && <span style={{ fontSize: TYPE.caption2, color: UI.ink3, flexShrink: 0 }}>{event.lastAt.replace("T", " ").slice(0, 16)}</span>}
                       </div>
@@ -1499,9 +1503,9 @@ function App() {
       <div ref={pageScrollRef} aria-label="현재 화면 콘텐츠" role="region"
         style={{ flex: 1, minWidth: 0, height: `calc(100vh / ${PRESENT_SCALE})`, overflowY: "auto", overflowX: "hidden", overscrollBehavior: "contain", scrollbarGutter: "stable" }}>
       {/* 상단 크롬 — 워크스페이스·스코프·네임스페이스·검색 (내부 표기 배지 제거) */}
-      <header ref={headerRef} style={{ position: "sticky", top: 0, zIndex: 74, display: "flex", alignItems: "center", gap: 10, padding: "12px 18px", borderBottom: `1px solid ${UI.line}`, background: UI.card }}>
+      <header ref={headerRef} style={{ position: "sticky", top: 0, zIndex: 74, display: "flex", alignItems: "center", flexWrap: "wrap", gap: 10, padding: "12px 18px", borderBottom: `1px solid ${UI.line}`, background: UI.card }}>
         {/* 워크스페이스 — 정체성은 항상 맨 왼쪽(D20). 데모 세계는 워크스페이스 1개라 사실 표시만 */}
-        <span style={{ display: "flex", alignItems: "center", gap: 7, fontSize: TYPE.body, fontWeight: 700, color: UI.ink, paddingRight: 12, borderRight: `1px solid ${UI.line2}` }}>
+        <span style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0, maxWidth: "30%", fontSize: TYPE.body, fontWeight: 700, color: UI.ink, paddingRight: 12, borderRight: `1px solid ${UI.line2}`, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           <Building2 size={14} style={{ color: UI.ink3 }} />{workspaceLabel(contract.workspaceId)}
         </span>
         {/* 새로고침 — 내부/기술 표기("실제 계약") 텍스트 제거, 상태점 + 아이콘만(P1-10) */}
@@ -1523,7 +1527,7 @@ function App() {
               setDrillCl(cluster || null);
               setScope(cluster ? { level: "nodes", cluster } : { level: "clusters" });
             }}
-            style={{ border: "none", outline: "none", background: "transparent", color: UI.ink, fontSize: TYPE.body, fontWeight: 700, cursor: "pointer", maxWidth: 220 }}>
+            style={{ border: "none", outline: "none", background: "transparent", color: UI.ink, fontSize: TYPE.body, fontWeight: 700, cursor: "pointer", width: "min(28vw, 220px)", minWidth: 0, maxWidth: 220 }}>
             <option value="">전체 클러스터</option>
             {contract.clusters.map((cluster) => <option key={cluster.id} value={cluster.id}>{cluster.id}</option>)}
           </select>
@@ -1532,7 +1536,7 @@ function App() {
         {surface === "resources" && resView !== "flow" && (
         <span style={{ position: "relative" }}>
           <button type="button" aria-label="네임스페이스 범위 선택" aria-haspopup="listbox" aria-expanded={nsOpen} onClick={() => setNsOpen(!nsOpen)}
-            style={{ display: "flex", alignItems: "center", gap: 7, border: `1px solid ${nsOpen ? blueA(0.45) : UI.line}`, background: UI.card, borderRadius: 9, padding: "6px 11px", fontSize: TYPE.body, fontWeight: 600, color: ns === "모든 네임스페이스" ? UI.ink : BLUE, cursor: "pointer" }}>
+            style={{ display: "flex", alignItems: "center", gap: 7, maxWidth: "min(32vw, 260px)", overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis", border: `1px solid ${nsOpen ? blueA(0.45) : UI.line}`, background: UI.card, borderRadius: 9, padding: "6px 11px", fontSize: TYPE.body, fontWeight: 600, color: ns === "모든 네임스페이스" ? UI.ink : BLUE, cursor: "pointer" }}>
             <Globe size={13} style={{ color: UI.ink3 }} />{ns}<ChevronDown size={12} style={{ color: UI.ink3, transform: nsOpen ? "rotate(180deg)" : "none", transition: "transform .15s" }} />
           </button>
           <AnimatePresence>
@@ -1558,6 +1562,12 @@ function App() {
             placeholder="전체 검색 — 리소스·화면 이동" style={{ border: "none", outline: "none", background: "transparent", fontSize: TYPE.body, color: UI.ink, width: "100%" }} />
           <span style={{ fontSize: TYPE.caption, fontFamily: MONO, color: UI.ink3, border: `1px solid ${UI.line}`, borderRadius: 4, padding: "1px 5px" }}>⌘K</span>
         </div>
+        {narrowList && !aiOpen && (
+          <button type="button" aria-label="AI 어시스턴트 열기" title="AI 어시스턴트" onClick={() => setAiOpen(true)}
+            style={{ width: 30, height: 30, flexShrink: 0, borderRadius: 9, border: "none", cursor: "pointer", background: blueA(0.1), color: BLUE, display: "grid", placeItems: "center" }}>
+            <Sparkles size={15} />
+          </button>
+        )}
         {/* 알림 벨 — 배지 수는 맵의 장애 수와 같은 인벤토리에서 나온다 */}
         <span style={{ position: "relative" }}>
           <button type="button" className="gnav" aria-label="알림 센터 열기" aria-expanded={bellOpen} onClick={() => setBellOpen(!bellOpen)}
@@ -1806,7 +1816,7 @@ function App() {
 
       {/* AI 플로팅 버튼 — 항상 최상위(상세 위 포함) · AI 창이 열리면 사라진다 */}
       <AnimatePresence>
-        {!aiOpen && (
+        {!aiOpen && !narrowList && (
           <motion.button type="button" aria-label="AI 어시스턴트 열기" key="fab" onClick={() => setAiOpen(true)} whileHover={{ scale: 1.06 }} whileTap={{ scale: 0.93 }}
             initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.5, opacity: 0 }} transition={SOFT}
             title="AI 어시스턴트"

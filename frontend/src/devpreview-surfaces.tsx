@@ -70,10 +70,6 @@ function koLabel(raw: string | null | undefined): string {
   const key = raw?.trim().toLowerCase();
   return (key ? LOCAL_STATUS_KO[key] : undefined) ?? statusLabel(raw);
 }
-function refreshPolicyLabel(raw: string): string {
-  return koLabel(raw).replace(/^stale\s/i, "오래됨 ");
-}
-
 // ── reason code 한글화 — 백엔드가 준 원시 스네이크 코드(:cluster 등 콜론 접미사 포함)를
 //    사용자 친화 한글 문구로. 매핑에 없으면 일반 안내로 폴백하고, 원시 코드는 호출부에서
 //    작은 부가표기로만 노출한다(코드 나열 대신 정돈된 안내). ──
@@ -842,7 +838,7 @@ export function SettingsSurface() {
     <Page title="설정" icon={Building2}>
       <Card pad={0}>
         <SettingsRow icon={Building2} title="워크스페이스" sub={workspaceSub}
-          right={session.status === "ready" && session.roles.length ? <Mono dim>{session.roles[0]}</Mono> : <Mono dim>—</Mono>} />
+          right={session.status === "ready" && session.roles.length ? <Mono dim>{koLabel(session.roles[0])}</Mono> : <Mono dim>—</Mono>} />
         <SettingsRow icon={Building2} title="계정" sub={accountSub}
           right={<span style={{ display: "flex", alignItems: "center", gap: 7 }}>
             <span style={{ fontSize: TYPE.label2, color: UI.ink2, maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{accountName}</span>
@@ -857,7 +853,7 @@ export function SettingsSurface() {
             onPick={(locale) => prefs.save({ locale })}
             options={[{ id: "en", label: "English" }, { id: "ko", label: "한국어" }]} />} />
         <SettingsRow icon={Bell} title="토스트 알림" sub="장애 사건만 토스트로 알림 · 벨에는 전부 기록 · 이 브라우저에만 저장됩니다" right={
-          <button onClick={toggleNoise} style={{ width: 34, height: 20, borderRadius: 999, border: "none", cursor: "pointer", background: noise ? HP.ok : inkA(0.15), position: "relative", transition: "background .2s" }}>
+          <button type="button" role="switch" aria-label="장애 사건 토스트 알림" aria-checked={noise} onClick={toggleNoise} style={{ width: 34, height: 20, borderRadius: 999, border: "none", cursor: "pointer", background: noise ? HP.ok : inkA(0.15), position: "relative", transition: "background .2s" }}>
             <span style={{ position: "absolute", top: 2, left: noise ? 16 : 2, width: 16, height: 16, borderRadius: 999, background: UI.card, boxShadow: `0 1px 3px ${inkA(0.3)}`, transition: "left .2s" }} />
           </button>} />
       </Card>
@@ -873,7 +869,7 @@ export function SettingsSurface() {
           : (
             <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: "12px 15px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                {access.roles.length ? access.roles.map((r) => <Pill key={r} tone="info" label={r} />) : <span style={{ fontSize: TYPE.label2, color: UI.ink3 }}>역할 없음</span>}
+                {access.roles.length ? access.roles.map((r) => <Pill key={r} tone="info" label={koLabel(r)} />) : <span style={{ fontSize: TYPE.label2, color: UI.ink3 }}>역할 없음</span>}
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                 <span style={segStyle}>허용 권한 <b style={numStyle}>{access.allowedCount}/{access.permissionCount}</b></span>
