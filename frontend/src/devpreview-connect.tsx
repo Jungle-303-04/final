@@ -47,7 +47,7 @@ import {
   type ConnectionStatusView,
   type ProviderAvailability,
 } from "./devpreview/connectFeed";
-import { statusLabel } from "./devpreview/statusLabel";
+import { reasonLabel, statusLabel } from "./devpreview/statusLabel";
 import "./styles/tokens.css";
 import "./styles/foundation.css";
 
@@ -341,7 +341,26 @@ function PlatformAvailability({ providers, cloud }: { providers: ClusterProvider
   );
 }
 
-function ClusterInfoStep({ providers, name, setName, platform, setPlatform, env, setEnv, onNext }: { providers: ClusterProvidersView; name: string; setName: (v: string) => void; platform: PlatformId; setPlatform: (v: PlatformId) => void; env: string; setEnv: (v: string) => void; onNext: () => void }) {
+function ClusterInfoStep({
+  providers, name, setName, platform, setPlatform, env, setEnv,
+  awsRegion, setAwsRegion, eksClusterName, setEksClusterName,
+  contextAlias, setContextAlias, onNext,
+}: {
+  providers: ClusterProvidersView;
+  name: string;
+  setName: (v: string) => void;
+  platform: PlatformId;
+  setPlatform: (v: PlatformId) => void;
+  env: string;
+  setEnv: (v: string) => void;
+  awsRegion: string;
+  setAwsRegion: (v: string) => void;
+  eksClusterName: string;
+  setEksClusterName: (v: string) => void;
+  contextAlias: string;
+  setContextAlias: (v: string) => void;
+  onNext: () => void;
+}) {
   const cloudFor = (id: PlatformId) => PLATFORM_CLOUD_PROVIDER[id] ?? "";
   const isDisabled = (id: PlatformId) => {
     if (providers.status !== "ready") return false;
@@ -390,6 +409,29 @@ function ClusterInfoStep({ providers, name, setName, platform, setPlatform, env,
           <input autoFocus value={name} onChange={(e) => setName(e.currentTarget.value)} placeholder="game-server-apne2" className="w-full bg-transparent font-mono text-[14px] c-ink outline-none placeholder:font-sans placeholder:c-3" />
         </div>
       </div>
+      {platform === "aws" && (
+        <div className="grid gap-3 rounded-[14px] border border-[var(--line)] bg-[var(--soft)] p-3.5">
+          <div>
+            <div className="text-[12.5px] font-semibold c-ink">AWS EKS 연결 정보</div>
+            <div className="mt-0.5 text-[11.5px] c-3">AWS 로그인 후 실제 EKS 이름과 리전을 입력합니다.</div>
+          </div>
+          <label className="grid gap-1.5 text-[11.5px] font-semibold c-2">
+            AWS Region
+            <input aria-label="AWS Region" value={awsRegion} onChange={(event) => setAwsRegion(event.currentTarget.value)}
+              placeholder="ap-northeast-2" className="field bg-surface px-3 py-2.5 font-mono text-[13px] c-ink outline-none" style={{ borderRadius: 10 }} />
+          </label>
+          <label className="grid gap-1.5 text-[11.5px] font-semibold c-2">
+            EKS Cluster Name
+            <input aria-label="EKS Cluster Name" value={eksClusterName} onChange={(event) => setEksClusterName(event.currentTarget.value)}
+              placeholder="실제 AWS EKS 클러스터 이름" className="field bg-surface px-3 py-2.5 font-mono text-[13px] c-ink outline-none" style={{ borderRadius: 10 }} />
+          </label>
+          <label className="grid gap-1.5 text-[11.5px] font-semibold c-2">
+            Context Alias
+            <input aria-label="Context Alias" value={contextAlias} onChange={(event) => setContextAlias(event.currentTarget.value)}
+              placeholder="game-server" className="field bg-surface px-3 py-2.5 font-mono text-[13px] c-ink outline-none" style={{ borderRadius: 10 }} />
+          </label>
+        </div>
+      )}
       <div className="grid gap-2.5">
         <div className="flex items-center gap-2 px-0.5"><span className="text-[12.5px] font-semibold c-2">환경</span><span className="text-[11.5px] c-3">이 클러스터의 용도 라벨</span></div>
         <div className="seg flex" style={{ borderRadius: 14, padding: 4 }}>
@@ -401,13 +443,15 @@ function ClusterInfoStep({ providers, name, setName, platform, setPlatform, env,
           ))}
         </div>
       </div>
-      <NextButton show={name.trim().length > 1 && !selectedDisabled} label="등록 단계로" onClick={onNext} />
+      <NextButton show={name.trim().length > 1 && !selectedDisabled
+        && (platform !== "aws" || (awsRegion.trim().length > 0 && eksClusterName.trim().length > 0 && contextAlias.trim().length > 0))}
+        label="등록 단계로" onClick={onNext} />
     </motion.div>
   );
 }
 
 function PreflightPanel({ result }: { result: TargetPreflightResponse }) {
-  const ok = result.valid && result.provider_ready;
+  const ok = result.valid && result.provider_ready && !result.duplicate_cluster_id;
   return (
     <div className="grid gap-2.5 inset" style={{ padding: 14 }}>
       <div className="flex items-center gap-2">
@@ -417,16 +461,16 @@ function PreflightPanel({ result }: { result: TargetPreflightResponse }) {
         <span className="text-[13px] font-semibold c-ink">{ok ? "사전검증 통과" : "사전검증: 확인 필요"}</span>
         <span className="ml-auto font-mono text-[11.5px] c-3">{statusLabel(result.connection_status)}</span>
       </div>
-      {result.errors.map((e) => <div key={e} className="font-mono text-[11.5px] c-red">· {e}</div>)}
-      {result.warnings.map((w) => <div key={w} className="font-mono text-[11.5px] c-orange">· {w}</div>)}
+      {result.errors.map((e) => <div key={e} className="text-[11.5px] c-red">· {reasonLabel(e)}</div>)}
+      {result.warnings.map((w) => <div key={w} className="text-[11.5px] c-orange">· {reasonLabel(w)}</div>)}
     </div>
   );
 }
 
-function ClusterInstallStep({ providers, platform, name, env, onBack, onConnected }: { providers: ClusterProvidersView; platform: PlatformId; name: string; env: string; onBack: () => void; onConnected: (info: ConnectionStatusView) => void }) {
+function ClusterInstallStep({ providers, platform, name, env, providerConfig, onBack, onConnected }: { providers: ClusterProvidersView; platform: PlatformId; name: string; env: string; providerConfig: Record<string, unknown>; onBack: () => void; onConnected: (info: ConnectionStatusView) => void }) {
   const cloud = PLATFORM_CLOUD_PROVIDER[platform] ?? providers.defaultCloudProvider ?? "existing-k8s";
   const deploy = providers.deployProviderFor(cloud) ?? providers.defaultDeployProvider ?? "manual-manifest";
-  const fields = { cloudProvider: cloud, deployProvider: deploy, name, environment: env };
+  const fields = { cloudProvider: cloud, deployProvider: deploy, name, environment: env, providerConfig };
   const pf = PLATFORMS.find((p) => p.id === platform)!;
   const Icon = pf.icon;
 
@@ -469,7 +513,11 @@ function ClusterInstallStep({ providers, platform, name, env, onBack, onConnecte
 
   const cmd = receipt?.install_command ?? "";
   const copy = () => { if (!cmd) return; navigator.clipboard?.writeText(cmd).catch(() => {}); setCopied(true); window.setTimeout(() => setCopied(false), 1600); };
-  const canRegister = phase === "preflighted" && preflight !== null && preflight.provider_ready;
+  const canRegister = phase === "preflighted"
+    && preflight !== null
+    && preflight.valid
+    && preflight.provider_ready
+    && !preflight.duplicate_cluster_id;
 
   return (
     <motion.div key="cinstall" {...swap} className="grid gap-5">
@@ -583,13 +631,22 @@ function ClusterDoneStep({ name, env, connection, onDone }: { name: string; env:
 
 function ClusterWizard({ providers, onClose, onComplete }: { providers: ClusterProvidersView; onClose: () => void; onComplete: (name: string) => void }) {
   const [step, setStep] = useState(0);
-  const [name, setName] = useState("game-server-apne2");
+  const [name, setName] = useState("game-server");
   const [platform, setPlatform] = useState<PlatformId>("aws");
   const [env, setEnv] = useState("prod");
+  const [awsRegion, setAwsRegion] = useState("ap-northeast-2");
+  const [eksClusterName, setEksClusterName] = useState("");
+  const [contextAlias, setContextAlias] = useState("game-server");
   const [connection, setConnection] = useState<ConnectionStatusView | null>(null);
+  const providerConfig = platform === "aws"
+    ? { region: awsRegion.trim(), eks_cluster_name: eksClusterName.trim(), context_alias: contextAlias.trim() }
+    : {};
   const el = {
-    0: <ClusterInfoStep key="c0" providers={providers} name={name} setName={setName} platform={platform} setPlatform={setPlatform} env={env} setEnv={setEnv} onNext={() => setStep(1)} />,
-    1: <ClusterInstallStep key="c1" providers={providers} platform={platform} name={name} env={env} onBack={() => setStep(0)} onConnected={(info) => { setConnection(info); setStep(2); }} />,
+    0: <ClusterInfoStep key="c0" providers={providers} name={name} setName={setName} platform={platform} setPlatform={setPlatform} env={env} setEnv={setEnv}
+      awsRegion={awsRegion} setAwsRegion={setAwsRegion} eksClusterName={eksClusterName} setEksClusterName={setEksClusterName}
+      contextAlias={contextAlias} setContextAlias={setContextAlias} onNext={() => setStep(1)} />,
+    1: <ClusterInstallStep key="c1" providers={providers} platform={platform} name={name} env={env} providerConfig={providerConfig}
+      onBack={() => setStep(0)} onConnected={(info) => { setConnection(info); setStep(2); }} />,
     2: connection ? <ClusterDoneStep key="c2" name={name} env={env} connection={connection} onDone={() => onComplete(name)} /> : null,
   }[step];
   return (<><ShellHeader icon={Server} title="클러스터 연결" sub="에이전트를 설치하면 클러스터가 안전하게 등록·관측됩니다" onClose={onClose} /><Steps steps={CLUSTER_STEPS} active={step} /><Body>{el}</Body></>);

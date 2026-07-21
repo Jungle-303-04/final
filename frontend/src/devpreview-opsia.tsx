@@ -11,8 +11,16 @@ import { UI, BLUE, HP, TINT, MONO, TYPE, SOFT, SPRING, PAGE, PRESENT_SCALE, DUR,
 import { AwsIcon, GithubIcon } from "./devpreview/brandIcons";
 import { statusLabel } from "./devpreview/statusLabel";
 import { useDevpreviewContracts, type DevpreviewCluster } from "./devpreview/contracts";
+import { isActiveIncidentCluster } from "./devpreview/rcaIssuesFeed";
 import { useClusterSummaries, type ClusterSummaryView } from "./devpreview/clusterSummaryFeed";
-import { useClusterTopology, type InvNode, type InvPod } from "./devpreview/inventoryTopologyFeed";
+import {
+  podsForNode,
+  useClusterTopologies,
+  useClusterTopology,
+  type ClusterTopologyView,
+  type InvNode,
+  type InvPod,
+} from "./devpreview/inventoryTopologyFeed";
 import "./styles/tokens.css";
 import "./styles/foundation.css";
 
@@ -73,17 +81,28 @@ function ClusterMiniUsage({ label, value }: { label: string; value: number | nul
 
 // 클러스터 개요 스트립 — 실 클러스터 계약(정체성·버전) + 셸 인벤토리 kind 카운트.
 // 계정/ARN/코어수/네트워크/디스크 등 가짜 파생값은 제거했다.
-function ClusterOverview({ cl, meta, onKind }: {
-  cl?: DevpreviewCluster; meta?: Record<string, number>; onKind?: (kindId: string) => void;
+function ClusterOverview({ cl, meta, topology, onKind }: {
+  cl?: DevpreviewCluster;
+  meta?: Record<string, number>;
+  topology?: ClusterTopologyView;
+  onKind?: (kindId: string) => void;
 }) {
   const KIND_LINKS: [string, string][] = [["StatefulSet", "StatefulSets"], ["DaemonSet", "DaemonSets"], ["Service", "Services"], ["Ingress", "Ingresses"], ["Job", "Jobs"], ["CronJob", "CronJobs"]];
   const hasMeta = meta !== undefined;
+  const topologyLoading = topology === undefined || topology.status === "loading";
+  const nodesReady = topologyLoading ? "…" : topology?.nodesReady ?? "—";
+  const nodesTotal = topologyLoading ? "…" : topology?.nodesTotal ?? "—";
+  const podsTotal = topologyLoading ? "…" : topology?.podsTotal ?? "—";
+  const omittedPods = topology?.truncatedPodCount ?? 0;
   return (
     <div style={{ display: "flex", gap: 18, alignItems: "flex-start", flexWrap: "wrap", background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 14, padding: "12px 16px", marginBottom: 14 }}>
       <div style={{ minWidth: 0, flex: "1 1 340px", display: "flex", flexDirection: "column", gap: 3, fontFamily: MONO, fontSize: TYPE.caption, color: UI.ink2 }}>
         <span>{cl ? `${cl.provider.toUpperCase()} · Kubernetes ${cl.kubernetesVersion ?? "관측 안 됨"}` : "클러스터 관측 안 됨"}</span>
         <span style={{ color: UI.ink3 }}>
-          노드 {cl?.nodeCount ?? "—"} · 파드 {cl?.podCount ?? "—"} · 네임스페이스 {meta?.Namespace ?? cl?.namespaceCount ?? "—"}
+          노드 {nodesReady}/{nodesTotal} Ready · 파드 {podsTotal} · 네임스페이스 {meta?.Namespace ?? cl?.namespaceCount ?? "—"}
+          {topology?.status === "ready" && topology.partial
+            ? ` · 일부 관측${omittedPods > 0 ? ` · ${omittedPods}개 미표시` : ""}`
+            : ""}
         </span>
         <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: TYPE.caption, color: UI.ink3 }}>
           <span className="pulsedot" style={{ width: 6, height: 6, borderRadius: 999, background: cl?.connectionStatus === "online" ? HP.ok : UI.ink3 }} />
@@ -102,20 +121,25 @@ function ClusterOverview({ cl, meta, onKind }: {
   );
 }
 
-function ClusterRow({ cl, summary, onOpen }: {
-  cl: DevpreviewCluster; summary?: ClusterSummaryView; onOpen: () => void;
+function ClusterRow({ cl, summary, topology, onOpen }: {
+  cl: DevpreviewCluster;
+  summary?: ClusterSummaryView;
+  topology?: ClusterTopologyView;
+  onOpen: () => void;
 }) {
-  // Live: identity/version/counts from `GET /api/clusters`; usage/health/open
-  // incidents from `GET /api/clusters/{id}/summary`. No fixture aggregation.
-  const incidents = cl.incidentCount ?? summary?.openIncidents ?? 0;
-  const healthy = cl.connectionStatus === "online" && incidents === 0;
-  const nodesReady = summary?.nodesReady ?? null;
-  const nodesTotal = summary?.nodesTotal ?? cl.nodeCount ?? null;
-  const podCount = summary?.podsRunning ?? cl.podCount ?? null;
-  const loading = summary === undefined || summary.status === "loading";
-  const fmt = (n: number | null) => (loading ? "…" : n ?? "—");
-  const cpuPct = loading ? null : summary?.cpuPct ?? null;
-  const memPct = loading ? null : summary?.memPct ?? null;
+  // Live: identity/version from `GET /api/clusters`; usage/health/open incidents
+  // from summary; node/pod counts from the same physical topology used by drill.
+  const incidentsObserved = isActiveIncidentCluster(cl);
+  const incidents = incidentsObserved ? cl.incidentCount ?? summary?.openIncidents ?? 0 : 0;
+  const healthy = incidentsObserved && incidents === 0;
+  const topologyLoading = topology === undefined || topology.status === "loading";
+  const nodesReady = topology?.nodesReady ?? null;
+  const nodesTotal = topology?.nodesTotal ?? null;
+  const podCount = topology?.podsTotal ?? null;
+  const fmt = (n: number | null) => (topologyLoading ? "…" : n ?? "—");
+  const summaryLoading = summary === undefined || summary.status === "loading";
+  const cpuPct = summaryLoading ? null : summary?.cpuPct ?? null;
+  const memPct = summaryLoading ? null : summary?.memPct ?? null;
   return (
     <motion.button transition={SPRING} onClick={onOpen}
       whileHover={{ boxShadow: `0 10px 26px -20px ${inkA(0.16)}`, borderColor: LINE3 }}
@@ -137,19 +161,30 @@ function ClusterRow({ cl, summary, onOpen }: {
         </span>
         {healthy
           ? <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: TYPE.caption, fontWeight: 700, color: TINT.ok.fg, background: TINT.ok.bg, border: `1px solid ${TINT.ok.bd}`, borderRadius: 999, padding: "3px 9px", flexShrink: 0 }}><span className="pulsedot" style={{ width: 6, height: 6, borderRadius: 999, background: HP.ok }} />Active</span>
-          : <span style={{ fontSize: TYPE.caption, fontWeight: 700, color: UI.card, background: HP.crit, borderRadius: 999, padding: "3px 9px", fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>장애 {incidents}</span>}
+          : incidentsObserved
+            ? <span style={{ fontSize: TYPE.caption, fontWeight: 700, color: UI.card, background: HP.crit, borderRadius: 999, padding: "3px 9px", fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>장애 {incidents}</span>
+            : <span style={{ fontSize: TYPE.caption, fontWeight: 700, color: UI.ink2, background: UI.bg2, border: `1px solid ${UI.line}`, borderRadius: 999, padding: "3px 9px", flexShrink: 0 }}>{statusLabel(cl.connectionStage ?? cl.connectionStatus)}</span>}
       </div>
 
       <div style={{ display: "flex", gap: 14, fontSize: TYPE.label, color: UI.ink2, fontVariantNumeric: "tabular-nums", flexWrap: "wrap" }}>
         <span>노드 <b style={{ fontFamily: MONO, color: UI.ink }}>{fmt(nodesReady)}/{fmt(nodesTotal)}</b> ready</span>
         <span>파드 <b style={{ fontFamily: MONO, color: UI.ink }}>{fmt(podCount)}</b>{incidents > 0 && <b style={{ color: TINT.crit.fg, fontFamily: MONO }}> · 장애 {incidents}</b>}</span>
-        <span>네임스페이스 <b style={{ fontFamily: MONO, color: UI.ink }}>{loading ? "…" : cl.namespaceCount ?? "—"}</b></span>
+        <span>네임스페이스 <b style={{ fontFamily: MONO, color: UI.ink }}>{cl.namespaceCount ?? "—"}</b></span>
+        {topology?.status === "ready" && topology.partial && (
+          <span title={topology.partialReasonCodes.join(", ") || "부분 관측"}
+            style={{ color: TINT.warn.fg, fontWeight: 700 }}>
+            일부 관측{topology.truncatedPodCount > 0 ? ` · ${topology.truncatedPodCount}개 미표시` : ""}
+          </span>
+        )}
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 7, marginTop: "auto" }}>
         <ClusterMiniUsage label="CPU" value={cpuPct} />
         <ClusterMiniUsage label="MEM" value={memPct} />
       </div>
+      <span style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 5, color: BLUE, fontSize: TYPE.label2, fontWeight: 700 }}>
+        노드 보기 <ChevronRight size={13} />
+      </span>
     </motion.button>
   );
 }
@@ -205,12 +240,13 @@ export function HomeClusterSection({ meta: _meta, onOpen, pending = [] }: {
   const { clusters } = useDevpreviewContracts();
   const clusterIds = useMemo(() => clusters.map((cl) => cl.id), [clusters]);
   const summaries = useClusterSummaries(clusterIds);
+  const topologies = useClusterTopologies(clusterIds);
   return (
     // 4칸 그리드 — 클러스터 카드 2칸씩, 연결 카드는 가로형 컴팩트 2칸(거대 공백 금지)
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gridAutoFlow: "row dense", gap: 14 }}>
+    <div className="home-cluster-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gridAutoFlow: "row dense", gap: 14 }}>
       {clusters.map((cl) => (
         <div key={cl.id} style={{ gridColumn: "span 2", minWidth: 0 }}>
-          <ClusterRow cl={cl} summary={summaries[cl.id]} onOpen={() => onOpen(cl.id)} />
+          <ClusterRow cl={cl} summary={summaries[cl.id]} topology={topologies[cl.id]} onOpen={() => onOpen(cl.id)} />
         </div>
       ))}
       {pending.map((n, i) => (
@@ -223,8 +259,7 @@ export function HomeClusterSection({ meta: _meta, onOpen, pending = [] }: {
   );
 }
 
-// ── 노드 카드 — 관측된 노드 하나. 계약이 주는 name/status/health 만 렌더한다.
-// 용량·CPU·MEM·파드 수는 인벤토리 계약에 없어 표기하지 않는다(no backfill).
+// ── 노드 카드 — 정본 physical topology 계약의 서버·측정값·pod count만 렌더한다.
 function NodeCard({ node, onOpen, onTip }: {
   node: InvNode; onOpen: () => void; onTip: (t: TipData) => void;
 }) {
@@ -242,12 +277,21 @@ function NodeCard({ node, onOpen, onTip }: {
       <div style={{ display: "flex", alignItems: "flex-start", gap: 8, minWidth: 0 }}>
         <Server size={13} strokeWidth={2} style={{ color: UI.ink3, flexShrink: 0, marginTop: 2 }} />
         <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ fontSize: TYPE.body, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink, fontFamily: MONO, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{node.name}</div>
+          <div title={node.name} style={{ fontSize: TYPE.body, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink, fontFamily: MONO, overflowWrap: "anywhere", lineHeight: 1.35 }}>{node.name}</div>
           <div style={{ fontSize: TYPE.caption2, color: UI.ink3, marginTop: 2 }}>{node.status ? statusLabel(node.status) : "상태 관측 안 됨"}</div>
         </div>
         <span style={{ width: 8, height: 8, borderRadius: 999, background: sevColor(sev), flexShrink: 0, marginTop: 4 }} />
       </div>
-      <div style={{ marginTop: "auto" }}><HealthChip health={node.health} /></div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+        <HealthChip health={node.health} />
+        <span style={{ fontSize: TYPE.caption, color: UI.ink3, fontFamily: MONO }}>
+          파드 {node.matchedPodCount ?? "—"}/{node.totalPodCount ?? "—"}
+        </span>
+      </div>
+      <div style={{ display: "grid", gap: 6, marginTop: "auto" }}>
+        <ClusterMiniUsage label="CPU" value={node.cpuPercent} />
+        <ClusterMiniUsage label="MEM" value={node.memoryPercent} />
+      </div>
     </motion.button>
   );
 }
@@ -307,6 +351,7 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
   const { clusters } = useDevpreviewContracts();
   const clusterIds = useMemo(() => clusters.map((cl) => cl.id), [clusters]);
   const clusterSummaries = useClusterSummaries(clusterIds);
+  const clusterTopologies = useClusterTopologies(clusterIds);
 
   const [view, setView] = useState<View>(initialCluster ? { level: "nodes", cluster: initialCluster } : { level: "clusters" });
   useEffect(() => { onScopeChange?.(view); }, [view]);
@@ -315,6 +360,10 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
   const activeCluster = view.level === "clusters" ? null : view.cluster;
   const topology = useClusterTopology(activeCluster);
   const { nodes, pods } = topology;
+  const activeNode = view.level === "pods" ? nodes.find((node) => node.name === view.node) : undefined;
+  const nodePods = view.level === "pods" && activeNode
+    ? podsForNode(pods, activeNode.key)
+    : [];
   const crit = pods.filter((p) => isBadHealth(p.health)).length;
 
   const [dir, setDir] = useState(1);
@@ -324,6 +373,7 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
     const hero = (view.level === "nodes" && v.level === "pods") || (view.level === "pods" && v.level === "nodes");
     setMode(hero ? "hero" : "push");
     setDir(d); setView(v);
+    window.scrollTo({ top: 0, behavior: "auto" });
   };
   const [tip, setTip] = useState<TipData>(null);
   // 툴팁 좌표는 CSS px로 — zoom(PRESENT_SCALE) 컨테이너 안 fixed는 시각 px 그대로 쓰면 스케일만큼 어긋난다
@@ -342,6 +392,7 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
       onOpenResource("Pod", {
         name: p.name, ns: p.namespace ?? undefined, kind: "Pod",
         status: p.status, health: p.health, cluster: p.cluster, bad: isBadHealth(p.health),
+        _key: p.key,
       });
     }
   };
@@ -374,17 +425,23 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
           const seg: React.CSSProperties = { display: "flex", alignItems: "center", gap: 5, fontSize: TYPE.label, fontWeight: 600, color: UI.ink2, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 999, padding: "5px 11px", whiteSpace: "nowrap" };
           const num: React.CSSProperties = { fontFamily: MONO, fontWeight: 700, color: UI.ink, fontVariantNumeric: "tabular-nums" };
           const drilled = view.level !== "clusters";
-          const observing = drilled && topology.status !== "loading";
+          const observing = drilled && topology.status === "ready";
           return (
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
               <span style={seg}><Server size={11} style={{ color: UI.ink3 }} />클러스터 <b style={num}>{clusters.length}</b>
                 {(pendingClusters?.length ?? 0) > 0 && <span style={{ color: TINT.blue.fg }}>· 연결 중 {pendingClusters!.length}</span>}
               </span>
               {drilled && (
-                <span style={seg}><Cpu size={11} style={{ color: UI.ink3 }} />노드 <b style={num}>{observing ? nodes.length : "…"}</b></span>
+                <span style={seg}><Cpu size={11} style={{ color: UI.ink3 }} />노드 <b style={num}>{observing ? topology.nodesTotal ?? "—" : topology.status === "loading" ? "…" : "—"}</b></span>
               )}
               {drilled && (
-                <span style={seg}><Box size={11} style={{ color: UI.ink3 }} />파드 <b style={num}>{observing ? pods.length : "…"}</b></span>
+                <span style={seg}><Box size={11} style={{ color: UI.ink3 }} />파드 <b style={num}>{observing ? topology.podsTotal ?? "—" : topology.status === "loading" ? "…" : "—"}</b></span>
+              )}
+              {observing && topology.partial && (
+                <span title={topology.partialReasonCodes.join(", ") || "부분 관측"}
+                  style={{ ...seg, color: TINT.warn.fg, fontWeight: 700 }}>
+                  일부 관측{topology.truncatedPodCount > 0 ? ` · ${topology.truncatedPodCount}개 미표시` : ""}
+                </span>
               )}
               {crit > 0 && <span style={{ width: 1, height: 16, background: UI.line, margin: "0 2px" }} />}
               {crit > 0 && (
@@ -395,6 +452,33 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
             </div>
           );
         })()}
+
+        {/* 물리 탐색 레벨은 항상 보이는 하나의 컨트롤로 고정한다. 클러스터 선택은
+            곧 정본 physical topology의 단일 cluster scope가 된다. */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+          <span style={{ display: "flex", gap: 2, background: inkA(0.05), borderRadius: 9, padding: 2 }}>
+            <button type="button" aria-pressed={view.level === "clusters"} onClick={() => { if (view.level !== "clusters") go({ level: "clusters" }, -1); }}
+              style={{ border: "none", borderRadius: 7, padding: "6px 12px", background: view.level === "clusters" ? UI.card : "transparent", color: view.level === "clusters" ? UI.ink : UI.ink3, boxShadow: view.level === "clusters" ? `0 1px 4px ${inkA(0.14)}` : "none", fontSize: TYPE.label2, fontWeight: 700, cursor: "pointer" }}>
+              클러스터 뷰
+            </button>
+            <button type="button" aria-pressed={view.level !== "clusters"}
+              disabled={clusters.length === 0}
+              onClick={() => {
+                const cluster = view.level === "clusters" ? clusters[0]?.id : view.cluster;
+                if (cluster) go({ level: "nodes", cluster }, view.level === "clusters" ? 1 : -1);
+              }}
+              style={{ border: "none", borderRadius: 7, padding: "6px 12px", background: view.level !== "clusters" ? UI.card : "transparent", color: view.level !== "clusters" ? UI.ink : UI.ink3, boxShadow: view.level !== "clusters" ? `0 1px 4px ${inkA(0.14)}` : "none", fontSize: TYPE.label2, fontWeight: 700, cursor: clusters.length ? "pointer" : "not-allowed", opacity: clusters.length ? 1 : 0.45 }}>
+              노드 뷰
+            </button>
+          </span>
+          <select aria-label="노드 뷰 클러스터 선택"
+            value={view.level === "clusters" ? "" : view.cluster}
+            onChange={(event) => { const cluster = event.currentTarget.value; if (cluster) go({ level: "nodes", cluster }, 1); }}
+            style={{ minWidth: 220, maxWidth: "100%", border: `1px solid ${UI.line}`, borderRadius: 9, background: UI.card, color: UI.ink, padding: "6px 10px", fontFamily: MONO, fontSize: TYPE.label2, fontWeight: 600 }}>
+            <option value="">노드 뷰 클러스터 선택</option>
+            {clusters.map((cluster) => <option key={cluster.id} value={cluster.id}>{cluster.id}</option>)}
+          </select>
+        </div>
 
         {/* 브레드크럼 */}
         <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 16, minHeight: 28 }}>
@@ -430,10 +514,10 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
 
                 {view.level === "clusters" && (
                   /* 클러스터: 가로 최대 2개 · 카드 폭을 제한해 정사각에 가깝게 */
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 560px))", gap: 14, alignItems: "stretch" }}>
+                  <div className="cluster-grid" style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 560px))", gap: 14, alignItems: "stretch" }}>
                     {clusters.map((cl, i) => (
                       <motion.div key={cl.id} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ ...SOFT, delay: i * 0.05 }} style={{ display: "flex" }}>
-                        <ClusterRow cl={cl} summary={clusterSummaries[cl.id]}
+                        <ClusterRow cl={cl} summary={clusterSummaries[cl.id]} topology={clusterTopologies[cl.id]}
                           onOpen={() => go({ level: "nodes", cluster: cl.id }, 1)} />
                       </motion.div>
                     ))}
@@ -443,7 +527,7 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
                 )}
 
                 {view.level === "nodes" && (<>
-                  <ClusterOverview cl={activeClusterObj} meta={activeClusterMeta} onKind={onOpenKind} />
+                  <ClusterOverview cl={activeClusterObj} meta={activeClusterMeta} topology={topology} onKind={onOpenKind} />
                   {topology.status === "loading" ? (
                     <NodeSkeleton />
                   ) : topology.status === "unavailable" ? (
@@ -454,7 +538,7 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
                       hint="이 클러스터에서 준비된 노드가 아직 관측되지 않았습니다." />
                   ) : (
                     /* 노드: 4칸 그리드. 계약이 주는 정체성·상태만 — 용량 병합/파드 밀도 표기 없음 */
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 12 }}>
+                    <div className="node-grid" style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 12 }}>
                       {nodes.map((node, i) => (
                         <motion.div key={node.key} style={{ minWidth: 0, maxWidth: "100%" }} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ ...SOFT, delay: i * 0.04 }}>
                           <NodeCard node={node} onOpen={() => go({ level: "pods", cluster: view.cluster, node: node.name }, 1)} onTip={onTip} />
@@ -470,13 +554,20 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
                       <Server size={14} style={{ color: UI.ink3 }} />
                       <span style={{ fontSize: TYPE.body, fontWeight: 700, fontFamily: MONO, color: UI.ink }}>{view.node}</span>
                     </div>
-                    {/* 정직성: 인벤토리 계약은 파드의 노드 귀속을 노출하지 않는다.
-                        따라서 이 클러스터에서 관측된 파드 전체를 표시한다(노드별 필터 불가). */}
+                    {/* physical topology의 server_id로만 노드 귀속을 판정한다. */}
                     <div style={{ display: "flex", alignItems: "flex-start", gap: 8, background: UI.bg2, border: `1px solid ${UI.line}`, borderRadius: 10, padding: "9px 12px", marginBottom: 14 }}>
                       <Network size={13} strokeWidth={2} style={{ color: UI.ink3, flexShrink: 0, marginTop: 1 }} />
                       <div style={{ minWidth: 0 }}>
-                        <div style={{ fontSize: TYPE.label2, fontWeight: 600, color: UI.ink2 }}>노드 범위 관측 미지원 · 클러스터 전체 파드 표시</div>
-                        <div style={{ fontSize: TYPE.caption2, color: UI.ink3, marginTop: 2 }}>인벤토리 계약이 파드의 노드 귀속을 노출하지 않아, 이 클러스터에서 관측된 파드 전체를 보여줍니다.</div>
+                        <div style={{ fontSize: TYPE.label2, fontWeight: 600, color: UI.ink2 }}>
+                          표시된 파드 {nodePods.length}개
+                          {activeNode?.matchedPodCount !== null && activeNode?.matchedPodCount !== undefined
+                            ? ` / 노드 일치 ${activeNode.matchedPodCount}개`
+                            : ""}
+                        </div>
+                        <div style={{ fontSize: TYPE.caption2, color: UI.ink3, marginTop: 2 }}>
+                          실제 물리 토폴로지의 server_id가 이 노드를 가리키는 파드만 표시합니다.
+                          {topology.partial && " 일부 관측 응답이므로 나머지는 생략될 수 있습니다."}
+                        </div>
                       </div>
                     </div>
                     {topology.status === "loading" ? (
@@ -484,17 +575,17 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
                     ) : topology.status === "unavailable" ? (
                       <EmptyState icon={<Box size={18} strokeWidth={1.75} />} label="인벤토리 관측 안 됨"
                         hint="에이전트가 아직 이 클러스터의 파드 인벤토리를 보고하지 않았습니다." flush />
-                    ) : pods.length === 0 ? (
+                    ) : nodePods.length === 0 ? (
                       <EmptyState icon={<Box size={18} strokeWidth={1.75} />} label="관측된 파드가 없습니다"
-                        hint="이 클러스터에서 실행 중인 파드가 아직 관측되지 않았습니다." flush />
-                    ) : (<>
+                        hint="이 노드에 귀속된 파드가 아직 관측되지 않았습니다." flush />
+                    ) : (<div style={{ maxHeight: 480, overflowY: "auto", scrollbarGutter: "stable", overscrollBehavior: "contain" }}>
                       <div style={{ display: "grid", gridTemplateColumns: "12px minmax(160px,1.8fr) minmax(90px,1fr) 92px 96px", alignItems: "center", gap: 12, padding: "0 10px 7px", borderBottom: `1px solid ${UI.line}`, fontSize: TYPE.micro, fontWeight: 600, letterSpacing: "0.07em", color: UI.ink3 }}>
                         <span /><span>파드</span><span>네임스페이스</span><span>상태</span><span>헬스</span>
                       </div>
-                      {pods.map((p) => (
+                      {nodePods.map((p) => (
                         <PodRow key={p.key} pod={p} onClick={() => selectPod(p)} onTip={onTip} />
                       ))}
-                    </>)}
+                    </div>)}
                   </div>
                 )}
               </motion.div>
@@ -530,6 +621,12 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
         .op { min-height: 100vh; background: ${UI.bg}; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Pretendard", "Apple SD Gothic Neo", "Helvetica Neue", sans-serif; -webkit-font-smoothing: antialiased; }
         .op .podrow { position: relative; transition: background .15s ease; }
         .op .podrow:hover { background: ${inkA(0.035)} !important; }
+        @media (max-width: 760px) {
+          .op .cluster-grid,
+          .op .node-grid { grid-template-columns: minmax(0, 1fr) !important; }
+          .home-cluster-grid { grid-template-columns: minmax(0, 1fr) !important; }
+          .home-cluster-grid > * { grid-column: auto !important; }
+        }
         .op .kindlink:hover { color: ${BLUE} !important; } .op .kindlink:hover b { color: ${BLUE}; }
         .pulsedot { animation: pd 1.5s ease-in-out infinite; }
         @keyframes pd { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
@@ -560,7 +657,7 @@ function EmptyState({ icon, label, hint, flush = false }: { icon?: React.ReactNo
 // ── 로딩 스켈레톤 — 실데이터 도착 전 레이아웃 자리를 잡아 깜빡임/점프를 줄인다. shimmer는 .op-skel.
 function NodeSkeleton() {
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 12 }}>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 12 }}>
       {Array.from({ length: 8 }).map((_, i) => (
         <div key={i} style={{ display: "flex", flexDirection: "column", gap: 10, minHeight: 96, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 16, padding: 16, boxSizing: "border-box" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>

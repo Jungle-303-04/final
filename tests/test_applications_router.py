@@ -36,6 +36,9 @@ class StubApplicationsDb:
         self.registered_bindings: list[dict[str, object]] = []
         self.upserted_applications: list[dict[str, object]] = []
         self.credentials: list[dict[str, object]] = []
+        self.workflow_runs: list[dict[str, object]] = []
+        self.workflow_steps: list[dict[str, object]] = []
+        self.manifest_artifacts: list[dict[str, object]] = []
         self.registration_calls: list[str] = []
         self.access_checks: list[tuple[str, str, str, str, str]] = []
         self.connected_cluster_ids = (
@@ -311,6 +314,15 @@ class StubApplicationsDb:
         self.registered_bindings.append(payload)
         return {**payload, "binding_id": "binding-1"}
 
+    def start_workflow_run(self, payload: dict[str, object]) -> None:
+        self.workflow_runs.append(payload)
+
+    def record_workflow_step(self, payload: dict[str, object]) -> None:
+        self.workflow_steps.append(payload)
+
+    def record_manifest_artifact(self, payload: dict[str, object]) -> None:
+        self.manifest_artifacts.append(payload)
+
 
 class BulkCatalogApplicationsDb(StubApplicationsDb):
     def __init__(self) -> None:
@@ -395,21 +407,73 @@ def current_session() -> SimpleNamespace:
 
 
 class StubRepositoryDiscovery:
-    async def validate_manifest(
+    revision = "a" * 40
+
+    async def resolve_branch_revision(self, repo_ref: str, branch: str) -> str:
+        assert repo_ref == "org/checkout"
+        assert branch == "release"
+        return self.revision
+
+    async def validate_manifests_at_revision(
         self,
-        payload: object,
-    ) -> RepositoryManifestValidationResponse:
-        return RepositoryManifestValidationResponse(
+        payloads: tuple[object, ...],
+        *,
+        expected_revision: str,
+    ) -> SimpleNamespace:
+        assert expected_revision == self.revision
+        assert len(payloads) == 1
+        payload = payloads[0]
+        return SimpleNamespace(
             repo_ref=payload.repo_ref,
             branch=payload.branch,
-            manifest_path=payload.manifest_path,
-            valid=True,
-            status="valid",
-            validation_mode="static-parse",
-            resource_count=2,
-            resources=[],
-            warnings=["server-side static validation"],
-            errors=[],
+            revision=self.revision,
+            validations=(
+                RepositoryManifestValidationResponse(
+                    repo_ref=payload.repo_ref,
+                    branch=payload.branch,
+                    manifest_path=payload.manifest_path,
+                    valid=True,
+                    status="valid",
+                    validation_mode="kustomize-render",
+                    resource_count=2,
+                    resources=[
+                        {
+                            "api_version": "apps/v1",
+                            "kind": "Deployment",
+                            "namespace": "prod",
+                            "name": "checkout-api",
+                        },
+                        {
+                            "api_version": "v1",
+                            "kind": "Service",
+                            "namespace": "prod",
+                            "name": "checkout-api",
+                        },
+                    ],
+                    warnings=["server-side static validation"],
+                    errors=[],
+                ),
+            ),
+        )
+
+
+class IncompleteRepositoryDiscovery(StubRepositoryDiscovery):
+    async def validate_manifests_at_revision(
+        self,
+        payloads: tuple[object, ...],
+        *,
+        expected_revision: str,
+    ) -> SimpleNamespace:
+        result = await super().validate_manifests_at_revision(
+            payloads,
+            expected_revision=expected_revision,
+        )
+        validation = result.validations[0].model_copy(update={"resource_count": 3})
+        return SimpleNamespace(
+            repo_ref=result.repo_ref,
+            branch=result.branch,
+            revision=result.revision,
+            validations=(validation,),
         )
 
 
@@ -579,12 +643,47 @@ def test_connect_application_registers_repo_watch_binding_atomically() -> None:
     assert db.registered_repositories[0]["default_branch"] == "release"
     assert db.registered_repositories[0]["metadata"]["source_type"] == "kustomize"
     assert db.registered_repositories[0]["metadata"]["validated_resource_count"] == 2
+    assert db.registered_repositories[0]["metadata"]["repository_revision"] == "a" * 40
     assert db.registered_watch_targets[0]["cluster_id"] == "cluster-1"
     assert db.registered_watch_targets[0]["namespace"] == "prod"
     assert db.registered_watch_targets[0]["manifest_path"] == "deploy/kustomization.yaml"
     assert db.registered_watch_targets[0]["settings"]["source_type"] == "kustomize"
     assert db.registered_watch_targets[0]["deploy_policy"]["manifest_source"] == "kustomize"
     assert db.registered_bindings[0]["repository_id"] == "repo-1"
+    assert len(db.workflow_runs) == 1
+    assert db.workflow_runs[0]["workflow_run_id"].startswith("workflow-connect-validation-")
+    assert db.workflow_runs[0]["commit_sha"] == "a" * 40
+    assert db.workflow_runs[0]["status"] == "succeeded"
+    assert db.workflow_runs[0]["current_step"] == "render"
+    assert db.workflow_runs[0]["metadata"] == {
+        "runtime_mode": "repository-connect-validation",
+        "evidence_kind": "revision_pinned_manifest_validation",
+        "source_type": "kustomize",
+        "validation_mode": "kustomize-render",
+        "validated_resource_count": 2,
+        "repository_revision": "a" * 40,
+        "cluster_mutation": False,
+    }
+    assert len(db.workflow_steps) == 1
+    assert db.workflow_steps[0]["workflow_run_id"] == db.workflow_runs[0]["workflow_run_id"]
+    assert db.workflow_steps[0]["details"]["cluster_mutation"] is False
+    assert len(db.manifest_artifacts) == 2
+    assert {
+        (
+            artifact["rendered_manifest"]["kind"],
+            artifact["rendered_manifest"]["metadata"]["namespace"],
+            artifact["rendered_manifest"]["metadata"]["name"],
+        )
+        for artifact in db.manifest_artifacts
+    } == {
+        ("Deployment", "prod", "checkout-api"),
+        ("Service", "prod", "checkout-api"),
+    }
+    assert all(
+        artifact["source_summary"]["repository_revision"] == "a" * 40
+        and artifact["source_summary"]["cluster_mutation"] is False
+        for artifact in db.manifest_artifacts
+    )
     assert db.access_checks == [
         ("user-1", "ws-1", "cluster", "cluster-1", "deploy.run"),
     ]
@@ -619,6 +718,37 @@ def test_connect_application_stores_github_token_as_credential_ref(monkeypatch) 
     assert db.credentials[0]["scope"] == expected_scope
     assert db.credentials[0]["encrypted_value"] != "ghp_secret-token"
     assert db.registered_repositories[0]["credential_ref"] == f"db:github:{expected_scope}"
+
+
+def test_connect_application_rejects_incomplete_pinned_resource_evidence_before_write() -> None:
+    db = StubApplicationsDb()
+
+    async def run():
+        return await connect_application(
+            ApplicationConnectRequest(
+                name="checkout-api",
+                repo_ref="org/checkout",
+                branch="release",
+                manifest_path="deploy/kustomization.yaml",
+                source_type="kustomize",
+                cluster_id="cluster-1",
+                namespace="prod",
+            ),
+            current=current_session(),
+            db=db,
+            discovery=IncompleteRepositoryDiscovery(),
+        )
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(run())
+
+    assert exc.value.status_code == 422
+    assert exc.value.detail == "repository manifest validation resource count is incomplete"
+    assert db.registered_repositories == []
+    assert db.registered_watch_targets == []
+    assert db.registered_bindings == []
+    assert db.workflow_runs == []
+    assert db.manifest_artifacts == []
 
 
 def test_connect_application_rejects_disconnected_cluster_before_write() -> None:

@@ -1,11 +1,14 @@
-import { useInventoryResources, type Row } from "./inventoryResourcesFeed";
+import { useEffect, useMemo, useState } from "react";
+
+import { getPhysicalTopology } from "../api/physical-topology";
+import type { PhysicalTopologyEndpoint } from "../api/physical-topology-schemas";
 
 // UI-PHASE2-001: 물리 토폴로지(노드·파드) 전용 라이브 어댑터.
-// `GET /api/clusters/{id}/inventory/resources?resource_type=node|pod` 만 읽는다.
-// 계약이 노출하지 않는 값(CPU/MEM/용량/파드→노드 귀속 등)은 절대 지어내지 않는다.
-// 관측이 없으면 status="unavailable" 로 정직하게 비운다.
+// 정본 `GET /api/topology?view=physical&clusters=<exact-one>`만 읽는다.
+// 노드 측정값과 파드 귀속은 응답의 server/server_id 증거만 사용하고 추정하지 않는다.
 
 export type TopologyStatus = "loading" | "ready" | "unavailable";
+export type TopologyCompleteness = "exact" | "partial" | "unavailable";
 
 export interface InvNode {
   name: string;
@@ -13,6 +16,10 @@ export interface InvNode {
   health: string;
   cluster: string;
   key: string;
+  cpuPercent: number | null;
+  memoryPercent: number | null;
+  matchedPodCount: number | null;
+  totalPodCount: number | null;
 }
 
 export interface InvPod {
@@ -22,57 +29,224 @@ export interface InvPod {
   health: string;
   cluster: string;
   key: string;
+  serverId: string | null;
+  cpuMillicores: number | null;
+  memoryMebibytes: number | null;
+  restartCount: number;
 }
 
 export interface ClusterTopologyView {
   status: TopologyStatus;
   nodes: InvNode[];
   pods: InvPod[];
+  /** 서버 배열에 실제로 반환된 Ready 노드 수. */
+  nodesReady: number | null;
+  /** 서버 배열에 실제로 반환된 노드 수. partial이면 화면에 일부 관측을 함께 표기한다. */
+  nodesTotal: number | null;
+  /** 정본 토폴로지가 실제로 반환해 노드/파드 화면에 표시할 수 있는 파드 수. */
+  podsTotal: number | null;
+  nodeCompleteness: TopologyCompleteness;
+  podCompleteness: TopologyCompleteness;
+  returnedPodCount: number;
+  truncatedPodCount: number;
+  partial: boolean;
+  stale: boolean;
+  partialReasonCodes: string[];
 }
 
-function str(value: unknown): string {
-  return typeof value === "string" ? value : "";
+type TopologyListener = (view: ClusterTopologyView) => void;
+
+const CACHE_TTL_MS = 30_000;
+const ERROR_CACHE_TTL_MS = 5_000;
+
+const EMPTY_READY: ClusterTopologyView = {
+  status: "ready",
+  nodes: [],
+  pods: [],
+  nodesReady: 0,
+  nodesTotal: 0,
+  podsTotal: 0,
+  nodeCompleteness: "exact",
+  podCompleteness: "exact",
+  returnedPodCount: 0,
+  truncatedPodCount: 0,
+  partial: false,
+  stale: false,
+  partialReasonCodes: [],
+};
+
+const LOADING: ClusterTopologyView = {
+  ...EMPTY_READY,
+  status: "loading",
+  nodesReady: null,
+  nodesTotal: null,
+  podsTotal: null,
+  nodeCompleteness: "unavailable",
+  podCompleteness: "unavailable",
+};
+
+const UNAVAILABLE: ClusterTopologyView = {
+  ...LOADING,
+  status: "unavailable",
+};
+
+const cache = new Map<string, { view: ClusterTopologyView; expiresAt: number }>();
+const activeRequests = new Map<string, {
+  controller: AbortController;
+  listeners: Set<TopologyListener>;
+}>();
+
+export function podsForNode(pods: readonly InvPod[], nodeId: string): InvPod[] {
+  return pods.filter((pod) => pod.serverId === nodeId);
 }
 
-function toNode(row: Row): InvNode {
+export function toClusterTopologyView(topology: PhysicalTopologyEndpoint): ClusterTopologyView {
+  const truncatedPodCount = Object.values(topology.truncated)
+    .reduce((total, count) => total + count, topology.unassigned_truncated_count);
+  const reasonCodes = Array.from(new Set([
+    ...topology.partial_reason_codes,
+    ...topology.snapshot.partial_reason_codes,
+  ])).sort();
+  const stale = topology.snapshot.stale;
+  const podCompleteness = topology.projection_completeness;
+  const partial = topology.projection_completeness !== "exact"
+    || truncatedPodCount > 0
+    || stale
+    || reasonCodes.length > 0;
+
   return {
-    name: str(row.name),
-    status: str(row.status),
-    health: str(row.health),
-    cluster: str(row.cluster),
-    key: str(row._key) || str(row.name),
+    status: "ready",
+    nodes: topology.servers.map((server) => ({
+      name: server.name,
+      status: server.status,
+      health: server.status,
+      cluster: topology.cluster.cluster_id,
+      key: server.id,
+      cpuPercent: server.cpu_pct,
+      memoryPercent: server.mem_pct,
+      matchedPodCount: server.matched_pod_count,
+      totalPodCount: server.total_pod_count,
+    })),
+    pods: topology.pods.map((pod) => ({
+      name: pod.name,
+      namespace: pod.namespace,
+      status: pod.phase,
+      health: pod.health,
+      cluster: topology.cluster.cluster_id,
+      key: pod.id,
+      serverId: pod.server_id,
+      cpuMillicores: pod.cpu_mcores,
+      memoryMebibytes: pod.mem_mib,
+      restartCount: pod.restarts,
+    })),
+    nodesReady: topology.servers.filter((server) => server.status.toLowerCase() === "ready").length,
+    nodesTotal: topology.servers.length,
+    // counts.*는 현재 리소스 필터 전체 개수이며 Pod 전용 개수가 아니다. 카드와
+    // 실제 드릴이 모두 같은 pods 배열 길이를 표시하고, 생략분은 별도 표기한다.
+    podsTotal: topology.pods.length,
+    nodeCompleteness: topology.projection_completeness,
+    podCompleteness,
+    returnedPodCount: topology.pods.length,
+    truncatedPodCount,
+    partial,
+    stale,
+    partialReasonCodes: reasonCodes,
   };
 }
 
-function toPod(row: Row): InvPod {
-  return {
-    name: str(row.name),
-    namespace: typeof row.ns === "string" ? row.ns : null,
-    status: str(row.status),
-    health: str(row.health),
-    cluster: str(row.cluster),
-    key: str(row._key) || str(row.name),
+function currentCached(clusterId: string): ClusterTopologyView | undefined {
+  const entry = cache.get(clusterId);
+  if (entry === undefined) return undefined;
+  if (entry.expiresAt > Date.now()) return entry.view;
+  cache.delete(clusterId);
+  return undefined;
+}
+
+function subscribeClusterTopology(clusterId: string, listener: TopologyListener): () => void {
+  const cached = currentCached(clusterId);
+  if (cached !== undefined) {
+    return () => undefined;
+  }
+
+  let request = activeRequests.get(clusterId);
+  if (request === undefined) {
+    request = { controller: new AbortController(), listeners: new Set() };
+    activeRequests.set(clusterId, request);
+    const active = request;
+    void getPhysicalTopology({ clusters: [clusterId] }, active.controller.signal)
+      .then((topology) => {
+        if (active.controller.signal.aborted) return;
+        const view = toClusterTopologyView(topology);
+        cache.set(clusterId, { view, expiresAt: Date.now() + CACHE_TTL_MS });
+        active.listeners.forEach((notify) => notify(view));
+      })
+      .catch((cause: unknown) => {
+        if (isAbortError(cause) || active.controller.signal.aborted) return;
+        cache.set(clusterId, { view: UNAVAILABLE, expiresAt: Date.now() + ERROR_CACHE_TTL_MS });
+        active.listeners.forEach((notify) => notify(UNAVAILABLE));
+      })
+      .finally(() => {
+        if (activeRequests.get(clusterId) === active) activeRequests.delete(clusterId);
+      });
+  }
+
+  request.listeners.add(listener);
+  const active = request;
+  return () => {
+    active.listeners.delete(listener);
+    if (active.listeners.size > 0 || activeRequests.get(clusterId) !== active) return;
+    active.controller.abort();
+    activeRequests.delete(clusterId);
   };
 }
 
 /**
- * 한 클러스터의 관측된 노드·파드를 인벤토리 계약에서 읽는다. `clusterId`가 null
- * 이면(클러스터 뷰) 아무 요청도 하지 않고 빈 결과를 낸다. 노드·파드 각각 한 번씩
- * `useInventoryResources`를 재사용하며, 두 리소스 타입의 상태를 합쳐 하나의
- * 정직한 status로 노출한다(둘 다 unavailable 일 때만 unavailable).
+ * 여러 클러스터의 정본 물리 토폴로지를 동시에 읽는다. 모듈 캐시와 진행 중 요청을
+ * 공유하므로 홈 카드와 노드 드릴이 같은 클러스터를 구독해도 네트워크 요청은 하나다.
+ * 범위가 바뀌면 더 이상 구독자가 없는 요청만 abort한다.
  */
+export function useClusterTopologies(
+  clusterIds: readonly string[],
+): Record<string, ClusterTopologyView> {
+  const key = Array.from(new Set(clusterIds)).sort().join("\u0000");
+  const ids = useMemo(() => (key ? key.split("\u0000") : []), [key]);
+  const [views, setViews] = useState<Record<string, ClusterTopologyView>>(() => initialViews(ids));
+
+  useEffect(() => {
+    const unsubscribes = ids.map((id) => subscribeClusterTopology(id, (view) => {
+      setViews((previous) => previous[id] === view
+        ? previous
+        : { ...previous, [id]: view });
+    }));
+    return () => unsubscribes.forEach((unsubscribe) => unsubscribe());
+  }, [ids]);
+
+  return Object.fromEntries(ids.map((id) => [
+    id,
+    currentCached(id) ?? views[id] ?? LOADING,
+  ]));
+}
+
+/** 한 클러스터 드릴용 기존 API. 다중 구독 훅과 같은 cache/request를 재사용한다. */
 export function useClusterTopology(clusterId: string | null): ClusterTopologyView {
-  const nodeView = useInventoryResources(clusterId, "node");
-  const podView = useInventoryResources(clusterId, "pod");
-  const status: TopologyStatus =
-    nodeView.status === "loading" || podView.status === "loading"
-      ? "loading"
-      : nodeView.status === "unavailable" && podView.status === "unavailable"
-        ? "unavailable"
-        : "ready";
-  return {
-    status,
-    nodes: nodeView.rows.map(toNode),
-    pods: podView.rows.map(toPod),
-  };
+  const clusterIds = useMemo(() => (clusterId === null ? [] : [clusterId]), [clusterId]);
+  const views = useClusterTopologies(clusterIds);
+  if (clusterId === null) return EMPTY_READY;
+  return views[clusterId] ?? LOADING;
+}
+
+function initialViews(ids: readonly string[]): Record<string, ClusterTopologyView> {
+  return Object.fromEntries(ids.map((id) => [id, currentCached(id) ?? LOADING]));
+}
+
+function isAbortError(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "name" in error
+    && (error as { name?: unknown }).name === "AbortError";
+}
+
+/** @internal 테스트 격리를 위한 캐시 초기화. */
+export function resetClusterTopologyCacheForTests(): void {
+  activeRequests.forEach((request) => request.controller.abort());
+  activeRequests.clear();
+  cache.clear();
 }

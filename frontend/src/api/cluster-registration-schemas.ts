@@ -69,6 +69,14 @@ export const providerClusterDiscoverySchema = z.strictObject({
   import_candidates: z.array(clusterImportCandidateSchema),
 });
 
+export const managementAccessSchema = z.strictObject({
+  mode: z.enum(["portforward", "loadbalancer", "ingress", "nodeport", "unknown"]),
+  external_url: z.string().nullable(),
+  agent_server_url: z.string(),
+  reachability: z.enum(["external", "self_only"]),
+  limitation_reason: z.enum(["external_url_not_configured"]).nullable(),
+});
+
 export const targetPreflightResponseSchema = z.strictObject({
   valid: z.boolean(),
   duplicate_cluster_id: z.boolean(),
@@ -81,6 +89,7 @@ export const targetPreflightResponseSchema = z.strictObject({
   selected: z.record(z.string(), jsonMapSchema),
   last_agent_id: z.string().nullable(),
   last_seen_at: z.string().nullable(),
+  management_access: managementAccessSchema.nullable(),
 });
 
 export const targetBootstrapStepSchema = z.strictObject({
@@ -102,6 +111,7 @@ export const targetInstallResponseSchema = z.strictObject({
   connect_timeout_seconds: z.number().int().nullable(),
   connect_expires_at: z.string().nullable(),
   connection_stage: connectionStageSchema.nullable(),
+  management_access: managementAccessSchema.nullable(),
 });
 
 export type ProviderConfigField = z.infer<typeof providerConfigFieldSchema>;

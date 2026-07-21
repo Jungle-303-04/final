@@ -1453,7 +1453,13 @@ async def install_manifest_by_token(
     identity = db.authenticate_cluster_agent(hash_agent_token(agent_token))
     if identity is None:
         raise HTTPException(status_code=NOT_FOUND_CODE, detail="install link not found")
-    registration = db.get_cluster_registration(identity["workspace_id"], identity["cluster_id"])
+    private_registration_getter = getattr(db, "get_cluster_registration_install_credentials", None)
+    if callable(private_registration_getter):
+        registration = private_registration_getter(identity["workspace_id"], identity["cluster_id"])
+    else:
+        # Narrow compatibility path for non-persistent test doubles. Production
+        # repositories always use the secret-bearing installer-only reader above.
+        registration = db.get_cluster_registration(identity["workspace_id"], identity["cluster_id"])
     if registration is None:
         raise HTTPException(status_code=NOT_FOUND_CODE, detail="install link not found")
     try:

@@ -25,7 +25,9 @@ export interface InventoryKindCountsView {
   meta: Record<string, Record<string, number>>;
 }
 
-const RESOURCE_QUERY_LIMIT = 500;
+// Gateway가 허용하는 최대 단일 응답. 전체 클러스터는 클러스터별로 각각 이 한도를
+// 사용하므로 기존 500 고정 때문에 요약 카운트와 목록이 과도하게 어긋나던 문제를 줄인다.
+const RESOURCE_QUERY_LIMIT = 1000;
 
 // kindId → backend resource_type 추정값. 백엔드 resource_type의 정확한 표기가
 // 불확실하므로 대부분은 kindId를 소문자화한 값(= 쿠버네티스 kind 소문자)을 쓰고,
@@ -113,6 +115,49 @@ export function useInventoryResources(
     return () => controller.abort();
   }, [key]);
   return canFetch ? view : { status: "ready", rows: [] };
+}
+
+/**
+ * 여러 클러스터의 동일 resource type을 실제 클러스터별 API에서 병렬 조회해 합친다.
+ * gateway 계약이 단일 클러스터 경로만 제공하므로 `전체 클러스터`는 서버 값을
+ * 이름으로 추정하지 않고 이 fan-out 결과의 합집합으로만 표현한다.
+ */
+export function useInventoryResourcesAcrossClusters(
+  clusterIds: readonly string[],
+  resourceType: string | null,
+): InventoryResourcesView {
+  const [view, setView] = useState<InventoryResourcesView & { key: string }>({
+    status: "loading",
+    rows: [],
+    key: "",
+  });
+  const type = resourceType?.trim() ?? "";
+  const ids = [...new Set(clusterIds.filter(Boolean))];
+  const key = type ? `${type}\u0000${ids.join("\u0000")}` : "";
+  useEffect(() => {
+    if (!key) return;
+    const [requestedType, ...requestedIds] = key.split("\u0000");
+    const controller = new AbortController();
+    void Promise.allSettled(requestedIds.map((clusterId) =>
+      listInventoryResourcesByType(
+        clusterId,
+        { resourceType: requestedType, limit: RESOURCE_QUERY_LIMIT },
+        controller.signal,
+      ),
+    )).then((results) => {
+      if (controller.signal.aborted) return;
+      const fulfilled = results.filter((result): result is PromiseFulfilledResult<Awaited<ReturnType<typeof listInventoryResourcesByType>>> => result.status === "fulfilled");
+      const rows = fulfilled
+        .flatMap((result) => result.value.resources)
+        .filter((resource) => resource.kind.toLowerCase() === requestedType)
+        .map(toRow)
+        .sort((a, b) => `${String(a.cluster)}\u0000${String(a.ns ?? "")}\u0000${String(a.name)}`.localeCompare(`${String(b.cluster)}\u0000${String(b.ns ?? "")}\u0000${String(b.name)}`));
+      setView({ status: fulfilled.length > 0 ? "ready" : "unavailable", rows, key });
+    });
+    return () => controller.abort();
+  }, [key]);
+  if (!key || ids.length === 0) return { status: "ready", rows: [] };
+  return view.key === key ? view : { status: "loading", rows: [] };
 }
 
 export function useInventoryKindCounts(

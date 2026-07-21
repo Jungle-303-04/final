@@ -1079,6 +1079,30 @@ class IdentityAccessRepository(DatabaseConnection):
             row = conn.execute(statement).mappings().first()
         return self._serialize_cluster_registration(row) if row else None
 
+    def get_cluster_registration_install_credentials(
+        self, workspace_id: str, cluster_id: str
+    ) -> JsonObject | None:
+        """Return the private enrollment material for the one-time installer only.
+
+        Keep these encrypted key fields out of the general registration reader so
+        ordinary cluster/detail call sites cannot accidentally serialize them.
+        """
+        table = ClusterRegistration.__table__
+        statement = (
+            select(
+                table.c.workspace_id,
+                table.c.cluster_id,
+                table.c.settings,
+                table.c.agent_envelope_public_key,
+                table.c.agent_envelope_private_key_encrypted,
+            )
+            .where(table.c.workspace_id == workspace_id, table.c.cluster_id == cluster_id)
+            .limit(1)
+        )
+        with self.connection() as conn:
+            row = conn.execute(statement).mappings().first()
+        return dict(row) if row is not None else None
+
     @staticmethod
     def _serialize_cluster_registration(row: JsonObject) -> JsonObject:
         item = dict(row)

@@ -18,7 +18,7 @@ import {
   type EdgeTelemetry,
 } from "./devpreview/trafficTelemetryFeed";
 import type { TrafficVerdict } from "./devpreview/trafficTelemetryFeed";
-import { statusLabel } from "./devpreview/statusLabel";
+import { reasonLabel, statusLabel } from "./devpreview/statusLabel";
 import "./styles/tokens.css";
 import "./styles/foundation.css";
 
@@ -226,7 +226,9 @@ export function TopologyView({ embedded = false, onOpenService, focusId, onFocus
     if (topo.status === "loading") return { tone: "gray" as const, text: "토폴로지 관측 중…" };
     if (topo.status === "error") return { tone: "crit" as const, text: "토폴로지를 불러오지 못했습니다" };
     if (topo.status === "unavailable") {
-      const why = topo.partialReasonCodes.length > 0 ? ` · ${topo.partialReasonCodes.join(", ")}` : "";
+      const why = topo.partialReasonCodes.length > 0
+        ? ` · ${reasonLabel(topo.partialReasonCodes[0])}${topo.partialReasonCodes.length > 1 ? ` 외 ${topo.partialReasonCodes.length - 1}건` : ""}`
+        : "";
       return { tone: "warn" as const, text: `구조 관측 안 됨${why}` };
     }
     if (topo.nodes.length === 0) return { tone: "gray" as const, text: "관측된 관계가 없습니다" };
@@ -272,7 +274,7 @@ export function TopologyView({ embedded = false, onOpenService, focusId, onFocus
                   </div>
                 ) : (
                   <div style={{ marginTop: 11, borderTop: `1px solid ${UI.line}`, paddingTop: 10, fontSize: TYPE.caption, color: UI.ink3 }}>
-                    트래픽 관측 안 됨{traffic.status === "unavailable" && traffic.reasonCodes.length > 0 ? ` · ${traffic.reasonCodes[0]}` : ""}
+                    트래픽 관측 안 됨{traffic.status === "unavailable" && traffic.reasonCodes.length > 0 ? ` · ${reasonLabel(traffic.reasonCodes[0])}` : ""}
                   </div>
                 )}
               </motion.div>

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import { getChangeTimeline } from "../api/change-timeline";
 import type { ChangeTimelineEndpoint } from "../api/change-timeline-schemas";
+import { operationalMessageLabel } from "./statusLabel";
 
 // UI-PHASE2-001 §2 "Timeline": typed live adapter for the /timeline surface.
 // Reads `GET /api/changes` for a fixed trailing window — the server returns
@@ -12,7 +13,13 @@ import type { ChangeTimelineEndpoint } from "../api/change-timeline-schemas";
 
 export type ChangeTimelineStatus = "loading" | "ready" | "unavailable";
 
-export type ChangeEventView = ChangeTimelineEndpoint["events"][number];
+type ChangeEventEndpoint = ChangeTimelineEndpoint["events"][number];
+export type ChangeEventView = Omit<ChangeEventEndpoint, "title"> & {
+  /** 서버 원문. 표시 한글화와 무관하게 증거·디버깅을 위해 보존한다. */
+  rawTitle: string;
+  /** 한국어 발표 화면용 표시 문자열. */
+  title: string;
+};
 export type ChangeBucketView = ChangeTimelineEndpoint["buckets"][number];
 
 export interface ChangeTimelineFeed {
@@ -56,7 +63,11 @@ export function useChangeTimeline(): ChangeTimelineFeed {
         if (controller.signal.aborted) return;
         setFeed({
           status: "ready",
-          events: response.events,
+          events: response.events.map((event) => ({
+            ...event,
+            rawTitle: event.title,
+            title: operationalMessageLabel(event.title),
+          })),
           buckets: response.buckets,
           gaps: response.gaps,
           windowFromMs: fromMs,

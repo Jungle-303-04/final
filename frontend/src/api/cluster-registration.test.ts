@@ -73,6 +73,7 @@ const SELECTION = {
   providerConfig: {
     region: "ap-northeast-2",
     eks_cluster_name: "production",
+    context_alias: "production",
   },
 };
 
@@ -88,6 +89,13 @@ const PREFLIGHT_RESPONSE = {
   selected: { cloud: { ...CLOUD_PROVIDER, additive_backend_metadata: true } },
   last_agent_id: null,
   last_seen_at: null,
+  management_access: {
+    mode: "ingress",
+    external_url: "https://opsia.example.com",
+    agent_server_url: "https://opsia.example.com",
+    reachability: "external",
+    limitation_reason: null,
+  },
 };
 
 const INSTALL_RESPONSE = {
@@ -107,6 +115,7 @@ const INSTALL_RESPONSE = {
   connect_timeout_seconds: 1_800,
   connect_expires_at: "2026-07-13T07:00:00Z",
   connection_stage: "token_issued",
+  management_access: PREFLIGHT_RESPONSE.management_access,
 };
 
 function jsonResponse(payload: unknown, status = 200): Response {
@@ -214,6 +223,11 @@ describe("Cluster registration API", () => {
       cluster_id: "production",
       cloud_provider: "eks",
       deploy_provider: "manual-manifest",
+      provider_config: {
+        region: "ap-northeast-2",
+        eks_cluster_name: "production",
+        context_alias: "production",
+      },
     }));
     expect(String(init?.body)).not.toContain("workspace");
   });

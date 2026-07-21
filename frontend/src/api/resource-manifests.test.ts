@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   approveResourceManifestEdit,
+  applyResourceManifestEdit,
   getResourceManifestSource,
   previewResourceManifestEdit,
 } from "./resource-manifests";
@@ -63,6 +64,15 @@ describe("resource manifest API", () => {
       diff: "+spec: {}\n",
       errors: [],
       warnings: [],
+      apply_availability: "available",
+      apply_reason_codes: [],
+      impact: [{
+        api_version: "v1",
+        kind: "Pod",
+        namespace: "shop",
+        name: "checkout-api",
+        selected: true,
+      }],
     };
     const approval = {
       accepted: true,
@@ -90,6 +100,42 @@ describe("resource manifest API", () => {
       application_id: "app-1",
       confirmed: true,
       reason: "increase capacity",
+    });
+  });
+
+  it("queues an explicitly confirmed direct apply with idempotency and CSRF", async () => {
+    const receipt = {
+      accepted: true,
+      event_id: "event-apply-1",
+      audit_event_id: "event-apply-1",
+      correlation_id: "correlation-apply-1",
+      command_id: "command-apply-1",
+      status: "queued",
+    } as const;
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify(receipt), { status: 202 }),
+    );
+
+    await expect(applyResourceManifestEdit("resource-1", {
+      applicationId: "app-1",
+      baseSha: "a".repeat(40),
+      sourceSha256: `sha256:${"b".repeat(64)}`,
+      editedYaml: SOURCE.content,
+      expectedDesiredSha256: `sha256:${"c".repeat(64)}`,
+      confirmation: true,
+      reason: "apply inspected change",
+      idempotencyKey: "manifest-apply-test-1",
+    })).resolves.toEqual(receipt);
+
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    const headers = new Headers(init.headers);
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/resource-manifests/resource-1/apply");
+    expect(headers.get("idempotency-key")).toBe("manifest-apply-test-1");
+    expect(headers.get("x-service-csrf")).toBe("same-origin");
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      expected_desired_sha256: `sha256:${"c".repeat(64)}`,
+      confirmation: true,
+      reason: "apply inspected change",
     });
   });
 });

@@ -498,13 +498,13 @@ export type RcaIncident = {
   evidenceSummary?: string | null;
   evidenceBundleSummary?: string | null;
 };
-export function IssuesSurface({ sessionRules: _sessionRules = [], onOpenRef: _onOpenRef, onAskAi, onOpenRca }: {
-  sessionRules?: string[]; onOpenRef: (kind: string, name: string) => void; onAskAi: () => void; onOpenRca?: (i: RcaIncident) => void;
+export function IssuesSurface({ incidentClusterIds, sessionRules: _sessionRules = [], onOpenRef: _onOpenRef, onAskAi, onOpenRca }: {
+  incidentClusterIds: readonly string[]; sessionRules?: string[]; onOpenRef: (kind: string, name: string) => void; onAskAi: () => void; onOpenRca?: (i: RcaIncident) => void;
 }) {
   const [tab, setTab] = useState("이슈");
   // 이슈 탭 — 실 RCA 이슈 큐(GET /api/dashboard/rca/issues, 홈 W2와 동일 소스).
   // 큐 항목이 관측 RCA 필드(원인/확신도/증거/AI 요약)를 이미 실어주므로 상세 드로어로 그대로 전달한다.
-  const issues = useRcaIssueDetails();
+  const issues = useRcaIssueDetails(incidentClusterIds);
   // 알림 규칙 탭 — 실 GET /api/alert-rules(읽기 전용). 예전의 하드코딩 2개 규칙 +
   // 세션 파생 규칙(고정 조건)을 로컬 state로 토글하던 가짜 상태를 제거했다. 규칙
   // 생성/활성 토글은 CSRF가 필요한 mutation이라 이 데모에는 배선되어 있지 않으므로

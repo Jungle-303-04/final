@@ -216,6 +216,8 @@ export interface ClusterTargetFields {
   deployProvider: string;
   name: string;
   environment: string;
+  /** Provider-specific values advertised by the provider catalog. */
+  providerConfig: Record<string, unknown>;
 }
 
 function slugId(name: string): string {
@@ -237,7 +239,7 @@ function baseSelection(fields: ClusterTargetFields) {
     kubeContext: null,
     cloudProvider: fields.cloudProvider,
     deployProvider: fields.deployProvider,
-    providerConfig: {} as Record<string, unknown>,
+    providerConfig: fields.providerConfig,
   };
 }
 
@@ -269,7 +271,10 @@ export function registerClusterTarget(
 ): Promise<TargetInstallResponse> {
   return registerTarget({
     ...baseSelection(fields),
-    clusterId: null,
+    // Keep the mutation bound to the exact identity that passed preflight.
+    // Letting the server generate a suffixed id here would validate one target
+    // and register another, defeating duplicate and policy checks.
+    clusterId: slugId(fields.name),
     name: fields.name,
     environment: fields.environment,
   }, signal);

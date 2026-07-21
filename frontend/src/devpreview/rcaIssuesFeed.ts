@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import { listRcaIssues } from "../api/rca-issues";
 import type { RcaIssueList } from "../api/schemas";
+import type { DevpreviewCluster } from "./contracts";
 
 // UI-PHASE2-001 §5.2: typed live adapter for the Issue widget/surface and the
 // notification bell. Reads the additive RCA Issue queue from
@@ -26,7 +27,68 @@ export interface RcaIssuesFeed {
   items: RcaIssueView[];
 }
 
-type RcaIssueItem = RcaIssueList["items"][number];
+export type RcaIssueItem = RcaIssueList["items"][number];
+
+const OBSERVED_TARGET_STAGES = new Set(["agent_connected", "snapshot_received", "ready"]);
+const TERMINAL_ISSUE_STATUSES = new Set([
+  "cancelled",
+  "closed",
+  "completed",
+  "dismissed",
+  "incident_resolved",
+  "resolved",
+]);
+
+/**
+ * The rehearsal queue follows live, mutable target clusters only. Management
+ * infrastructure and targets that are stale, disconnecting or whose install
+ * expired must not leak historical incidents into the current demo story.
+ */
+export function activeIncidentClusterIds(
+  clusters: readonly Pick<DevpreviewCluster, "id" | "role" | "connectionStatus" | "connectionStage">[],
+): string[] {
+  return clusters
+    .filter(isActiveIncidentCluster)
+    .map((cluster) => cluster.id);
+}
+
+export function isActiveIncidentCluster(
+  cluster: Pick<DevpreviewCluster, "role" | "connectionStatus" | "connectionStage">,
+): boolean {
+  return cluster.role === "target"
+    && cluster.connectionStatus === "online"
+    && cluster.connectionStage !== null
+    && cluster.connectionStage !== undefined
+    && OBSERVED_TARGET_STAGES.has(cluster.connectionStage);
+}
+
+export function isActiveRcaIssue(item: Pick<RcaIssueItem, "status">): boolean {
+  return !TERMINAL_ISSUE_STATUSES.has(normalizeStatus(item.status));
+}
+
+export async function loadActiveRcaIssueItems(
+  clusterIds: readonly string[] | undefined,
+  signal: AbortSignal,
+): Promise<RcaIssueItem[]> {
+  const scopedClusterIds = clusterIds === undefined
+    ? null
+    : [...new Set(clusterIds.filter((clusterId) => clusterId.trim() !== ""))].sort();
+  const requests = scopedClusterIds === null
+    ? [listRcaIssues({ limit: 100, signal })]
+    : scopedClusterIds.map((clusterId) => listRcaIssues({ clusterId, limit: 100, signal }));
+  const responses = await Promise.all(requests);
+  const allowedClusters = scopedClusterIds === null ? null : new Set(scopedClusterIds);
+  const seen = new Set<string>();
+  return responses
+    .flatMap((response) => response.items)
+    .filter((item) => {
+      if (!isActiveRcaIssue(item)) return false;
+      if (allowedClusters !== null && (item.cluster_id === null || !allowedClusters.has(item.cluster_id))) return false;
+      if (seen.has(item.correlation_id)) return false;
+      seen.add(item.correlation_id);
+      return true;
+    });
+}
 
 export function toRcaIssueView(item: RcaIssueItem): RcaIssueView {
   return {
@@ -47,24 +109,38 @@ function isAbortError(error: unknown): boolean {
 }
 
 /**
- * Reads the live issue queue, optionally scoped to one cluster. A scope change
- * aborts the obsolete request so a stale response cannot overwrite the current
- * selection.
+ * Reads the live issue queue, optionally scoped to live cluster identities. A
+ * scope change aborts the obsolete fan-out and immediately hides its previous
+ * snapshot, so history from a disconnected target cannot flash in the new UI.
  */
-export function useRcaIssues(clusterId?: string): RcaIssuesFeed {
-  const [feed, setFeed] = useState<RcaIssuesFeed>({ status: "loading", items: [] });
+export function useRcaIssues(clusterIds?: readonly string[]): RcaIssuesFeed {
+  const scopeKey = clusterIds === undefined
+    ? null
+    : [...new Set(clusterIds.filter((clusterId) => clusterId.trim() !== ""))].sort().join("\u0000");
+  const [snapshot, setSnapshot] = useState<{ scopeKey: string | null; feed: RcaIssuesFeed }>({
+    scopeKey,
+    feed: { status: "loading", items: [] },
+  });
   useEffect(() => {
     const controller = new AbortController();
-    void listRcaIssues({ clusterId, signal: controller.signal })
-      .then((response) => {
+    const scopedClusterIds = scopeKey === null ? null : scopeKey === "" ? [] : scopeKey.split("\u0000");
+    void loadActiveRcaIssueItems(scopedClusterIds ?? undefined, controller.signal)
+      .then((loadedItems) => {
         if (controller.signal.aborted) return;
-        setFeed({ status: "ready", items: response.items.map(toRcaIssueView) });
+        const items = loadedItems.map(toRcaIssueView);
+        setSnapshot({ scopeKey, feed: { status: "ready", items } });
       })
       .catch((cause: unknown) => {
         if (controller.signal.aborted || isAbortError(cause)) return;
-        setFeed({ status: "unavailable", items: [] });
+        setSnapshot({ scopeKey, feed: { status: "unavailable", items: [] } });
       });
     return () => controller.abort();
-  }, [clusterId]);
-  return feed;
+  }, [scopeKey]);
+  return snapshot.scopeKey === scopeKey
+    ? snapshot.feed
+    : { status: "loading", items: [] };
+}
+
+function normalizeStatus(status: string): string {
+  return status.trim().toLocaleLowerCase().replace(/[.\s-]+/gu, "_");
 }

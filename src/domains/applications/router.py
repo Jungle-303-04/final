@@ -19,6 +19,10 @@ from domains.applications.product_projection import (
     drift_projection,
     workload_scope_projection,
 )
+from domains.applications.source_validation import (
+    persist_repository_connect_validation,
+    validated_manifest_resources,
+)
 from domains.gitops.repository import (
     derive_application_id,
     derive_repository_id,
@@ -1012,22 +1016,37 @@ async def connect_application(
         validation_credential_ref,
     )
     validation_discovery = discovery_with_token(discovery, validation_token)
+    validation_request = RepositoryManifestValidationRequest(
+        repo_ref=normalized_repo_ref,
+        branch=payload.branch,
+        manifest_path=payload.manifest_path,
+        source_type=payload.source_type,
+    )
     try:
-        validation = await validation_discovery.validate_manifest(
-            RepositoryManifestValidationRequest(
-                repo_ref=normalized_repo_ref,
-                branch=payload.branch,
-                manifest_path=payload.manifest_path,
-                source_type=payload.source_type,
-            )
+        revision = await validation_discovery.resolve_branch_revision(
+            normalized_repo_ref,
+            payload.branch,
+        )
+        validation_batch = await validation_discovery.validate_manifests_at_revision(
+            (validation_request,),
+            expected_revision=revision,
         )
     except RepositoryDiscoveryError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if validation_batch.revision != revision:
+        raise HTTPException(status_code=409, detail="repository revision changed during validation")
+    if len(validation_batch.validations) != 1:
+        raise HTTPException(status_code=422, detail=MANIFEST_VALIDATION_FAILED)
+    validation = validation_batch.validations[0]
     if not validation.valid:
         detail = validation.errors[0] if validation.errors else MANIFEST_VALIDATION_FAILED
         raise HTTPException(status_code=422, detail=detail)
+    try:
+        validated_manifest_resources(validation)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     try:
         validated_repo_ref = normalize_github_repo_ref(validation.repo_ref)
     except (RepositoryDiscoveryError, ValueError) as exc:
@@ -1050,6 +1069,7 @@ async def connect_application(
         "validation_mode": validation.validation_mode,
         "validated_resource_count": validation.resource_count,
         "validation_warnings": validation.warnings,
+        "repository_revision": revision,
     }
     deploy_policy = {
         **payload.deploy_policy,
@@ -1119,8 +1139,20 @@ async def connect_application(
             "repository_id": application["repository_id"],
             "app_name": application["name"],
         }
-        db.register_watch_target(binding_body)
-        db.register_deployment_binding(binding_body)
+        watch_target = db.register_watch_target(binding_body)
+        binding = db.register_deployment_binding(binding_body)
+        persist_repository_connect_validation(
+            db,
+            workspace_id=workspace_id,
+            repo_ref=normalized_repo_ref,
+            branch=validation.branch,
+            revision=revision,
+            source_type=source_type,
+            validation=validation,
+            application=application,
+            watch_target=watch_target,
+            binding=binding,
+        )
     return ApplicationResponse(application=application)
 
 

@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 
-import { listRcaIssues } from "../api/rca-issues";
 import { getRecoveryPlanByCorrelation } from "../api/recovery";
 import type { RecoveryPlan } from "../api/recovery-schemas";
 import type { RcaIssueList } from "../api/schemas";
+import { loadActiveRcaIssueItems } from "./rcaIssuesFeed";
+import { operationalMessageLabel } from "./statusLabel";
 
 // UI-PHASE2-001: typed live adapters for the RCA Issue *detail* drawer. Unlike
 // the reduced `rcaIssuesFeed` view (list/bell), this exposes the full observed
@@ -22,6 +23,7 @@ export interface RcaIssueDetailView {
   namespace: string | null;
   resourceName: string | null;
   resourceKind: string | null;
+  rawSymptom: string | null;
   symptom: string | null;
   status: string;
   severity: "critical" | "warning" | null;
@@ -53,7 +55,8 @@ export function toRcaIssueDetailView(item: RcaIssueItem): RcaIssueDetailView {
     namespace: item.incident_namespace,
     resourceName: item.incident_resource_name,
     resourceKind: item.incident_resource_kind,
-    symptom: item.incident_symptom,
+    rawSymptom: item.incident_symptom,
+    symptom: item.incident_symptom === null ? null : operationalMessageLabel(item.incident_symptom),
     status: item.status,
     severity: item.issue_severity,
     rootCause: item.root_cause,
@@ -80,22 +83,31 @@ function isAbortError(error: unknown): boolean {
  * an honest `unavailable`; the queue already carries the observed RCA fields, so
  * no per-incident refetch is needed for cause/confidence/evidence.
  */
-export function useRcaIssueDetails(clusterId?: string): RcaIssueDetailsFeed {
-  const [feed, setFeed] = useState<RcaIssueDetailsFeed>({ status: "loading", items: [] });
+export function useRcaIssueDetails(clusterIds?: readonly string[]): RcaIssueDetailsFeed {
+  const scopeKey = clusterIds === undefined
+    ? null
+    : [...new Set(clusterIds.filter((clusterId) => clusterId.trim() !== ""))].sort().join("\u0000");
+  const [snapshot, setSnapshot] = useState<{ scopeKey: string | null; feed: RcaIssueDetailsFeed }>({
+    scopeKey,
+    feed: { status: "loading", items: [] },
+  });
   useEffect(() => {
     const controller = new AbortController();
-    void listRcaIssues({ clusterId, signal: controller.signal })
-      .then((response) => {
+    const scopedClusterIds = scopeKey === null ? undefined : scopeKey === "" ? [] : scopeKey.split("\u0000");
+    void loadActiveRcaIssueItems(scopedClusterIds, controller.signal)
+      .then((items) => {
         if (controller.signal.aborted) return;
-        setFeed({ status: "ready", items: response.items.map(toRcaIssueDetailView) });
+        setSnapshot({ scopeKey, feed: { status: "ready", items: items.map(toRcaIssueDetailView) } });
       })
       .catch((cause: unknown) => {
         if (controller.signal.aborted || isAbortError(cause)) return;
-        setFeed({ status: "unavailable", items: [] });
+        setSnapshot({ scopeKey, feed: { status: "unavailable", items: [] } });
       });
     return () => controller.abort();
-  }, [clusterId]);
-  return feed;
+  }, [scopeKey]);
+  return snapshot.scopeKey === scopeKey
+    ? snapshot.feed
+    : { status: "loading", items: [] };
 }
 
 export type RecoveryPlanStatus = "idle" | "loading" | "ready" | "unavailable";

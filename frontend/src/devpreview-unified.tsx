@@ -19,7 +19,7 @@ import { ConnectWizard } from "./devpreview-connect";
 import { TopologyView } from "./devpreview-topology";
 import { GithubIcon } from "./devpreview/brandIcons";
 import { DevpreviewContractProvider, useDevpreviewContracts } from "./devpreview/contracts";
-import { useRcaIssues } from "./devpreview/rcaIssuesFeed";
+import { activeIncidentClusterIds, useRcaIssues } from "./devpreview/rcaIssuesFeed";
 import { useCostOverview } from "./devpreview/costFeed";
 import { useSession, sessionInitial } from "./devpreview/sessionFeed";
 import { useInventoryNamespaces } from "./devpreview/inventoryNamespacesFeed";
@@ -28,8 +28,10 @@ import { useApplications } from "./devpreview/deployFeed";
 import { useAlertEvents } from "./devpreview/alertsFeed";
 import { useRelationTopology } from "./devpreview/relationTopologyFeed";
 import { logout as logoutApi } from "./devpreview/sessionFeed";
-import { useInventoryResources, useInventoryKindCounts, kindToResourceType } from "./devpreview/inventoryResourcesFeed";
-import { statusLabel, isCriticalStatus } from "./devpreview/statusLabel";
+import { useInventoryResourcesAcrossClusters, useInventoryKindCounts, kindToResourceType } from "./devpreview/inventoryResourcesFeed";
+import { operationalMessageLabel, reasonLabel, statusLabel, isCriticalStatus } from "./devpreview/statusLabel";
+import { LiveResourceManifestEditor } from "./devpreview/resourceManifestEditor";
+import { podsForNode, useClusterTopology } from "./devpreview/inventoryTopologyFeed";
 import { UI, BLUE, BLUE2, HP, TINT, MONO, TYPE, SOFT, SPRING, PRESENT_SCALE, DUR, inkA, blueA, MARK, cardA, GLASS, critA } from "./devpreview/theme";
 import "./styles/tokens.css";
 import "./styles/foundation.css";
@@ -406,7 +408,7 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
   const phase = row.status != null && String(row.status) ? statusLabel(String(row.status)) : "관측 안 됨";
   const healthVal = row.health != null && String(row.health) ? statusLabel(String(row.health)) : "관측 안 됨";
   const clusterVal = row.cluster != null && String(row.cluster) ? String(row.cluster) : "관측 안 됨";
-  // 관측 전용: 이 환경에는 리소스 변경(뮤테이션) 실행 계약이 없어 YAML 편집/적용/비교 상태를 두지 않는다.
+  const resourceId = row._key != null ? String(row._key) : "";
   // 드로어 폭 — 왼쪽 가장자리 드래그로 조절 (전체 화면일 땐 비활성)
   const [dw, setDw] = useState(560);
   const [dwDragging, setDwDragging] = useState(false);
@@ -417,18 +419,18 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
     const up = () => { setDwDragging(false); window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
     window.addEventListener("pointermove", move); window.addEventListener("pointerup", up);
   };
-  // 재시작/스케일/재적용/비교 등 변경 컨트롤 제거 — 실제 실행 API(capability 게이트 + CSRF + audit)가
-  // 없어 onToast로 성공을 가장하지 않는다. 관측된 상태만 표시한다.
+  // 재시작/스케일처럼 이 드로어가 지원하지 않는 변경 컨트롤은 노출하지 않는다.
+  // YAML 변경은 source/content SHA를 고정하고 권한·CSRF·감사 계약을 거치는 전용 편집기에서만 수행한다.
   const isWorkload = ["Deployment", "StatefulSet", "DaemonSet", "ReplicaSet", "Job", "CronJob"].includes(kind.id);
   const isPod = kind.id === "Pod";
   const wp = isWorkload || isPod;                 // 워크로드·파드 전용 섹션
-  // 합성 YAML 매니페스트 생성 제거 — row(라이브 인벤토리)는 매니페스트를 노출하지 않으므로
-  // YAML 탭은 "관측 안 됨"으로 정직하게 비운다.
+  // 합성 YAML은 만들지 않는다. 실제 인벤토리 key로 원본을 조회하고, 원본이 없는 리소스는
+  // Git 바인딩 누락 상태를 명시해 잘못된 매니페스트를 편집·적용하지 않도록 한다.
 
   return (
     <>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: 0.1 } }} transition={{ duration: DUR.fade }}
-        onClick={onClose} style={{ position: "fixed", top: topInset, right: 0, bottom: 0, left: leftInset, background: inkA(0.07), zIndex: 70 }} />
+        aria-hidden="true" onClick={onClose} style={{ position: "fixed", top: topInset, right: 0, bottom: 0, left: leftInset, background: inkA(0.07), zIndex: 70 }} />
       {/* 닫기 즉시 반응 — 열림은 스프링, 닫힘은 짧은 ease-in으로 지연 없이 사라진다(P1-12) */}
       <motion.aside initial={{ x: 40, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 24, opacity: 0, transition: { duration: 0.14, ease: [0.4, 0, 1, 1] } }} transition={{ type: "spring", bounce: 0.06, visualDuration: 0.36 }}
         style={{ position: "fixed", top: topInset, right: 0, bottom: 0,
@@ -451,11 +453,11 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
               <div style={{ fontSize: TYPE.label, color: UI.ink3, marginTop: 2 }}>{kind.label} · {ns}</div>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <span title="이 환경에는 리소스 변경(뮤테이션) 실행 계약이 없습니다" style={{ display: "flex", alignItems: "center", gap: 5, border: `1px solid ${UI.line}`, background: UI.bg2, borderRadius: 8, padding: "5px 10px", fontSize: TYPE.label, fontWeight: 600, color: UI.ink3 }}>
-                관측 전용 · 변경 미지원
+              <span title="YAML 탭에서 실제 Git 소스·권한·에이전트 적용 가능성을 확인합니다" style={{ display: "flex", alignItems: "center", gap: 5, border: `1px solid ${UI.line}`, background: UI.bg2, borderRadius: 8, padding: "5px 10px", fontSize: TYPE.label, fontWeight: 600, color: UI.ink3 }}>
+                소스·권한 검증
               </span>
-              <button title={forceFull ? "AI 대화 중에는 전체 화면 유지" : full ? "패널로 축소" : "전체 화면"} disabled={forceFull} onClick={() => setFull(!fullSelf)} style={{ width: 26, height: 26, borderRadius: 999, border: "none", background: inkA(0.06), color: UI.ink3, cursor: forceFull ? "default" : "pointer", opacity: forceFull ? 0.4 : 1, fontSize: TYPE.label, lineHeight: 1 }}>{full ? "⤡" : "⤢"}</button>
-              <button onClick={onClose} style={{ width: 26, height: 26, borderRadius: 999, border: "none", background: inkA(0.06), color: UI.ink3, cursor: "pointer", fontSize: TYPE.body, lineHeight: 1 }}>✕</button>
+              <button type="button" aria-label={forceFull ? "AI 대화 중에는 전체 화면 유지" : full ? "상세 패널 축소" : "상세 패널 전체 화면"} title={forceFull ? "AI 대화 중에는 전체 화면 유지" : full ? "패널로 축소" : "전체 화면"} disabled={forceFull} onClick={() => setFull(!fullSelf)} style={{ width: 26, height: 26, borderRadius: 999, border: "none", background: inkA(0.06), color: UI.ink3, cursor: forceFull ? "default" : "pointer", opacity: forceFull ? 0.4 : 1, fontSize: TYPE.label, lineHeight: 1 }}>{full ? "⤡" : "⤢"}</button>
+              <button type="button" aria-label="상세 패널 닫기" onClick={onClose} style={{ width: 26, height: 26, borderRadius: 999, border: "none", background: inkA(0.06), color: UI.ink3, cursor: "pointer", fontSize: TYPE.body, lineHeight: 1 }}>✕</button>
             </div>
           </div>
           <div style={{ display: "flex", gap: 2, marginTop: 14 }}>
@@ -463,7 +465,7 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
               const on = tab === t;
               const label = DETAIL_TABS.find((d) => d.id === t)!.label;
               return (
-                <button key={t} onClick={() => setTab(t)} style={{ position: "relative", border: "none", background: "transparent", cursor: "pointer", padding: "8px 12px 10px", fontSize: TYPE.body, fontWeight: on ? 700 : 500, color: on ? UI.ink : UI.ink3 }}>
+                <button type="button" role="tab" aria-selected={on} key={t} onClick={() => setTab(t)} style={{ position: "relative", border: "none", background: "transparent", cursor: "pointer", padding: "8px 12px 10px", fontSize: TYPE.body, fontWeight: on ? 700 : 500, color: on ? UI.ink : UI.ink3 }}>
                   {label}
                   {on && <motion.span layoutId="dtab" transition={SOFT} style={{ position: "absolute", left: 8, right: 8, bottom: 0, height: 2, borderRadius: 2, background: BLUE }} />}
                 </button>
@@ -595,13 +597,7 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
           )}
 
           {tab === "yaml" && (
-            <div style={{ padding: "18px 0" }}>
-              <div style={{ fontSize: TYPE.body, fontWeight: 700, color: UI.ink, marginBottom: 6 }}>YAML 매니페스트 · 관측 안 됨</div>
-              <div style={{ fontSize: TYPE.label, color: UI.ink3, lineHeight: 1.6 }}>
-                라이브 인벤토리 계약은 이 리소스의 매니페스트를 노출하지 않습니다. 합성 YAML을 생성하지 않으며,
-                이 환경에는 편집·적용(kubectl apply) 실행 계약도 없습니다.
-              </div>
-            </div>
+            <LiveResourceManifestEditor resourceId={resourceId} />
           )}
 
 
@@ -643,17 +639,19 @@ function TrafficPanel({ focus, onFocus, onOpen, stickyTop }: {
   const rows = useMemo(() => topo.status === "ready"
     ? topo.nodes.map((n) => ({ id: n.name || n.id, ns: n.namespace, bad: /error|fail|crit|degrad|down|unhealthy/i.test(n.status) }))
     : [], [topo]);
+  const visibleRows = rows.slice(0, 40);
+  const hiddenCount = Math.max(0, rows.length - visibleRows.length);
   return (
     <aside style={{ width: 248, flexShrink: 0, alignSelf: "flex-start", position: "sticky", top: stickyTop, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 14, padding: 12, maxHeight: `calc(100vh / ${PRESENT_SCALE} - ${stickyTop + 48}px)`, overflowY: "auto", scrollbarGutter: "stable", display: "flex", flexDirection: "column", gap: 4 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "2px 2px 7px" }}>
         <span style={{ fontSize: TYPE.bodyStrong, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink }}>서비스 호출 상태</span>
-        {focus && <button onClick={() => onFocus(null)} style={{ marginLeft: "auto", border: "none", background: inkA(0.05), color: UI.ink3, borderRadius: 999, padding: "2px 9px", fontSize: TYPE.caption, fontWeight: 700, cursor: "pointer" }}>해제</button>}
+        {focus && <button type="button" aria-label="서비스 포커스 해제" onClick={() => onFocus(null)} style={{ marginLeft: "auto", border: "none", background: inkA(0.05), color: UI.ink3, borderRadius: 999, padding: "2px 9px", fontSize: TYPE.caption, fontWeight: 700, cursor: "pointer" }}>해제</button>}
       </div>
       {topo.status === "loading" && <span style={{ fontSize: TYPE.caption, color: UI.ink3, padding: "6px 2px" }}>불러오는 중…</span>}
       {topo.status === "unavailable" && <span style={{ fontSize: TYPE.caption, color: UI.ink3, padding: "6px 2px" }}>관계 토폴로지 관측 안 됨</span>}
       {topo.status === "ready" && rows.length === 0 && <span style={{ fontSize: TYPE.caption, color: UI.ink3, padding: "6px 2px" }}>관측된 서비스가 없습니다</span>}
-      {rows.map((r) => (
-        <button key={r.id} onClick={() => onFocus(focus === r.id ? null : r.id)} onDoubleClick={() => onOpen(r.id)} className="rrow"
+      {visibleRows.map((r) => (
+        <button type="button" aria-label={`${r.id} 서비스 그래프 포커스`} key={r.id} onClick={() => onFocus(focus === r.id ? null : r.id)} onDoubleClick={() => onOpen(r.id)} className="rrow"
           style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left", border: `1px solid ${focus === r.id ? TINT.blue.bd : "transparent"}`, background: focus === r.id ? TINT.blue.bg : "transparent", borderRadius: 9, padding: "7px 9px", cursor: "pointer" }}>
           <span style={{ width: 8, height: 8, borderRadius: 3, background: r.bad ? HP.crit : HP.ok, flexShrink: 0 }} />
           <span style={{ minWidth: 0, flex: 1 }}>
@@ -665,6 +663,11 @@ function TrafficPanel({ focus, onFocus, onOpen, stickyTop }: {
             : <span style={{ width: 6, height: 6, borderRadius: 999, background: HP.ok, flexShrink: 0 }} />}
         </button>
       ))}
+      {hiddenCount > 0 && (
+        <span style={{ fontSize: TYPE.caption2, color: UI.ink3, padding: "8px 9px", borderTop: `1px solid ${UI.line2}` }}>
+          현재 범위의 나머지 서비스 {hiddenCount}개는 검색·범위 축소 후 표시됩니다.
+        </span>
+      )}
       <span style={{ fontSize: TYPE.caption, color: UI.ink3, padding: "7px 2px 0", lineHeight: 1.5 }}>클릭 = 그래프 포커스 · 더블클릭 = 상세</span>
     </aside>
   );
@@ -753,17 +756,18 @@ function GlobalNav({ collapsed, setCollapsed, surface, onSurface }: {
     const sid = SURFACE_OF[it.id];
     const active = !!sid && surface === sid;
     const enabled = active || !!sid;
-    const body = (
-      <span className={enabled ? "gnav" : undefined} title={collapsed ? it.label : undefined}
-        onClick={sid ? () => onSurface(sid) : undefined}
+    return (
+      <button type="button" className={enabled ? "gnav" : undefined} title={collapsed ? it.label : undefined}
+        aria-label={`${it.label} 화면으로 이동`} aria-current={active ? "page" : undefined}
+        disabled={!sid} onClick={sid ? () => onSurface(sid) : undefined}
         style={{ display: "flex", alignItems: "center", gap: 11, borderRadius: 9, padding: collapsed ? "9px 0" : "8px 11px", justifyContent: collapsed ? "center" : "flex-start",
+          width: "100%", border: "none", textAlign: "left",
           background: active ? blueA(0.09) : "transparent", color: active ? BLUE : enabled ? UI.ink2 : UI.ink3,
           opacity: enabled ? 1 : 0.45, cursor: enabled ? "pointer" : "default", transition: "background .14s" }}>
         <it.icon size={16} style={{ flexShrink: 0 }} />
         {!collapsed && <span style={{ fontSize: TYPE.body, fontWeight: active ? 700 : 500, whiteSpace: "nowrap" }}>{it.label}</span>}
-      </span>
+      </button>
     );
-    return <div key={it.id}>{body}</div>;
   };
   return (
     <motion.nav initial={false} animate={{ width: collapsed ? 60 : 208 }} transition={SOFT}
@@ -779,7 +783,7 @@ function GlobalNav({ collapsed, setCollapsed, surface, onSurface }: {
       <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>{NAV_ITEMS.map((it) => <Item key={it.id} it={it} />)}</div>
       <div style={{ marginTop: "auto", display: "flex", flexDirection: "column", gap: 1, borderTop: `1px solid ${UI.line2}`, paddingTop: 8 }}>
         {NAV_BOTTOM.map((it) => <Item key={it.id} it={it} />)}
-        <button onClick={() => setCollapsed(!collapsed)} className="gnav"
+        <button type="button" aria-label={collapsed ? "주 메뉴 펼치기" : "주 메뉴 접기"} aria-expanded={!collapsed} onClick={() => setCollapsed(!collapsed)} className="gnav"
           style={{ display: "flex", alignItems: "center", gap: 11, border: "none", background: "transparent", borderRadius: 9, padding: collapsed ? "9px 0" : "8px 11px", justifyContent: collapsed ? "center" : "flex-start", color: UI.ink3, cursor: "pointer" }}>
           {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
           {!collapsed && <span style={{ fontSize: TYPE.body, fontWeight: 600 }}>접기</span>}
@@ -809,8 +813,9 @@ const readBoard = (): BoardState => {
   return defaultBoard();
 };
 
-function HomeSurface({ clusterMeta, onDrillCluster, onConnect, onOpenPod: _onOpenPod, onPickNs, onWidgetDeepLink, onOpenIssues, pendingCl = [], pendingRepo = [] }: {
+function HomeSurface({ clusterMeta, incidentClusterIds, onDrillCluster, onConnect, onOpenPod: _onOpenPod, onPickNs, onWidgetDeepLink, onOpenIssues, pendingCl = [], pendingRepo = [] }: {
   clusterMeta: Record<string, Record<string, number>>;
+  incidentClusterIds: readonly string[];
   onDrillCluster: (clId: string) => void; onConnect: () => void;
   onOpenPod: (name: string) => void; onPickNs: (ns: string) => void;
   pendingCl?: string[]; pendingRepo?: string[]; onWidgetDeepLink?: (id: string) => void; onOpenIssues?: () => void;
@@ -818,7 +823,7 @@ function HomeSurface({ clusterMeta, onDrillCluster, onConnect, onOpenPod: _onOpe
   // 상단 요약 칩은 렌더 지점(아래 IIFE)에서 실 관측 파생(issues·apps)으로 계산 — fixture 인벤토리 제거.
   const clusters = Object.keys(clusterMeta);
   // W2 이슈 위젯 — 실 RCA 이슈 큐(GET /api/dashboard/rca/issues). 빈 배열=관측된 이슈 없음.
-  const issues = useRcaIssues();
+  const issues = useRcaIssues(incidentClusterIds);
   // W7 비용 위젯 — 실 GET /api/cost/overview. 현 계약은 관측 unavailable(가격 backfill 금지).
   const cost = useCostOverview();
 
@@ -858,8 +863,8 @@ function HomeSurface({ clusterMeta, onDrillCluster, onConnect, onOpenPod: _onOpe
         id: iss.correlationId,
         tone: (iss.severity === "warning" ? "warn" : "crit") as "warn" | "crit",
         title: iss.resourceName ?? iss.correlationId.slice(0, 12),
-        sub: [iss.namespace, iss.clusterId].filter(Boolean).join(" · ") || iss.symptom || iss.status,
-        right: iss.status,
+        sub: [iss.namespace, iss.clusterId].filter(Boolean).join(" · ") || operationalMessageLabel(iss.symptom || iss.status),
+        right: statusLabel(iss.status),
       }));
   }, [issues]);
   // W8 최근 변경 · W4 활동 — 실 GET /api/changes(버킷 시계열 + 순서 이벤트).
@@ -885,9 +890,9 @@ function HomeSurface({ clusterMeta, onDrillCluster, onConnect, onOpenPod: _onOpe
           ? <RankList onPick={onOpenIssues ? () => onOpenIssues() : undefined} rows={issues.items.slice(0, 3).map((iss) => ({
               id: iss.correlationId,
               tone: iss.severity === "warning" ? "warn" as const : "crit" as const,
-              title: `${iss.resourceName ?? iss.correlationId} · ${iss.symptom ?? iss.status}`,
-              sub: [iss.namespace, iss.clusterId].filter(Boolean).join(" · ") || iss.status,
-              right: iss.status,
+              title: `${iss.resourceName ?? iss.correlationId} · ${operationalMessageLabel(iss.symptom ?? iss.status)}`,
+              sub: [iss.namespace, iss.clusterId].filter(Boolean).join(" · ") || statusLabel(iss.status),
+              right: statusLabel(iss.status),
             }))} />
           : <span style={{ fontSize: TYPE.label2, color: UI.ink2 }}>활성 이슈가 없습니다</span>;
       case "W3":
@@ -931,7 +936,7 @@ function HomeSurface({ clusterMeta, onDrillCluster, onConnect, onOpenPod: _onOpe
         return (
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             <span style={{ fontSize: TYPE.body, fontWeight: 700, color: UI.ink2 }}>비용 관측 안 됨</span>
-            <span style={{ fontSize: TYPE.caption2, color: UI.ink3 }}>{cost.reasonCodes.length ? cost.reasonCodes.join(" · ") : "cost_observation_unavailable"}</span>
+            <span style={{ fontSize: TYPE.caption2, color: UI.ink3 }}>{reasonLabel(cost.reasonCodes[0] ?? "cost_observation_unavailable")}</span>
           </div>
         );
       }
@@ -945,7 +950,7 @@ function HomeSurface({ clusterMeta, onDrillCluster, onConnect, onOpenPod: _onOpe
             id: e.id,
             time: clockTime(e.occurredMs),
             tone: (e.kind === "incident" ? "crit" : e.kind === "deployment" ? "ok" : "warn") as "ok" | "warn" | "crit",
-            title: e.title,
+            title: operationalMessageLabel(e.title),
           }))} />;
         }
       default: return null;
@@ -1056,6 +1061,10 @@ function App() {
   // 헤더 계정/워크스페이스/로그아웃 — 실 GET /api/auth/session(하드코딩 세션 제거).
   const session = useSession();
   const clusterIds = useMemo(() => contract.clusters.map((cluster) => cluster.id), [contract.clusters]);
+  const incidentClusterIds = useMemo(
+    () => activeIncidentClusterIds(contract.clusters),
+    [contract.clusters],
+  );
   const [kindId, setKindId] = useState("Deployment");
   const [resView, setResView] = useState<ResView>("map"); // D18 관점 — 지도가 기본, 스코프는 관점 공유
   const [trafficFocus, setTrafficFocus] = useState<string | null>(null); // 트래픽 보조 패널 → 그래프 포커스
@@ -1099,6 +1108,7 @@ function App() {
   const kind = KINDS.find((k) => k.id === kindId)!;
   const togglePin = (id: string) => setPinned((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
   const searchRef = useRef<HTMLInputElement>(null);
+  const pageScrollRef = useRef<HTMLDivElement>(null);
   // 상단 크롬 높이 — 폰트·확대에 따라 변하므로 실측해서 오버레이 기준으로 쓴다
   const headerRef = useRef<HTMLElement>(null);
   const [topH, setTopH] = useState(TOPBAR_H);
@@ -1108,8 +1118,12 @@ function App() {
     const ro = new ResizeObserver(() => setTopH(el.offsetHeight));
     ro.observe(el); return () => ro.disconnect();
   }, []);
-  // 서피스 전환 = 새 화면 — 이전 화면의 스크롤 위치를 승계하면 상단 잘림·하단 공백으로 깨져 보인다
-  useEffect(() => { window.scrollTo({ top: 0 }); }, [surface]);
+  // 서피스·관점·물리 드릴·종류 전환 = 새 화면. 문서와 앱 내부 스크롤을 함께
+  // 초기화해 긴 이슈/타임라인/노드 목록의 위치를 다음 화면으로 승계하지 않는다.
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0 });
+    pageScrollRef.current?.scrollTo({ top: 0, left: 0 });
+  }, [surface, resView, scope.level, scope.cluster, scope.node, kindId]);
   // zoom 좌표계: fixed 오버레이 계산은 전부 CSS 픽셀(뷰포트/스케일)로
   const [vwCss, setVwCss] = useState(() => document.documentElement.clientWidth / PRESENT_SCALE);
   useEffect(() => {
@@ -1127,14 +1141,28 @@ function App() {
     return () => mq.removeEventListener("change", on);
   }, []);
 
-  // 표 데이터: 라이브 인벤토리 계약(GET .../inventory/resources)에서 배선.
-  // 스코프 클러스터가 없으면 요청하지 않고 빈 결과(계약이 클러스터 단위이므로).
-  const resourcesView = useInventoryResources(scope.cluster ?? null, kindToResourceType(kindId));
+  // 표 데이터: gateway가 단일 클러스터 경로만 제공하므로 전체 범위는 실제 클러스터별
+  // 요청을 병렬 수행한 합집합이다. 카운트와 표가 같은 clusterIds를 사용해 2029/0 같은
+  // 불일치가 생기지 않는다.
+  const resourceClusterIds = scope.cluster ? [scope.cluster] : clusterIds;
+  const resourcesView = useInventoryResourcesAcrossClusters(resourceClusterIds, kindToResourceType(kindId));
   const allRows = resourcesView.rows;
   const inScope = scope.level !== "clusters" && !!scope.cluster;
+  const scopedTopology = useClusterTopology(scope.cluster ?? null);
+  const scopedNode = scope.level === "pods"
+    ? scopedTopology.nodes.find((node) => node.name === scope.node)
+    : undefined;
+  const scopedNodePodKeys = useMemo(() => new Set(
+    scopedNode ? podsForNode(scopedTopology.pods, scopedNode.key).map((pod) => pod.key) : [],
+  ), [scopedNode, scopedTopology.pods]);
   // 행에 관측된 클러스터 귀속(cluster 필드)이 있으면 스코프와 일치할 때만 남긴다.
   // cluster 필드가 없으면 이름 해싱으로 귀속을 지어내지 않고 그대로 둔다(필터하지 않음).
-  const scopedRows = useMemo(() => (inScope ? allRows.filter((row) => { const cl = typeof row.cluster === "string" ? row.cluster : ""; return cl === "" || cl === scope.cluster; }) : allRows), [allRows, inScope, scope.cluster]);
+  const scopedRows = useMemo(() => (inScope ? allRows.filter((row) => {
+    const cl = typeof row.cluster === "string" ? row.cluster : "";
+    if (cl !== "" && cl !== scope.cluster) return false;
+    if (scope.level !== "pods" || kindId !== "Pod") return true;
+    return scopedNodePodKeys.has(String(row._key ?? ""));
+  }) : allRows), [allRows, inScope, kindId, scope.cluster, scope.level, scopedNodePodKeys]);
   const nsRows = useMemo(() => (ns === "모든 네임스페이스" ? scopedRows : scopedRows.filter((r) => r.ns === undefined || String(r.ns) === ns)), [scopedRows, ns]);
   const shownRows = useMemo(() => (q ? nsRows.filter((r) => String(r.name ?? "").toLowerCase().includes(q.toLowerCase())) : nsRows), [nsRows, q]);
   // 클러스터 카드 메타 — 라이브 인벤토리 요약(GET .../inventory/summary)의 종류별 카운트.
@@ -1153,14 +1181,18 @@ function App() {
   // 사이드바(KindIndex) 카운트 — 전 클러스터 합산 (kindId → resource_type로 조회).
   const kindCounts = useMemo(() => {
     const out: Record<string, number> = {};
+    const countedClusters = scope.cluster ? [scope.cluster] : clusterIds;
     for (const k of KINDS) {
       const rt = kindToResourceType(k.id);
       let sum = 0;
-      for (const cl of clusterIds) sum += kindCountsView.meta[cl]?.[rt] ?? 0;
+      for (const cl of countedClusters) sum += kindCountsView.meta[cl]?.[rt] ?? 0;
       out[k.id] = sum;
     }
+    if (scope.level === "pods" && scopedNode) {
+      out.Pod = podsForNode(scopedTopology.pods, scopedNode.key).length;
+    }
     return out;
-  }, [clusterIds, kindCountsView.meta]);
+  }, [clusterIds, kindCountsView.meta, scope.cluster, scope.level, scopedNode, scopedTopology.pods]);
   const openFromMap = (kid: string, data: Record<string, unknown>) => {
     const k = KINDS.find((x) => x.id === kid); if (k) setDetail({ kind: k, row: data });
   };
@@ -1233,7 +1265,8 @@ function App() {
       <GlobalNav collapsed={navCollapsed} setCollapsed={setNavCollapsed}
         surface={surface} onSurface={(sf) => { setSurface(sf); if (sf === "connect") setConnectView(null); }} />
 
-      <div style={{ flex: 1, minWidth: 0 }}>
+      <div ref={pageScrollRef} aria-label="현재 화면 콘텐츠" role="region"
+        style={{ flex: 1, minWidth: 0, height: `calc(100vh / ${PRESENT_SCALE})`, overflowY: "auto", overflowX: "hidden", overscrollBehavior: "contain", scrollbarGutter: "stable" }}>
       {/* 상단 크롬 — 워크스페이스·스코프·네임스페이스·검색 (내부 표기 배지 제거) */}
       <header ref={headerRef} style={{ position: "sticky", top: 0, zIndex: 74, display: "flex", alignItems: "center", gap: 10, padding: "12px 18px", borderBottom: `1px solid ${UI.line}`, background: UI.card }}>
         {/* 워크스페이스 — 정체성은 항상 맨 왼쪽(D20). 데모 세계는 워크스페이스 1개라 사실 표시만 */}
@@ -1241,7 +1274,7 @@ function App() {
           <Building2 size={14} style={{ color: UI.ink3 }} />{contract.workspaceId ?? "워크스페이스 확인 중"}
         </span>
         {/* 새로고침 — 내부/기술 표기("실제 계약") 텍스트 제거, 상태점 + 아이콘만(P1-10) */}
-        <button type="button" onClick={contract.refresh}
+        <button type="button" aria-label="라이브 데이터 새로고침" onClick={contract.refresh}
           title={contract.error ?? "새로고침"}
           style={{ display: "flex", alignItems: "center", gap: 5, border: "none", background: "transparent", padding: 4, color: contract.status === "error" ? HP.crit : UI.ink3, cursor: "pointer" }}>
           <span className={contract.status === "loading" ? "livedot" : undefined}
@@ -1250,13 +1283,24 @@ function App() {
         </button>
         {/* 현재 스코프 표시 — 물리 스코프가 실제 적용되는 관점(지도·목록)에서만. 흐름은 서비스 수준 */}
         {surface === "resources" && resView !== "flow" && (
-        <span style={{ display: "flex", alignItems: "center", gap: 7, border: `1px solid ${UI.line}`, borderRadius: 9, padding: "6px 11px", fontSize: TYPE.body, fontWeight: 600, color: UI.ink }}>
-          <Server size={13} style={{ color: UI.ink3 }} />{scope.cluster ?? "전체 클러스터"}{scope.level === "pods" && <span style={{ color: UI.ink3, fontWeight: 600 }}>· {scope.node}</span>}
-        </span>
+        <label style={{ display: "flex", alignItems: "center", gap: 7, border: `1px solid ${UI.line}`, borderRadius: 9, padding: "5px 9px", fontSize: TYPE.body, fontWeight: 600, color: UI.ink, background: UI.card }}>
+          <Server size={13} style={{ color: UI.ink3, flexShrink: 0 }} />
+          <select aria-label="클러스터 범위" value={scope.cluster ?? ""}
+            onChange={(event) => {
+              const cluster = event.currentTarget.value;
+              setDetail(null);
+              setDrillCl(cluster || null);
+              setScope(cluster ? { level: "nodes", cluster } : { level: "clusters" });
+            }}
+            style={{ border: "none", outline: "none", background: "transparent", color: UI.ink, fontSize: TYPE.body, fontWeight: 700, cursor: "pointer", maxWidth: 220 }}>
+            <option value="">전체 클러스터</option>
+            {contract.clusters.map((cluster) => <option key={cluster.id} value={cluster.id}>{cluster.id}</option>)}
+          </select>
+        </label>
         )}
         {surface === "resources" && resView !== "flow" && (
         <span style={{ position: "relative" }}>
-          <button onClick={() => setNsOpen(!nsOpen)}
+          <button type="button" aria-label="네임스페이스 범위 선택" aria-haspopup="listbox" aria-expanded={nsOpen} onClick={() => setNsOpen(!nsOpen)}
             style={{ display: "flex", alignItems: "center", gap: 7, border: `1px solid ${nsOpen ? blueA(0.45) : UI.line}`, background: UI.card, borderRadius: 9, padding: "6px 11px", fontSize: TYPE.body, fontWeight: 600, color: ns === "모든 네임스페이스" ? UI.ink : BLUE, cursor: "pointer" }}>
             <Globe size={13} style={{ color: UI.ink3 }} />{ns}<ChevronDown size={12} style={{ color: UI.ink3, transform: nsOpen ? "rotate(180deg)" : "none", transition: "transform .15s" }} />
           </button>
@@ -1278,14 +1322,14 @@ function App() {
         <div style={{ flex: 1, maxWidth: 520, margin: "0 auto", display: "flex", alignItems: "center", gap: 8, border: `1px solid ${UI.line}`, background: UI.bg2, borderRadius: 9, padding: "6px 12px" }}>
           <Search size={13} style={{ color: UI.ink3 }} />
           {/* 전역 검색(D6) — 홈에서 입력하면 결과가 있는 리소스 목록으로 이동한다(무반응 인풋 금지) */}
-          <input ref={searchRef} value={q}
+          <input ref={searchRef} aria-label="리소스와 화면 전체 검색" value={q}
             onChange={(e) => { const v = e.currentTarget.value; setQ(v); if (v && surface !== "resources") { setSurface("resources"); setResView("list"); } }}
             placeholder="전체 검색 — 리소스·화면 이동" style={{ border: "none", outline: "none", background: "transparent", fontSize: TYPE.body, color: UI.ink, width: "100%" }} />
           <span style={{ fontSize: TYPE.caption, fontFamily: MONO, color: UI.ink3, border: `1px solid ${UI.line}`, borderRadius: 4, padding: "1px 5px" }}>⌘K</span>
         </div>
         {/* 알림 벨 — 배지 수는 맵의 장애 수와 같은 인벤토리에서 나온다 */}
         <span style={{ position: "relative" }}>
-          <button className="gnav" onClick={() => setBellOpen(!bellOpen)}
+          <button type="button" className="gnav" aria-label="알림 센터 열기" aria-expanded={bellOpen} onClick={() => setBellOpen(!bellOpen)}
             style={{ width: 30, height: 30, borderRadius: 999, border: "none", background: bellOpen ? blueA(0.1) : inkA(0.045), color: bellOpen ? BLUE : UI.ink2, cursor: "pointer", display: "grid", placeItems: "center" }}>
             <Bell size={14} />
           </button>
@@ -1322,7 +1366,7 @@ function App() {
                 )}
                 {(() => {
                   const Card = ({ icon: I, tint, title, body, time, right, onClick }: { icon: typeof Bell; tint: string; title: string; body: string; time: string; right?: string; onClick?: () => void }) => (
-                    <button className="acard" onClick={onClick} disabled={!onClick}
+                    <button type="button" className="acard" aria-label={`${title} 알림 상세 열기`} onClick={onClick} disabled={!onClick}
                       style={{ display: "flex", alignItems: "flex-start", gap: 10, width: "100%", textAlign: "left", background: cardA(0.85),
                         border: `1px solid ${inkA(0.05)}`, borderRadius: 14, padding: "10px 12px", marginBottom: 6, cursor: onClick ? "pointer" : "default",
                         boxShadow: `0 1px 2px ${inkA(0.05)}` }}>
@@ -1347,7 +1391,7 @@ function App() {
                       {liveAlerts.map((ev) => (
                         <Card key={ev.eventId} icon={ev.severity === "critical" ? Activity : Server}
                           tint={ev.severity === "critical" ? HP.crit : HP.warn} title={ev.name} time={alertTime(ev.firedAt)}
-                          body={[ev.severity, ev.status, ev.kind, ev.namespace, ev.ruleName].filter(Boolean).join(" · ")}
+                          body={[statusLabel(ev.severity), statusLabel(ev.status), ev.kind, ev.namespace, ev.ruleName].filter(Boolean).join(" · ")}
                           right={ev.cluster} onClick={() => { setBellOpen(false); openRef(ev.kind, ev.name); }} />
                       ))}
                       {alertEvents.status === "unavailable" && notes.length === 0 && (
@@ -1362,7 +1406,7 @@ function App() {
         </span>
         {/* 계정 — 맨 오른쪽(D20). 로그아웃 = 데모 세션 초기화(실동작) */}
         <span style={{ position: "relative" }}>
-          <button className="gnav" onClick={() => setMeOpen(!meOpen)}
+          <button type="button" className="gnav" aria-label="계정 메뉴 열기" aria-expanded={meOpen} onClick={() => setMeOpen(!meOpen)}
             style={{ width: 30, height: 30, borderRadius: 999, border: meOpen ? `1.5px solid ${BLUE}` : "1.5px solid transparent", background: blueA(0.12), color: BLUE, cursor: "pointer", display: "grid", placeItems: "center", fontSize: TYPE.label, fontWeight: 800 }}>{sessionInitial(session)}</button>
           <AnimatePresence>
             {meOpen && (
@@ -1370,7 +1414,7 @@ function App() {
                 style={{ position: "absolute", top: 38, right: 0, width: 244, zIndex: 65, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 12, boxShadow: `0 18px 50px -18px ${inkA(0.28)}`, padding: 6, overflow: "hidden" }}>
                 <div style={{ padding: "8px 10px 9px", borderBottom: `1px solid ${UI.line2}` }}>
                   <div style={{ fontSize: TYPE.body, fontWeight: 700, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{session.status === "loading" ? "확인 중…" : session.displayName ?? session.userId ?? "알 수 없음"}</div>
-                  <div style={{ fontSize: TYPE.caption2, fontFamily: MONO, color: UI.ink3, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{session.email ?? (session.roles.length ? session.roles.join(" · ") : session.authMode ? `인증 모드: ${session.authMode}` : "이메일 없음")}</div>
+                  <div style={{ fontSize: TYPE.caption2, fontFamily: MONO, color: UI.ink3, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{session.email ?? (session.roles.length ? session.roles.map(statusLabel).join(" · ") : session.authMode ? `인증 모드: ${statusLabel(session.authMode)}` : "이메일 없음")}</div>
                   <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: TYPE.caption2, color: UI.ink2, marginTop: 6 }}><Building2 size={11} style={{ color: UI.ink3 }} />{session.workspaceId ?? contract.workspaceId ?? "워크스페이스 확인 중"} 워크스페이스</div>
                 </div>
                 {session.logoutSupported ? (
@@ -1397,7 +1441,7 @@ function App() {
       ) : surface === "deploy" ? (
         <DeploySurface pendingRepos={pendingRepo} onOpenRef={openRef} onAddRepo={() => setConnectModal("repo")} />
       ) : surface === "issues" ? (
-        <IssuesSurface sessionRules={notes.filter((n) => n.icon === "rule").map((n) => n.body.split(" · ")[0])} onOpenRef={openRef} onAskAi={() => setAiOpen(true)} onOpenRca={setRcaIncident} />
+        <IssuesSurface incidentClusterIds={incidentClusterIds} sessionRules={notes.filter((n) => n.icon === "rule").map((n) => n.body.split(" · ")[0])} onOpenRef={openRef} onAskAi={() => setAiOpen(true)} onOpenRca={setRcaIncident} />
       ) : surface === "timeline" ? (
         <TimelineSurface onOpenRef={openRef} />
       ) : surface === "checks" ? (
@@ -1412,7 +1456,7 @@ function App() {
         <SettingsSurface />
       ) : surface === "home" ? (
         /* 홈 — 위젯 보드 (D21). 카드 클릭=지도 드릴, 위젯 액션=전부 실 목적지 */
-        <HomeSurface clusterMeta={clusterMeta} pendingCl={pendingCl} pendingRepo={pendingRepo}
+        <HomeSurface clusterMeta={clusterMeta} incidentClusterIds={incidentClusterIds} pendingCl={pendingCl} pendingRepo={pendingRepo}
           onWidgetDeepLink={(id) => {
             if (id === "W2") setSurface("issues");
             else if (id === "W3") setSurface("deploy");
@@ -1432,7 +1476,7 @@ function App() {
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <span style={{ display: "flex", gap: 2, background: inkA(0.05), borderRadius: 9, padding: 2 }}>
               {([["map", "인프라"], ["list", "쿠버네티스"], ["flow", "트래픽"]] as const).map(([v, l]) => (
-                <button key={v} onClick={() => setResView(v)}
+                <button type="button" aria-pressed={resView === v} key={v} onClick={() => setResView(v)}
                   style={{ position: "relative", border: "none", background: "transparent", borderRadius: 7, padding: "5px 16px", fontSize: TYPE.label2, fontWeight: 700, color: resView === v ? UI.ink : UI.ink3, cursor: "pointer" }}>
                   {resView === v && <motion.span layoutId="resview" transition={SOFT} style={{ position: "absolute", inset: 0, background: UI.card, borderRadius: 7, boxShadow: `0 1px 4px ${inkA(0.14)}` }} />}
                   <span style={{ position: "relative" }}>{l}</span>
@@ -1471,23 +1515,13 @@ function App() {
                   {/* 밀도 토글 — 많은 행을 한 화면에 */}
                   <span style={{ marginLeft: "auto", display: "flex", gap: 2, background: inkA(0.05), borderRadius: 8, padding: 2 }}>
                     {([["기본", false], ["촘촘", true]] as const).map(([l, v]) => (
-                      <button key={l} onClick={() => setDense(v)}
+                      <button type="button" aria-pressed={dense === v} key={l} onClick={() => setDense(v)}
                         style={{ border: "none", borderRadius: 6, padding: "3px 9px", fontSize: TYPE.caption2, fontWeight: 600, cursor: "pointer",
                           background: dense === v ? UI.card : "transparent", color: dense === v ? UI.ink : UI.ink3,
                           boxShadow: dense === v ? `0 1px 3px ${inkA(0.12)}` : "none" }}>{l}</button>
                     ))}
                   </span>
                 </div>
-                {/* 노드 선택 스코프 정직 표기(P1-13) — 파드→노드 귀속 계약이 없어 노드 단위로 파드를 추릴 수 없다.
-                     사용자가 "이 노드의 파드"로 오인하지 않도록 클러스터 전체 관측 파드임을 명시한다. */}
-                {scope.level === "pods" && scope.node && (
-                  <div style={{ display: "flex", alignItems: "flex-start", gap: 8, border: `1px solid ${TINT.warn.bd}`, background: TINT.warn.bg, borderRadius: 10, padding: "9px 12px" }}>
-                    <AlertTriangle size={14} style={{ color: TINT.warn.fg, flexShrink: 0, marginTop: 1 }} />
-                    <span style={{ fontSize: TYPE.label, color: UI.ink2, lineHeight: 1.5 }}>
-                      <b style={{ fontWeight: 700, color: TINT.warn.fg }}>노드 범위 관측 미지원</b> · 파드→노드 귀속 계약이 없어 <b style={{ fontFamily: MONO }}>{scope.node}</b> 노드만의 파드를 추릴 수 없습니다. 아래 목록은 <b>클러스터 전체 관측 파드</b>입니다.
-                    </span>
-                  </div>
-                )}
                 {/* 표 교체는 대기 없이 즉시 — exit를 기다리면 전환이 느리고, 탭 스로틀 시 멈춘다 */}
                 <motion.div key={kindId} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={SOFT}>
                   {/* 라이브 인벤토리 상태를 정직하게 표시 — 데이터 없으면 관측 안 됨 */}
@@ -1528,7 +1562,7 @@ function App() {
         {aiOpen && (
           <motion.div key="ai" initial={{ x: aiW + 30 }} animate={{ x: 0 }} exit={{ x: aiW + 30 }} transition={{ type: "spring", bounce: 0.06, visualDuration: 0.34 }}
             style={{ position: "fixed", top: topH, right: 0, bottom: 0, width: aiW, zIndex: 72, display: "flex", boxShadow: `-28px 0 70px -32px ${inkA(0.3)}` }}>
-            <div onPointerDown={onAiHandleDown} title="드래그해서 폭 조절"
+            <div role="separator" aria-label="AI 패널 폭 조절" aria-orientation="vertical" onPointerDown={onAiHandleDown} title="드래그해서 폭 조절"
               style={{ width: 5, flexShrink: 0, cursor: "col-resize", background: aiDragging ? blueA(0.35) : "transparent", transition: "background .15s" }} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <AiPanel embedded onClose={() => setAiOpen(false)} contextView={surface === "connect" ? "연결 설정" : surface === "home" ? "홈" : surface === "deploy" ? "배포" : surface === "issues" ? "이슈" : surface === "timeline" ? "타임라인" : surface === "checks" ? "점검" : surface === "cost" ? "비용" : surface === "alerts" ? "알림" : surface === "ai" ? "AI 대화" : surface === "settings" ? "설정" : resView === "flow" ? "트래픽" : resView === "list" ? "쿠버네티스 리소스" : "인프라 지도"} contextScope={scope.cluster ?? "전체 클러스터"} />
@@ -1540,7 +1574,7 @@ function App() {
       {/* AI 플로팅 버튼 — 항상 최상위(상세 위 포함) · AI 창이 열리면 사라진다 */}
       <AnimatePresence>
         {!aiOpen && (
-          <motion.button key="fab" onClick={() => setAiOpen(true)} whileHover={{ scale: 1.06 }} whileTap={{ scale: 0.93 }}
+          <motion.button type="button" aria-label="AI 어시스턴트 열기" key="fab" onClick={() => setAiOpen(true)} whileHover={{ scale: 1.06 }} whileTap={{ scale: 0.93 }}
             initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.5, opacity: 0 }} transition={SOFT}
             title="AI 어시스턴트"
             style={{ position: "fixed", right: 22, bottom: 22, zIndex: 75, width: 48, height: 48, borderRadius: 999, border: "none", cursor: "pointer",

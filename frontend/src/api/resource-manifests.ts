@@ -1,9 +1,11 @@
 import { apiRequest, type ApiPath } from "./client";
 import {
   resourceManifestApproveSchema,
+  resourceManifestApplySchema,
   resourceManifestPreviewSchema,
   resourceManifestSourceSchema,
   type ResourceManifestApproveEndpoint,
+  type ResourceManifestApplyEndpoint,
   type ResourceManifestPreviewEndpoint,
   type ResourceManifestSourceEndpoint,
 } from "./resource-manifests-schemas";
@@ -19,6 +21,13 @@ export interface ResourceManifestEditInput {
 export interface ResourceManifestApprovalInput extends ResourceManifestEditInput {
   confirmed: true;
   reason: string;
+}
+
+export interface ResourceManifestDirectApplyInput extends ResourceManifestEditInput {
+  expectedDesiredSha256: string;
+  confirmation: true;
+  reason: string;
+  idempotencyKey: string;
 }
 
 export function getResourceManifestSource(
@@ -61,7 +70,31 @@ export function approveResourceManifestEdit(
   });
 }
 
-function resourceManifestPath(resourceId: string, action: "preview" | "approve"): ApiPath {
+export function applyResourceManifestEdit(
+  resourceId: string,
+  input: ResourceManifestDirectApplyInput,
+  signal?: AbortSignal,
+): Promise<ResourceManifestApplyEndpoint> {
+  if (input.idempotencyKey.trim().length < 8) {
+    throw new TypeError("manifest idempotencyKey must contain at least 8 characters");
+  }
+  return apiRequest(resourceManifestPath(resourceId, "apply"), resourceManifestApplySchema, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "idempotency-key": input.idempotencyKey,
+    },
+    body: JSON.stringify({
+      ...requestBody(input),
+      expected_desired_sha256: input.expectedDesiredSha256,
+      confirmation: input.confirmation,
+      reason: input.reason,
+    }),
+    signal,
+  });
+}
+
+function resourceManifestPath(resourceId: string, action: "preview" | "approve" | "apply"): ApiPath {
   return `/api/resource-manifests/${encodePathSegment(resourceId)}/${action}` as ApiPath;
 }
 

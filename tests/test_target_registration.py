@@ -3068,6 +3068,15 @@ class StubInstallLinkDb:
         return {
             "workspace_id": workspace_id,
             "cluster_id": cluster_id,
+            "settings": self.settings,
+        }
+
+    def get_cluster_registration_install_credentials(
+        self, workspace_id: str, cluster_id: str
+    ) -> dict[str, object] | None:
+        return {
+            "workspace_id": workspace_id,
+            "cluster_id": cluster_id,
             "agent_envelope_public_key": self.public_key,
             "agent_envelope_private_key_encrypted": self.encrypted_private_key,
             "settings": self.settings,
