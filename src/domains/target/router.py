@@ -1530,15 +1530,11 @@ async def list_clusters(
     )
     cluster_ids = {cluster["cluster_id"] for cluster in clusters}
     snapshot_getter = getattr(db, "latest_inventory_snapshots", None)
-    has_open_incident_counts = hasattr(db, "count_open_rca_incidents")
     bulk_count_reader = getattr(db, "inventory_resource_counts_by_cluster", None)
-    latest_agents, latest_snapshots, open_incident_counts, resource_counts = await asyncio.gather(
+    latest_agents, latest_snapshots, resource_counts = await asyncio.gather(
         asyncio.to_thread(db.latest_cluster_agent_statuses, workspace_id, cluster_ids),
         asyncio.to_thread(snapshot_getter, workspace_id, cluster_ids)
         if callable(snapshot_getter)
-        else asyncio.sleep(0, result={}),
-        asyncio.to_thread(db.count_open_rca_incidents, workspace_id, cluster_ids)
-        if has_open_incident_counts
         else asyncio.sleep(0, result={}),
         asyncio.to_thread(bulk_count_reader, workspace_id, cluster_ids)
         if callable(bulk_count_reader)
@@ -1569,9 +1565,9 @@ async def list_clusters(
                 latest_snapshots.get(summary.cluster_id),
                 resource_counts.get(summary.cluster_id, []),
             )
-        if has_open_incident_counts:
-            summary.incident_count = int(open_incident_counts.get(summary.cluster_id, 0))
-            summary.open_incidents = summary.incident_count
+        # Cluster discovery is a latency-sensitive identity path. Exact incident
+        # aggregation belongs to the dedicated fleet/issues APIs, so unknown
+        # counts remain nullable here instead of blocking or fabricating zero.
     return ClusterListResponse(clusters=summaries)
 
 

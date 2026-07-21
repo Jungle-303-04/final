@@ -311,6 +311,7 @@ class StubClusterDb:
     def __init__(self) -> None:
         self.access_filter: set[str] | None = None
         self.bulk_count_calls = 0
+        self.incident_count_calls = 0
         self.agent = {
             "workspace_id": "default",
             "cluster_id": "cluster-1",
@@ -372,6 +373,7 @@ class StubClusterDb:
         _workspace_id: str,
         cluster_ids: set[str],
     ) -> dict[str, int]:
+        self.incident_count_calls += 1
         assert cluster_ids == {"cluster-1"}
         return {"cluster-1": 3}
 
@@ -1743,11 +1745,12 @@ def test_cluster_list_uses_access_filter_and_agent_status() -> None:
     assert response.clusters[0].namespace_count == 2
     assert response.clusters[0].kubernetes_version == "v1.33.1"
     assert response.clusters[0].crd_discovery_status == "exact"
-    assert response.clusters[0].incident_count == 3
-    assert response.clusters[0].open_incidents == 3
+    assert response.clusters[0].incident_count is None
+    assert response.clusters[0].open_incidents is None
     assert response.clusters[0].app_count is None
     assert response.clusters[0].last_seen_at == db.agent["last_seen_at"]
     assert db.bulk_count_calls == 1
+    assert db.incident_count_calls == 0
 
 
 def test_cluster_summary_marks_explicit_demo_observation_as_simulation() -> None:
