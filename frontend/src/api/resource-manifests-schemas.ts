@@ -20,16 +20,18 @@ export const resourceManifestSourceSchema = z.strictObject({
   source_sha256: z.string().nullable(),
   content: z.string().nullable(),
   reason: z.string().nullable(),
-  live_yaml: z.string().nullable(),
-  live_observed_at: z.string().nullable(),
-  live_reason: z.string().nullable(),
+  // live/edit projection은 backend와 console의 순차 배포 호환 경계다. 구버전
+  // backend가 필드를 생략하면 관측 불가로 정규화하고, 값을 지어내지 않는다.
+  live_yaml: z.string().nullable().optional().default(null),
+  live_observed_at: z.string().nullable().optional().default(null),
+  live_reason: z.string().nullable().optional().default(null),
   edit_target: z.strictObject({
     resource_id: z.string().min(1),
     relationship: z.enum(["self", "owner"]),
     kind: z.string().min(1),
     namespace: z.string().nullable(),
     name: z.string().min(1),
-  }).nullable(),
+  }).nullable().optional().default(null),
 });
 
 export const resourceManifestPreviewSchema = z.strictObject({

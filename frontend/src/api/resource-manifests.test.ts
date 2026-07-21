@@ -58,6 +58,25 @@ describe("resource manifest API", () => {
     );
   });
 
+  it("normalizes live projection fields omitted by a rolling backend deployment", async () => {
+    const { live_yaml, live_observed_at, live_reason, edit_target, ...legacySource } = SOURCE;
+    void live_yaml;
+    void live_observed_at;
+    void live_reason;
+    void edit_target;
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify(legacySource), { status: 200 }),
+    );
+
+    await expect(getResourceManifestSource("resource-1")).resolves.toMatchObject({
+      ...legacySource,
+      live_yaml: null,
+      live_observed_at: null,
+      live_reason: null,
+      edit_target: null,
+    });
+  });
+
   it("posts preview and human approval through the CSRF-protected boundary", async () => {
     const input = {
       applicationId: "app-1",

@@ -67,10 +67,11 @@ export const inventoryResourceDetailSchema = z.strictObject({
   cluster_id: z.string(),
   identity: unknownRecordSchema,
   resource: inventoryResourceSchema,
-  // Gateway detail 계약에서 두 필드는 항상 존재하며 값만 nullable이다. provider는
-  // 서버의 discriminator 집합을, access는 네 변형 전체를 런타임에서 검증한다.
-  provider_detail: resourceProviderDetailSchema.nullable(),
-  access: kubernetesResourceAccessResponseSchema.nullable(),
+  // 순차 배포 중 구버전 gateway는 nullable projection 자체를 생략할 수 있다. 생략은
+  // "관측 안 됨"(null)으로 정규화하되, 값이 존재하면 discriminator를 엄격히 검증한다.
+  // 이 경계가 partial 200 응답을 raw invalid-payload로 오인하지 않게 한다.
+  provider_detail: resourceProviderDetailSchema.nullable().optional().default(null),
+  access: kubernetesResourceAccessResponseSchema.nullable().optional().default(null),
   related: z.record(z.string(), z.array(inventoryResourceSchema)),
   events: z.array(inventoryResourceSchema),
 });

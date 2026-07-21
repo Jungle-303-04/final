@@ -130,7 +130,7 @@ describe("inventory resource API", () => {
     } satisfies Partial<ApiError>);
   });
 
-  it("requires nullable provider/access fields and validates their discriminators", async () => {
+  it("normalizes omitted nullable projections and validates present discriminators", async () => {
     const base = {
       cluster_id: "cluster-1",
       identity: { resource_type: "pod", kind: "Pod", name: "api-abc", namespace: "default" },
@@ -150,7 +150,10 @@ describe("inventory resource API", () => {
     const request = () => getInventoryResourceDetail("cluster-1", {
       resourceType: "pod", kind: "Pod", name: "api-abc", namespace: "default",
     });
-    await expect(request()).rejects.toMatchObject({ kind: "invalid-payload" });
+    await expect(request()).resolves.toMatchObject({
+      provider_detail: null,
+      access: null,
+    });
     await expect(request()).rejects.toMatchObject({ kind: "invalid-payload" });
     await expect(request()).rejects.toMatchObject({ kind: "invalid-payload" });
   });
