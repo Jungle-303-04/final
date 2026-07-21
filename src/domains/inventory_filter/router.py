@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
+import logging
+import time
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 
 from domains.identity.dependencies import (
     require_session,
@@ -79,6 +83,7 @@ TOPOLOGY_PROJECTION_UNAVAILABLE = "topology_projection_unavailable"
 FacetAxis = Literal[*gateway_facets.RESOURCE_FILTER_FACET_AXES]
 
 router = APIRouter()
+_LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -117,7 +122,9 @@ async def list_global_filter_facets(
     limit: int = Query(default=DEFAULT_GLOBAL_FACET_LIMIT, ge=1, le=MAX_GLOBAL_FACET_LIMIT),
     current: Any = Depends(require_session),
     db: Any = Depends(get_db),
-) -> GlobalFilterFacetsResponse:
+    request: Request = None,  # type: ignore[assignment]
+    response: Response = None,  # type: ignore[assignment]
+) -> GlobalFilterFacetsResponse | Response:
     filters = _parse_filters(
         clusters=clusters,
         namespaces=namespaces,
@@ -133,19 +140,127 @@ async def list_global_filter_facets(
     if not authorized.cluster_ids:
         return GlobalFilterFacetsResponse()
     context = await _snapshot_context(db, authorized)
-    result = await asyncio.to_thread(
-        db.list_global_filter_facets,
+    snapshot_revision = int(context.get("snapshot_revision") or 0)
+    # 버스트 첫 병목(신이미지 실측: 20@3rps 에서 1.37→3.39s 선형 적층) = 동일 요청의
+    # 전량 재계산. 응답을 유일하게 결정하는 입력으로 값-안정 키를 만들어
+    # (a) If-None-Match 일치 시 304 (b) 같은 키 계산이 진행 중이면 결과 저장 없이
+    # 합류(single-flight)한다. 저장 캐시가 아니므로 무효화 정책이 필요 없고,
+    # revision 이 오르면 키가 바뀌어 항상 새로 계산한다(stale 응답 없음).
+    etag = _global_facets_etag(
         workspace_id=authorized.workspace_id,
-        allowed_cluster_ids=set(authorized.cluster_ids),
-        allowed_application_ids=set(authorized.application_ids),
-        filters=filters,
-        snapshot_revision=int(context.get("snapshot_revision") or 0),
+        cluster_ids=tuple(authorized.cluster_ids),
+        application_ids=tuple(authorized.application_ids),
+        clusters=clusters,
+        namespaces=namespaces,
+        applications=applications,
+        resource_types=_coalesce_text(resources_types, resource_types),
+        labels=labels,
         query=q,
         limit=limit,
+        snapshot_revision=snapshot_revision,
     )
+    if request is not None and request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers={"ETag": etag, "Cache-Control": "no-cache"})
+    started = time.monotonic()
+
+    def _compute() -> Any:
+        return db.list_global_filter_facets(
+            workspace_id=authorized.workspace_id,
+            allowed_cluster_ids=set(authorized.cluster_ids),
+            allowed_application_ids=set(authorized.application_ids),
+            filters=filters,
+            snapshot_revision=snapshot_revision,
+            query=q,
+            limit=limit,
+        )
+
+    result, coalesced = await _facets_single_flight(etag, _compute)
+    _LOGGER.info(
+        "filter_facets_computed",
+        extra={
+            "action": "filter_facets_computed",
+            "duration_ms": round((time.monotonic() - started) * 1000),
+            "coalesced": coalesced,
+            "snapshot_revision": snapshot_revision,
+            "cluster_scope": len(authorized.cluster_ids),
+            "has_query": bool(q),
+        },
+    )
+    if response is not None:
+        response.headers["ETag"] = etag
+        response.headers["Cache-Control"] = "no-cache"
     return GlobalFilterFacetsResponse.model_validate(
         _global_facets_with_completeness(result, context)
     )
+
+
+# 진행 중 계산 합류 테이블 — 결과를 저장하지 않는다(캐시 아님). 같은 값-키의 동시
+# 요청만 owner 의 결과를 공유하고, 완료 즉시 항목이 제거된다.
+_FACETS_INFLIGHT: dict[str, asyncio.Future[Any]] = {}
+_FACETS_INFLIGHT_LOCK = asyncio.Lock()
+
+
+async def _facets_single_flight(key: str, compute: Any) -> tuple[Any, bool]:
+    """같은 키의 동시 facets 계산을 1회로 합류시킨다. 반환: (결과, 합류 여부)."""
+    async with _FACETS_INFLIGHT_LOCK:
+        existing = _FACETS_INFLIGHT.get(key)
+        if existing is None:
+            future: asyncio.Future[Any] = asyncio.get_running_loop().create_future()
+            _FACETS_INFLIGHT[key] = future
+        else:
+            future = existing
+    if existing is not None:
+        # follower — owner 실패 시 예외도 그대로 전파된다(가짜 성공 없음).
+        return await asyncio.shield(future), True
+    try:
+        result = await asyncio.to_thread(compute)
+    except BaseException as exc:
+        if not future.done():
+            future.set_exception(exc)
+        raise
+    else:
+        if not future.done():
+            future.set_result(result)
+        return result, False
+    finally:
+        async with _FACETS_INFLIGHT_LOCK:
+            _FACETS_INFLIGHT.pop(key, None)
+
+
+def _global_facets_etag(
+    *,
+    workspace_id: str,
+    cluster_ids: tuple[str, ...],
+    application_ids: tuple[str, ...],
+    clusters: str | None,
+    namespaces: str | None,
+    applications: str | None,
+    resource_types: str | None,
+    labels: str | None,
+    query: str | None,
+    limit: int,
+    snapshot_revision: int,
+) -> str:
+    """facets 응답을 유일하게 결정하는 입력으로 값-안정 ETag/합류 키를 만든다."""
+    payload = json.dumps(
+        {
+            "ws": workspace_id,
+            "clusters_scope": sorted(cluster_ids),
+            "apps_scope": sorted(application_ids),
+            "clusters": clusters,
+            "namespaces": namespaces,
+            "applications": applications,
+            "resource_types": resource_types,
+            "labels": labels,
+            "q": query,
+            "limit": limit,
+            "revision": snapshot_revision,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+    )
+    return '"' + hashlib.sha256(payload.encode("utf-8")).hexdigest() + '"'
 
 
 @router.get(

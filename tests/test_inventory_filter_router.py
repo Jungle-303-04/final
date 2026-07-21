@@ -796,3 +796,86 @@ def test_resource_filter_facets_preserve_exact_namespace_references() -> None:
         "tenant/eu/prod/shop",
     ]
     assert all(item.status == "resolved" for item in body.selected_resolutions)
+
+
+def test_global_filter_facets_etag_304_and_recompute_on_revision_change() -> None:
+    db = InventoryFilterApiDb(
+        allowed_clusters={CLUSTER_ID},
+        allowed_applications={APPLICATION_ID},
+    )
+    client, _auth = _make_client(db)
+
+    first = client.get("/filter-facets", params={"clusters": CLUSTER_ID})
+    assert first.status_code == 200
+    etag = first.headers.get("etag")
+    assert etag
+    calls = sum(1 for item in db.data_calls if item[0] == "global-facets")
+
+    second = client.get(
+        "/filter-facets", params={"clusters": CLUSTER_ID}, headers={"If-None-Match": etag}
+    )
+    assert second.status_code == 304
+    # 304 는 비싼 facet 집계를 재실행하지 않는다.
+    assert sum(1 for item in db.data_calls if item[0] == "global-facets") == calls
+
+    db.filter_snapshot_context = lambda *_args, **_kwargs: {
+        "snapshot_revision": 99,
+        "observed_at": "2026-07-22T00:00:00+00:00",
+    }
+    third = client.get(
+        "/filter-facets", params={"clusters": CLUSTER_ID}, headers={"If-None-Match": etag}
+    )
+    assert third.status_code == 200
+    assert third.headers.get("etag") != etag
+
+
+def test_facets_single_flight_coalesces_same_key_and_propagates_failure() -> None:
+    """같은 키 동시 계산은 1회로 합류하고(저장 없음), 실패는 전원에 정직 전파된다."""
+    import asyncio as _asyncio
+    import time as _time
+
+    from domains.inventory_filter.router import _facets_single_flight
+
+    calls = {"n": 0}
+
+    def slow_compute():  # noqa: ANN202
+        calls["n"] += 1
+        _time.sleep(0.05)
+        return {"value": calls["n"]}
+
+    async def run_pair():  # noqa: ANN202
+        return await _asyncio.gather(
+            _facets_single_flight("key-a", slow_compute),
+            _facets_single_flight("key-a", slow_compute),
+        )
+
+    (r1, c1), (r2, c2) = _asyncio.run(run_pair())
+    assert calls["n"] == 1  # 계산은 1회
+    assert r1 == r2 == {"value": 1}
+    assert sorted([c1, c2]) == [False, True]  # owner 1 + follower 1
+
+    # 완료 후 테이블은 비워져 다음 호출은 새로 계산한다(결과 저장 없음 = 캐시 아님).
+    (r3, c3) = _asyncio.run(_facets_single_flight("key-a", slow_compute))
+    assert r3 == {"value": 2} and c3 is False
+
+    # 다른 키는 합류하지 않는다.
+    _asyncio.run(_facets_single_flight("key-b", slow_compute))
+    assert calls["n"] == 3
+
+    # 실패 전파: owner 예외가 follower 에게도 전파되고 테이블이 정리된다.
+    def boom():  # noqa: ANN202
+        _time.sleep(0.02)
+        raise RuntimeError("compute failed")
+
+    async def run_fail_pair():  # noqa: ANN202
+        results = await _asyncio.gather(
+            _facets_single_flight("key-c", boom),
+            _facets_single_flight("key-c", boom),
+            return_exceptions=True,
+        )
+        return results
+
+    results = _asyncio.run(run_fail_pair())
+    assert all(isinstance(item, RuntimeError) for item in results)
+    (r4, _c4) = _asyncio.run(_facets_single_flight("key-c", slow_compute))
+    assert r4 == {"value": 4}
