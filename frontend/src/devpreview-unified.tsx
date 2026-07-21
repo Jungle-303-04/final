@@ -30,6 +30,7 @@ import { useRelationTopology } from "./devpreview/relationTopologyFeed";
 import { logout as logoutApi } from "./devpreview/sessionFeed";
 import { useInventoryResourcesAcrossClusters, useInventoryKindCounts, kindToResourceType } from "./devpreview/inventoryResourcesFeed";
 import { useWorkloadDetail } from "./devpreview/workloadDetailFeed";
+import { useResourceUsageSeries } from "./devpreview/resourceUsageFeed";
 import { operationalMessageLabel, reasonLabel, statusLabel, isCriticalStatus } from "./devpreview/statusLabel";
 import { LiveResourceManifestEditor } from "./devpreview/resourceManifestEditor";
 import { podsForNode, useClusterTopology } from "./devpreview/inventoryTopologyFeed";
@@ -391,8 +392,42 @@ function Empty({ children }: { children: React.ReactNode }) {
 
 const TOPBAR_H = 57; // 상단 크롬 높이 — 오버레이는 이 아래부터 시작한다
 
-// MetricChart 제거 — sine-wave 합성 시계열을 렌더하던 DetailOverlay 메트릭 섹션이
-// "메트릭 관측 안 됨"으로 바뀌며 미사용(이 환경에는 메트릭 시계열 계약이 배선되어 있지 않다).
+// UsageMiniChart(M14) — 관측된 사용량 시계열만 그린다. null 표본(미관측)에서는
+// 선을 끊어 gap을 정직하게 표시하고, 값 자체를 보간·합성하지 않는다.
+function UsageMiniChart({ title, unit, values, observed, total }: { title: string; unit: string; values: (number | null)[]; observed: number; total: number }) {
+  const nums = values.filter((v): v is number => v !== null);
+  if (nums.length === 0) return null;
+  const max = Math.max(...nums);
+  const min = Math.min(...nums);
+  const range = max - min || 1;
+  const W = 240, H = 44;
+  const n = values.length;
+  const px = (i: number) => (n <= 1 ? 0 : (i / (n - 1)) * W);
+  const py = (v: number) => H - ((v - min) / range) * H;
+  let d = "";
+  let pen = false;
+  values.forEach((v, i) => {
+    if (v === null) { pen = false; return; }
+    d += `${pen ? "L" : "M"}${px(i).toFixed(1)} ${py(v).toFixed(1)} `;
+    pen = true;
+  });
+  const last = [...values].reverse().find((v): v is number => v !== null);
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 6 }}>
+        <span style={{ fontSize: TYPE.label2, fontWeight: 700, color: UI.ink2 }}>{title}</span>
+        {last !== undefined && <span style={{ fontSize: TYPE.label2, fontFamily: MONO, color: UI.ink }}>{last.toFixed(0)} {unit}</span>}
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" width="100%" height={44} style={{ display: "block", overflow: "visible" }} role="img" aria-label={`${title} 사용량 추이`}>
+        <path d={d.trim()} fill="none" stroke={BLUE} strokeWidth={1.5} vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />
+      </svg>
+      <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4, fontSize: TYPE.micro, color: UI.ink3 }}>
+        <span>표본 {observed}/{total}{observed < total ? " · 부분 관측" : ""}</span>
+        <span>최대 {max.toFixed(0)} · 최소 {min.toFixed(0)} {unit}</span>
+      </div>
+    </div>
+  );
+}
 
 // hlYaml/YAML_FONT 제거 — 합성 YAML 매니페스트를 렌더하던 DetailOverlay YAML 탭이
 // 관측 전용("관측 안 됨")으로 바뀌면서 더 이상 쓰이지 않는다.
@@ -418,6 +453,15 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
     kind.id,
     row.ns != null && String(row.ns) ? String(row.ns) : null,
     name,
+  );
+  // M14: 파드 상세는 `GET /api/clusters/{id}/usage`에서 관측된 CPU/메모리 시계열을
+  // 차트로 표시한다. 파드가 아니거나 스코프가 비면 idle이라 요청하지 않는다.
+  const isPodKind = kind.id === "Pod";
+  const usage = useResourceUsageSeries(
+    isPodKind && row.cluster != null && String(row.cluster) ? String(row.cluster) : null,
+    "pod",
+    isPodKind && row.ns != null && String(row.ns) ? String(row.ns) : null,
+    isPodKind ? name : "",
   );
   // 드로어 폭 — 왼쪽 가장자리 드래그로 조절 (전체 화면일 땐 비활성)
   const [dw, setDw] = useState(560);
@@ -581,10 +625,26 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
               </Sec>
               )}
 
-              {/* 메트릭 (워크로드·파드) — 메트릭 시계열 계약이 배선되어 있지 않다 */}
-              {wp && (
+              {/* 메트릭(M14) — 파드는 관측된 CPU/메모리 시계열을 차트로, 워크로드는 파드 단위 관측 안내 */}
+              {isPod && (
               <Sec title="메트릭" icon={Activity}>
-                <Empty>메트릭 관측 안 됨 — 이 환경에는 메트릭 시계열 계약이 배선되어 있지 않습니다.</Empty>
+                {usage.status === "loading" ? <Empty>불러오는 중…</Empty>
+                  : usage.status === "unavailable" || usage.status === "error" ? <Empty>메트릭 관측 안 됨 — 이 파드의 관측 사용량 표본이 없습니다.</Empty>
+                  : usage.status === "ready" ? (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                      {usage.hasMemory
+                        ? <UsageMiniChart title="메모리" unit="MiB" values={usage.points.map((p) => p.memMib)} observed={usage.memObserved} total={usage.sampleCount} />
+                        : <KV k="메모리" v="관측 안 됨" mono />}
+                      {usage.hasCpu
+                        ? <UsageMiniChart title="CPU" unit="mcores" values={usage.points.map((p) => p.cpuMcores)} observed={usage.cpuObserved} total={usage.sampleCount} />
+                        : <KV k="CPU" v="관측 안 됨 — 이 환경은 실사용 CPU를 표본화하지 않습니다" mono />}
+                    </div>
+                  ) : <Empty>메트릭 관측 안 됨</Empty>}
+              </Sec>
+              )}
+              {isWorkload && (
+              <Sec title="메트릭" icon={Activity}>
+                <Empty>메트릭은 관리 파드 단위로 관측됩니다 — 위 “관리 중인 파드 보기”에서 개별 파드의 사용량을 확인하세요.</Empty>
               </Sec>
               )}
 
