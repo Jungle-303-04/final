@@ -1829,6 +1829,7 @@ async def update_cluster_scheduling_profiles(
 async def unregister_cluster(
     cluster_id: str,
     purge: bool = False,
+    manual_cleanup_attested: bool = False,
     current: Any = Depends(require_admin_session),
     db: Any = Depends(get_db),
 ) -> ClusterUnregisterResponse:
@@ -1856,7 +1857,33 @@ async def unregister_cluster(
             cleanup_verified=True,
         )
 
-    unregisterable_registration(db, workspace_id, cluster_id)
+    registration = unregisterable_registration(db, workspace_id, cluster_id)
+    if manual_cleanup_attested:
+        if str(registration.get("status") or "") != (
+            ClusterRegistrationStatus.UNINSTALL_REQUESTED.value
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "manual_cleanup_not_requested",
+                    "detail": "에이전트 제거 요청 후에만 수동 정리 완료를 확인할 수 있습니다",
+                },
+            )
+        unregister = getattr(db, "unregister_target_cluster", None)
+        if not callable(unregister):
+            raise HTTPException(
+                status_code=500,
+                detail="cluster registration cleanup is unavailable",
+            )
+        with unit_of_work_or_null(db):
+            if not unregister(workspace_id, cluster_id):
+                raise HTTPException(status_code=NOT_FOUND_CODE, detail=CLUSTER_NOT_FOUND)
+        return ClusterUnregisterResponse(
+            cluster_id=cluster_id,
+            status="disconnected",
+            stage="registration_revoked",
+            cleanup_verified=True,
+        )
     agents = visible_cluster_agent_statuses(
         db.list_cluster_agent_statuses(workspace_id, cluster_id)
     )

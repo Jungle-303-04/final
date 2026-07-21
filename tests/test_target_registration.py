@@ -2858,6 +2858,51 @@ def test_offline_target_requires_actual_cleanup_before_registration_revocation()
     assert db.unregistered == []
 
 
+def test_manual_cleanup_attestation_revokes_pending_registration() -> None:
+    db = StubUnregisterDb(cluster_role="target")
+    original_get_registration = db.get_cluster_registration
+
+    def uninstall_requested_registration(workspace_id: str, cluster_id: str) -> dict[str, object]:
+        registration = original_get_registration(workspace_id, cluster_id)
+        registration["status"] = ClusterRegistrationStatus.UNINSTALL_REQUESTED.value
+        return registration
+
+    db.get_cluster_registration = uninstall_requested_registration  # type: ignore[method-assign]
+
+    response = asyncio.run(
+        unregister_cluster(
+            "cluster-1",
+            manual_cleanup_attested=True,
+            current=SimpleNamespace(workspace_id="default", user_id="admin"),
+            db=db,
+        )
+    )
+
+    assert response.status == "disconnected"
+    assert response.stage == "registration_revoked"
+    assert response.cleanup_verified is True
+    assert db.unregistered == [("default", "cluster-1")]
+    assert db.queued == []
+
+
+def test_manual_cleanup_attestation_requires_prior_uninstall_request() -> None:
+    db = StubUnregisterDb(cluster_role="target")
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(
+            unregister_cluster(
+                "cluster-1",
+                manual_cleanup_attested=True,
+                current=SimpleNamespace(workspace_id="default", user_id="admin"),
+                db=db,
+            )
+        )
+
+    assert exc.value.status_code == 409
+    assert exc.value.detail["code"] == "manual_cleanup_not_requested"
+    assert db.unregistered == []
+
+
 def test_never_connected_target_without_snapshot_revokes_registration_immediately() -> None:
     db = NeverConnectedUnregisterDb(cluster_role="target")
 
