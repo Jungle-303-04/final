@@ -554,6 +554,17 @@ test('동결된 최신 UI delta ledger는 생성 입력의 전수 분류를 보�
   )
   const ledger = JSON.parse(await readFile(ledgerPath, 'utf8'))
   const classificationInput = JSON.parse(await readFile(classificationPath, 'utf8'))
+  const { stdout: trackedPathsOutput } = await execFile('git', [
+    '-C',
+    path.join(scriptDirectory, '..'),
+    'ls-files',
+    '--',
+    'desktop',
+    'frontend',
+    'src',
+    'tests',
+  ])
+  const knownOpsiaDestinations = new Set(trackedPathsOutput.split('\n').filter(Boolean))
 
   assert.equal(ledger.baseRevision, BASE)
   assert.equal(ledger.targetRevision, TARGET)
@@ -594,6 +605,6 @@ test('동결된 최신 UI delta ledger는 생성 입력의 전수 분류를 보�
   const actualPending = ledger.files.filter((row) => row.classification === 'pending').length
   assert.equal(ledger.pendingCount, actualPending)
   assert.equal(actualPending, 0)
-  assert.deepEqual(validateDeltaLedger(ledger), [])
-  assert.doesNotThrow(() => assertDeltaLedgerClassified(ledger))
+  assert.deepEqual(validateDeltaLedger(ledger, { knownOpsiaDestinations }), [])
+  assert.doesNotThrow(() => assertDeltaLedgerClassified(ledger, { knownOpsiaDestinations }))
 })

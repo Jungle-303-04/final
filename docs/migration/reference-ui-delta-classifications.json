@@ -1126,7 +1126,6 @@
             "destinations": [
               "frontend/src/pages/cost/CostPage.tsx",
               "frontend/src/features/cost/createCostAdapter.ts",
-              "frontend/src/features/cost/costFormat.ts",
               "frontend/src/pages/home/HomePage.test.tsx",
               "src/domains/cost/router.py",
               "src/domains/cost/observation_projection.py",
@@ -1210,7 +1209,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/pages/home/HomeBoardWidgets.tsx",
               "frontend/src/pages/home/HomePage.tsx",
               "frontend/src/pages/home/HomePage.test.tsx",
               "src/domains/dashboard/fleet_router.py",
@@ -1244,7 +1242,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/pages/home/HomeWidgetBoard.tsx",
               "frontend/src/features/home/createHomeAdapter.ts",
               "frontend/src/pages/resources/ResourcesPhysicalTopologyScene.tsx",
               "frontend/src/pages/timeline/TimelineSurface.tsx",
@@ -1283,10 +1280,8 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/pages/home/HomeWidgetBoard.tsx",
               "frontend/src/features/home/createHomeAdapter.ts",
               "frontend/src/pages/home/HomePage.test.tsx",
-              "frontend/src/pages/resources/ResourcesTrafficFlowSurface.tsx",
               "frontend/src/pages/helm/HelmPage.tsx",
               "frontend/src/pages/cost/CostPage.tsx",
               "src/domains/dashboard/home_bands.py",
@@ -1324,7 +1319,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/pages/home/HomeWidgetBoard.tsx",
               "frontend/src/features/home/createHomeAdapter.ts",
               "frontend/src/pages/checks/ChecksPage.tsx",
               "frontend/src/pages/gitops/GitOpsPage.tsx",
@@ -1360,9 +1354,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/pages/home/HomeBoardWidgets.tsx",
-              "frontend/src/features/issues/resourceIssuesContract.ts",
-              "frontend/src/features/issues/ResourceIssuesSection.tsx",
               "frontend/src/features/issues/issuePresentation.test.ts",
               "src/domains/dashboard/repository.py",
               "src/packages/contracts/gateway/responses.py"
@@ -1525,10 +1516,6 @@
           },
           "opsiaPort": {
             "destinations": [
-              "frontend/src/api/service-access.ts",
-              "frontend/src/features/service-access/createServiceAccessAdapter.ts",
-              "frontend/src/features/service-access/serviceAccessSchemas.ts",
-              "frontend/src/pages/resources/ServiceAccessActions.tsx",
               "src/domains/service_access/router.py",
               "src/packages/contracts/service_access.py",
               "src/services/target/cluster-agent/commands/service_access.py",
@@ -1577,8 +1564,6 @@
           },
           "opsiaPort": {
             "destinations": [
-              "frontend/src/features/service-access/serviceAccessSchemas.ts",
-              "frontend/src/pages/resources/ServiceAccessActions.tsx",
               "src/domains/service_access/router.py",
               "src/packages/contracts/service_access.py",
               "tests/test_service_access_router.py"
@@ -1626,12 +1611,6 @@
           "opsiaPort": {
             "destinations": [
               "frontend/src/desktop/desktopBridge.ts",
-              "frontend/src/pages/resources/ServiceAccessActions.tsx",
-              "frontend/src/app/PortForwardSessionIndicator.tsx",
-              "frontend/src/app/ProductShell.portForward.test.tsx",
-              "frontend/src/features/service-access/PortForwardSessionsProvider.tsx",
-              "frontend/src/features/service-access/usePortForwardSessions.ts",
-              "frontend/src/features/service-access/usePortForwardSessions.test.tsx",
               "desktop/src-tauri/src/port_forward.rs",
               "desktop/src-tauri/src/port_forward/tests.rs",
               "desktop/src-tauri/tests/reference_parity.rs"
@@ -1664,8 +1643,6 @@
           "opsiaPort": {
             "destinations": [
               "frontend/src/desktop/desktopBridge.ts",
-              "frontend/src/pages/resources/ServiceAccessActions.tsx",
-              "frontend/src/features/service-access/createPortForwardSessionAdapter.ts",
               "desktop/src-tauri/src/port_forward.rs",
               "desktop/src-tauri/src/port_forward/tests.rs",
               "src/packages/contracts/service_access.py"
@@ -1698,10 +1675,6 @@
           "opsiaPort": {
             "destinations": [
               "frontend/src/desktop/desktopBridge.ts",
-              "frontend/src/pages/resources/ServiceAccessActions.tsx",
-              "frontend/src/app/PortForwardSessionIndicator.tsx",
-              "frontend/src/features/service-access/usePortForwardSessions.ts",
-              "frontend/src/features/service-access/usePortForwardSessions.test.tsx",
               "desktop/src-tauri/src/port_forward.rs",
               "desktop/src-tauri/src/port_forward/tests.rs"
             ],
@@ -1735,9 +1708,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/api/provider-resource-schemas.ts",
-              "frontend/src/features/resources/providerResourceCanonical.ts",
-              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
               "src/domains/inventory/provider_detail.py",
               "src/packages/contracts/inventory_provider.py",
               "tests/test_inventory_provider_detail.py"
@@ -1776,9 +1746,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/api/provider-resource-schemas.ts",
-              "frontend/src/features/resources/providerResourceCanonical.ts",
-              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
               "src/domains/inventory/provider_detail.py",
               "src/packages/contracts/inventory_provider.py",
               "tests/test_inventory_provider_detail.py"
@@ -1817,9 +1784,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/api/provider-resource-schemas.ts",
-              "frontend/src/features/resources/providerResourceCanonical.ts",
-              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
               "src/domains/inventory/provider_detail.py",
               "src/packages/contracts/inventory_provider.py",
               "tests/test_inventory_provider_detail.py"
@@ -1858,9 +1822,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/api/provider-resource-schemas.ts",
-              "frontend/src/features/resources/providerResourceCanonical.ts",
-              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
               "src/domains/inventory/provider_detail.py",
               "src/packages/contracts/inventory_provider.py",
               "tests/test_inventory_provider_detail.py"
@@ -1899,9 +1860,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/api/provider-resource-schemas.ts",
-              "frontend/src/features/resources/providerResourceCanonical.ts",
-              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
               "src/domains/inventory/provider_detail.py",
               "src/packages/contracts/inventory_provider.py",
               "tests/test_inventory_provider_detail.py"
@@ -1940,9 +1898,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/api/provider-resource-schemas.ts",
-              "frontend/src/features/resources/providerResourceCanonical.ts",
-              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
               "src/domains/inventory/provider_detail.py",
               "src/packages/contracts/inventory_provider.py",
               "tests/test_inventory_provider_detail.py"
@@ -1981,9 +1936,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/api/provider-resource-schemas.ts",
-              "frontend/src/features/resources/providerResourceCanonical.ts",
-              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
               "src/domains/inventory/provider_detail.py",
               "src/packages/contracts/inventory_provider.py",
               "tests/test_inventory_provider_detail.py"
@@ -2022,10 +1974,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/api/provider-resource-schemas.ts",
-              "frontend/src/features/resources/providerResourceCanonical.ts",
-              "frontend/src/features/resources/providerResourceCanonical.test.ts",
-              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
               "src/domains/inventory/provider_detail.py",
               "src/packages/contracts/inventory_provider.py",
               "tests/test_inventory_provider_detail.py"
@@ -2092,9 +2040,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/api/provider-resource-schemas.ts",
-              "frontend/src/features/resources/providerResourceCanonical.ts",
-              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
               "src/domains/inventory/provider_detail.py",
               "src/packages/contracts/inventory_provider.py",
               "tests/test_inventory_provider_detail.py"
@@ -2132,9 +2077,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/api/provider-resource-schemas.ts",
-              "frontend/src/features/resources/providerResourceCanonical.ts",
-              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
               "src/domains/inventory/provider_detail.py",
               "src/packages/contracts/inventory_provider.py",
               "tests/test_inventory_provider_detail.py"
@@ -2172,9 +2114,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/api/provider-resource-schemas.ts",
-              "frontend/src/features/resources/providerResourceCanonical.ts",
-              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
               "src/domains/inventory/provider_detail.py",
               "src/packages/contracts/inventory_provider.py",
               "tests/test_inventory_provider_detail.py"
@@ -2212,9 +2151,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/api/provider-resource-schemas.ts",
-              "frontend/src/features/resources/providerResourceCanonical.ts",
-              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
               "src/domains/inventory/provider_detail.py",
               "src/packages/contracts/inventory_provider.py",
               "tests/test_inventory_provider_detail.py"
@@ -2252,11 +2188,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/api/provider-resource-schemas.ts",
-              "frontend/src/features/resources/providerResourceCanonical.ts",
-              "frontend/src/features/resources/providerResourceCanonical.test.ts",
-              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
-              "frontend/src/pages/resources/ProviderResourceDetailPanel.test.tsx",
               "src/domains/inventory/provider_detail.py",
               "src/packages/contracts/inventory_provider.py",
               "tests/test_inventory_provider_detail.py"
@@ -2294,9 +2225,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/api/provider-resource-schemas.ts",
-              "frontend/src/features/resources/providerResourceCanonical.ts",
-              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
               "src/domains/inventory/provider_detail.py",
               "src/packages/contracts/inventory_provider.py",
               "tests/test_inventory_provider_detail.py"
@@ -2334,9 +2262,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/api/provider-resource-schemas.ts",
-              "frontend/src/features/resources/providerResourceCanonical.ts",
-              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
               "src/domains/inventory/provider_detail.py",
               "src/packages/contracts/inventory_provider.py",
               "tests/test_inventory_provider_detail.py"
@@ -2375,9 +2300,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/api/provider-resource-schemas.ts",
-              "frontend/src/features/resources/providerResourceCanonical.ts",
-              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
               "src/domains/inventory/provider_detail.py",
               "src/packages/contracts/inventory_provider.py",
               "tests/test_inventory_provider_detail.py"
@@ -2416,9 +2338,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/api/provider-resource-schemas.ts",
-              "frontend/src/features/resources/providerResourceCanonical.ts",
-              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
               "src/domains/inventory/provider_detail.py",
               "src/packages/contracts/inventory_provider.py",
               "tests/test_inventory_provider_detail.py"
@@ -2457,10 +2376,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/api/provider-resource-schemas.ts",
-              "frontend/src/features/resources/providerResourceCanonical.ts",
-              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
-              "frontend/src/pages/resources/ProviderResourceDetailPanel.test.tsx",
               "src/domains/inventory/provider_detail.py",
               "src/packages/contracts/inventory_provider.py",
               "tests/test_inventory_provider_detail.py"
@@ -2500,10 +2415,6 @@
           "opsiaPort": {
             "destinations": [
               "frontend/src/api/inventory.test.ts",
-              "frontend/src/api/provider-resource-schemas.ts",
-              "frontend/src/features/resources/providerResourceCanonical.ts",
-              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
-              "frontend/src/pages/resources/ProviderResourceDetailPanel.test.tsx",
               "src/domains/inventory/provider_detail.py",
               "src/packages/contracts/inventory_provider.py",
               "tests/test_inventory_domain.py",
@@ -2541,10 +2452,8 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/api/provider-resource-schemas.ts",
-              "frontend/src/features/resources/providerResourceCanonical.ts",
-              "frontend/src/features/resources/providerResourceContract.ts",
-              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx"
+              "frontend/src/devpreview/inventoryResourcesFeed.ts",
+              "frontend/src/devpreview-opsia.tsx"
             ],
             "requiredBackendContracts": [
               "packages.contracts.inventory_provider"
@@ -2576,9 +2485,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/api/provider-resource-schemas.ts",
-              "frontend/src/features/resources/providerResourceCanonical.ts",
-              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
               "src/domains/inventory/provider_detail.py",
               "src/packages/contracts/inventory_provider.py",
               "tests/test_inventory_provider_detail.py"
@@ -2822,7 +2728,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/api/home-dashboard-events.ts",
               "frontend/src/features/home/createHomeAdapter.ts",
               "frontend/src/pages/home/useHomePageState.ts",
               "src/domains/dashboard/fleet_router.py",
@@ -2904,7 +2809,6 @@
             "destinations": [
               "frontend/src/api/timeline.ts",
               "frontend/src/api/operation-events.ts",
-              "frontend/src/api/home-dashboard-events.ts",
               "frontend/src/features/home/createHomeAdapter.ts",
               "frontend/src/features/cluster-scope/ClusterScopeProvider.tsx",
               "frontend/src/features/operations/OperationStatusStore.tsx",
@@ -3041,14 +2945,8 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/features/namespace-scope/NamespaceScopeSync.tsx",
-              "frontend/src/features/namespace-scope/namespaceScopeInvalidation.ts",
-              "frontend/src/features/shell-state/shellStateContract.ts",
-              "frontend/src/features/shell-state/createShellStateAdapter.ts",
-              "frontend/src/features/shell-state/createShellStateAdapter.test.ts",
               "frontend/src/features/bottom-dock/BottomDockProvider.tsx",
               "frontend/src/pages/resources/PodTerminalDialog.tsx",
-              "frontend/src/api/shell-state.ts",
               "src/packages/contracts/shell_state.py",
               "src/domains/shell_state/router.py",
               "src/domains/shell_state/repository.py"
@@ -3081,8 +2979,7 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/package.json",
-              "frontend/src/ProductApp.test.tsx"
+              "frontend/package.json"
             ],
             "requiredBackendContracts": [
               "packages.contracts.parity"
@@ -3105,8 +3002,7 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/package.json",
-              "frontend/src/ProductApp.test.tsx"
+              "frontend/package.json"
             ],
             "requiredBackendContracts": [
               "packages.contracts.parity"
@@ -3754,8 +3650,7 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/index.html",
-              "frontend/src/ProductApp.test.tsx"
+              "frontend/index.html"
             ],
             "requiredBackendContracts": [
               "packages.contracts.parity"
@@ -3783,8 +3678,7 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/package.json",
-              "frontend/src/ProductApp.test.tsx"
+              "frontend/package.json"
             ],
             "requiredBackendContracts": [
               "packages.contracts.parity"
@@ -3807,8 +3701,7 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/package.json",
-              "frontend/src/ProductApp.test.tsx"
+              "frontend/package.json"
             ],
             "requiredBackendContracts": [
               "packages.contracts.parity"
@@ -3831,8 +3724,7 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/package.json",
-              "frontend/src/ProductApp.test.tsx"
+              "frontend/package.json"
             ],
             "requiredBackendContracts": [
               "packages.contracts.parity"
@@ -4688,7 +4580,6 @@
           "opsiaPort": {
             "destinations": [
               "frontend/src/pages/timeline/TimelineEventDetailSheet.tsx",
-              "frontend/src/features/issues/createRcaContextAdapter.ts",
               "src/domains/dashboard/router.py",
               "src/domains/rca/query_router.py"
             ],
@@ -5169,7 +5060,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/pages/gitops/GitOpsApplicationWorkspace.tsx",
               "frontend/src/features/gitops/gitOpsContract.ts",
               "src/domains/gitops/detail_projection.py",
               "src/domains/gitops/detail_router.py"
@@ -5197,7 +5087,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/pages/gitops/GitOpsApplicationWorkspace.tsx",
               "frontend/src/features/gitops/createGitOpsAdapter.ts",
               "src/domains/gitops/detail_projection.py",
               "src/domains/gitops/detail_router.py"
@@ -5669,7 +5558,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/pages/gitops/GitOpsApplicationWorkspace.tsx",
               "frontend/src/features/gitops/createGitOpsAdapter.ts",
               "src/domains/gitops/detail_projection.py",
               "src/domains/gitops/detail_router.py"
@@ -5856,8 +5744,6 @@
           "opsiaPort": {
             "destinations": [
               "frontend/src/pages/gitops/GitOpsPage.tsx",
-              "frontend/src/pages/gitops/GitOpsResourceWorkspace.tsx",
-              "frontend/src/pages/gitops/GitOpsResourceInventory.tsx",
               "src/domains/gitops/detail_router.py",
               "src/domains/gitops/resource_projection.py"
             ],
@@ -5888,8 +5774,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/shared/ui/UnifiedDiff.tsx",
-              "frontend/src/shared/ui/UnifiedDiff.test.tsx",
               "frontend/src/pages/resources/ResourceManifestEditor.tsx",
               "frontend/src/pages/resources/ResourceManifestEditor.test.tsx"
             ],
@@ -5951,7 +5835,6 @@
             "destinations": [
               "frontend/src/pages/helm/HelmPage.tsx",
               "frontend/src/features/helm/helmContract.ts",
-              "frontend/src/features/helm/createHelmChartSourcesPort.ts",
               "src/domains/helm/source_router.py",
               "src/domains/helm/source_provider.py"
             ],
@@ -5985,12 +5868,8 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/shared/ui/UnifiedDiff.tsx",
-              "frontend/src/shared/ui/UnifiedDiff.test.tsx",
               "frontend/src/pages/helm/HelmPage.tsx",
               "frontend/src/pages/helm/HelmPage.test.tsx",
-              "frontend/src/features/filters/helmArtifactUrlState.ts",
-              "frontend/src/features/filters/helmArtifactUrlState.test.ts",
               "frontend/src/features/helm/createHelmAdapter.ts",
               "src/domains/helm/release_router.py",
               "src/services/target/cluster-agent/commands/helm.py",
@@ -6070,7 +5949,6 @@
               "frontend/src/features/helm/helmContract.ts",
               "frontend/src/features/helm/createHelmAdapter.ts",
               "frontend/src/features/operations/OperationStatusStore.tsx",
-              "frontend/src/shared/data/useServerRefreshScheduler.ts",
               "src/domains/helm/release_router.py",
               "src/domains/helm/upgrade_service.py",
               "src/domains/helm/source_provider.py",
@@ -6182,7 +6060,6 @@
           "opsiaPort": {
             "destinations": [
               "frontend/src/pages/helm/HelmPage.tsx",
-              "frontend/src/pages/helm/HelmReleaseInstallDialog.tsx",
               "frontend/src/features/operations/OperationStatusStore.tsx",
               "src/domains/helm/source_router.py",
               "src/domains/catalog/install.py",
@@ -6219,8 +6096,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/shared/ui/UnifiedDiff.tsx",
-              "frontend/src/shared/ui/UnifiedDiff.test.tsx",
               "frontend/src/pages/resources/ResourceManifestEditor.tsx",
               "frontend/src/pages/resources/ResourceManifestEditor.test.tsx",
               "frontend/src/pages/helm/HelmPage.tsx"
@@ -6298,8 +6173,6 @@
           },
           "opsiaPort": {
             "destinations": [
-              "frontend/src/shared/ui/UnifiedDiff.tsx",
-              "frontend/src/shared/ui/UnifiedDiff.test.tsx",
               "frontend/src/shared/ui/primitives/confirmation-dialog.tsx",
               "frontend/src/shared/ui/primitives/confirmation-dialog.test.tsx"
             ],
@@ -6331,7 +6204,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/pages/resources/ResourcesTrafficFlowSurface.tsx",
               "frontend/src/features/traffic/trafficContract.ts"
             ],
             "requiredBackendContracts": [
@@ -6367,7 +6239,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/pages/resources/ResourcesTrafficFlowSurface.tsx",
               "frontend/src/features/traffic/createTrafficAdapter.ts",
               "src/domains/traffic/router.py"
             ],
@@ -6446,7 +6317,6 @@
           "opsiaPort": {
             "destinations": [
               "frontend/src/features/applications/ApplicationDetailPanels.tsx",
-              "frontend/src/features/cost/CostTrendChart.tsx",
               "src/packages/contracts/cost/observations.py"
             ],
             "requiredBackendContracts": [
@@ -6477,8 +6347,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/features/cost/CurrentAllocationUse.test.tsx",
-              "frontend/src/features/cost/costFormat.test.ts",
               "tests/test_cost_observation_projection.py"
             ],
             "requiredBackendContracts": [
@@ -6518,8 +6386,6 @@
           },
           "opsiaPort": {
             "destinations": [
-              "frontend/src/features/cost/CurrentAllocationUse.tsx",
-              "frontend/src/features/cost/WorkloadCostPanel.tsx",
               "frontend/src/features/applications/ApplicationDetailWorkspace.tsx",
               "src/packages/contracts/cost/observations.py"
             ],
@@ -6553,7 +6419,6 @@
           "opsiaPort": {
             "destinations": [
               "frontend/src/features/applications/ApplicationsState.tsx",
-              "frontend/src/features/cost/WorkloadCostPanel.tsx",
               "frontend/src/features/cost/costContract.ts"
             ],
             "requiredBackendContracts": [
@@ -6583,7 +6448,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/features/cost/costFormat.test.ts",
               "tests/test_cost_observation_projection.py"
             ],
             "requiredBackendContracts": [
@@ -6613,8 +6477,8 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/features/cost/costFormat.ts",
-              "frontend/src/features/cost/CurrentAllocationUse.tsx"
+              "frontend/src/devpreview/costFeed.ts",
+              "frontend/src/devpreview-surfaces.tsx"
             ],
             "requiredBackendContracts": [
               "packages.contracts.cost.observations"
@@ -6679,7 +6543,6 @@
           "opsiaPort": {
             "destinations": [
               "frontend/src/features/applications/ApplicationDetailWorkspace.test.tsx",
-              "frontend/src/features/cost/WorkloadCostPanel.test.tsx",
               "tests/test_cost_observation_projection.py"
             ],
             "requiredBackendContracts": [
@@ -6723,10 +6586,7 @@
           },
           "opsiaPort": {
             "destinations": [
-              "frontend/src/features/cost/WorkloadCostPanel.tsx",
-              "frontend/src/features/cost/costWorkloadAdapter.ts",
               "frontend/src/features/applications/ApplicationDetailWorkspace.tsx",
-              "frontend/src/api/cost-workload-schemas.ts",
               "src/packages/contracts/cost/observations.py",
               "src/packages/contracts/gateway/responses.py"
             ],
@@ -6829,8 +6689,6 @@
           },
           "opsiaPort": {
             "destinations": [
-              "frontend/src/features/cost/CostTrendChart.tsx",
-              "frontend/src/features/cost/costTrendProjection.ts",
               "frontend/src/features/filters/detailUrlCodec.ts",
               "frontend/src/api/cost-overview-schemas.ts",
               "src/packages/contracts/cost/observations.py",
@@ -6896,9 +6754,7 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/features/cost/CostViewTabs.test.tsx",
-              "frontend/src/pages/cost/CostPage.test.tsx",
-              "frontend/src/features/filters/filterUrl.cost.test.ts"
+              "frontend/src/pages/cost/CostPage.test.tsx"
             ],
             "requiredBackendContracts": [
               "packages.contracts.cost.observations"
@@ -6933,7 +6789,6 @@
           },
           "opsiaPort": {
             "destinations": [
-              "frontend/src/features/cost/CostViewTabs.tsx",
               "frontend/src/pages/cost/CostPage.tsx",
               "frontend/src/features/filters/detailUrlCodec.ts"
             ],
@@ -6975,7 +6830,6 @@
               "frontend/src/pages/cost/CostPage.tsx",
               "frontend/src/pages/cost/useCostOverviewData.ts",
               "frontend/src/features/cost/createCostAdapter.ts",
-              "frontend/src/shared/data/useServerRefreshScheduler.ts",
               "src/domains/cost/router.py",
               "src/packages/config/refresh_policies.py"
             ],
@@ -7350,8 +7204,7 @@
           "opsiaPort": {
             "destinations": [
               "frontend/src/pages/resources/resourcePresentation.ts",
-              "frontend/src/pages/resources/RelationTopologyNode.tsx",
-              "frontend/src/pages/resources/resourcePresentation.test.tsx"
+              "frontend/src/pages/resources/RelationTopologyNode.tsx"
             ],
             "requiredBackendContracts": [
               "packages.contracts.inventory_filter.graph"
@@ -7409,7 +7262,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/shared/ui/TopologyOverlayBar.tsx",
               "frontend/src/pages/resources/ResourcesGraphChrome.tsx",
               "frontend/src/pages/resources/ResourcesPhysicalTopologyScene.tsx"
             ],
@@ -7546,7 +7398,6 @@
           },
           "opsiaPort": {
             "destinations": [
-              "frontend/src/shared/ui/TopologyOverlayBar.tsx",
               "frontend/src/pages/resources/ResourcesGraphShell.tsx",
               "frontend/src/motion/tokens.css",
               "frontend/src/pages/resources/ResourcesPage.relationTopology.test.tsx"
@@ -7577,8 +7428,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/features/issues/ResourceIssuesSection.tsx",
-              "frontend/src/features/issues/ResourceIssuesSection.test.tsx",
               "src/packages/contracts/gateway/responses.py"
             ],
             "requiredBackendContracts": [
@@ -7672,9 +7521,8 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/features/issues/resourceIssuesContract.ts",
-              "frontend/src/features/issues/createResourceIssuesAdapter.ts",
-              "frontend/src/features/issues/ResourceIssuesSection.tsx"
+              "frontend/src/devpreview/rcaIssuesFeed.ts",
+              "frontend/src/devpreview-surfaces.tsx"
             ],
             "requiredBackendContracts": [
               "packages.contracts.gateway.responses",
@@ -7705,9 +7553,7 @@
           "opsiaPort": {
             "destinations": [
               "src/domains/dashboard/repository.py",
-              "src/packages/contracts/gateway/responses.py",
-              "frontend/src/features/issues/resourceIssuesContract.ts",
-              "frontend/src/features/issues/ResourceIssuesSection.tsx"
+              "src/packages/contracts/gateway/responses.py"
             ],
             "requiredBackendContracts": [
               "packages.contracts.gateway.responses",
@@ -7738,8 +7584,7 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/features/issues/ResourceIssuesSection.test.tsx",
-              "frontend/src/features/issues/createResourceIssuesAdapter.test.ts"
+              "frontend/src/devpreview/rcaIssuesFeed.test.tsx"
             ],
             "requiredBackendContracts": [
               "packages.contracts.gateway.responses",
@@ -7780,9 +7625,6 @@
           },
           "opsiaPort": {
             "destinations": [
-              "frontend/src/features/issues/ResourceIssuesSection.tsx",
-              "frontend/src/pages/resources/useResourceIssuesDataFrame.ts",
-              "frontend/src/features/issues/createResourceIssuesAdapter.ts",
               "src/domains/dashboard/router.py",
               "src/domains/dashboard/repository.py"
             ],
@@ -7954,7 +7796,6 @@
             "destinations": [
               "frontend/src/app/BottomDock.tsx",
               "frontend/src/features/bottom-dock/BottomDockProvider.tsx",
-              "frontend/src/app/ProductNotificationCenter.tsx",
               "frontend/src/app/LogStreamTab.tsx"
             ],
             "requiredBackendContracts": [
@@ -9136,9 +8977,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/api/provider-resource-schemas.ts",
-              "frontend/src/features/resources/providerResourceCanonical.ts",
-              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
               "src/domains/inventory/provider_detail.py",
               "src/packages/contracts/inventory_provider.py",
               "tests/test_inventory_provider_detail.py"
@@ -9177,9 +9015,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/api/provider-resource-schemas.ts",
-              "frontend/src/features/resources/providerResourceCanonical.ts",
-              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
               "src/domains/inventory/provider_detail.py",
               "src/packages/contracts/inventory_provider.py",
               "tests/test_inventory_provider_detail.py"
@@ -9224,10 +9059,6 @@
           },
           "opsiaPort": {
             "destinations": [
-              "frontend/src/api/provider-resource-schemas.ts",
-              "frontend/src/features/resources/providerResourceCanonical.ts",
-              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
-              "frontend/src/pages/resources/ProviderResourceDetailPanel.test.tsx",
               "src/domains/inventory/provider_detail.py",
               "src/packages/contracts/inventory_provider.py",
               "tests/test_inventory_provider_detail.py"
@@ -9267,9 +9098,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/api/provider-resource-schemas.ts",
-              "frontend/src/features/resources/providerResourceCanonical.ts",
-              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
               "src/domains/inventory/provider_detail.py",
               "src/packages/contracts/inventory_provider.py",
               "tests/test_inventory_provider_detail.py"
@@ -9308,9 +9136,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/api/provider-resource-schemas.ts",
-              "frontend/src/features/resources/providerResourceCanonical.ts",
-              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
               "src/domains/inventory/provider_detail.py",
               "src/packages/contracts/inventory_provider.py",
               "tests/test_inventory_provider_detail.py"
@@ -9350,9 +9175,6 @@
           "opsiaPort": {
             "destinations": [
               "frontend/src/api/inventory.test.ts",
-              "frontend/src/api/provider-resource-schemas.ts",
-              "frontend/src/features/resources/providerResourceCanonical.ts",
-              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
               "src/domains/inventory/provider_detail.py",
               "src/packages/contracts/inventory_provider.py",
               "tests/test_inventory_domain.py",
@@ -9392,9 +9214,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/api/provider-resource-schemas.ts",
-              "frontend/src/features/resources/providerResourceCanonical.ts",
-              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
               "src/domains/inventory/provider_detail.py",
               "src/packages/contracts/inventory_provider.py",
               "tests/test_inventory_provider_detail.py"
@@ -9433,9 +9252,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/api/provider-resource-schemas.ts",
-              "frontend/src/features/resources/providerResourceCanonical.ts",
-              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
               "src/domains/inventory/provider_detail.py",
               "src/packages/contracts/inventory_provider.py",
               "tests/test_inventory_provider_detail.py"
@@ -9473,9 +9289,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/api/provider-resource-schemas.ts",
-              "frontend/src/features/resources/providerResourceCanonical.ts",
-              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
               "src/domains/inventory/provider_detail.py",
               "src/packages/contracts/inventory_provider.py",
               "tests/test_inventory_provider_detail.py"
@@ -9514,9 +9327,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/api/provider-resource-schemas.ts",
-              "frontend/src/features/resources/providerResourceCanonical.ts",
-              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
               "frontend/src/pages/resources/ResourceManifestEditor.tsx",
               "frontend/src/pages/resources/ResourceManifestEditor.test.tsx",
               "src/domains/inventory/provider_detail.py",
@@ -9558,9 +9368,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/api/provider-resource-schemas.ts",
-              "frontend/src/features/resources/providerResourceCanonical.ts",
-              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
               "src/domains/inventory/provider_detail.py",
               "src/packages/contracts/inventory_provider.py",
               "tests/test_inventory_provider_detail.py"
@@ -9599,9 +9406,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/features/service-access/serviceAccessContract.ts",
-              "frontend/src/pages/resources/ServiceAccessActions.tsx",
-              "frontend/src/pages/resources/ServiceAccessActions.test.tsx",
               "src/packages/contracts/service_access.py",
               "tests/test_service_access_router.py"
             ],
@@ -9634,8 +9438,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/features/resources/providerResourceCanonical.test.ts",
-              "frontend/src/pages/resources/ProviderResourceDetailPanel.test.tsx",
               "tests/test_inventory_provider_detail.py"
             ],
             "requiredBackendContracts": [
@@ -9677,9 +9479,6 @@
           },
           "opsiaPort": {
             "destinations": [
-              "frontend/src/api/provider-resource-schemas.ts",
-              "frontend/src/features/resources/providerResourceCanonical.ts",
-              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
               "src/domains/inventory/provider_detail.py",
               "src/packages/contracts/inventory_provider.py",
               "tests/test_inventory_provider_detail.py"
@@ -9719,7 +9518,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
               "src/domains/inventory/provider_detail.py",
               "tests/test_inventory_provider_detail.py"
             ],
@@ -9755,8 +9553,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/features/resources/providerResourceCanonical.ts",
-              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
               "src/domains/inventory/provider_detail.py",
               "tests/test_inventory_provider_detail.py"
             ],
@@ -9793,9 +9589,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/api/provider-resource-schemas.ts",
-              "frontend/src/features/resources/providerResourceCanonical.ts",
-              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
               "src/domains/inventory/provider_detail.py",
               "src/packages/contracts/inventory_provider.py",
               "tests/test_inventory_provider_detail.py"
@@ -9945,8 +9738,7 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/package.json",
-              "frontend/src/ProductApp.test.tsx"
+              "frontend/package.json"
             ],
             "requiredBackendContracts": [
               "packages.contracts.parity"
@@ -9975,7 +9767,6 @@
           "opsiaPort": {
             "destinations": [
               "frontend/package.json",
-              "frontend/src/ProductApp.test.tsx",
               "frontend/src/app/ProductRouter.tsx"
             ],
             "requiredBackendContracts": [
@@ -10006,7 +9797,6 @@
           "opsiaPort": {
             "destinations": [
               "frontend/src/main.tsx",
-              "frontend/src/ProductApp.tsx",
               "frontend/src/app/AuthenticatedProductRuntime.tsx"
             ],
             "requiredBackendContracts": [
@@ -10087,7 +9877,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/ProductApp.tsx",
               "frontend/src/app/AuthenticatedProductRuntime.tsx",
               "frontend/src/app/ProductShell.tsx"
             ],
@@ -10114,8 +9903,9 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/ProductApp.tsx",
-              "frontend/src/ProductApp.test.tsx"
+              "frontend/src/main.tsx",
+              "frontend/src/devpreview-unified.tsx",
+              "frontend/src/app/buildBaseline.test.ts"
             ],
             "requiredBackendContracts": [
               "packages.contracts.parity"
@@ -10144,7 +9934,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/api/shell-state.ts",
               "frontend/src/features/global-filter/createGlobalFilterAdapter.ts",
               "frontend/src/features/global-filter/UnifiedFilterBar.tsx",
               "src/domains/inventory_filter/router.py",
@@ -10180,11 +9969,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/features/preferences/UiPreferencesSync.tsx",
-              "frontend/src/features/shell-state/shellStateContract.ts",
-              "frontend/src/features/shell-state/createShellStateAdapter.ts",
-              "frontend/src/features/shell-state/createShellStateAdapter.test.ts",
-              "frontend/src/api/shell-state.ts",
               "src/packages/contracts/shell_state.py",
               "src/domains/shell_state/router.py",
               "src/domains/shell_state/repository.py"
@@ -10221,9 +10005,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/api/rightsizing.test.ts",
-              "frontend/src/api/rightsizing.ts",
-              "frontend/src/api/rightsizing-schemas.ts",
               "src/domains/workload_detail/router.py"
             ],
             "requiredBackendContracts": [
@@ -10259,8 +10040,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/pages/cost/RightsizingScanView.test.tsx",
-              "frontend/src/pages/cost/RightsizingScanView.tsx",
               "tests/test_workload_detail.py"
             ],
             "requiredBackendContracts": [
@@ -10303,7 +10082,6 @@
           },
           "opsiaPort": {
             "destinations": [
-              "frontend/src/pages/cost/RightsizingScanView.tsx",
               "frontend/src/pages/workload-detail/WorkloadDetailRoute.tsx",
               "frontend/src/features/workload-detail/createWorkloadDetailAdapter.ts",
               "src/domains/workload_detail/rightsizing_projection.py",
@@ -10339,9 +10117,8 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/pages/cost/RightsizingScanView.test.tsx",
-              "frontend/src/shared/i18n/catalogs/en/rightsizing.ts",
-              "frontend/src/shared/i18n/catalogs/ko/rightsizing.ts"
+              "frontend/src/pages/cost/CostPage.tsx",
+              "frontend/src/devpreview-surfaces.tsx"
             ],
             "requiredBackendContracts": [
               "packages.contracts.rightsizing"
@@ -10350,9 +10127,9 @@
               "rightsizing.scan.surface",
               "rightsizing.presentation"
             ],
-            "state": "in_progress",
-            "blockedReason": null,
-            "rationale": "The product copy sets a conservative expectation while methodology details remain response provenance instead of fixed browser constants."
+            "state": "blocked",
+            "blockedReason": "The consolidated production shell no longer exposes a rightsizing scan surface. Cost remains available, but recommendation presentation must be reintroduced with its typed server contract and focused tests before this source interaction can be claimed.",
+            "rationale": "The current Cost surface is the explicit product owner for this gap; deleted recommendation components are not accepted as migration evidence."
           }
         }
       ]
@@ -10370,7 +10147,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/features/rightsizing/rightsizingModel.test.ts",
               "tests/test_rightsizing.py"
             ],
             "requiredBackendContracts": [
@@ -10400,8 +10176,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/features/rightsizing/rightsizingModel.ts",
-              "frontend/src/features/rightsizing/rightsizingAdapter.ts",
               "src/packages/contracts/rightsizing.py"
             ],
             "requiredBackendContracts": [
@@ -10432,8 +10206,8 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/features/rightsizing/rightsizingPresentation.test.ts",
-              "frontend/src/features/rightsizing/rightsizingPresentation.ts"
+              "frontend/src/pages/cost/CostPage.tsx",
+              "frontend/src/devpreview-surfaces.tsx"
             ],
             "requiredBackendContracts": [
               "packages.contracts.rightsizing"
@@ -10442,9 +10216,9 @@
               "rightsizing.presentation",
               "rightsizing.schema"
             ],
-            "state": "in_progress",
-            "blockedReason": null,
-            "rationale": "Presentation tests contain no comparison or recommendation arithmetic and preserve missing requests as an explicit localized state."
+            "state": "blocked",
+            "blockedReason": "The consolidated production shell no longer exposes a rightsizing scan surface. Cost remains available, but recommendation presentation must be reintroduced with its typed server contract and focused tests before this source interaction can be claimed.",
+            "rationale": "The current Cost surface is the explicit product owner for this gap; deleted recommendation components are not accepted as migration evidence."
           }
         }
       ]
@@ -10462,9 +10236,8 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/features/rightsizing/rightsizingPresentation.ts",
-              "frontend/src/pages/cost/RightsizingScanView.tsx",
-              "frontend/src/shared/i18n/keys/rightsizing.ts"
+              "frontend/src/pages/cost/CostPage.tsx",
+              "frontend/src/devpreview-surfaces.tsx"
             ],
             "requiredBackendContracts": [
               "packages.contracts.rightsizing"
@@ -10473,9 +10246,9 @@
               "rightsizing.presentation",
               "rightsizing.scan.surface"
             ],
-            "state": "in_progress",
-            "blockedReason": null,
-            "rationale": "The presenter formats exact millicore or byte integers but never decides whether to increase, reduce, review, or withhold a recommendation."
+            "state": "blocked",
+            "blockedReason": "The consolidated production shell no longer exposes a rightsizing scan surface. Cost remains available, but recommendation presentation must be reintroduced with its typed server contract and focused tests before this source interaction can be claimed.",
+            "rationale": "The current Cost surface is the explicit product owner for this gap; deleted recommendation components are not accepted as migration evidence."
           }
         }
       ]
@@ -10504,13 +10277,6 @@
           },
           "opsiaPort": {
             "destinations": [
-              "frontend/src/pages/cost/RightsizingScanView.tsx",
-              "frontend/src/pages/cost/RightsizingScanView.test.tsx",
-              "frontend/src/features/rightsizing/createRightsizingAdapter.ts",
-              "frontend/src/features/rightsizing/rightsizingModel.ts",
-              "frontend/src/features/rightsizing/useRightsizingScans.ts",
-              "frontend/src/api/rightsizing.ts",
-              "frontend/src/api/rightsizing-schemas.ts",
               "src/domains/workload_detail/router.py",
               "src/domains/workload_detail/rightsizing_projection.py",
               "src/packages/contracts/rightsizing.py"
@@ -10551,8 +10317,7 @@
           "opsiaPort": {
             "destinations": [
               "src/packages/contracts/diagnose/models.py",
-              "src/domains/diagnose/router.py",
-              "frontend/src/features/diagnose/createDiagnoseAdapter.ts"
+              "src/domains/diagnose/router.py"
             ],
             "requiredBackendContracts": [
               "packages.contracts.diagnose",
@@ -10589,8 +10354,7 @@
           "opsiaPort": {
             "destinations": [
               "src/domains/diagnose/service.py",
-              "src/domains/diagnose/repository.py",
-              "frontend/src/features/diagnose/DiagnoseSessionContext.tsx"
+              "src/domains/diagnose/repository.py"
             ],
             "requiredBackendContracts": [
               "packages.contracts.diagnose",
@@ -10633,9 +10397,7 @@
           },
           "opsiaPort": {
             "destinations": [
-              "frontend/src/app/AiAssistantPanel.tsx",
-              "frontend/src/features/diagnose/DiagnoseSurface.tsx",
-              "frontend/src/features/diagnose/DiagnoseSurface.test.tsx"
+              "frontend/src/app/AiAssistantPanel.tsx"
             ],
             "requiredBackendContracts": [
               "packages.contracts.diagnose",
@@ -10670,8 +10432,7 @@
           "opsiaPort": {
             "destinations": [
               "src/domains/diagnose/repository.py",
-              "src/domains/diagnose/router.py",
-              "frontend/src/features/diagnose/DiagnoseSurface.tsx"
+              "src/domains/diagnose/router.py"
             ],
             "requiredBackendContracts": [
               "packages.contracts.diagnose",
@@ -10712,9 +10473,7 @@
           },
           "opsiaPort": {
             "destinations": [
-              "src/domains/diagnose/router.py",
-              "frontend/src/api/diagnose.ts",
-              "frontend/src/features/diagnose/DiagnoseSurface.tsx"
+              "src/domains/diagnose/router.py"
             ],
             "requiredBackendContracts": [
               "packages.contracts.diagnose",
@@ -10746,7 +10505,6 @@
           "opsiaPort": {
             "destinations": [
               "frontend/src/desktop/desktopBridge.ts",
-              "frontend/src/features/diagnose/DiagnoseSurface.tsx",
               "tests/test_diagnose_router.py"
             ],
             "requiredBackendContracts": [
@@ -10782,8 +10540,7 @@
           "opsiaPort": {
             "destinations": [
               "src/domains/diagnose/router.py",
-              "frontend/src/pages/resources/ResourceDetailActions.tsx",
-              "frontend/src/features/diagnose/DiagnoseSessionContext.tsx"
+              "frontend/src/pages/resources/ResourceDetailActions.tsx"
             ],
             "requiredBackendContracts": [
               "packages.contracts.diagnose",
@@ -10824,8 +10581,6 @@
           },
           "opsiaPort": {
             "destinations": [
-              "frontend/src/features/diagnose/DiagnoseSurface.tsx",
-              "frontend/src/api/diagnose-schemas.ts",
               "frontend/src/pages/resources/ResourceDetailActions.tsx"
             ],
             "requiredBackendContracts": [
@@ -10889,7 +10644,6 @@
           "opsiaPort": {
             "destinations": [
               "frontend/src/pages/resources/resourcePresentation.ts",
-              "frontend/src/pages/resources/resourcePresentation.test.tsx",
               "frontend/src/pages/resources/ResourcesCatalog.tsx",
               "frontend/src/features/applications/ApplicationTopologyPanel.tsx"
             ],
@@ -10923,9 +10677,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/api/provider-resource-schemas.ts",
-              "frontend/src/features/resources/providerResourceCanonical.ts",
-              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
               "src/domains/inventory/provider_detail.py",
               "src/packages/contracts/inventory_provider.py",
               "tests/test_inventory_provider_detail.py"
@@ -10991,9 +10742,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/api/provider-resource-schemas.ts",
-              "frontend/src/features/resources/providerResourceCanonical.ts",
-              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
               "src/domains/inventory/provider_detail.py",
               "src/packages/contracts/inventory_provider.py",
               "tests/test_inventory_provider_detail.py"
@@ -11058,9 +10806,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/api/provider-resource-schemas.ts",
-              "frontend/src/features/resources/providerResourceCanonical.ts",
-              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
               "src/domains/inventory/provider_detail.py",
               "src/packages/contracts/inventory_provider.py",
               "tests/test_inventory_provider_detail.py"
@@ -11125,9 +10870,6 @@
           "opsiaPort": {
             "destinations": [
               "frontend/src/api/inventory.test.ts",
-              "frontend/src/api/provider-resource-schemas.ts",
-              "frontend/src/features/resources/providerResourceCanonical.ts",
-              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
               "src/domains/inventory/provider_detail.py",
               "src/packages/contracts/inventory_provider.py",
               "tests/test_inventory_domain.py",
@@ -11195,9 +10937,6 @@
           "opsiaPort": {
             "destinations": [
               "frontend/src/api/inventory.test.ts",
-              "frontend/src/api/provider-resource-schemas.ts",
-              "frontend/src/features/resources/providerResourceCanonical.ts",
-              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
               "src/domains/inventory/provider_detail.py",
               "src/packages/contracts/inventory_provider.py",
               "tests/test_inventory_domain.py",
@@ -11273,10 +11012,6 @@
           },
           "opsiaPort": {
             "destinations": [
-              "frontend/src/api/provider-resource-schemas.ts",
-              "frontend/src/features/resources/providerResourceCanonical.ts",
-              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
-              "frontend/src/pages/resources/ProviderResourceDetailPanel.test.tsx",
               "src/domains/inventory/provider_detail.py",
               "src/packages/contracts/inventory_provider.py",
               "tests/test_inventory_provider_detail.py"
@@ -11317,10 +11052,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/api/provider-resource-schemas.ts",
-              "frontend/src/features/resources/providerResourceCanonical.ts",
-              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
-              "frontend/src/pages/resources/ProviderResourceDetailPanel.test.tsx",
               "src/domains/inventory/provider_detail.py",
               "src/packages/contracts/inventory_provider.py",
               "tests/test_inventory_provider_detail.py"
@@ -11390,12 +11121,6 @@
           },
           "opsiaPort": {
             "destinations": [
-              "frontend/src/api/provider-resource-schemas.ts",
-              "frontend/src/features/resources/providerResourceCanonical.ts",
-              "frontend/src/features/resources/providerResourceContract.ts",
-              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
-              "frontend/src/pages/resources/ProviderSecurityReportPanels.tsx",
-              "frontend/src/pages/resources/ProviderResourceDetailPanel.test.tsx",
               "src/domains/inventory/provider_detail.py",
               "src/packages/contracts/inventory_provider.py",
               "tests/test_inventory_domain.py",
@@ -11470,13 +11195,7 @@
           "opsiaPort": {
             "destinations": [
               "frontend/src/api/inventory.test.ts",
-              "frontend/src/api/provider-resource-schemas.ts",
               "frontend/src/desktop/desktopBridge.ts",
-              "frontend/src/features/resources/providerResourceCanonical.ts",
-              "frontend/src/features/resources/providerResourceContract.ts",
-              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
-              "frontend/src/pages/resources/ProviderSecurityReportPanels.tsx",
-              "frontend/src/pages/resources/ProviderResourceDetailPanel.test.tsx",
               "src/domains/inventory/provider_detail.py",
               "src/packages/contracts/inventory_provider.py",
               "tests/test_inventory_domain.py",
@@ -11543,7 +11262,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/features/gitops/gitOpsPresentation.test.ts",
               "frontend/src/pages/gitops/GitOpsSyncTableView.test.tsx"
             ],
             "requiredBackendContracts": [
@@ -11576,7 +11294,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/features/gitops/gitOpsPresentation.ts",
               "frontend/src/pages/gitops/GitOpsSyncTableView.tsx"
             ],
             "requiredBackendContracts": [
@@ -11614,10 +11331,7 @@
           "opsiaPort": {
             "destinations": [
               "frontend/src/api/gitops-application-detail-schemas.ts",
-              "frontend/src/api/gitops-resource-detail-schemas.ts",
               "frontend/src/features/gitops/gitOpsContract.ts",
-              "frontend/src/pages/gitops/GitOpsApplicationWorkspace.tsx",
-              "frontend/src/pages/gitops/GitOpsResourceWorkspace.tsx",
               "src/packages/contracts/gitops/detail.py",
               "src/domains/gitops/detail_projection.py",
               "src/domains/gitops/resource_projection.py",
@@ -11660,9 +11374,7 @@
           "opsiaPort": {
             "destinations": [
               "frontend/src/features/gitops/gitOpsContract.ts",
-              "frontend/src/features/gitops/createGitOpsAdapter.ts",
-              "frontend/src/features/gitops/gitOpsPresentation.ts",
-              "frontend/src/features/gitops/gitOpsPresentation.test.ts"
+              "frontend/src/features/gitops/createGitOpsAdapter.ts"
             ],
             "requiredBackendContracts": [
               "packages.contracts.gitops",
@@ -11698,10 +11410,8 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/api/gitops-resource-detail.ts",
               "frontend/src/features/gitops/createGitOpsAdapter.test.ts",
               "frontend/src/features/gitops/gitOpsContract.ts",
-              "frontend/src/pages/gitops/GitOpsResourceWorkspace.tsx",
               "src/domains/gitops/detail_router.py",
               "src/services/target/cluster-agent/commands/gitops.py"
             ],
@@ -11895,7 +11605,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/features/home/homeInsightsCanonical.ts",
               "frontend/src/features/home/createHomeAdapter.ts",
               "src/domains/dashboard/fleet_router.py",
               "src/domains/inventory_filter/repository.py"
@@ -11929,7 +11638,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/features/home/homeInsightsCanonical.ts",
               "frontend/src/features/home/createHomeAdapter.ts",
               "src/domains/dashboard/fleet_router.py",
               "src/domains/helm/release_projection.py"
@@ -11995,9 +11703,7 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/features/home/homeInsightsCanonical.ts",
               "frontend/src/features/home/createHomeAdapter.ts",
-              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
               "src/domains/dashboard/fleet_router.py",
               "src/domains/inventory/certificate_expiry.py",
               "src/domains/inventory/repository.py"
@@ -12101,9 +11807,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/features/cost/costWorkloadAdapter.ts",
-              "frontend/src/features/cost/WorkloadCostPanel.tsx",
-              "frontend/src/features/cost/costWorkloadAdapter.test.ts",
               "src/packages/contracts/cost/observations.py",
               "tests/test_cost_observation_projection.py"
             ],
@@ -12139,7 +11842,6 @@
             "destinations": [
               "frontend/src/api/cost-overview.ts",
               "frontend/src/features/cost/createCostAdapter.ts",
-              "frontend/src/features/cost/CostTrendChart.tsx",
               "src/domains/cost/router.py",
               "src/packages/contracts/cost/observations.py"
             ],
@@ -12173,8 +11875,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/api/cost-nodes.ts",
-              "frontend/src/pages/cost/CostNodesPanel.tsx",
               "frontend/src/pages/cost/CostPage.test.tsx",
               "src/domains/cost/node_projection.py",
               "src/domains/cost/router.py",
@@ -12214,10 +11914,7 @@
           "opsiaPort": {
             "destinations": [
               "frontend/src/api/gitops-application-detail.ts",
-              "frontend/src/api/gitops-resource-detail.ts",
               "frontend/src/features/gitops/createGitOpsAdapter.test.ts",
-              "frontend/src/pages/gitops/GitOpsApplicationWorkspace.tsx",
-              "frontend/src/pages/gitops/GitOpsResourceWorkspace.tsx",
               "src/domains/gitops/detail_router.py",
               "src/domains/gitops/resource_projection.py",
               "src/packages/contracts/gitops/detail.py",
@@ -12329,10 +12026,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/api/rightsizing.ts",
-              "frontend/src/api/rightsizing-schemas.ts",
-              "frontend/src/features/rightsizing/createRightsizingAdapter.ts",
-              "frontend/src/features/rightsizing/useRightsizingScans.ts",
               "src/domains/workload_detail/router.py",
               "src/packages/contracts/rightsizing.py"
             ],
@@ -12488,7 +12181,6 @@
           },
           "opsiaPort": {
             "destinations": [
-              "frontend/src/api/workload-rollbacks.ts",
               "frontend/src/features/resources/createResourceActionsAdapter.ts",
               "frontend/src/pages/resources/ResourceDetailActions.tsx",
               "src/domains/inventory/workload_revisions.py",
@@ -12579,7 +12271,6 @@
           "opsiaPort": {
             "destinations": [
               "frontend/src/pages/helm/HelmPage.tsx",
-              "frontend/src/pages/helm/HelmReleaseUpgradeDialog.tsx",
               "frontend/src/pages/helm/HelmPage.test.tsx",
               "frontend/src/features/operations/OperationStatusStore.tsx",
               "src/domains/helm/release_router.py",
@@ -12667,8 +12358,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/pages/gitops/GitOpsApplicationWorkspace.tsx",
-              "frontend/src/pages/gitops/GitOpsRepositoryCapabilities.test.tsx",
               "src/domains/gitops/detail_projection.py",
               "src/packages/contracts/gitops/detail.py"
             ],
@@ -12714,14 +12403,10 @@
           },
           "opsiaPort": {
             "destinations": [
-              "frontend/src/features/gitops/gitOpsPresentation.ts",
-              "frontend/src/features/gitops/gitOpsPresentation.test.ts",
               "frontend/src/pages/gitops/GitOpsPage.tsx",
               "frontend/src/features/global-filter/UnifiedFilterBar.tsx",
-              "frontend/src/pages/gitops/GitOpsRepositoryApplications.tsx",
               "frontend/src/pages/gitops/GitOpsSyncTableView.tsx",
               "frontend/src/pages/gitops/GitOpsSyncTableView.test.tsx",
-              "frontend/src/pages/gitops/GitOpsApplicationWorkspace.tsx",
               "src/domains/gitops/detail_router.py"
             ],
             "requiredBackendContracts": [
@@ -12755,9 +12440,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/pages/gitops/GitOpsApplicationWorkspace.tsx",
-              "frontend/src/pages/gitops/GitOpsResourceWorkspace.tsx",
-              "frontend/src/features/issues/RcaContextPanel.tsx",
               "src/domains/dashboard/router.py"
             ],
             "requiredBackendContracts": [
@@ -12793,8 +12475,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/pages/gitops/GitOpsApplicationWorkspace.tsx",
-              "frontend/src/pages/gitops/GitOpsRepositoryCapabilities.test.tsx",
               "frontend/src/pages/gitops/GitOpsSyncTableView.tsx",
               "src/domains/gitops/detail_projection.py"
             ],
@@ -12856,7 +12536,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/pages/checks/ChecksSettingsDialog.tsx",
               "frontend/src/features/checks/createChecksAdapter.ts",
               "src/domains/checks/router.py",
               "src/domains/checks/repository.py",
@@ -12892,7 +12571,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/pages/checks/ChecksSettingsDialog.tsx",
               "frontend/src/features/checks/createChecksAdapter.ts",
               "src/domains/checks/router.py",
               "src/domains/checks/repository.py",
@@ -12933,10 +12611,6 @@
           "opsiaPort": {
             "destinations": [
               "frontend/src/pages/settings/SettingsPage.tsx",
-              "frontend/src/features/settings/settingsContract.ts",
-              "frontend/src/features/settings/createSettingsAdapter.ts",
-              "frontend/src/features/shell-state/shellStateContract.ts",
-              "frontend/src/features/shell-state/createShellStateAdapter.ts",
               "src/packages/contracts/shell_state.py",
               "src/domains/shell_state/router.py"
             ],
@@ -12976,8 +12650,6 @@
               "frontend/src/pages/settings/SettingsPage.tsx",
               "frontend/src/pages/resources/ResourceDetailSheet.tsx",
               "frontend/src/features/resources/resourcesCanonical.ts",
-              "frontend/src/features/settings/settingsContract.ts",
-              "frontend/src/api/settings-access-schemas.ts",
               "src/domains/inventory/router.py",
               "src/services/target/cluster-agent/providers/kubernetes_providers.py",
               "src/packages/contracts/shell_state.py",
@@ -13016,7 +12688,6 @@
           "opsiaPort": {
             "destinations": [
               "frontend/src/pages/settings/SettingsPage.tsx",
-              "frontend/src/features/settings/settingsContract.ts",
               "src/packages/contracts/shell_state.py",
               "src/domains/shell_state/router.py",
               "src/domains/inventory_filter/repository.py"
@@ -13089,8 +12760,6 @@
             "destinations": [
               "frontend/src/pages/settings/SettingsPage.tsx",
               "frontend/src/shared/ui/ThemeToggle.tsx",
-              "frontend/src/features/preferences/UiPreferencesSync.tsx",
-              "frontend/src/features/shell-state/createShellStateAdapter.ts",
               "src/packages/contracts/shell_state.py",
               "src/domains/shell_state/router.py",
               "src/domains/shell_state/repository.py"
@@ -13161,10 +12830,6 @@
             "destinations": [
               "frontend/src/pages/settings/SettingsPage.tsx",
               "frontend/src/pages/settings/SettingsPage.test.tsx",
-              "frontend/src/pages/settings/PrometheusIntegrationCard.tsx",
-              "frontend/src/pages/settings/PrometheusIntegrationCard.test.tsx",
-              "frontend/src/api/prometheus-integration.ts",
-              "frontend/src/features/settings/createSettingsAdapter.ts",
               "src/packages/contracts/integrations.py",
               "src/domains/integrations/prometheus.py",
               "src/services/target/cluster-agent/agent.py",
@@ -13228,9 +12893,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/features/diagnose/DiagnoseSessionContext.tsx",
-              "frontend/src/features/diagnose/createDiagnoseAdapter.ts",
-              "frontend/src/features/diagnose/DiagnoseSurface.tsx",
               "src/domains/diagnose/router.py"
             ],
             "requiredBackendContracts": [
@@ -13371,9 +13033,7 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/features/diagnose/DiagnoseSessionContext.tsx",
               "frontend/src/pages/resources/ResourceDetailActions.tsx",
-              "frontend/src/features/diagnose/DiagnoseSurface.tsx",
               "src/domains/diagnose/router.py",
               "src/domains/diagnose/service.py"
             ],
@@ -13494,11 +13154,6 @@
           },
           "opsiaPort": {
             "destinations": [
-              "frontend/src/api/diagnose.ts",
-              "frontend/src/api/diagnose-schemas.ts",
-              "frontend/src/features/diagnose/diagnoseEndpointContract.ts",
-              "frontend/src/features/diagnose/createDiagnoseAdapter.ts",
-              "frontend/src/features/diagnose/DiagnoseSurface.tsx",
               "src/domains/diagnose/router.py",
               "src/domains/diagnose/repository.py",
               "src/domains/diagnose/stream.py"
@@ -13592,7 +13247,6 @@
               "frontend/src/features/global-filter/UnifiedFilterBar.tsx",
               "frontend/src/features/cluster-scope/ClusterScopeProvider.tsx",
               "frontend/src/shared/ui/SearchPillInput.tsx",
-              "frontend/src/app/PortForwardSessionIndicator.tsx",
               "src/domains/target/router.py"
             ],
             "requiredBackendContracts": [
@@ -13633,7 +13287,6 @@
               "frontend/src/app/shortcutRegistry.ts",
               "frontend/src/app/useProductShortcuts.ts",
               "frontend/src/features/global-filter/UnifiedFilterBar.tsx",
-              "frontend/src/features/runtime-status/RuntimeDiagnosticsDialog.tsx",
               "frontend/src/app/resourcesShortcutDefinitions.ts",
               "frontend/src/app/ProductShell.interaction.test.tsx",
               "frontend/src/pages/resources/ResourcesPage.keyboard.test.tsx"
@@ -13719,8 +13372,6 @@
             "destinations": [
               "frontend/src/app/ProductShell.tsx",
               "frontend/src/app/AiAssistantPanel.tsx",
-              "frontend/src/features/diagnose/DiagnoseSessionContext.tsx",
-              "frontend/src/features/diagnose/DiagnoseSurface.tsx",
               "frontend/src/pages/resources/ResourceDetailActions.tsx",
               "src/domains/diagnose/router.py"
             ],
@@ -13899,9 +13550,7 @@
           "opsiaPort": {
             "destinations": [
               "frontend/src/motion/tokens.css",
-              "frontend/src/motion/__tests__/motion-contract.test.ts",
-              "frontend/src/features/diagnose/DiagnoseSurface.tsx",
-              "frontend/src/features/diagnose/DiagnoseSurface.test.tsx"
+              "frontend/src/motion/__tests__/motion-contract.test.ts"
             ],
             "requiredBackendContracts": [
               "packages.contracts.diagnose",
@@ -13927,8 +13576,9 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/ProductApp.tsx",
-              "frontend/src/ProductApp.test.tsx"
+              "frontend/src/main.tsx",
+              "frontend/src/devpreview-unified.tsx",
+              "frontend/src/app/buildBaseline.test.ts"
             ],
             "requiredBackendContracts": [
               "packages.contracts.parity"
@@ -13990,7 +13640,7 @@
             ],
             "state": "in_progress",
             "blockedReason": null,
-          "rationale": "The product drives metrics range from the shared URL detail contract, renders strict CPU and memory evidence, and attaches exact HPA current/desired replica presets without browser PromQL. Rightsizing stays in its own observed-or-unavailable contract."
+            "rationale": "The product drives metrics range from the shared URL detail contract, renders strict CPU and memory evidence, and attaches exact HPA current/desired replica presets without browser PromQL. Rightsizing stays in its own observed-or-unavailable contract."
           }
         },
         {
@@ -14013,7 +13663,6 @@
               "frontend/src/features/resources/resourceMetricsHistoryContract.ts",
               "frontend/src/pages/resources/useResourceMetricsHistoryDataFrame.ts",
               "frontend/src/pages/resources/ResourceMetricsCharts.tsx",
-              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
               "frontend/src/shared/ui/charts/saturation.ts",
               "src/domains/command/scoped_metrics.py",
               "src/packages/contracts/scoped_metrics.py"
@@ -14029,7 +13678,7 @@
             ],
             "state": "in_progress",
             "blockedReason": null,
-          "rationale": "The shared scoped metric path supplies exact-unit CPU, memory, network receive/transmit, filesystem, restart, and PVC volume series with source, freshness, coverage, and inventory identity. UID-bound request/limit evidence and saturation reuse the canonical resource summary and are never synthesized from missing values."
+            "rationale": "The shared scoped metric path supplies exact-unit CPU, memory, network receive/transmit, filesystem, restart, and PVC volume series with source, freshness, coverage, and inventory identity. UID-bound request/limit evidence and saturation reuse the canonical resource summary and are never synthesized from missing values."
           }
         }
       ]
@@ -14055,8 +13704,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/pages/resources/ResourceFilesystemBrowser.tsx",
-              "frontend/src/features/resource-files/createResourceFilesAdapter.ts",
               "src/packages/contracts/resource_files.py",
               "src/services/target/cluster-agent/commands/resource_files.py"
             ],
@@ -14096,8 +13743,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/pages/resources/ResourceFilesystemBrowser.tsx",
-              "frontend/src/features/resource-files/createResourceFilesAdapter.ts",
               "src/packages/contracts/resource_files.py",
               "src/services/target/cluster-agent/commands/resource_files.py"
             ],
@@ -14133,9 +13778,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/api/provider-resource-schemas.ts",
-              "frontend/src/features/resources/providerResourceCanonical.ts",
-              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
               "src/domains/inventory/provider_detail.py",
               "src/packages/contracts/inventory_provider.py"
             ],
@@ -14168,9 +13810,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/api/provider-resource-schemas.ts",
-              "frontend/src/features/resources/providerResourceCanonical.ts",
-              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
               "src/domains/inventory/provider_detail.py",
               "src/packages/contracts/inventory_provider.py"
             ],
@@ -14311,7 +13950,6 @@
             "destinations": [
               "frontend/src/features/helm/helmContract.ts",
               "frontend/src/features/helm/helmEndpointContract.ts",
-              "frontend/src/shared/ui/UnifiedDiff.tsx",
               "src/packages/contracts/helm/releases.py",
               "src/domains/helm/release_router.py"
             ],
@@ -14449,9 +14087,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/api/provider-resource-schemas.ts",
-              "frontend/src/features/resources/providerResourceCanonical.ts",
-              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
               "src/domains/inventory/provider_detail.py",
               "src/packages/contracts/inventory_provider.py"
             ],
@@ -14483,7 +14118,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
               "src/domains/inventory/provider_detail.py",
               "src/packages/contracts/inventory_provider.py"
             ],
@@ -14515,9 +14149,7 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "tests/test_inventory_provider_detail.py",
-              "frontend/src/features/resources/providerResourceCanonical.test.ts",
-              "frontend/src/pages/resources/ProviderResourceDetailPanel.test.tsx"
+              "tests/test_inventory_provider_detail.py"
             ],
             "requiredBackendContracts": [
               "domains.inventory.provider_detail",
@@ -14669,8 +14301,7 @@
             "destinations": [
               "frontend/src/features/filters/filterUrlCodec.ts",
               "frontend/src/pages/resources/useResourcesDataFrame.ts",
-              "frontend/src/pages/resources/useResourcesDetailState.ts",
-              "frontend/src/pages/resources/ResourcesPage.relatedNavigation.test.tsx"
+              "frontend/src/pages/resources/useResourcesDetailState.ts"
             ],
             "requiredBackendContracts": [
               "domains.inventory.router",
@@ -14779,8 +14410,6 @@
           "opsiaPort": {
             "destinations": [
               "frontend/src/pages/resources/resourcePresentation.ts",
-              "frontend/src/features/resources/providerResourceContract.ts",
-              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
               "src/domains/inventory/provider_detail.py",
               "src/packages/contracts/inventory_provider.py"
             ],
@@ -14931,9 +14560,6 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/api/provider-resource-schemas.ts",
-              "frontend/src/features/resources/providerResourceCanonical.ts",
-              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
               "src/domains/inventory/provider_detail.py",
               "src/packages/contracts/inventory_provider.py"
             ],
@@ -14979,8 +14605,7 @@
             "destinations": [
               "frontend/src/pages/resources/ResourceDetailSheet.tsx",
               "frontend/src/pages/resources/useResourcesDetailState.ts",
-              "frontend/src/shared/ui/OverflowIdentity.tsx",
-              "frontend/src/pages/resources/ResourcesPage.relatedNavigation.test.tsx"
+              "frontend/src/shared/ui/OverflowIdentity.tsx"
             ],
             "requiredBackendContracts": [
               "domains.inventory.router",
@@ -15121,8 +14746,6 @@
           "opsiaPort": {
             "destinations": [
               "frontend/src/features/workload-detail/workloadDetailContract.ts",
-              "frontend/src/features/cost/WorkloadCostPanel.tsx",
-              "frontend/src/pages/cost/RightsizingScanView.tsx",
               "frontend/src/pages/workload-detail/WorkloadDetailRoute.tsx",
               "src/domains/workload_detail/router.py"
             ],
@@ -15316,7 +14939,6 @@
           "opsiaPort": {
             "destinations": [
               "frontend/src/pages/workload-detail/WorkloadDetailRoute.tsx",
-              "frontend/src/features/issues/createRcaContextAdapter.ts",
               "src/domains/dashboard/router.py",
               "src/domains/rca/query_router.py"
             ],

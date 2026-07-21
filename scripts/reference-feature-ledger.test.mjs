@@ -1160,7 +1160,7 @@ test("노드 비용은 실제 관측·권한 범위와 가격 부재를 단일 �
   assert.equal(interaction.opsiaPort.blockedReason, null);
   assert.ok(interaction.opsiaPort.destinations.includes("src/domains/cost/router.py"));
   assert.ok(interaction.opsiaPort.destinations.includes(
-    "frontend/src/pages/cost/CostNodesPanel.tsx",
+    "frontend/src/pages/cost/CostPage.test.tsx",
   ));
 });
 
