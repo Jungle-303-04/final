@@ -33,6 +33,7 @@ import {
 import type {
   ProviderCatalog,
   ProviderClusterDiscovery,
+  ProviderConfigField,
   TargetInstallResponse,
   TargetPreflightResponse,
 } from "../api/cluster-registration-schemas";
@@ -129,6 +130,8 @@ export interface ClusterProvidersView {
   defaultDeployProvider: string | null;
   /** Server-advertised default deploy provider for a given cloud provider. */
   deployProviderFor: (cloudProvider: string) => string | null;
+  /** Server-advertised provider-specific registration fields. */
+  providerConfigFieldsFor: (cloudProvider: string) => ProviderConfigField[];
 }
 
 const EMPTY_PROVIDERS: ClusterProvidersView = {
@@ -138,6 +141,7 @@ const EMPTY_PROVIDERS: ClusterProvidersView = {
   defaultCloudProvider: null,
   defaultDeployProvider: null,
   deployProviderFor: () => null,
+  providerConfigFieldsFor: () => [],
 };
 
 function isAbortError(error: unknown): boolean {
@@ -151,6 +155,10 @@ function toClusterProvidersView(
 ): ClusterProvidersView {
   const cloudProviders = new Map<string, ProviderAvailability>();
   const deployByCloud = new Map<string, string>();
+  const configFieldsByCloud = new Map<string, ProviderConfigField[]>();
+  for (const provider of catalog.providers.cloud ?? []) {
+    configFieldsByCloud.set(provider.key, provider.config_fields);
+  }
   for (const flow of discovery.flows) {
     cloudProviders.set(flow.cloud_provider, {
       key: flow.cloud_provider,
@@ -177,6 +185,9 @@ function toClusterProvidersView(
     defaultCloudProvider: discovery.default_cloud_provider,
     defaultDeployProvider: discovery.default_deploy_provider,
     deployProviderFor: (cloudProvider: string) => deployByCloud.get(cloudProvider) ?? null,
+    providerConfigFieldsFor: (cloudProvider: string) => (
+      configFieldsByCloud.get(cloudProvider) ?? []
+    ),
   };
 }
 
@@ -321,14 +332,13 @@ function slugId(name: string): string {
 }
 
 function normalizedProviderConfig(fields: ClusterTargetFields): Record<string, unknown> {
-  if (fields.cloudProvider !== "eks") return fields.providerConfig;
-  const clusterName = fields.name.trim();
-  return {
-    region: "ap-northeast-2",
-    eks_cluster_name: clusterName,
-    context_alias: slugId(clusterName),
-    ...fields.providerConfig,
-  };
+  return Object.fromEntries(
+    Object.entries(fields.providerConfig).flatMap(([key, value]) => {
+      if (typeof value !== "string") return [[key, value]];
+      const normalized = value.trim();
+      return normalized === "" ? [] : [[key, normalized]];
+    }),
+  );
 }
 
 function baseSelection(fields: ClusterTargetFields) {
@@ -411,4 +421,8 @@ export const PLATFORM_CLOUD_PROVIDER: Record<string, string> = {
 
 // 클러스터 등록 도메인의 api 유틸/타입도 이 어댑터 경계를 통해서만 노출한다.
 export { isApiError } from "../api/client";
-export type { TargetInstallResponse, TargetPreflightResponse } from "../api/cluster-registration-schemas";
+export type {
+  ProviderConfigField,
+  TargetInstallResponse,
+  TargetPreflightResponse,
+} from "../api/cluster-registration-schemas";

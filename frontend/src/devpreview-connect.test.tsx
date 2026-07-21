@@ -21,6 +21,32 @@ const PROVIDERS: ClusterProvidersView = {
   defaultCloudProvider: "eks",
   defaultDeployProvider: "manual-manifest",
   deployProviderFor: () => "manual-manifest",
+  providerConfigFieldsFor: (cloudProvider) => cloudProvider === "eks" ? [
+    {
+      key: "region",
+      label: "AWS region",
+      required: true,
+      kind: "text",
+      options: [],
+      description: "",
+    },
+    {
+      key: "eks_cluster_name",
+      label: "EKS cluster name",
+      required: true,
+      kind: "text",
+      options: [],
+      description: "",
+    },
+    {
+      key: "context_alias",
+      label: "Context alias",
+      required: false,
+      kind: "text",
+      options: [],
+      description: "생략하면 등록 cluster_id를 alias로 사용.",
+    },
+  ] : [],
 };
 
 const PREFLIGHT_OK: TargetPreflightResponse = {
@@ -80,17 +106,25 @@ beforeEach(() => {
 
 async function reachInstallStep(user: ReturnType<typeof userEvent.setup>) {
   render(<ConnectWizard embedded initialView="cluster" />);
+  await user.type(screen.getByRole("textbox", { name: "AWS region" }), "ap-northeast-2");
+  await user.type(screen.getByRole("textbox", { name: "EKS cluster name" }), "game-server");
   await user.click(screen.getByRole("button", { name: "등록 단계로" }));
   await user.click(await screen.findByRole("button", { name: "사전검증 실행" }));
 }
 
 describe("devpreview AWS cluster wizard", () => {
-  it("keeps AWS authentication and provider details out of the browser form", () => {
+  it("renders the live catalog EKS fields and requires both mandatory values", async () => {
+    const user = userEvent.setup();
     render(<ConnectWizard embedded initialView="cluster" />);
 
-    expect(screen.queryByRole("textbox", { name: "AWS Region" })).toBeNull();
-    expect(screen.queryByRole("textbox", { name: "EKS Cluster Name" })).toBeNull();
-    expect(screen.queryByRole("textbox", { name: "Context Alias" })).toBeNull();
+    expect(screen.getByRole("textbox", { name: "AWS region" }).hasAttribute("required")).toBe(true);
+    expect(screen.getByRole("textbox", { name: "EKS cluster name" }).hasAttribute("required")).toBe(true);
+    expect(screen.getByRole("textbox", { name: "Context alias" }).hasAttribute("required")).toBe(false);
+    expect(screen.queryByRole("button", { name: "등록 단계로" })).toBeNull();
+
+    await user.type(screen.getByRole("textbox", { name: "AWS region" }), "ap-northeast-2");
+    expect(screen.queryByRole("button", { name: "등록 단계로" })).toBeNull();
+    await user.type(screen.getByRole("textbox", { name: "EKS cluster name" }), "game-server");
     expect(screen.getByRole("button", { name: "등록 단계로" })).toBeTruthy();
   });
 
@@ -106,7 +140,10 @@ describe("devpreview AWS cluster wizard", () => {
       deployProvider: "manual-manifest",
       name: "game-server",
       environment: "prod",
-      providerConfig: {},
+      providerConfig: {
+        region: "ap-northeast-2",
+        eks_cluster_name: "game-server",
+      },
     };
     expect(preflightClusterTarget).toHaveBeenCalledWith(expectedFields, expect.any(AbortSignal));
     expect(registerClusterTarget).toHaveBeenCalledWith(expectedFields, expect.any(AbortSignal));

@@ -54,16 +54,31 @@ describe("devpreview cluster registration adapter", () => {
     expect(registerInput.clusterId).toBe(preflightInput.clusterId);
   });
 
-  it("derives the terminal bootstrap fields without asking for AWS credentials in the browser", () => {
+  it("does not invent provider values that the server catalog requires the user to enter", () => {
     const preflightInput = buildClusterTargetPreflightInput(AWS_DEFAULTED_FIELDS);
     const registerInput = buildClusterTargetRegisterInput(AWS_DEFAULTED_FIELDS);
 
-    const expectedProviderConfig = {
+    expect(preflightInput.providerConfig).toEqual({});
+    expect(registerInput.providerConfig).toEqual({});
+  });
+
+  it("trims catalog field values and omits an empty optional context alias", () => {
+    const fields: ClusterTargetFields = {
+      ...AWS_FIELDS,
+      providerConfig: {
+        region: "  ap-northeast-2 ",
+        eks_cluster_name: " game-server ",
+        context_alias: "   ",
+      },
+    };
+
+    expect(buildClusterTargetPreflightInput(fields).providerConfig).toEqual({
       region: "ap-northeast-2",
       eks_cluster_name: "game-server",
-      context_alias: "game-server",
-    };
-    expect(preflightInput.providerConfig).toEqual(expectedProviderConfig);
-    expect(registerInput.providerConfig).toEqual(expectedProviderConfig);
+    });
+    expect(buildClusterTargetRegisterInput(fields).providerConfig).toEqual({
+      region: "ap-northeast-2",
+      eks_cluster_name: "game-server",
+    });
   });
 });

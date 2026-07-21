@@ -58,6 +58,7 @@ import {
   type ClusterProvidersView,
   type ConnectionStatusView,
   type ProviderAvailability,
+  type ProviderConfigField,
 } from "./devpreview/connectFeed";
 import { reasonLabel, statusLabel } from "./devpreview/statusLabel";
 import "./styles/tokens.css";
@@ -559,8 +560,91 @@ function PlatformAvailability({ providers, cloud }: { providers: ClusterProvider
   );
 }
 
+function providerConfigValue(
+  providerConfig: Record<string, unknown>,
+  key: string,
+): string {
+  const value = providerConfig[key];
+  return typeof value === "string" ? value : "";
+}
+
+function requiredProviderConfigPresent(
+  fields: ProviderConfigField[],
+  providerConfig: Record<string, unknown>,
+): boolean {
+  return fields.every((field) => (
+    !field.required || providerConfigValue(providerConfig, field.key).trim() !== ""
+  ));
+}
+
+function ProviderConfigFields({
+  fields,
+  providerConfig,
+  setProviderConfig,
+}: {
+  fields: ProviderConfigField[];
+  providerConfig: Record<string, unknown>;
+  setProviderConfig: (value: Record<string, unknown>) => void;
+}) {
+  if (fields.length === 0) return null;
+  const update = (key: string, value: string) => {
+    setProviderConfig({ ...providerConfig, [key]: value });
+  };
+  return (
+    <div className="grid gap-3" aria-label="클러스터 제공자 연결 정보">
+      <div className="flex items-center gap-2 px-0.5">
+        <span className="text-[12.5px] font-semibold c-2">연결 정보</span>
+        <span className="text-[11.5px] c-3">서버 제공자 카탈로그 기준</span>
+      </div>
+      {fields.map((field) => {
+        const value = providerConfigValue(providerConfig, field.key);
+        return (
+          <label key={field.key} className="grid gap-1.5">
+            <span className="flex items-center gap-1.5 px-0.5 text-[12px] font-medium c-2">
+              {field.label}
+              {field.required && <span className="c-red" aria-hidden>*</span>}
+              {!field.required && <span className="text-[10.5px] c-3">선택</span>}
+            </span>
+            {field.kind === "select" && field.options.length > 0 ? (
+              <select
+                aria-label={field.label}
+                required={field.required}
+                value={value}
+                onChange={(event) => update(field.key, event.currentTarget.value)}
+                className="field w-full bg-surface font-mono text-[14px] c-ink outline-none"
+                style={{ borderRadius: 14, padding: "14px 16px" }}
+              >
+                <option value="">선택</option>
+                {field.options.map((option) => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+              </select>
+            ) : (
+              <input
+                aria-label={field.label}
+                required={field.required}
+                value={value}
+                onChange={(event) => update(field.key, event.currentTarget.value)}
+                placeholder={field.description || field.label}
+                autoComplete="off"
+                spellCheck={false}
+                className="field w-full bg-surface font-mono text-[14px] c-ink outline-none placeholder:font-sans placeholder:c-3"
+                style={{ borderRadius: 14, padding: "14px 16px" }}
+              />
+            )}
+            {field.description && (
+              <span className="px-0.5 text-[11px] leading-[1.45] c-3">{field.description}</span>
+            )}
+          </label>
+        );
+      })}
+    </div>
+  );
+}
+
 function ClusterInfoStep({
-  providers, name, setName, platform, setPlatform, env, setEnv, onNext,
+  providers, name, setName, platform, setPlatform, env, setEnv,
+  providerConfig, setProviderConfig, onNext,
 }: {
   providers: ClusterProvidersView;
   name: string;
@@ -569,6 +653,8 @@ function ClusterInfoStep({
   setPlatform: (v: PlatformId) => void;
   env: string;
   setEnv: (v: string) => void;
+  providerConfig: Record<string, unknown>;
+  setProviderConfig: (value: Record<string, unknown>) => void;
   onNext: () => void;
 }) {
   const cloudFor = (id: PlatformId) => PLATFORM_CLOUD_PROVIDER[id] ?? "";
@@ -578,6 +664,8 @@ function ClusterInfoStep({
     return info ? !info.available : false;
   };
   const selectedDisabled = isDisabled(platform);
+  const configFields = providers.providerConfigFieldsFor(cloudFor(platform));
+  const providerConfigReady = requiredProviderConfigPresent(configFields, providerConfig);
   return (
     <motion.div key="cinfo" {...swap} className="grid gap-5">
       {providers.status === "loading" && (
@@ -619,6 +707,11 @@ function ClusterInfoStep({
           <input value={name} onChange={(e) => setName(e.currentTarget.value)} placeholder="game-server-apne2" className="w-full bg-transparent font-mono text-[14px] c-ink outline-none placeholder:font-sans placeholder:c-3" />
         </div>
       </div>
+      <ProviderConfigFields
+        fields={configFields}
+        providerConfig={providerConfig}
+        setProviderConfig={setProviderConfig}
+      />
       <div className="grid gap-2.5">
         <div className="flex items-center gap-2 px-0.5"><span className="text-[12.5px] font-semibold c-2">환경</span><span className="text-[11.5px] c-3">이 클러스터의 용도 라벨</span></div>
         <div className="seg flex" style={{ borderRadius: 14, padding: 4 }}>
@@ -630,7 +723,7 @@ function ClusterInfoStep({
           ))}
         </div>
       </div>
-      <NextButton show={name.trim().length > 1 && !selectedDisabled}
+      <NextButton show={name.trim().length > 1 && !selectedDisabled && providerConfigReady}
         label="등록 단계로" onClick={onNext} />
     </motion.div>
   );
@@ -821,11 +914,13 @@ function ClusterWizard({ providers, onClose, onComplete }: { providers: ClusterP
   const [name, setName] = useState("game-server");
   const [platform, setPlatform] = useState<PlatformId>("aws");
   const [env, setEnv] = useState("prod");
+  const [providerConfig, setProviderConfig] = useState<Record<string, unknown>>({});
   const [connection, setConnection] = useState<ConnectionStatusView | null>(null);
   const el = {
-    0: <ClusterInfoStep key="c0" providers={providers} name={name} setName={setName} platform={platform} setPlatform={setPlatform} env={env} setEnv={setEnv}
+    0: <ClusterInfoStep key="c0" providers={providers} name={name} setName={setName} platform={platform} setPlatform={(next) => { setPlatform(next); setProviderConfig({}); }} env={env} setEnv={setEnv}
+      providerConfig={providerConfig} setProviderConfig={setProviderConfig}
       onNext={() => setStep(1)} />,
-    1: <ClusterInstallStep key="c1" providers={providers} platform={platform} name={name} env={env} providerConfig={{}}
+    1: <ClusterInstallStep key="c1" providers={providers} platform={platform} name={name} env={env} providerConfig={providerConfig}
       onBack={() => setStep(0)} onConnected={(info) => { setConnection(info); setStep(2); }} />,
     2: connection ? <ClusterDoneStep key="c2" name={name} env={env} connection={connection} onDone={() => onComplete(name)} /> : null,
   }[step];
