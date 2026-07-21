@@ -20,6 +20,7 @@ import {
   parseNetscapeSessionCookie,
   readRouteReleaseBudget,
   verifyCurrentWorkspaceEvidence,
+  verifyDeliveryRoutePolicy,
   verifyWorkspaceSwitcherPlacement,
   withRouteSmokeDiagnostics,
 } from "./post-deploy-route-smoke.mjs";
@@ -57,6 +58,39 @@ function createNetworkHarness(startedAt = 1_000) {
 }
 
 describe("post-deploy route smoke helpers", () => {
+  it("requires one canonical document, permanent legacy redirects, and a retired HTML 404", async () => {
+    const calls = [];
+    const response = (status, location = null) => ({
+      headers: new Headers(location === null ? {} : { location }),
+      status,
+    });
+    const request = vi.fn(async (url, options) => {
+      calls.push({ options, pathname: url.pathname });
+      if (url.pathname === "/") return response(200);
+      if (url.pathname === "/devpreview-unified.html") return response(308, "/");
+      if (url.pathname === "/devpreview-index.html") {
+        return response(308, "https://console.example.test/");
+      }
+      return response(404);
+    });
+
+    await verifyDeliveryRoutePolicy("https://console.example.test/settings", request);
+
+    expect(calls).toEqual([
+      { options: { redirect: "manual" }, pathname: "/" },
+      { options: { redirect: "manual" }, pathname: "/devpreview-unified.html" },
+      { options: { redirect: "manual" }, pathname: "/devpreview-index.html" },
+      { options: { redirect: "manual" }, pathname: "/retired-product-entrypoint-canary.html" },
+    ]);
+  });
+
+  it("rejects a legacy HTML alias that still renders the canonical document", async () => {
+    await expect(verifyDeliveryRoutePolicy(
+      "https://console.example.test",
+      async () => ({ headers: new Headers(), status: 200 }),
+    )).rejects.toThrow("must permanently redirect");
+  });
+
   it("verifies the stable workspace id in the product header and rejects a sidebar duplicate", async () => {
     const calls = [];
     const page = {

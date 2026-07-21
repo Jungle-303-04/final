@@ -30,6 +30,11 @@ const FAILURE_PRODUCT_STATES = new Set([
   "offline",
   "release",
 ]);
+const LEGACY_DOCUMENT_ALIASES = Object.freeze([
+  "/devpreview-unified.html",
+  "/devpreview-index.html",
+]);
+const RETIRED_DOCUMENT_CANARY = "/retired-product-entrypoint-canary.html";
 
 /**
  * Route-owned read boundaries used by the deployment smoke. Prefix matching
@@ -266,6 +271,7 @@ async function runWithDiagnostics(diagnostics) {
   const password = requiredEnvironment("AUTH_PASSWORD", { trim: false });
   const releaseBudget = readRouteReleaseBudget(process.env);
   diagnostics.failingRoute = new URL(baseUrl).pathname;
+  await verifyDeliveryRoutePolicy(baseUrl);
   const browser = await chromium.launch({
     headless: true,
     args: ["--disable-dev-shm-usage", "--no-sandbox"],
@@ -396,6 +402,38 @@ async function runWithDiagnostics(diagnostics) {
     routeNetwork.dispose();
     await browser.close();
   }
+}
+
+export async function verifyDeliveryRoutePolicy(baseUrl, request = fetch) {
+  const canonicalUrl = new URL("/", baseUrl);
+  const canonicalResponse = await request(canonicalUrl, { redirect: "manual" });
+  assert.equal(
+    canonicalResponse.status,
+    200,
+    `canonical product URL must return HTTP 200: ${canonicalUrl.href}`,
+  );
+
+  for (const alias of LEGACY_DOCUMENT_ALIASES) {
+    const aliasUrl = new URL(alias, canonicalUrl);
+    const response = await request(aliasUrl, { redirect: "manual" });
+    assert.equal(response.status, 308, `${alias} must permanently redirect`);
+    const location = response.headers.get("location");
+    assert.ok(location, `${alias} redirect must include Location`);
+    assert.equal(
+      new URL(location, aliasUrl).href,
+      canonicalUrl.href,
+      `${alias} must redirect to the canonical product URL`,
+    );
+  }
+
+  const retiredUrl = new URL(RETIRED_DOCUMENT_CANARY, canonicalUrl);
+  const retiredResponse = await request(retiredUrl, { redirect: "manual" });
+  assert.equal(
+    retiredResponse.status,
+    404,
+    "unknown retired HTML entry points must not render the product home page",
+  );
+  process.stdout.write("canonical delivery route policy passed\n");
 }
 
 async function isUnifiedShell(page) {

@@ -57,6 +57,26 @@ data:
             try_files /index.html =404;
         }
 
+        location = /devpreview-unified.html {
+            absolute_redirect off;
+            return 308 /;
+        }
+
+        location = /devpreview-index.html {
+            absolute_redirect off;
+            return 308 /;
+        }
+
+        location ~* [.]html$ {
+            return 404;
+        }
+
+        location = / {
+            expires -1;
+            add_header Cache-Control "no-store";
+            try_files /index.html =404;
+        }
+
         location / {
             expires -1;
             add_header Cache-Control "no-store";
