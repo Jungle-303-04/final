@@ -1316,6 +1316,18 @@ function App() {
   const pageScrollRef = useRef<HTMLDivElement>(null);
   // 상단 크롬 높이 — 폰트·확대에 따라 변하므로 실측해서 오버레이 기준으로 쓴다
   const headerRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node) || !headerRef.current?.contains(target)) {
+        setBellOpen(false);
+        setMeOpen(false);
+        setNsOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    return () => document.removeEventListener("pointerdown", onPointerDown, true);
+  }, []);
   const [topH, setTopH] = useState(TOPBAR_H);
   useEffect(() => {
     const el = headerRef.current; if (!el) return;
@@ -1574,7 +1586,7 @@ function App() {
         )}
         {/* 알림 벨 — 배지 수는 맵의 장애 수와 같은 인벤토리에서 나온다 */}
         <span style={{ position: "relative" }}>
-          <button type="button" className="gnav" aria-label="알림 센터 열기" aria-expanded={bellOpen} onClick={() => setBellOpen(!bellOpen)}
+          <button type="button" className="gnav" aria-label="알림 센터 열기" aria-expanded={bellOpen} onClick={() => { setBellOpen((open) => !open); setMeOpen(false); }}
             style={{ width: 30, height: 30, borderRadius: 999, border: "none", background: bellOpen ? blueA(0.1) : inkA(0.045), color: bellOpen ? BLUE : UI.ink2, cursor: "pointer", display: "grid", placeItems: "center" }}>
             <Bell size={14} />
           </button>
@@ -1651,7 +1663,7 @@ function App() {
         </span>
         {/* 계정 — 맨 오른쪽(D20). 로그아웃 = 데모 세션 초기화(실동작) */}
         <span style={{ position: "relative" }}>
-          <button type="button" className="gnav" aria-label="계정 메뉴 열기" aria-expanded={meOpen} onClick={() => setMeOpen(!meOpen)}
+          <button type="button" className="gnav" aria-label="계정 메뉴 열기" aria-expanded={meOpen} onClick={() => { setMeOpen((open) => !open); setBellOpen(false); }}
             style={{ width: 30, height: 30, borderRadius: 999, border: meOpen ? `1.5px solid ${BLUE}` : "1.5px solid transparent", background: blueA(0.12), color: BLUE, cursor: "pointer", display: "grid", placeItems: "center", fontSize: TYPE.label, fontWeight: 800 }}>{sessionInitial(session)}</button>
           <AnimatePresence>
             {meOpen && (
