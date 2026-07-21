@@ -9,10 +9,13 @@ from pydantic import ValidationError
 
 from packages.contracts.realtime import (
     MAX_HOT_PODS,
+    MAX_LIVE_NODE_OBSERVATIONS,
     MAX_WINDOW_MS,
     REALTIME_PROTOCOL,
     HelloMessage,
     HotPod,
+    LiveClusterResourceObservation,
+    LiveNodeResourceObservation,
     LiveSummary,
     LiveSummaryMessage,
     PingMessage,
@@ -22,6 +25,7 @@ from packages.contracts.realtime import (
     Subscription,
     delta_key_parts,
     parse_realtime_message,
+    serialized_json_bytes,
 )
 
 CLUSTER = "target-cluster-01"
@@ -143,4 +147,60 @@ def test_resource_delta_replace_requires_a_value() -> None:
                 "op": "replace",
                 "key": f"{CLUSTER}/sandbox/pod/checkout",
             }
+        )
+
+
+def test_cluster_metrics_delta_is_bounded_and_fits_existing_ingress_budget() -> None:
+    observed_at = datetime(2026, 7, 15, 3, tzinfo=UTC)
+    nodes = [
+        LiveNodeResourceObservation(
+            name=f"worker-{index:02d}",
+            status="ready",
+            cpu_mcores=250.0,
+            mem_mib=128.0,
+            observed_at=observed_at,
+            source="kubelet_stats_summary",
+            stale=False,
+            status_observed_at=observed_at,
+            status_stale=False,
+        )
+        for index in range(MAX_LIVE_NODE_OBSERVATIONS)
+    ]
+    observation = LiveClusterResourceObservation(
+        cluster_id=CLUSTER,
+        name=CLUSTER,
+        actual_interval_seconds=1.0,
+        collection_complete=True,
+        status="ready",
+        cpu_mcores=250.0 * MAX_LIVE_NODE_OBSERVATIONS,
+        mem_mib=128.0 * MAX_LIVE_NODE_OBSERVATIONS,
+        observed_at=observed_at,
+        source="kubelet_stats_summary",
+        stale=False,
+        status_observed_at=observed_at,
+        status_stale=False,
+        nodes_ready=MAX_LIVE_NODE_OBSERVATIONS,
+        nodes_total=MAX_LIVE_NODE_OBSERVATIONS,
+        nodes=nodes,
+    )
+    delta = ResourceDelta(
+        key=f"{CLUSTER}/cluster/metrics/live",
+        value=observation.model_dump(mode="json"),
+        observed_at=observed_at,
+    )
+
+    parsed = parse_realtime_message(delta.model_dump(mode="json"))
+
+    assert isinstance(parsed, ResourceDelta)
+    assert serialized_json_bytes(delta.value) <= RealtimeIngressLimits().delta_value_max_bytes
+    with pytest.raises(ValidationError):
+        LiveClusterResourceObservation(
+            cluster_id=CLUSTER,
+            name=CLUSTER,
+            collection_complete=False,
+            status="unknown",
+            source="unavailable",
+            stale=True,
+            status_stale=True,
+            nodes=[*nodes, nodes[0]],
         )

@@ -1,8 +1,9 @@
-"""Kubelet cAdvisor 기반 실시간 Pod 자원 측정.
+"""Kubelet 기반 실시간 Pod 및 bounded Node/Cluster 자원 측정.
 
 기존 15초 evidence 수집 경로와 상태를 공유하지 않는다. 1초마다 갱신되는 cAdvisor
 누적 실측값을 우선 사용하고 stats summary, metrics.k8s.io 순서로 폴백한다. 누락값은
-추정하지 않고 ``None``으로 유지한다.
+추정하지 않고 ``None``으로 유지한다. Node 대상 발견은 adaptive topology pass가 맡고,
+1 Hz 경로는 그 bounded 대상의 status와 stats만 직접 다시 관측한다.
 """
 
 from __future__ import annotations
@@ -19,10 +20,17 @@ from urllib.parse import quote
 import httpx
 from providers.kubernetes_providers import parse_cpu_mcores, parse_memory_mib
 
+from packages.contracts.realtime import (
+    MAX_LIVE_NODE_OBSERVATIONS,
+    LiveClusterResourceObservation,
+    LiveNodeResourceObservation,
+)
+
 KUBELET_SOURCE = "kubelet_stats_summary"
 FALLBACK_SOURCE = "metrics_server_fallback"
 UNAVAILABLE_SOURCE = "unavailable"
 DEFAULT_NODE_CONCURRENCY = 8
+DEFAULT_STALE_AFTER_SECONDS = 2.5
 MIB = 1024 * 1024
 CADVISOR_CPU_METRIC = "container_cpu_usage_seconds_total"
 CADVISOR_MEMORY_METRIC = "container_memory_working_set_bytes"
@@ -36,6 +44,73 @@ PROMETHEUS_SAMPLE_PATTERN = re.compile(
 class CpuCumulativeSample:
     usage_core_nanoseconds: float
     observed_at_seconds: float
+
+
+@dataclass(frozen=True)
+class NodeTargetSnapshot:
+    names: tuple[str, ...]
+    complete: bool
+    degraded_reason: str | None
+
+
+class BoundedNodeTargetStore:
+    """Atomic bounded node-name cut refreshed by the adaptive topology collector."""
+
+    def __init__(self, max_nodes: int = MAX_LIVE_NODE_OBSERVATIONS) -> None:
+        self.max_nodes = max(1, min(int(max_nodes), MAX_LIVE_NODE_OBSERVATIONS))
+        self._snapshot = NodeTargetSnapshot((), False, "node_targets_not_observed")
+
+    def update(self, payload: Any) -> None:
+        items = payload.get("items") if isinstance(payload, dict) else None
+        if not isinstance(items, list):
+            self.mark_unavailable("kubernetes_nodes_invalid_payload")
+            return
+        metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
+        raw_names = [
+            str(item.get("metadata", {}).get("name") or "")
+            for item in items
+            if isinstance(item, dict)
+        ]
+        valid_names = sorted({name for name in raw_names if name})
+        complete = (
+            not bool(metadata.get("continue"))
+            and len(items) <= self.max_nodes
+            and len(valid_names) == len(items)
+        )
+        self._snapshot = NodeTargetSnapshot(
+            tuple(valid_names[: self.max_nodes]),
+            complete,
+            None if complete else "node_limit_exceeded",
+        )
+
+    def mark_unavailable(self, reason: str) -> None:
+        self._snapshot = NodeTargetSnapshot(self._snapshot.names, False, reason)
+
+    def snapshot(self) -> NodeTargetSnapshot:
+        return self._snapshot
+
+
+def _observed_datetime(value: Any) -> datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
+
+
+def _is_stale(
+    observed_at: datetime | None,
+    collected_at: datetime,
+    stale_after_seconds: float,
+) -> bool:
+    if observed_at is None:
+        return True
+    age_seconds = (collected_at - observed_at).total_seconds()
+    return age_seconds > stale_after_seconds
 
 
 def collection_interval_for_pods(pod_count: int) -> float:
@@ -94,6 +169,341 @@ def _ratio_percent(actual: float | None, denominator: float | None) -> float | N
 def _joined_reason(*reasons: str | None) -> str | None:
     unique = [reason for reason in dict.fromkeys(reasons) if reason]
     return ",".join(unique) or None
+
+
+class NodeClusterResourceMetricsCollector:
+    """Collect one bounded node/cluster observation without listing pods.
+
+    Node readiness comes from the Kubernetes Node API. CPU and memory come from
+    each node's kubelet stats summary. Missing, late, or partial measurements stay
+    explicit; the collector never fills gaps with requests, limits, or cached pod
+    totals.
+    """
+
+    def __init__(
+        self,
+        cluster_id: str,
+        node_concurrency: int = DEFAULT_NODE_CONCURRENCY,
+        *,
+        max_nodes: int = MAX_LIVE_NODE_OBSERVATIONS,
+        stale_after_seconds: float = DEFAULT_STALE_AFTER_SECONDS,
+    ) -> None:
+        self.cluster_id = cluster_id
+        self.node_concurrency = max(1, min(int(node_concurrency), 32))
+        self.max_nodes = max(1, min(int(max_nodes), MAX_LIVE_NODE_OBSERVATIONS))
+        self.stale_after_seconds = max(0.0, float(stale_after_seconds))
+        self._cpu_cumulative_samples: dict[str, CpuCumulativeSample] = {}
+
+    async def collect(
+        self,
+        client: Any,
+        *,
+        base_url: str,
+        headers: dict[str, str],
+        node_targets: tuple[str, ...],
+        targets_complete: bool,
+        targets_degraded_reason: str | None,
+        actual_interval_seconds: float,
+        collected_at: datetime | None = None,
+    ) -> LiveClusterResourceObservation:
+        tick_observed_at = collected_at or datetime.now(UTC)
+        ordered_targets = tuple(sorted(set(node_targets)))[: self.max_nodes]
+        semaphore = asyncio.Semaphore(self.node_concurrency)
+
+        async def fetch(node_name: str) -> LiveNodeResourceObservation:
+            async with semaphore:
+                item, status_observed_at, status_reason = await self._fetch_node_status(
+                    client,
+                    base_url,
+                    headers,
+                    node_name,
+                )
+                raw, metrics_reason = await self._fetch_node_stats_summary(
+                    client,
+                    base_url,
+                    headers,
+                    node_name,
+                )
+            return self._node_observation(
+                item or {"metadata": {"name": node_name}},
+                raw,
+                reason=metrics_reason,
+                status_reason=status_reason,
+                status_observed_at=status_observed_at,
+                tick_observed_at=tick_observed_at,
+            )
+
+        nodes = list(await asyncio.gather(*(fetch(name) for name in ordered_targets)))
+        return self._cluster_observation(
+            nodes,
+            actual_interval_seconds=actual_interval_seconds,
+            collection_complete=targets_complete and len(ordered_targets) == len(node_targets),
+            targets_degraded_reason=targets_degraded_reason,
+        )
+
+    def unavailable(
+        self,
+        reason: str,
+        *,
+        actual_interval_seconds: float | None,
+    ) -> LiveClusterResourceObservation:
+        return LiveClusterResourceObservation(
+            cluster_id=self.cluster_id,
+            name=self.cluster_id,
+            actual_interval_seconds=actual_interval_seconds,
+            collection_complete=False,
+            status="unknown",
+            source=UNAVAILABLE_SOURCE,
+            stale=True,
+            degraded_reason=reason,
+            status_stale=True,
+            nodes=[],
+        )
+
+    async def _fetch_node_status(
+        self,
+        client: Any,
+        base_url: str,
+        headers: dict[str, str],
+        node_name: str,
+    ) -> tuple[dict[str, Any] | None, datetime | None, str | None]:
+        url = f"{base_url.rstrip('/')}/api/v1/nodes/{quote(node_name, safe='')}"
+        try:
+            response = await client.get(url, headers=headers)
+        except httpx.HTTPError:
+            return None, None, "kubernetes_node_status_request_failed"
+        if response.is_error:
+            return None, None, f"kubernetes_node_status_http_{response.status_code}"
+        try:
+            payload = response.json()
+        except ValueError:
+            return None, None, "kubernetes_node_status_invalid_payload"
+        if not isinstance(payload, dict):
+            return None, None, "kubernetes_node_status_invalid_payload"
+        measured_name = str(payload.get("metadata", {}).get("name") or "")
+        if measured_name != node_name:
+            return None, None, "kubernetes_node_status_name_mismatch"
+        return payload, datetime.now(UTC), None
+
+    async def _fetch_node_stats_summary(
+        self,
+        client: Any,
+        base_url: str,
+        headers: dict[str, str],
+        node_name: str,
+    ) -> tuple[dict[str, Any] | None, str | None]:
+        url = f"{base_url.rstrip('/')}/api/v1/nodes/{quote(node_name, safe='')}/proxy/stats/summary"
+        try:
+            response = await client.get(url, headers=headers)
+        except httpx.HTTPError:
+            return None, "kubelet_stats_request_failed"
+        if response.status_code == 401:
+            return None, "kubelet_stats_unauthorized"
+        if response.status_code == 403:
+            return None, "kubelet_stats_forbidden"
+        if response.status_code == 404:
+            return None, "kubelet_stats_not_found"
+        if response.is_error:
+            return None, f"kubelet_stats_http_{response.status_code}"
+        try:
+            payload = response.json()
+        except ValueError:
+            return None, "kubelet_stats_invalid_payload"
+        raw = payload.get("node") if isinstance(payload, dict) else None
+        if not isinstance(raw, dict):
+            return None, "kubelet_node_measurement_missing"
+        measured_name = str(raw.get("nodeName") or "")
+        if measured_name and measured_name != node_name:
+            return None, "kubelet_node_name_mismatch"
+        return raw, None
+
+    def _node_observation(
+        self,
+        item: dict[str, Any],
+        raw: dict[str, Any] | None,
+        *,
+        reason: str | None,
+        status_reason: str | None,
+        status_observed_at: datetime | None,
+        tick_observed_at: datetime,
+    ) -> LiveNodeResourceObservation:
+        metadata = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
+        status_value = item.get("status") if isinstance(item.get("status"), dict) else {}
+        conditions = (
+            status_value.get("conditions")
+            if isinstance(status_value.get("conditions"), list)
+            else []
+        )
+        ready_condition = next(
+            (
+                condition
+                for condition in conditions
+                if isinstance(condition, dict) and condition.get("type") == "Ready"
+            ),
+            {},
+        )
+        ready_raw = ready_condition.get("status")
+        ready = True if ready_raw == "True" else False if ready_raw == "False" else None
+        status = "ready" if ready is True else "not_ready" if ready is False else "unknown"
+        node_name = str(metadata.get("name") or "")
+        if raw is None:
+            return LiveNodeResourceObservation(
+                name=node_name,
+                status=status,
+                source=UNAVAILABLE_SOURCE,
+                stale=True,
+                degraded_reason=_joined_reason(
+                    reason or "kubelet_node_measurement_unavailable",
+                    status_reason,
+                ),
+                status_observed_at=status_observed_at,
+                status_stale=status_observed_at is None,
+            )
+
+        cpu = raw.get("cpu") if isinstance(raw.get("cpu"), dict) else {}
+        memory = raw.get("memory") if isinstance(raw.get("memory"), dict) else {}
+        cpu_observed_at = _observed_datetime(cpu.get("time"))
+        mem_observed_at = _observed_datetime(memory.get("time"))
+        nano_cores = _finite_nonnegative(cpu.get("usageNanoCores"))
+        cpu_mcores = nano_cores / 1_000_000 if nano_cores is not None else None
+        cumulative = _finite_nonnegative(cpu.get("usageCoreNanoSeconds"))
+        if cumulative is not None and cpu_observed_at is not None:
+            current = CpuCumulativeSample(cumulative, cpu_observed_at.timestamp())
+            sample_key = f"{node_name}/{metadata.get('uid') or ''}"
+            previous = self._cpu_cumulative_samples.get(sample_key)
+            self._cpu_cumulative_samples[sample_key] = current
+            if previous is not None:
+                elapsed = current.observed_at_seconds - previous.observed_at_seconds
+                consumed = current.usage_core_nanoseconds - previous.usage_core_nanoseconds
+                if elapsed > 0 and consumed >= 0:
+                    cpu_mcores = consumed / elapsed / 1_000_000
+        working_set = _finite_nonnegative(memory.get("workingSetBytes"))
+        mem_bytes = int(working_set) if working_set is not None else None
+        mem_mib = mem_bytes / MIB if mem_bytes is not None else None
+        expected_times = [
+            timestamp
+            for value, timestamp in (
+                (cpu_mcores, cpu_observed_at),
+                (mem_bytes, mem_observed_at),
+            )
+            if value is not None
+        ]
+        timestamp_missing = (cpu_mcores is not None and cpu_observed_at is None) or (
+            mem_bytes is not None and mem_observed_at is None
+        )
+        observed_at = min(expected_times) if expected_times and not timestamp_missing else None
+        partial = cpu_mcores is None or mem_bytes is None
+        stale = (
+            partial
+            or timestamp_missing
+            or _is_stale(
+                observed_at,
+                tick_observed_at,
+                self.stale_after_seconds,
+            )
+        )
+        degraded_reason = _joined_reason(
+            reason,
+            status_reason,
+            "kubelet_measurement_partial" if partial else None,
+            "kubelet_observed_at_invalid" if timestamp_missing else None,
+            "kubelet_measurement_stale"
+            if observed_at is not None
+            and _is_stale(observed_at, tick_observed_at, self.stale_after_seconds)
+            else None,
+        )
+        return LiveNodeResourceObservation(
+            name=node_name,
+            status=status,
+            cpu_mcores=cpu_mcores,
+            mem_mib=mem_mib,
+            observed_at=observed_at,
+            source=KUBELET_SOURCE,
+            stale=stale,
+            degraded_reason=degraded_reason,
+            status_observed_at=status_observed_at,
+            status_stale=status_observed_at is None,
+        )
+
+    def _cluster_observation(
+        self,
+        nodes: list[LiveNodeResourceObservation],
+        *,
+        actual_interval_seconds: float,
+        collection_complete: bool,
+        targets_degraded_reason: str | None,
+    ) -> LiveClusterResourceObservation:
+        metric_complete = (
+            collection_complete
+            and bool(nodes)
+            and all(node.cpu_mcores is not None and node.mem_mib is not None for node in nodes)
+        )
+        cpu_mcores = (
+            sum(float(node.cpu_mcores) for node in nodes if node.cpu_mcores is not None)
+            if metric_complete
+            else None
+        )
+        mem_mib = (
+            sum(float(node.mem_mib) for node in nodes if node.mem_mib is not None)
+            if metric_complete
+            else None
+        )
+        observed_at = (
+            min(node.observed_at for node in nodes if node.observed_at is not None)
+            if metric_complete and all(node.observed_at is not None for node in nodes)
+            else None
+        )
+        measured_sources = {node.source for node in nodes}
+        source = (
+            next(iter(measured_sources))
+            if len(measured_sources) == 1
+            else "mixed"
+            if measured_sources
+            else UNAVAILABLE_SOURCE
+        )
+        statuses_complete = (
+            collection_complete and bool(nodes) and all(node.status != "unknown" for node in nodes)
+        )
+        status_observed_at = (
+            min(node.status_observed_at for node in nodes if node.status_observed_at is not None)
+            if statuses_complete and all(node.status_observed_at is not None for node in nodes)
+            else None
+        )
+        status = (
+            "ready"
+            if statuses_complete and all(node.status == "ready" for node in nodes)
+            else "degraded"
+            if statuses_complete
+            else "unknown"
+        )
+        reasons = [node.degraded_reason for node in nodes if node.degraded_reason]
+        degraded_reason = _joined_reason(
+            (targets_degraded_reason or "node_targets_incomplete")
+            if not collection_complete
+            else None,
+            "node_observation_empty" if not nodes else None,
+            *reasons,
+        )
+        return LiveClusterResourceObservation(
+            cluster_id=self.cluster_id,
+            name=self.cluster_id,
+            actual_interval_seconds=actual_interval_seconds,
+            collection_complete=collection_complete,
+            status=status,
+            cpu_mcores=cpu_mcores,
+            mem_mib=mem_mib,
+            observed_at=observed_at,
+            source=source,
+            stale=(not metric_complete or any(node.stale for node in nodes)),
+            degraded_reason=degraded_reason,
+            status_observed_at=status_observed_at,
+            status_stale=(not statuses_complete or any(node.status_stale for node in nodes)),
+            nodes_ready=(
+                sum(node.status == "ready" for node in nodes) if collection_complete else None
+            ),
+            nodes_total=(len(nodes) if collection_complete else None),
+            nodes=nodes,
+        )
 
 
 class PodResourceMetricsCollector:

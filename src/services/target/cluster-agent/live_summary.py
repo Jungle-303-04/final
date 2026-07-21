@@ -13,7 +13,7 @@ import asyncio
 import json
 import time
 from collections.abc import Awaitable, Callable
-from contextlib import AbstractAsyncContextManager, suppress
+from contextlib import AbstractAsyncContextManager
 from datetime import UTC, datetime
 from typing import Any, Protocol
 
@@ -25,6 +25,8 @@ from kubernetes_api import (
     service_account_token,
 )
 from live_resource_metrics import (
+    BoundedNodeTargetStore,
+    NodeClusterResourceMetricsCollector,
     PodResourceMetricsCollector,
     collection_interval_for_pods,
 )
@@ -39,6 +41,7 @@ from packages.contracts.realtime import (
     AGENT_LIVE_PATH,
     MAX_HOT_PODS,
     HotPod,
+    LiveClusterResourceObservation,
     LiveMetricsMetadata,
     LiveSummary,
     LiveSummaryMessage,
@@ -56,6 +59,7 @@ LOGGER = get_logger(__name__)
 CRASH_LOOP_REASON = "CrashLoopBackOff"
 
 SummaryCollector = Callable[[], Awaitable[LiveSummary | None]]
+ResourceMetricsCollector = Callable[[], Awaitable[LiveClusterResourceObservation]]
 
 
 class LiveStreamConnection(Protocol):
@@ -114,6 +118,11 @@ def next_collection_delay(target_interval: float, collection_elapsed: float) -> 
     return max(0.0, target_interval - max(0.0, collection_elapsed))
 
 
+def cluster_resource_metrics_key(cluster_id: str) -> str:
+    """Stable retained-state key for the single bounded cluster metrics cut."""
+    return f"{cluster_id}/cluster/metrics/live"
+
+
 class KubernetesPodSummaryCollector:
     """k8s pod 목록(상한 있음)에서 bounded 요약을 계산함. API 미접근 환경이면 None."""
 
@@ -123,6 +132,7 @@ class KubernetesPodSummaryCollector:
         window_ms: int,
         transport: httpx.AsyncBaseTransport | None = None,
         metrics_collector: PodResourceMetricsCollector | None = None,
+        node_target_store: BoundedNodeTargetStore | None = None,
     ) -> None:
         self.cluster_id = cluster_id
         self.window_ms = window_ms
@@ -135,6 +145,7 @@ class KubernetesPodSummaryCollector:
         self.metrics_collector = metrics_collector or PodResourceMetricsCollector(
             agent_config.LIVE_RESOURCE_NODE_CONCURRENCY
         )
+        self.node_target_store = node_target_store
 
     async def __call__(self) -> LiveSummary | None:
         base_url = kubernetes_api_base_url()
@@ -151,6 +162,7 @@ class KubernetesPodSummaryCollector:
         )
         self._last_collection_started = collection_started
         async with kubernetes_client(self.transport) as client:
+            await self._refresh_node_targets(client, base_url, headers)
             continuation = ""
             while len(pods) < agent_config.LIVE_SUMMARY_POD_TOTAL_LIMIT:
                 params: dict[str, str | int] = {"limit": agent_config.LIVE_SUMMARY_POD_LIST_LIMIT}
@@ -176,6 +188,32 @@ class KubernetesPodSummaryCollector:
                 actual_interval_seconds=max(actual_interval_seconds, 0.0),
             )
         return self.summarize(pods, measured, observed_at=datetime.now(UTC))
+
+    async def _refresh_node_targets(
+        self,
+        client: Any,
+        base_url: str,
+        headers: dict[str, str],
+    ) -> None:
+        store = self.node_target_store
+        if store is None:
+            return
+        try:
+            response = await client.get(
+                f"{base_url.rstrip('/')}/api/v1/nodes",
+                params={"limit": store.max_nodes + 1},
+                headers=headers,
+            )
+        except httpx.HTTPError:
+            store.mark_unavailable("kubernetes_nodes_request_failed")
+            return
+        if response.is_error:
+            store.mark_unavailable(f"kubernetes_nodes_http_{response.status_code}")
+            return
+        try:
+            store.update(response.json())
+        except ValueError:
+            store.mark_unavailable("kubernetes_nodes_invalid_payload")
 
     def summarize(
         self,
@@ -268,6 +306,59 @@ class KubernetesPodSummaryCollector:
         return deltas
 
 
+class KubernetesClusterResourceCollector:
+    """Bounded 1 Hz node/cluster metrics collector, independent of pod topology."""
+
+    def __init__(
+        self,
+        cluster_id: str,
+        transport: httpx.AsyncBaseTransport | None = None,
+        metrics_collector: NodeClusterResourceMetricsCollector | None = None,
+        node_target_store: BoundedNodeTargetStore | None = None,
+    ) -> None:
+        self.cluster_id = cluster_id
+        self.transport = transport
+        self.metrics_collector = metrics_collector or NodeClusterResourceMetricsCollector(
+            cluster_id,
+            agent_config.LIVE_RESOURCE_NODE_CONCURRENCY,
+        )
+        self.node_target_store = node_target_store or BoundedNodeTargetStore()
+        self._last_collection_started: float | None = None
+        self._actual_interval_seconds = agent_config.LIVE_RESOURCE_METRICS_INTERVAL_SECONDS
+
+    async def __call__(self) -> LiveClusterResourceObservation:
+        collection_started = time.monotonic()
+        self._actual_interval_seconds = (
+            collection_started - self._last_collection_started
+            if self._last_collection_started is not None
+            else agent_config.LIVE_RESOURCE_METRICS_INTERVAL_SECONDS
+        )
+        self._last_collection_started = collection_started
+        base_url = kubernetes_api_base_url()
+        token = service_account_token()
+        if not base_url or not token:
+            return self.unavailable("kubernetes_api_not_configured")
+        targets = self.node_target_store.snapshot()
+        if not targets.names and not targets.complete:
+            return self.unavailable(targets.degraded_reason or "node_targets_not_observed")
+        async with kubernetes_client(self.transport) as client:
+            return await self.metrics_collector.collect(
+                client,
+                base_url=base_url,
+                headers=kubernetes_headers(token),
+                node_targets=targets.names,
+                targets_complete=targets.complete,
+                targets_degraded_reason=targets.degraded_reason,
+                actual_interval_seconds=max(self._actual_interval_seconds, 0.0),
+            )
+
+    def unavailable(self, reason: str) -> LiveClusterResourceObservation:
+        return self.metrics_collector.unavailable(
+            reason,
+            actual_interval_seconds=max(self._actual_interval_seconds, 0.0),
+        )
+
+
 class LiveSummaryPublisher:
     """주기적으로 요약을 수집해 realtime-gateway 로 push. 끄면(run 즉시 반환) no-op."""
 
@@ -279,6 +370,7 @@ class LiveSummaryPublisher:
         token: str,
         interval_seconds: float,
         collector: SummaryCollector,
+        resource_metrics_collector: ResourceMetricsCollector | None = None,
         connect: LiveStreamConnector | None = None,
         terminal_controller: TerminalController | None = None,
         port_forward_controller: PortForwardStreamController | None = None,
@@ -290,6 +382,7 @@ class LiveSummaryPublisher:
         self.token = token
         self.interval_seconds = interval_seconds
         self.collector = collector
+        self.resource_metrics_collector = resource_metrics_collector
         self.connect = connect or _websockets_connector
         self.terminal_controller = terminal_controller
         self.port_forward_controller = port_forward_controller
@@ -320,13 +413,22 @@ class LiveSummaryPublisher:
         gateway_url = env(agent_config.REALTIME_GATEWAY_URL_ENV, "") or derive_gateway_url(
             management_base_url
         )
+        node_target_store = BoundedNodeTargetStore()
         return cls(
             cluster_id=cluster_id,
             gateway_url=gateway_url,
             token=env(agent_config.AGENT_TOKEN_ENV, ""),
             interval_seconds=interval,
             collector=KubernetesPodSummaryCollector(
-                cluster_id, int(interval * 1000), kubernetes_transport
+                cluster_id,
+                int(interval * 1000),
+                kubernetes_transport,
+                node_target_store=node_target_store,
+            ),
+            resource_metrics_collector=KubernetesClusterResourceCollector(
+                cluster_id,
+                kubernetes_transport,
+                node_target_store=node_target_store,
             ),
             terminal_controller=terminal_controller,
             port_forward_controller=port_forward_controller,
@@ -380,9 +482,18 @@ class LiveSummaryPublisher:
             async with send_lock:
                 await connection.send(frame)
 
-        producer = asyncio.create_task(self._publish_loop(connection, send_lock))
+        producers = [asyncio.create_task(self._publish_loop(connection, send_lock))]
+        if self.resource_metrics_collector is not None:
+            producers.append(
+                asyncio.create_task(self._resource_metrics_loop(connection, send_lock))
+            )
         if self.terminal_controller is None and self.port_forward_controller is None:
-            await producer
+            try:
+                await asyncio.gather(*producers)
+            finally:
+                for producer in producers:
+                    producer.cancel()
+                await asyncio.gather(*producers, return_exceptions=True)
             return
         try:
             while True:
@@ -408,9 +519,9 @@ class LiveSummaryPublisher:
                         send_port_forward_data,
                     )
         finally:
-            producer.cancel()
-            with suppress(asyncio.CancelledError):
-                await producer
+            for producer in producers:
+                producer.cancel()
+            await asyncio.gather(*producers, return_exceptions=True)
             if self.terminal_controller is not None:
                 await self.terminal_controller.close_all()
             if self.port_forward_controller is not None:
@@ -442,6 +553,40 @@ class LiveSummaryPublisher:
                 time.monotonic() - collection_started,
             )
             await asyncio.sleep(delay)
+
+    async def _resource_metrics_loop(
+        self,
+        connection: LiveStreamConnection,
+        send_lock: asyncio.Lock,
+    ) -> None:
+        collector = self.resource_metrics_collector
+        if collector is None:
+            return
+        while True:
+            collection_started = time.monotonic()
+            try:
+                observation = await asyncio.wait_for(
+                    collector(),
+                    timeout=agent_config.LIVE_RESOURCE_METRICS_TIMEOUT_SECONDS,
+                )
+            except TimeoutError:
+                unavailable = getattr(collector, "unavailable", None)
+                if not callable(unavailable):
+                    raise
+                observation = unavailable("node_metrics_collection_timeout")
+            delta = ResourceDelta(
+                key=cluster_resource_metrics_key(self.cluster_id),
+                value=observation.model_dump(mode="json"),
+                observed_at=observation.observed_at or observation.status_observed_at,
+            )
+            async with send_lock:
+                await connection.send(delta.model_dump_json())
+            await asyncio.sleep(
+                next_collection_delay(
+                    agent_config.LIVE_RESOURCE_METRICS_INTERVAL_SECONDS,
+                    time.monotonic() - collection_started,
+                )
+            )
 
 
 def aggregate_metrics_metadata(

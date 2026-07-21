@@ -13,7 +13,12 @@ import pytest
 import yaml
 from conftest import ROOT, load_file
 
-from packages.contracts.realtime import MAX_HOT_PODS, LiveSummary
+from packages.contracts.realtime import (
+    MAX_HOT_PODS,
+    LiveClusterResourceObservation,
+    LiveNodeResourceObservation,
+    LiveSummary,
+)
 
 CLUSTER = "target-cluster-01"
 MAX_STREAM_PAYLOAD_BYTES = 16_384  # live summary 1건의 직렬화 상한(넉넉한 안전 마진)
@@ -226,6 +231,50 @@ def test_collector_reads_pods_across_the_cluster_including_application_namespace
     }
 
 
+def test_adaptive_topology_pass_refreshes_bounded_node_targets(monkeypatch: Any) -> None:
+    module = load_live_summary_module()
+    requested_paths: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requested_paths.append(request.url.path)
+        if request.url.path == "/api/v1/pods":
+            return httpx.Response(200, json={"metadata": {}, "items": [pod()]})
+        if request.url.path == "/api/v1/nodes":
+            return httpx.Response(
+                200,
+                json={
+                    "metadata": {},
+                    "items": [
+                        {"metadata": {"name": "node-b"}},
+                        {"metadata": {"name": "node-a"}},
+                    ],
+                },
+            )
+        raise AssertionError(f"unexpected path: {request.url.path}")
+
+    class MetricsCollector:
+        async def collect(self, _client: Any, **_kwargs: Any) -> dict[str, dict[str, Any]]:
+            return {}
+
+    store = module.BoundedNodeTargetStore()
+    collector = module.KubernetesPodSummaryCollector(
+        CLUSTER,
+        window_ms=1000,
+        transport=httpx.MockTransport(handler),
+        metrics_collector=MetricsCollector(),
+        node_target_store=store,
+    )
+    monkeypatch.setattr(module, "kubernetes_api_base_url", lambda: "https://kube.local")
+    monkeypatch.setattr(module, "service_account_token", lambda: "service-account-token")
+
+    summary = asyncio.run(collector())
+
+    assert summary is not None
+    assert requested_paths == ["/api/v1/nodes", "/api/v1/pods"]
+    assert store.snapshot().names == ("node-a", "node-b")
+    assert store.snapshot().complete is True
+
+
 def test_publisher_streams_bounded_live_summary_payloads() -> None:
     module = load_live_summary_module()
     connector = StubConnector()
@@ -269,6 +318,160 @@ def test_publisher_streams_bounded_live_summary_payloads() -> None:
         assert message["type"] == "live.summary"
         assert message["cluster_id"] == CLUSTER
         assert len(message["summary"]["hot_pods"]) <= MAX_HOT_PODS
+
+
+def test_resource_metrics_publish_at_one_hz_path_independent_of_adaptive_pod_cadence(
+    monkeypatch: Any,
+) -> None:
+    module = load_live_summary_module()
+    connection = StubConnection()
+    summary_calls = 0
+    resource_calls = 0
+
+    class AdaptiveSummaryCollector:
+        async def __call__(self) -> LiveSummary:
+            nonlocal summary_calls
+            summary_calls += 1
+            return LiveSummary(cluster_id=CLUSTER, window_ms=200)
+
+        @staticmethod
+        def next_interval_seconds() -> float:
+            return 0.2
+
+        @staticmethod
+        def drain_deltas() -> list[Any]:
+            return []
+
+    class ResourceCollector:
+        async def __call__(self) -> LiveClusterResourceObservation:
+            nonlocal resource_calls
+            resource_calls += 1
+            observed_at = datetime.now(UTC)
+            return LiveClusterResourceObservation(
+                cluster_id=CLUSTER,
+                name=CLUSTER,
+                actual_interval_seconds=0.02,
+                collection_complete=True,
+                status="ready",
+                cpu_mcores=250.0,
+                mem_mib=128.0,
+                observed_at=observed_at,
+                source="kubelet_stats_summary",
+                stale=False,
+                status_observed_at=observed_at,
+                status_stale=False,
+                nodes_ready=1,
+                nodes_total=1,
+                nodes=[
+                    LiveNodeResourceObservation(
+                        name="node-a",
+                        status="ready",
+                        cpu_mcores=250.0,
+                        mem_mib=128.0,
+                        observed_at=observed_at,
+                        source="kubelet_stats_summary",
+                        stale=False,
+                        status_observed_at=observed_at,
+                        status_stale=False,
+                    )
+                ],
+            )
+
+    monkeypatch.setattr(module.agent_config, "LIVE_RESOURCE_METRICS_INTERVAL_SECONDS", 0.02)
+    monkeypatch.setattr(module.agent_config, "LIVE_RESOURCE_METRICS_TIMEOUT_SECONDS", 0.015)
+    publisher = module.LiveSummaryPublisher(
+        cluster_id=CLUSTER,
+        gateway_url="ws://management-host:30090",
+        token="secret-token",
+        interval_seconds=0.2,
+        collector=AdaptiveSummaryCollector(),
+        resource_metrics_collector=ResourceCollector(),
+    )
+
+    async def run_until_three_resource_ticks() -> None:
+        task = asyncio.create_task(publisher._stream(connection))
+        try:
+            while resource_calls < 3:
+                await asyncio.sleep(0.002)
+        finally:
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
+
+    asyncio.run(asyncio.wait_for(run_until_three_resource_ticks(), timeout=2))
+
+    messages = [json.loads(raw) for raw in connection.sent]
+    resource_messages = [item for item in messages if item["type"] == "resource.delta"]
+    summary_messages = [item for item in messages if item["type"] == "live.summary"]
+    assert len(resource_messages) >= 3
+    assert summary_calls == len(summary_messages) == 1
+    assert all(item["key"] == f"{CLUSTER}/cluster/metrics/live" for item in resource_messages)
+    latest = resource_messages[-1]
+    assert latest["value"]["cpu_mcores"] == 250.0
+    assert latest["value"]["nodes"][0]["status"] == "ready"
+    assert latest["value"]["source"] == "kubelet_stats_summary"
+    assert latest["value"]["stale"] is False
+    assert latest["observed_at"] == latest["value"]["observed_at"]
+
+
+def test_resource_metrics_timeout_emits_honest_unavailable_tick(monkeypatch: Any) -> None:
+    module = load_live_summary_module()
+    connection = StubConnection()
+
+    class SlowResourceCollector:
+        async def __call__(self) -> LiveClusterResourceObservation:
+            await asyncio.sleep(1)
+            raise AssertionError("the publisher deadline must cancel the slow collection")
+
+        @staticmethod
+        def unavailable(reason: str) -> LiveClusterResourceObservation:
+            return LiveClusterResourceObservation(
+                cluster_id=CLUSTER,
+                name=CLUSTER,
+                actual_interval_seconds=0.02,
+                collection_complete=False,
+                status="unknown",
+                source="unavailable",
+                stale=True,
+                degraded_reason=reason,
+                status_stale=True,
+            )
+
+    monkeypatch.setattr(module.agent_config, "LIVE_RESOURCE_METRICS_INTERVAL_SECONDS", 0.02)
+    monkeypatch.setattr(module.agent_config, "LIVE_RESOURCE_METRICS_TIMEOUT_SECONDS", 0.005)
+
+    async def unused_summary_collector() -> None:
+        return None
+
+    publisher = module.LiveSummaryPublisher(
+        cluster_id=CLUSTER,
+        gateway_url="ws://management-host:30090",
+        token="secret-token",
+        interval_seconds=1,
+        collector=unused_summary_collector,  # this test runs only the resource loop
+        resource_metrics_collector=SlowResourceCollector(),
+    )
+
+    async def run_until_one_tick() -> None:
+        task = asyncio.create_task(publisher._resource_metrics_loop(connection, asyncio.Lock()))
+        try:
+            while not connection.sent:
+                await asyncio.sleep(0.001)
+        finally:
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
+
+    asyncio.run(asyncio.wait_for(run_until_one_tick(), timeout=1))
+
+    message = json.loads(connection.sent[0])
+    assert message["type"] == "resource.delta"
+    assert message["observed_at"] is None
+    assert message["value"]["cpu_mcores"] is None
+    assert message["value"]["mem_mib"] is None
+    assert message["value"]["source"] == "unavailable"
+    assert message["value"]["stale"] is True
+    assert message["value"]["degraded_reason"] == "node_metrics_collection_timeout"
 
 
 def test_publisher_subtracts_collection_time_from_adaptive_interval() -> None:

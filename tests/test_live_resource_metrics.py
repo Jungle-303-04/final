@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -52,6 +53,13 @@ def pod(
     }
 
 
+def node(name: str, *, ready: str = "True", uid: str | None = None) -> dict[str, Any]:
+    return {
+        "metadata": {"name": name, "uid": uid or f"uid-{name}"},
+        "status": {"conditions": [{"type": "Ready", "status": ready}]},
+    }
+
+
 @pytest.mark.parametrize(
     ("pod_count", "expected"),
     [(0, 1.0), (199, 1.0), (200, 2.0), (799, 2.0), (800, 5.0), (1999, 5.0), (2000, 10.0)],
@@ -59,6 +67,126 @@ def pod(
 def test_collection_interval_adapts_to_pod_count(pod_count: int, expected: float) -> None:
     module = load_resource_metrics_module()
     assert module.collection_interval_for_pods(pod_count) == expected
+
+
+def test_node_cluster_collector_emits_one_bounded_real_observation_cut() -> None:
+    module = load_resource_metrics_module()
+    requested: list[tuple[str, str]] = []
+
+    async def handle(request: httpx.Request) -> httpx.Response:
+        requested.append((request.url.path, str(request.url.params)))
+        node_name = request.url.path.split("/")[4]
+        if not request.url.path.endswith("/proxy/stats/summary"):
+            return httpx.Response(
+                200, json=node(node_name, ready="False" if node_name == "node-b" else "True")
+            )
+        cpu = 200_000_000 if node_name == "node-a" else 300_000_000
+        memory = 1_073_741_824 if node_name == "node-a" else 2_147_483_648
+        return httpx.Response(
+            200,
+            json={
+                "node": {
+                    "nodeName": node_name,
+                    "cpu": {
+                        "time": "2026-07-15T03:00:00Z",
+                        "usageNanoCores": cpu,
+                        "usageCoreNanoSeconds": cpu * 10,
+                    },
+                    "memory": {
+                        "time": "2026-07-15T03:00:00Z",
+                        "workingSetBytes": memory,
+                    },
+                }
+            },
+        )
+
+    async def collect() -> Any:
+        collector = module.NodeClusterResourceMetricsCollector("cluster-a", node_concurrency=2)
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
+            return await collector.collect(
+                client,
+                base_url="https://kubernetes.default.svc",
+                headers={"authorization": "Bearer token"},
+                node_targets=("node-b", "node-a"),
+                targets_complete=True,
+                targets_degraded_reason=None,
+                actual_interval_seconds=1.02,
+                collected_at=datetime(2026, 7, 15, 3, 0, 1, tzinfo=UTC),
+            )
+
+    observation = asyncio.run(collect())
+
+    assert all(path != "/api/v1/nodes" for path, _params in requested)
+    assert {path for path, _params in requested} == {
+        "/api/v1/nodes/node-a",
+        "/api/v1/nodes/node-a/proxy/stats/summary",
+        "/api/v1/nodes/node-b",
+        "/api/v1/nodes/node-b/proxy/stats/summary",
+    }
+    assert [item.name for item in observation.nodes] == ["node-a", "node-b"]
+    assert observation.collection_complete is True
+    assert observation.cpu_mcores == 500.0
+    assert observation.mem_mib == 3072.0
+    assert observation.observed_at == datetime(2026, 7, 15, 3, tzinfo=UTC)
+    assert observation.source == "kubelet_stats_summary"
+    assert observation.stale is False
+    assert observation.status == "degraded"
+    assert observation.nodes_ready == 1
+    assert observation.nodes_total == 2
+    assert observation.status_stale is False
+
+
+def test_node_cluster_collector_marks_partial_cut_stale_without_inventing_aggregate() -> None:
+    module = load_resource_metrics_module()
+
+    async def handle(request: httpx.Request) -> httpx.Response:
+        if not request.url.path.endswith("/proxy/stats/summary"):
+            return httpx.Response(200, json=node("node-a"))
+        return httpx.Response(
+            200,
+            json={
+                "node": {
+                    "nodeName": "node-a",
+                    "cpu": {
+                        "time": "2026-07-15T03:00:00Z",
+                        "usageNanoCores": 200_000_000,
+                    },
+                    "memory": {
+                        "time": "2026-07-15T03:00:00Z",
+                        "workingSetBytes": 1_073_741_824,
+                    },
+                }
+            },
+        )
+
+    async def collect() -> Any:
+        collector = module.NodeClusterResourceMetricsCollector("cluster-a", max_nodes=1)
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
+            return await collector.collect(
+                client,
+                base_url="https://kubernetes.default.svc",
+                headers={},
+                node_targets=("node-a",),
+                targets_complete=False,
+                targets_degraded_reason="node_limit_exceeded",
+                actual_interval_seconds=1.0,
+                collected_at=datetime(2026, 7, 15, 3, 0, 1, tzinfo=UTC),
+            )
+
+    observation = asyncio.run(collect())
+
+    assert len(observation.nodes) == 1
+    assert observation.nodes[0].cpu_mcores == 200.0
+    assert observation.collection_complete is False
+    assert observation.cpu_mcores is None
+    assert observation.mem_mib is None
+    assert observation.observed_at is None
+    assert observation.status == "unknown"
+    assert observation.nodes_ready is None
+    assert observation.nodes_total is None
+    assert observation.stale is True
+    assert observation.status_stale is True
+    assert "node_limit_exceeded" in (observation.degraded_reason or "")
 
 
 def test_kubelet_stats_join_actual_usage_with_complete_request_and_limit_totals() -> None:

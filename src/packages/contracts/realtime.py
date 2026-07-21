@@ -13,9 +13,9 @@ import json
 import re
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, Self
 
-from pydantic import Field, TypeAdapter, field_validator
+from pydantic import Field, TypeAdapter, field_validator, model_validator
 
 from packages.contracts.gateway.base import StrictModel
 
@@ -32,6 +32,7 @@ STATE_RESOURCES_KEY = "resources"
 # live summary 상한 — 사용자 수와 무관하게 agent payload 가 bounded 이도록 계약으로 강제.
 MAX_HOT_PODS = 20
 MAX_WINDOW_MS = 60_000
+MAX_LIVE_NODE_OBSERVATIONS = 18
 
 # browser fan-out 상한 — 느린 client 는 밀린 메시지를 버리고 최신 snapshot 으로 복구함.
 BROWSER_QUEUE_MAX = 32
@@ -76,6 +77,8 @@ MetricSource = Literal[
     "mixed",
     "unavailable",
 ]
+LiveNodeStatus = Literal["ready", "not_ready", "unknown"]
+LiveClusterStatus = Literal["ready", "degraded", "unknown"]
 
 
 class HotPod(StrictModel):
@@ -94,6 +97,82 @@ class LiveMetricsMetadata(StrictModel):
     source: MetricSource
     actual_interval_seconds: float | None = Field(default=None, ge=0.0)
     degraded_reason: str | None = None
+
+
+class LiveNodeResourceObservation(StrictModel):
+    """One bounded, real node observation carried inside a cluster metrics delta."""
+
+    name: str = Field(min_length=1)
+    status: LiveNodeStatus
+    cpu_mcores: float | None = Field(default=None, ge=0.0)
+    mem_mib: float | None = Field(default=None, ge=0.0)
+    observed_at: datetime | None = None
+    source: MetricSource
+    stale: bool
+    degraded_reason: str | None = None
+    status_observed_at: datetime | None = None
+    status_source: Literal["kubernetes_api"] = "kubernetes_api"
+    status_stale: bool
+
+    @model_validator(mode="after")
+    def _validate_observation_evidence(self) -> Self:
+        if not self.stale and (
+            self.cpu_mcores is None or self.mem_mib is None or self.observed_at is None
+        ):
+            raise ValueError("fresh node metrics require measured cpu, memory, and observed_at")
+        if not self.status_stale and self.status_observed_at is None:
+            raise ValueError("fresh node status requires status_observed_at")
+        return self
+
+
+class LiveClusterResourceObservation(StrictModel):
+    """Bounded node/cluster CPU, memory, and status cut for one realtime tick.
+
+    The observation travels as one ``resource.delta`` value.  Keeping all nodes in
+    one bounded value prevents a node-sized cluster from turning a 1 Hz metric tick
+    into an unbounded frame burst.
+    """
+
+    resource_type: Literal["cluster_metrics"] = "cluster_metrics"
+    kind: Literal["ClusterMetrics"] = "ClusterMetrics"
+    cluster_id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    actual_interval_seconds: float | None = Field(default=None, ge=0.0)
+    collection_complete: bool
+    status: LiveClusterStatus
+    cpu_mcores: float | None = Field(default=None, ge=0.0)
+    mem_mib: float | None = Field(default=None, ge=0.0)
+    observed_at: datetime | None = None
+    source: MetricSource
+    stale: bool
+    degraded_reason: str | None = None
+    status_observed_at: datetime | None = None
+    status_source: Literal["kubernetes_api"] = "kubernetes_api"
+    status_stale: bool
+    nodes_ready: int | None = Field(default=None, ge=0)
+    nodes_total: int | None = Field(default=None, ge=0)
+    nodes: list[LiveNodeResourceObservation] = Field(
+        default_factory=list,
+        max_length=MAX_LIVE_NODE_OBSERVATIONS,
+    )
+
+    @model_validator(mode="after")
+    def _validate_observation_evidence(self) -> Self:
+        if not self.stale and (
+            self.cpu_mcores is None or self.mem_mib is None or self.observed_at is None
+        ):
+            raise ValueError("fresh cluster metrics require measured cpu, memory, and observed_at")
+        if not self.status_stale and self.status_observed_at is None:
+            raise ValueError("fresh cluster status requires status_observed_at")
+        if self.collection_complete:
+            if self.nodes_total != len(self.nodes):
+                raise ValueError("complete cluster metrics require exact nodes_total")
+            ready = sum(node.status == "ready" for node in self.nodes)
+            if self.nodes_ready != ready:
+                raise ValueError("complete cluster metrics require exact nodes_ready")
+        elif self.nodes_total is not None or self.nodes_ready is not None:
+            raise ValueError("partial cluster metrics cannot claim node totals")
+        return self
 
 
 class LiveSummary(StrictModel):
