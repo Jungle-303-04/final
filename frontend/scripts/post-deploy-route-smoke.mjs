@@ -460,11 +460,12 @@ async function runUnifiedShellSmoke(page, baseUrl, diagnostics) {
   );
 
   const navigation = page.locator(UNIFIED_NAVIGATION_SELECTOR);
-  const surfaceCount = await navigation.count();
-  assert.ok(surfaceCount > 1, "unified navigation must expose multiple surfaces");
   const labels = await navigation.evaluateAll((items) => items
     .map((item) => item.getAttribute("aria-label"))
-    .filter((label) => label));
+  );
+  assert.equal(labels.length, 9, "GlobalNav must expose exactly nine unified surfaces");
+  assert.ok(labels.every((label) => typeof label === "string" && label.length > 0), "GlobalNav labels must be non-empty");
+  assert.equal(new Set(labels).size, labels.length, "GlobalNav labels must be unique");
   for (const label of labels) {
     const item = page.locator('[data-slot="global-navigation"]')
       .getByRole("button", { name: label, exact: true });
@@ -482,7 +483,7 @@ async function runUnifiedShellSmoke(page, baseUrl, diagnostics) {
     );
     assertDiagnostics(diagnostics);
   }
-  process.stdout.write(`authenticated unified shell smoke passed: ${surfaceCount} surfaces\n`);
+  process.stdout.write(`authenticated unified shell smoke passed: ${labels.length} surfaces\n`);
 }
 
 export async function verifyCurrentWorkspaceEvidence({
