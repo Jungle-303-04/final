@@ -349,10 +349,10 @@ const DETAIL_TABS = [
   { id: "overview", label: "개요" }, { id: "yaml", label: "YAML" }, { id: "events", label: "이벤트" }, { id: "logs", label: "로그" }, { id: "rbac", label: "권한" },
 ] as const;
 type DetailTab = (typeof DETAIL_TABS)[number]["id"];
-const TABS_FOR = (kindId: string): DetailTab[] => {
+export const TABS_FOR = (kindId: string): DetailTab[] => {
   if (kindId === "Pod") return ["overview", "yaml", "events", "logs", "rbac"];
   if (["Deployment", "StatefulSet", "DaemonSet", "ReplicaSet", "Job", "CronJob"].includes(kindId)) return ["overview", "yaml", "events", "logs", "rbac"];
-  if (["ServiceAccount", "Role", "ClusterRole", "RoleBinding", "ClusterRoleBinding"].includes(kindId)) return ["overview", "yaml", "rbac"];
+  if (["ServiceAccount", "Role", "ClusterRole", "RoleBinding", "ClusterRoleBinding", "Namespace"].includes(kindId)) return ["overview", "yaml", "events", "rbac"];
   if (kindId === "Node") return ["overview", "yaml", "events"];
   return ["overview", "yaml", "events"];
 };
@@ -644,10 +644,10 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
               </Sec>
               )}
 
-              {/* 권한 (워크로드·파드) — 계약이 ServiceAccount·RBAC를 노출하지 않는다 */}
+              {/* 권한 (워크로드·파드) — 실제 namespace reverse-index 계약을 개요에서도 공유한다. */}
               {wp && (
               <Sec title="ServiceAccount 권한" icon={ShieldCheck}>
-                <Empty>관측 안 됨 — 라이브 인벤토리 계약은 ServiceAccount·RBAC 정보를 노출하지 않습니다.</Empty>
+                <ResourceAccessPanel view={access} />
               </Sec>
               )}
 

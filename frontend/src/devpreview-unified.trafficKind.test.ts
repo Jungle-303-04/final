@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { resolveTrafficResourceKindId } from "./devpreview-unified";
+import { resolveTrafficResourceKindId, TABS_FOR } from "./devpreview-unified";
 
 describe("traffic relation resource kind", () => {
   it("preserves workload and service kinds when opening detail", () => {
@@ -13,4 +13,14 @@ describe("traffic relation resource kind", () => {
     expect(resolveTrafficResourceKindId("statefulset")).toBe("StatefulSet");
     expect(resolveTrafficResourceKindId("UnknownKind")).toBeNull();
   });
+});
+
+describe("resource detail coverage", () => {
+  it.each(["ServiceAccount", "Role", "ClusterRole", "RoleBinding", "ClusterRoleBinding", "Namespace"])(
+    "exposes events and access for %s",
+    (kind) => {
+      expect(TABS_FOR(kind)).toContain("events");
+      expect(TABS_FOR(kind)).toContain("rbac");
+    },
+  );
 });
