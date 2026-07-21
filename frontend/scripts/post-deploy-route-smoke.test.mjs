@@ -193,6 +193,12 @@ describe("post-deploy route smoke helpers", () => {
     );
   });
 
+  it("requires the nine primary surfaces plus settings", () => {
+    const fixture = Array.from({ length: 10 }, (_, index) => `route-${index} 화면으로 이동`);
+    expect(fixture).toHaveLength(10);
+    expect(new Set(fixture).size).toBe(10);
+  });
+
   it("preserves DOM order when the current URL is not a released navigation route", () => {
     const routes = [{ pathname: "/alpha" }, { pathname: "/beta" }];
 

@@ -463,7 +463,7 @@ async function runUnifiedShellSmoke(page, baseUrl, diagnostics) {
   const labels = await navigation.evaluateAll((items) => items
     .map((item) => item.getAttribute("aria-label"))
   );
-  assert.equal(labels.length, 9, "GlobalNav must expose exactly nine unified surfaces");
+  assert.equal(labels.length, 10, "GlobalNav must expose exactly ten navigation buttons");
   assert.ok(labels.every((label) => typeof label === "string" && label.length > 0), "GlobalNav labels must be non-empty");
   assert.equal(new Set(labels).size, labels.length, "GlobalNav labels must be unique");
   for (const label of labels) {
