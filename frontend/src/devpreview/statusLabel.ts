@@ -89,6 +89,23 @@ const REASON_KO: Record<string, string> = {
   "cluster_id must use lowercase letters, numbers, and hyphens": "클러스터 이름에는 영문 소문자, 숫자, 하이픈만 사용할 수 있습니다.",
   "test target registrations are not allowed": "테스트용 클러스터 이름은 등록할 수 없습니다.",
   "no exact gitops source binding was found for this live resource.": "이 라이브 리소스와 정확히 일치하는 GitOps 원본 연결을 찾지 못했습니다.",
+  // GitHub/GitOps 저장소 디스커버리 — M24 구(영문 메시지)·신(structured code) 응답을 모두 매핑한다.
+  // 429(요청 한도)와 403(권한)을 서로 다른 honest 안내로 구분한다.
+  "github authentication failed or lacks repository access": "GitHub 인증에 실패했거나 저장소 접근 권한이 없습니다. 토큰의 저장소(repo) 권한을 확인해 주세요.",
+  "github api request failed": "GitHub에 연결하지 못했습니다. 주소·네트워크를 확인하고 잠시 후 다시 시도해 주세요.",
+  github_authentication_failed: "GitHub 인증에 실패했습니다. 토큰이 유효한지, 저장소 접근 권한이 있는지 확인해 주세요.",
+  github_unauthorized: "GitHub 인증에 실패했습니다(401). 토큰을 다시 확인해 주세요.",
+  github_forbidden: "GitHub 접근이 거부되었습니다(403). 토큰의 저장소 권한을 확인해 주세요.",
+  github_rate_limited: "GitHub 요청 한도를 초과했습니다(429). 잠시 후 다시 시도해 주세요.",
+  github_rate_limit_exceeded: "GitHub 요청 한도를 초과했습니다(429). 잠시 후 다시 시도해 주세요.",
+  github_not_found: "GitHub 저장소를 찾을 수 없습니다. 주소와 접근 권한을 확인해 주세요.",
+  github_api_request_failed: "GitHub에 연결하지 못했습니다. 주소·네트워크를 확인하고 잠시 후 다시 시도해 주세요.",
+  github_response_invalid: "GitHub 응답 형식을 해석하지 못했습니다. 잠시 후 다시 시도해 주세요.",
+  repository_probe_failed: "저장소 확인에 실패했습니다. 주소와 접근 권한을 확인해 주세요.",
+  repository_unreachable: "저장소에 연결하지 못했습니다. 주소·네트워크를 확인해 주세요.",
+  provider_not_configured: "이 제공자는 아직 서버에 구성되지 않았습니다.",
+  provider_unavailable: "이 제공자는 현재 사용할 수 없습니다.",
+  provider_disabled: "이 제공자는 현재 비활성화되어 있습니다.",
 };
 
 const MESSAGE_KO: Record<string, string> = {

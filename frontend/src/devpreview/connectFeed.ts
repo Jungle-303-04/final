@@ -241,7 +241,14 @@ export function useClusterConnectionStatus(clusterId: string | null): Connection
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | null = null;
     let cancelled = false;
+    // 마지막 관측이 아직 waiting이라 추가 폴링이 필요한지 여부. 백그라운드 탭에서는
+    // 폴링을 멈추고(visibility-gate), 화면이 다시 보이면 즉시 1회 재조회해 이어간다.
+    let waiting = false;
 
+    const schedule = () => {
+      if (timer !== null || document.hidden) return;
+      timer = setTimeout(() => { timer = null; poll(); }, POLL_INTERVAL_MS);
+    };
     const poll = () => {
       void getClusterConnectStatus(clusterId, controller.signal)
         .then((response) => {
@@ -252,20 +259,24 @@ export function useClusterConnectionStatus(clusterId: string | null): Connection
             agentVersion: response.agent_version,
             connectedAt: response.connected_at,
           });
-          if (response.status === "waiting") {
-            timer = setTimeout(poll, POLL_INTERVAL_MS);
-          }
+          waiting = response.status === "waiting";
+          if (waiting) schedule();
         })
         .catch((cause: unknown) => {
           if (cancelled || controller.signal.aborted || isAbortError(cause)) return;
           setView((prev) => ({ ...prev, status: "error" }));
         });
     };
+    const onVisibility = () => {
+      if (!document.hidden && waiting && timer === null) poll();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
     poll();
 
     return () => {
       cancelled = true;
       if (timer) clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onVisibility);
       controller.abort();
     };
   }, [clusterId]);

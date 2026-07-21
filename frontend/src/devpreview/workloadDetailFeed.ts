@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { getWorkloadDetail } from "../api/workload-detail";
 
@@ -59,7 +59,11 @@ export interface WorkloadDetailView {
   events: WorkloadEventView[];
   /** capability 계약이 advertise한 action id들(예: restart/scale). advertise된 것만. */
   actions: string[];
+  /** 일시적 오류(error status)에서 사용자가 재조회할 수 있게 하는 재시도 트리거. */
+  retry: () => void;
 }
+
+const NOOP = () => {};
 
 const IDLE: WorkloadDetailView = {
   status: "idle",
@@ -75,6 +79,7 @@ const IDLE: WorkloadDetailView = {
   eventsAvailability: null,
   events: [],
   actions: [],
+  retry: NOOP,
 };
 
 // 이 detail 계약이 실제로 배선된 워크로드 kind → {apiGroup, apiVersion}.
@@ -109,7 +114,10 @@ export function useWorkloadDetail(
   namespace: string | null,
   name: string,
 ): WorkloadDetailView {
-  const [view, setView] = useState<WorkloadDetailView & { key: string }>({ ...IDLE, key: "" });
+  // 내부 상태는 retry를 담지 않는다(retry는 훅이 반환 시점에 부착). 그래서 setView는
+  // 순수 관측 결과만 담고, 공개 반환 타입에서 retry가 항상 존재하도록 보장한다.
+  const [view, setView] = useState<Omit<WorkloadDetailView, "retry"> & { key: string }>({ ...IDLE, key: "" });
+  const [nonce, setNonce] = useState(0);
   const api = WORKLOAD_API[kindId];
   const cid = clusterId?.trim() ?? "";
   const nm = name.trim();
@@ -170,10 +178,17 @@ export function useWorkloadDetail(
       })
       .catch((cause: unknown) => {
         if (controller.signal.aborted || isAbortError(cause)) return;
-        setView({ ...IDLE, status: "unavailable", key });
+        // 요청 자체가 실패한 것(HTTP/네트워크 오류)은 "관측 안 됨(unavailable)"이 아니라
+        // 재시도 가능한 error로 구분한다 — 데이터 부재와 일시적 오류를 섞지 않는다.
+        setView({ ...IDLE, status: "error", key });
       });
     return () => controller.abort();
-  }, [key]);
-  if (!canFetch) return IDLE;
-  return view.key === key ? view : { ...IDLE, status: "loading" };
+    // nonce 변경 시 동일 key라도 재조회한다(사용자 재시도).
+  }, [key, nonce]);
+  const retry = useCallback(() => {
+    setView((prev) => ({ ...IDLE, status: "loading", key: prev.key }));
+    setNonce((n) => n + 1);
+  }, []);
+  if (!canFetch) return { ...IDLE, retry };
+  return { ...(view.key === key ? view : { ...IDLE, status: "loading" }), retry };
 }

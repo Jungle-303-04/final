@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { getClusterResourceUsageSeries } from "../api/usage-series";
 
@@ -32,7 +32,11 @@ export interface ResourceUsageView {
   sampleCount: number;
   cpuObserved: number;
   memObserved: number;
+  /** 일시적 오류(error status)에서 재조회 트리거. */
+  retry: () => void;
 }
+
+const NOOP = () => {};
 
 const IDLE: ResourceUsageView = {
   status: "idle",
@@ -42,6 +46,7 @@ const IDLE: ResourceUsageView = {
   sampleCount: 0,
   cpuObserved: 0,
   memObserved: 0,
+  retry: NOOP,
 };
 
 function isAbortError(error: unknown): boolean {
@@ -61,7 +66,9 @@ export function useResourceUsageSeries(
   namespace: string | null,
   name: string,
 ): ResourceUsageView {
-  const [view, setView] = useState<ResourceUsageView & { key: string }>({ ...IDLE, key: "" });
+  // 내부 상태는 retry를 제외하고, retry는 훅 반환 시점에 부착한다.
+  const [view, setView] = useState<Omit<ResourceUsageView, "retry"> & { key: string }>({ ...IDLE, key: "" });
+  const [nonce, setNonce] = useState(0);
   const cid = clusterId?.trim() ?? "";
   const nm = name.trim();
   // pod은 namespace가 필요하다. node는 namespace 없이 조회한다.
@@ -98,10 +105,16 @@ export function useResourceUsageSeries(
       })
       .catch((cause: unknown) => {
         if (controller.signal.aborted || isAbortError(cause)) return;
-        setView({ ...IDLE, status: "unavailable", key });
+        // 요청 실패(HTTP/네트워크)는 재시도 가능한 error. 200이지만 관측 표본이 없는
+        // 경우(위 then의 unavailable)와 구분해 "데이터 없음"과 "일시적 오류"를 섞지 않는다.
+        setView({ ...IDLE, status: "error", key });
       });
     return () => controller.abort();
-  }, [key]);
-  if (!canFetch) return IDLE;
-  return view.key === key ? view : { ...IDLE, status: "loading" };
+  }, [key, nonce]);
+  const retry = useCallback(() => {
+    setView((prev) => ({ ...IDLE, status: "loading", key: prev.key }));
+    setNonce((n) => n + 1);
+  }, []);
+  if (!canFetch) return { ...IDLE, retry };
+  return { ...(view.key === key ? view : { ...IDLE, status: "loading" }), retry };
 }

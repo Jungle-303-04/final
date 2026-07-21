@@ -211,7 +211,9 @@ export function TopologyView({ embedded = false, onOpenService, focusId, onFocus
   const endDrag = () => { dragRef.current = null; setDragId(null); };
 
   const openNode = (id: string) => {
-    if (onOpenService) onOpenService(id);
+    // node.id는 cluster 한정 합성 id(dup key 방지). 서비스 상세는 이름으로 열어야 하므로
+    // 여기서 노드 이름으로 되돌려 전달한다(합성 id를 이름으로 오인해 빈 상세를 여는 것 방지).
+    if (onOpenService) onOpenService(nodeMap.get(id)?.name ?? id);
     else setGraphSel(id);
   };
   // TOP-04: 엣지 상호작용은 언제나 고정 상세 패널을 연다(onOpenService가 있어도 노드로 새지 않는다)
@@ -231,7 +233,15 @@ export function TopologyView({ embedded = false, onOpenService, focusId, onFocus
         : "";
       return { tone: "warn" as const, text: `구조 관측 안 됨${why}` };
     }
-    if (topo.nodes.length === 0) return { tone: "gray" as const, text: "관측된 관계가 없습니다" };
+    if (topo.nodes.length === 0) return { tone: "gray" as const, text: "관측된 서비스가 없습니다" };
+    // 노드는 관측됐으나 서비스 호출(edge)이 아직 관측되지 않은 경우, 관계 없는 노드를
+    // 나열하지 않고 compact honest 상태로 닫는다(트래픽 텔레메트리 갱신 대기 등).
+    if (topo.edges.length === 0) {
+      const why = topo.partialReasonCodes.length > 0
+        ? ` · ${reasonLabel(topo.partialReasonCodes[0])}${topo.partialReasonCodes.length > 1 ? ` 외 ${topo.partialReasonCodes.length - 1}건` : ""}`
+        : "";
+      return { tone: "warn" as const, text: `트래픽 관측 안 됨${why}` };
+    }
     return null;
   })();
 
@@ -287,7 +297,9 @@ export function TopologyView({ embedded = false, onOpenService, focusId, onFocus
             </div>
           )}
 
-          {topo.status === "ready" && topo.nodes.length > 0 && (
+          {/* P0: 서비스 호출 그래프는 실제 관측된 edge가 있을 때만 렌더한다. edge가 0이면
+              관계 없는 노드 구름을 그리지 않고 위 banner의 honest 상태만 보인다. */}
+          {topo.status === "ready" && topo.edges.length > 0 && (
           <svg ref={svgRef} viewBox={`0 0 ${layout.vw} ${layout.vh}`} width="100%" style={{ display: "block", touchAction: "none" }}
             onPointerMove={onMove} onPointerUp={endDrag} onPointerLeave={() => { if (!dragRef.current) { setGraphSel(null); setEtip(null); } }}>
             {/* 방향 엣지 — 관계 근거. 관측된 트래픽이 있을 때만 흐름 애니메이션 */}

@@ -122,7 +122,15 @@ export function toRelationTopologyView(
     to: qualify(edge.to_node_id),
     kind: edge.kind,
   }));
-  return { status: "ready", nodes, edges, rootIds: endpoint.root_node_ids.map(qualify), ...base };
+  // 서비스 호출 관계도는 서비스/워크로드 단위로 정규화한다. 계약이 노출하는 raw pod·
+  // endpoint·event 노드는 서비스 관계의 잡음이라 제외한다(계약 nodes 배열에서만 선택,
+  // 이름으로 서비스를 지어내지 않음). 걸러진 노드를 참조하는 edge·root도 함께 정리한다.
+  const SERVICE_CATEGORIES = new Set<RelationNodeCategory>(["service", "workload"]);
+  const serviceNodes = nodes.filter((node) => SERVICE_CATEGORIES.has(node.category));
+  const keptIds = new Set(serviceNodes.map((node) => node.id));
+  const serviceEdges = edges.filter((edge) => keptIds.has(edge.from) && keptIds.has(edge.to));
+  const serviceRoots = endpoint.root_node_ids.map(qualify).filter((id) => keptIds.has(id));
+  return { status: "ready", nodes: serviceNodes, edges: serviceEdges, rootIds: serviceRoots, ...base };
 }
 
 function isAbortError(error: unknown): boolean {

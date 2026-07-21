@@ -82,10 +82,11 @@ describe("useWorkloadDetail", () => {
     expect(workloadDetailSupported("Deployment")).toBe(true);
   });
 
-  it("reports honest unavailable when the observation cannot be fetched", async () => {
+  it("reports a retryable error (not unavailable) when the request fails", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("nope", { status: 503 }));
     const rendered = renderHook(() => useWorkloadDetail("demo-server", "StatefulSet", "target", "db"));
-    await waitFor(() => expect(rendered.result.current.status).toBe("unavailable"));
+    await waitFor(() => expect(rendered.result.current.status).toBe("error"));
     expect(rendered.result.current.replicas).toBeNull();
+    expect(typeof rendered.result.current.retry).toBe("function");
   });
 });

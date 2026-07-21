@@ -17,16 +17,18 @@ export function WidgetFrame({ title, info, onDeepLink, deepLabel, collapsed, onT
     // 편집 = 카드 전체가 드래그 핸들(버튼식 이동 없음) — 파란 점선 보더가 편집 상태 신호
     <div style={{ background: UI.card, border: editing ? `1.5px dashed ${blueA(0.5)}` : `1px solid ${UI.line}`, borderRadius: 14, padding: "13px 15px", display: "flex", flexDirection: "column", gap: 11, minWidth: 0, position: "relative", transition: "border-color .2s", height: "100%", boxSizing: "border-box" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-        <span style={{ fontSize: TYPE.body, fontWeight: 700, letterSpacing: "-0.01em", color: UI.ink }}>{title}</span>
+        {/* 제목은 좁은 폭에서 한글이 글자 단위(세로줄)로 붕괴하지 않도록 nowrap+말줄임으로 잘라낸다.
+            (CSS word-break: normal은 CJK를 임의 글자에서 끊으므로 nowrap이 필요하다.) */}
+        <span style={{ fontSize: TYPE.body, fontWeight: 700, letterSpacing: "-0.01em", color: UI.ink, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</span>
         {info && (
-          <span style={{ position: "relative", display: "grid" }} onMouseEnter={() => setTip(true)} onMouseLeave={() => setTip(false)}>
+          <span style={{ position: "relative", display: "grid", flexShrink: 0 }} onMouseEnter={() => setTip(true)} onMouseLeave={() => setTip(false)}>
             <Info size={12.5} style={{ color: UI.ink3, cursor: "help" }} />
             {tip && (
               <span style={{ position: "absolute", top: 20, left: -8, zIndex: 30, width: 210, background: inkA(0.92), color: UI.card, fontSize: TYPE.caption, lineHeight: 1.5, borderRadius: 8, padding: "7px 10px", backdropFilter: "blur(8px)" }}>{info}</span>
             )}
           </span>
         )}
-        <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 4 }}>
+        <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
           {editing && onRemove && (
             <button onClick={onRemove} title="위젯 숨기기"
               style={{ width: 22, height: 22, borderRadius: 999, border: "none", background: critA(0.12), color: HP.crit, cursor: "pointer", fontSize: TYPE.body, lineHeight: 1, fontWeight: 700 }}>×</button>

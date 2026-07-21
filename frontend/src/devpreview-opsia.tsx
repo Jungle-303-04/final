@@ -16,6 +16,7 @@ import { isActiveIncidentCluster } from "./devpreview/rcaIssuesFeed";
 import { useClusterSummaries, type ClusterSummaryView } from "./devpreview/clusterSummaryFeed";
 import {
   podsForNode,
+  useClusterTopologies,
   useClusterTopology,
   type ClusterTopologyView,
   type InvNode,
@@ -242,6 +243,7 @@ export function HomeClusterSection({ meta: _meta, onOpen, pending = [] }: {
   const { clusters } = useDevpreviewContracts();
   const clusterIds = useMemo(() => clusters.map((cl) => cl.id), [clusters]);
   const summaries = useClusterSummaries(clusterIds);
+  const topologies = useClusterTopologies(clusterIds);
   // priority 14: 홈은 OpsiaMap의 `.op` 스타일 블록(반응형 media query 포함) 밖에서
   // 렌더되므로 그 media query가 적용되지 않는다. 좁은 화면 1열 전환을 인라인으로 보장한다.
   const narrow = useNarrowViewport();
@@ -251,7 +253,7 @@ export function HomeClusterSection({ meta: _meta, onOpen, pending = [] }: {
     <div className="home-cluster-grid" style={{ display: "grid", gridTemplateColumns: narrow ? "minmax(0, 1fr)" : "repeat(4, minmax(0, 1fr))", gridAutoFlow: "row dense", gap: 14 }}>
       {clusters.map((cl) => (
         <div key={cl.id} style={{ gridColumn: span, minWidth: 0 }}>
-          <ClusterRow cl={cl} summary={summaries[cl.id]} onOpen={() => onOpen(cl.id)} />
+          <ClusterRow cl={cl} summary={summaries[cl.id]} topology={topologies[cl.id]} onOpen={() => onOpen(cl.id)} />
         </div>
       ))}
       {pending.map((n, i) => (
@@ -685,8 +687,9 @@ function SidePanel({ forcedTab, scaled, onAddRepo, stickyTop, pendingRepos }: {
   return (
     <aside style={{ width: 270, flexShrink: 0, alignSelf: "flex-start", background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 16, position: "sticky", top: stickyTop ?? 24, maxHeight: scaled ? `calc(100vh / ${PRESENT_SCALE} - ${(stickyTop ?? 24) + 16}px)` : "calc(100vh - 60px)", overflow: "hidden", display: "flex" }}>
     <div style={{ flex: 1, minWidth: 0, padding: "14px 6px 14px 14px", display: "flex", flexDirection: "column", gap: 12, overflowY: "auto", scrollbarGutter: "stable" }}>
-      <div style={{ fontSize: TYPE.bodyStrong, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink, padding: "2px 2px 0" }}>연결 보기</div>
-      <div style={{ display: "flex", gap: 3, background: inkA(0.04), borderRadius: 10, padding: 3 }}>
+      {/* P1: 중복 "연결 보기" heading 제거. 서비스/구성/저장소 탭을 사이드바 최상단에 고정하고
+          결과 목록만 내부 스크롤한다(탭 sticky). */}
+      <div style={{ display: "flex", gap: 3, background: UI.bg2, borderRadius: 10, padding: 3, position: "sticky", top: 0, zIndex: 2, boxShadow: `0 6px 12px -12px ${inkA(0.3)}` }}>
         {([["svc", "서비스", Plug], ["cfg", "구성", FileCog], ["git", "저장소", GithubIcon]] as const).map(([id, label, I]) => {
           const on = tab === id;
           return (

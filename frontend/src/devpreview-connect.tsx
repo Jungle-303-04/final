@@ -137,7 +137,7 @@ function ProviderChips({ providers }: { providers: ProviderAvailability[] }) {
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       {providers.map((p) => (
-        <span key={p.key} title={p.unavailableReason ?? undefined}
+        <span key={p.key} title={p.unavailableReason ? reasonLabel(p.unavailableReason) : undefined}
           className={`inline-flex items-center gap-1 rounded-full px-2 py-[3px] text-[11px] font-semibold ${p.available ? "green-bg c-green" : "orange-bg c-orange"}`}>
           {p.available ? <Check className="size-3" strokeWidth={2.5} /> : <X className="size-3" strokeWidth={2.5} />}
           {p.label}
@@ -554,7 +554,7 @@ function PlatformAvailability({ providers, cloud }: { providers: ClusterProvider
   if (!info || info.available) return null;
   return (
     <span className="text-[10.5px] font-semibold c-orange">
-      미지원{info.unavailableReason ? ` · ${info.unavailableReason}` : ""}
+      미지원{info.unavailableReason ? ` · ${reasonLabel(info.unavailableReason)}` : ""}
     </span>
   );
 }

@@ -295,13 +295,14 @@ function Hi({ text, q }: { text: string; q: string }) {
   return <>{text.slice(0, i)}<span style={{ background: MARK, borderRadius: 3, padding: "0 1px" }}>{text.slice(i, i + q.length)}</span>{text.slice(i + q.length)}</>;
 }
 
-function ResourceTable({ kind, rows, q, dense, filterDesc = "", onClearFilter, onOpen }: { kind: Kind; rows: Row[]; q: string; dense: boolean; filterDesc?: string; onClearFilter?: () => void; onOpen: (r: Row) => void }) {
+function ResourceTable({ kind, rows, q, filterDesc = "", onClearFilter, onOpen }: { kind: Kind; rows: Row[]; q: string; filterDesc?: string; onClearFilter?: () => void; onOpen: (r: Row) => void }) {
   const spec = SPEC[kind.id];
   if (!spec) return null;
   const filtered = rows;
   /* 가로 스크롤 금지 — 고정폭 컬럼을 minmax로 감싸 컨테이너에 항상 맞춘다 */
   const grid = spec.cols.map((c) => { const w = c.w ?? "1fr"; return w.endsWith("px") ? `minmax(48px, ${w})` : w; }).join(" ");
-  const rowPad = dense ? "5px 16px" : "9px 16px";
+  // 밀도 토글 제거(P1) — 엔터프라이즈 밀도의 단일 행 높이로 고정한다.
+  const rowPad = "7px 16px";
   return (
     /* 긴 표는 카드 안에서 세로 스크롤(헤더 고정) */
     <div style={{ background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 14, overflowY: "auto", overflowX: "hidden", maxHeight: `min(calc(64vh / ${PRESENT_SCALE}), 680px)`, scrollbarGutter: "stable" }}>
@@ -426,6 +427,16 @@ function UsageMiniChart({ title, unit, values, observed, total }: { title: strin
         <span>표본 {observed}/{total}{observed < total ? " · 부분 관측" : ""}</span>
         <span>최대 {max.toFixed(0)} · 최소 {min.toFixed(0)} {unit}</span>
       </div>
+    </div>
+  );
+}
+// RetryNote — 일시적 오류(요청 실패)를 "관측 안 됨(데이터 없음)"과 구분해 표시하고
+// 재조회 버튼을 제공한다. 오류를 unavailable로 위장하지 않는다(M13/M14/M16).
+function RetryNote({ onRetry, label }: { onRetry: () => void; label?: string }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 0", flexWrap: "wrap" }}>
+      <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>{label ?? "일시적 오류로 관측값을 불러오지 못했습니다."}</span>
+      <button type="button" onClick={onRetry} style={{ border: `1px solid ${UI.line}`, background: UI.card, color: BLUE, borderRadius: 8, padding: "5px 11px", fontSize: TYPE.label2, fontWeight: 700, cursor: "pointer" }}>다시 시도</button>
     </div>
   );
 }
@@ -572,6 +583,7 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
                 {isWorkload && wd.coverageAvailability === "partial" && (
                   <div style={{ fontSize: TYPE.caption2, color: UI.ink3, marginTop: 8 }}>일부 범위만 관측된 부분 스냅샷입니다.</div>
                 )}
+                {isWorkload && wd.status === "error" && <RetryNote onRetry={wd.retry} label="상세 관측값을 불러오지 못했습니다." />}
                 <div style={{ display: "flex", gap: 7, marginTop: 12 }}>
                   {isWorkload && <button onClick={onShowPods ? () => onShowPods(name) : undefined}
                     style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${UI.line}`, background: UI.card, borderRadius: 8, padding: "6px 11px", fontSize: TYPE.label2, fontWeight: 600, color: BLUE, cursor: "pointer" }}><Boxes size={12} />관리 중인 파드 보기</button>}
@@ -630,7 +642,8 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
               {isPod && (
               <Sec title="메트릭" icon={Activity}>
                 {usage.status === "loading" ? <Empty>불러오는 중…</Empty>
-                  : usage.status === "unavailable" || usage.status === "error" ? <Empty>메트릭 관측 안 됨 — 이 파드의 관측 사용량 표본이 없습니다.</Empty>
+                  : usage.status === "error" ? <RetryNote onRetry={usage.retry} label="메트릭을 불러오지 못했습니다." />
+                  : usage.status === "unavailable" ? <Empty>메트릭 관측 안 됨 — 이 파드의 관측 사용량 표본이 없습니다.</Empty>
                   : usage.status === "ready" ? (
                     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                       {usage.hasMemory
@@ -660,7 +673,8 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
               <Sec title="관련 리소스" icon={Copy}>
                 {wd.status === "idle" ? <Empty>관측 안 됨 — 라이브 인벤토리 계약은 리소스 간 소유·참조 관계를 노출하지 않습니다.</Empty>
                   : wd.status === "loading" ? <Empty>불러오는 중…</Empty>
-                  : wd.status === "unavailable" ? <Empty>관리 파드를 관측하지 못했습니다.</Empty>
+                  : wd.status === "error" ? <RetryNote onRetry={wd.retry} label="관리 파드를 불러오지 못했습니다." />
+                  : wd.status === "unavailable" ? <Empty>관리 파드가 관측되지 않았습니다.</Empty>
                   : wd.pods.length === 0 ? <Empty>관측된 관리 파드가 없습니다.{wd.podsExcludedCount > 0 ? ` (수집 한도로 ${wd.podsExcludedCount}개 생략)` : ""}</Empty>
                   : (<div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                       {wd.pods.map((p) => (
@@ -677,7 +691,7 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
               <Sec title="최근 이벤트" icon={Activity}>
                 {wd.status === "idle" ? <Empty>관측 안 됨 — 이 리소스의 이벤트 계약이 없습니다.</Empty>
                   : wd.status === "loading" ? <Empty>불러오는 중…</Empty>
-                  : wd.status === "unavailable" ? <Empty>이벤트를 관측하지 못했습니다.</Empty>
+                  : wd.status === "error" ? <RetryNote onRetry={wd.retry} label="이벤트를 불러오지 못했습니다." />
                   : wd.events.length === 0 ? <Empty>최근 관측된 이벤트가 없습니다.</Empty>
                   : (<div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                       {wd.events.map((e, i) => (
@@ -726,8 +740,21 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
 
 
           {tab === "events" && (
-            <div style={{ padding: "18px 0", fontSize: TYPE.label, color: UI.ink3, lineHeight: 1.6 }}>
-              관측 안 됨 — 라이브 인벤토리 계약은 이 리소스의 이벤트를 노출하지 않습니다.
+            <div style={{ padding: "12px 0" }}>
+              {/* M16: 워크로드 상세 계약의 관측 이벤트를 렌더한다. 미지원 kind는 honest 빈상태. */}
+              {wd.status === "idle" ? <Empty>관측 안 됨 — 이 리소스의 이벤트 계약이 없습니다.</Empty>
+                : wd.status === "loading" ? <Empty>불러오는 중…</Empty>
+                : wd.status === "error" ? <RetryNote onRetry={wd.retry} label="이벤트를 불러오지 못했습니다." />
+                : wd.events.length === 0 ? <Empty>최근 관측된 이벤트가 없습니다.{wd.eventsAvailability === "partial" ? " (부분 관측)" : ""}</Empty>
+                : (<div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                    {wd.eventsAvailability === "partial" && <div style={{ fontSize: TYPE.caption2, color: UI.ink3, marginBottom: 3 }}>일부 범위만 관측된 부분 이벤트입니다.</div>}
+                    {wd.events.map((e, i) => (
+                      <div key={`${e.reason ?? "ev"}-${i}`} style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, border: `1px solid ${UI.line2}`, background: UI.bg2, borderRadius: 8, padding: "8px 12px" }}>
+                        <span style={{ fontSize: TYPE.label, color: UI.ink }}>{statusLabel(e.reason)}{e.type ? ` · ${statusLabel(e.type)}` : ""}{e.count != null && e.count > 1 ? ` ×${e.count}` : ""}</span>
+                        {e.lastAt && <span style={{ fontSize: TYPE.caption2, color: UI.ink3, flexShrink: 0 }}>{e.lastAt.replace("T", " ").slice(0, 16)}</span>}
+                      </div>
+                    ))}
+                  </div>)}
             </div>
           )}
 
@@ -760,8 +787,11 @@ function TrafficPanel({ focus, onFocus, onOpen, stickyTop }: {
   const { clusters } = useDevpreviewContracts();
   const clusterIds = useMemo(() => clusters.map((c) => c.id), [clusters]);
   const topo = useRelationTopology(clusterIds);
+  // M20: React key·포커스는 cluster 한정 합성 id(n.id)로 — 여러 클러스터의 동일 서비스명이
+  // 충돌해 dup key가 나거나 한 행이 다른 클러스터 서비스를 가리키지 않게 한다. 표시·상세
+  // 열기는 서비스 이름을 쓴다.
   const rows = useMemo(() => topo.status === "ready"
-    ? topo.nodes.map((n) => ({ id: n.name || n.id, ns: n.namespace, bad: /error|fail|crit|degrad|down|unhealthy/i.test(n.status) }))
+    ? topo.nodes.map((n) => ({ id: n.id, name: n.name || n.id, ns: n.namespace, bad: /error|fail|crit|degrad|down|unhealthy/i.test(n.status) }))
     : [], [topo]);
   const visibleRows = rows.slice(0, 40);
   const hiddenCount = Math.max(0, rows.length - visibleRows.length);
@@ -775,11 +805,11 @@ function TrafficPanel({ focus, onFocus, onOpen, stickyTop }: {
       {topo.status === "unavailable" && <span style={{ fontSize: TYPE.caption, color: UI.ink3, padding: "6px 2px" }}>관계 토폴로지 관측 안 됨</span>}
       {topo.status === "ready" && rows.length === 0 && <span style={{ fontSize: TYPE.caption, color: UI.ink3, padding: "6px 2px" }}>관측된 서비스가 없습니다</span>}
       {visibleRows.map((r) => (
-        <button type="button" aria-label={`${r.id} 서비스 그래프 포커스`} key={r.id} onClick={() => onFocus(focus === r.id ? null : r.id)} onDoubleClick={() => onOpen(r.id)} className="rrow"
+        <button type="button" aria-label={`${r.name} 서비스 그래프 포커스`} key={r.id} onClick={() => onFocus(focus === r.id ? null : r.id)} onDoubleClick={() => onOpen(r.name)} className="rrow"
           style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left", border: `1px solid ${focus === r.id ? TINT.blue.bd : "transparent"}`, background: focus === r.id ? TINT.blue.bg : "transparent", borderRadius: 9, padding: "7px 9px", cursor: "pointer" }}>
           <span style={{ width: 8, height: 8, borderRadius: 3, background: r.bad ? HP.crit : HP.ok, flexShrink: 0 }} />
           <span style={{ minWidth: 0, flex: 1 }}>
-            <span style={{ display: "block", fontSize: TYPE.label2, fontWeight: 700, fontFamily: MONO, color: UI.ink }}>{r.id}</span>
+            <span style={{ display: "block", fontSize: TYPE.label2, fontWeight: 700, fontFamily: MONO, color: UI.ink }}>{r.name}</span>
             <span style={{ display: "block", fontSize: TYPE.caption, color: UI.ink3 }}>{r.ns ?? "—"}</span>
           </span>
           {r.bad
@@ -1116,7 +1146,8 @@ function HomeSurface({ clusterMeta, incidentClusterIds, onDrillCluster, onConnec
             </span>
           );
         })()}
-        <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+        {/* 좁은 화면: 우측 컨트롤을 왼쪽 정렬로 되돌리고 줄바꿈해 상단 잘림/가로 넘침을 막는다. */}
+        <span style={{ marginLeft: narrow ? 0 : "auto", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           <span style={{ display: "flex", gap: 2, background: inkA(0.05), borderRadius: 8, padding: 2 }}>
             {(["오늘", "7일", "30일"] as const).map((p) => (
               <button key={p} onClick={() => setPeriod(p)}
@@ -1163,10 +1194,10 @@ function HomeSurface({ clusterMeta, incidentClusterIds, onDrillCluster, onConnec
         })}
         {editing && hiddenDefs.length > 0 && (
           <div style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", border: `1.5px dashed ${UI.line}`, borderRadius: 14, padding: "11px 14px" }}>
-            <span style={{ fontSize: TYPE.label, fontWeight: 700, color: UI.ink3 }}>위젯 추가</span>
+            <span style={{ fontSize: TYPE.label, fontWeight: 700, color: UI.ink3, whiteSpace: "nowrap" }}>위젯 추가</span>
             {hiddenDefs.map((w) => (
               <button key={w.id} onClick={() => save({ ...board, hidden: board.hidden.filter((x) => x !== w.id) })}
-                style={{ border: `1px solid ${UI.line}`, background: UI.card, color: UI.ink, borderRadius: 999, padding: "4px 12px", fontSize: TYPE.label, fontWeight: 600, cursor: "pointer" }}>+ {w.title}</button>
+                style={{ border: `1px solid ${UI.line}`, background: UI.card, color: UI.ink, borderRadius: 999, padding: "4px 12px", fontSize: TYPE.label, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>+ {w.title}</button>
             ))}
           </div>
         )}
@@ -1177,6 +1208,13 @@ function HomeSurface({ clusterMeta, incidentClusterIds, onDrillCluster, onConnec
 
 // ── 앱 ─────────────────────────────
 // 종류 선택 → 맵 '연결 보기' 탭 매핑 (같은 축은 한 몸으로 움직인다)
+// P1: 워크스페이스 표시명 — 백엔드 workspace_id는 "default"지만 제품 표기는 "Krafton Jungle".
+// 다른 워크스페이스 id는 그대로 노출한다(지어내지 않음).
+function workspaceLabel(id: string | null | undefined): string {
+  if (id == null || id === "") return "워크스페이스 확인 중";
+  return id === "default" ? "Krafton Jungle" : id;
+}
+
 const lensTabFor = (id: string): "svc" | "cfg" | "git" | null =>
   id === "Service" ? "svc"
   : id === "ConfigMap" || id === "Secret" ? "cfg"
@@ -1415,7 +1453,7 @@ function App() {
       <header ref={headerRef} style={{ position: "sticky", top: 0, zIndex: 74, display: "flex", alignItems: "center", gap: 10, padding: "12px 18px", borderBottom: `1px solid ${UI.line}`, background: UI.card }}>
         {/* 워크스페이스 — 정체성은 항상 맨 왼쪽(D20). 데모 세계는 워크스페이스 1개라 사실 표시만 */}
         <span style={{ display: "flex", alignItems: "center", gap: 7, fontSize: TYPE.body, fontWeight: 700, color: UI.ink, paddingRight: 12, borderRight: `1px solid ${UI.line2}` }}>
-          <Building2 size={14} style={{ color: UI.ink3 }} />{contract.workspaceId ?? "워크스페이스 확인 중"}
+          <Building2 size={14} style={{ color: UI.ink3 }} />{workspaceLabel(contract.workspaceId)}
         </span>
         {/* 새로고침 — 내부/기술 표기("실제 계약") 텍스트 제거, 상태점 + 아이콘만(P1-10) */}
         <button type="button" aria-label="라이브 데이터 새로고침" onClick={contract.refresh}
@@ -1559,7 +1597,7 @@ function App() {
                 <div style={{ padding: "8px 10px 9px", borderBottom: `1px solid ${UI.line2}` }}>
                   <div style={{ fontSize: TYPE.body, fontWeight: 700, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{session.status === "loading" ? "확인 중…" : session.displayName ?? session.userId ?? "알 수 없음"}</div>
                   <div style={{ fontSize: TYPE.caption2, fontFamily: MONO, color: UI.ink3, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{session.email ?? (session.roles.length ? session.roles.map(statusLabel).join(" · ") : session.authMode ? `인증 모드: ${statusLabel(session.authMode)}` : "이메일 없음")}</div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: TYPE.caption2, color: UI.ink2, marginTop: 6 }}><Building2 size={11} style={{ color: UI.ink3 }} />{session.workspaceId ?? contract.workspaceId ?? "워크스페이스 확인 중"} 워크스페이스</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: TYPE.caption2, color: UI.ink2, marginTop: 6 }}><Building2 size={11} style={{ color: UI.ink3 }} />{workspaceLabel(session.workspaceId ?? contract.workspaceId)} 워크스페이스</div>
                 </div>
                 {session.logoutSupported ? (
                   <button className="rrow" onClick={() => { void logoutApi().then(() => window.location.reload()).catch(() => undefined); }}
@@ -1627,6 +1665,7 @@ function App() {
                 </button>
               ))}
             </span>
+            {/* P1: UI를 설명하는 데모성 카피("서비스 호출 관점 — 전체 클러스터")는 제거한다. */}
           </div>
 
           {resView === "map" && (
@@ -1672,7 +1711,7 @@ function App() {
                   ) : resourcesView.status === "unavailable" ? (
                     <div style={{ background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 14, padding: "40px 18px", textAlign: "center", fontSize: TYPE.body, color: UI.ink3 }}>인벤토리 관측 안 됨</div>
                   ) : (
-                    <ResourceTable kind={kind} rows={shownRows} q={q} dense
+                    <ResourceTable kind={kind} rows={shownRows} q={q}
                       filterDesc={[inScope ? `${scopeLabel}` : "", ns !== "모든 네임스페이스" ? `${ns} 네임스페이스` : ""].filter(Boolean).join(" · ")}
                       onClearFilter={() => { setQ(""); setNs("모든 네임스페이스"); }}
                       onOpen={(r) => setDetail({ kind, row: r })} />
