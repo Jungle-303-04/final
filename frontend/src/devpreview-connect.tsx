@@ -54,6 +54,7 @@ import {
   preflightClusterTarget,
   registerClusterTarget,
   useClusterConnectionStatus,
+  useClusterActivationReadiness,
   useClusterProviders,
   type ClusterProvidersView,
   type ConnectionStatusView,
@@ -764,9 +765,13 @@ function ClusterInstallStep({ providers, platform, name, env, providerConfig, on
 
   // 등록이 실제로 완료된 뒤에만(=cluster_id 존재) 연결 상태를 폴링한다(타이머 성공 흉내 없음).
   const conn = useClusterConnectionStatus(receipt?.cluster_id ?? null);
+  const activation = useClusterActivationReadiness(
+    receipt?.cluster_id ?? null,
+    conn.connection,
+  );
   useEffect(() => {
-    if (conn.connection === "connected") onConnected(conn);
-  }, [conn.connection]);
+    if (activation.status === "ready") onConnected(conn);
+  }, [activation.status, conn, onConnected]);
 
   // 사전검증(비변경 POST) — 명시적 클릭에서만.
   const runPreflight = () => {
@@ -871,11 +876,45 @@ function ClusterInstallStep({ providers, platform, name, env, providerConfig, on
               </>
             )}
           </div>
+          {conn.connection === "connected" ? (
+            <div className="inset grid gap-2.5" aria-label="등록 준비 상태" style={{ padding: "13px 16px" }}>
+              <ActivationEvidenceRow label="에이전트 heartbeat" status={activation.heartbeat} />
+              <ActivationEvidenceRow label="인벤토리 수신" status={activation.inventory} />
+              <ActivationEvidenceRow label="CPU·메모리 메트릭 수신" status={activation.metrics} />
+              {activation.status === "error" ? (
+                <p className="text-[11.5px] c-red">실제 관측 API 응답을 확인하지 못했습니다. 자동으로 다시 확인합니다.</p>
+              ) : null}
+            </div>
+          ) : null}
         </>
       )}
 
       <div className="flex"><BackBtn onClick={onBack} /></div>
     </motion.div>
+  );
+}
+
+function ActivationEvidenceRow({
+  label,
+  status,
+}: {
+  label: string;
+  status: "waiting" | "ready" | "error";
+}) {
+  return (
+    <div className="flex min-w-0 items-center gap-2 text-[12.5px]">
+      {status === "ready" ? (
+        <Check aria-hidden="true" className="size-4 shrink-0 c-green" strokeWidth={3} />
+      ) : status === "error" ? (
+        <AlertCircle aria-hidden="true" className="size-4 shrink-0 c-red" />
+      ) : (
+        <Spin c="size-4 shrink-0 c-accent" />
+      )}
+      <span className="min-w-0 flex-1 truncate c-ink">{label}</span>
+      <span className={status === "ready" ? "c-green" : status === "error" ? "c-red" : "c-3"}>
+        {status === "ready" ? "Ready" : status === "error" ? "확인 오류" : "대기"}
+      </span>
+    </div>
   );
 }
 

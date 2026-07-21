@@ -75,6 +75,12 @@ vi.mock("./devpreview/connectFeed", async (importOriginal) => {
       agentVersion: null,
       connectedAt: null,
     }),
+    useClusterActivationReadiness: () => ({
+      status: "idle",
+      heartbeat: "waiting",
+      inventory: "waiting",
+      metrics: "waiting",
+    }),
     preflightClusterTarget: vi.fn(),
     registerClusterTarget: vi.fn(),
   };

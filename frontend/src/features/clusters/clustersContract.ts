@@ -63,8 +63,11 @@ export interface ClusterDisconnectPort {
 
 export interface ClusterDisconnectReceipt {
   status: "uninstalling" | "cleanup-required" | "disconnected";
+  stage: "agent_cleanup_queued" | "agent_cleanup_pending" | "registration_revoked" | "purged";
   commandId: string | null;
   uninstallCommand: string | null;
+  cleanupVerified: boolean;
+  cleanupResources: string[];
   residualResources: string[];
   failureReason: string | null;
 }
@@ -72,5 +75,7 @@ export interface ClusterDisconnectReceipt {
 export interface ClusterDisconnectProgress {
   status: "queued" | "leased" | "running" | "completed" | "failed";
   cleanupCompleted: boolean;
+  cleanupResources: string[];
+  residualResources: string[];
   failureReason: string | null;
 }

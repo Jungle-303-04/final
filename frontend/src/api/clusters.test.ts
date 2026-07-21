@@ -178,6 +178,24 @@ describe("clusters API", () => {
     );
   });
 
+  it("accepts the canonical unregister response when optional cleanup detail is absent", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({
+      cluster_id: "target-blue",
+      status: "cleanup_required",
+      stage: "agent_cleanup_pending",
+      command_id: "cmd-uninstall-1",
+      command_status_path: "/api/commands/cmd-uninstall-1",
+      cleanup_verified: false,
+      failure_reason: "agent is offline; cleanup waits for agent reconnect",
+    }, 202));
+
+    await expect(unregisterCluster("target-blue")).resolves.toMatchObject({
+      uninstall_command: null,
+      resources: [],
+      residual_resources: [],
+    });
+  });
+
   it("rejects an empty cluster identity before issuing an unregister request", () => {
     const fetchMock = vi.spyOn(globalThis, "fetch");
     expect(() => unregisterCluster("  ")).toThrow(TypeError);

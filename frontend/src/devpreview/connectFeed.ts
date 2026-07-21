@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 
 import { getClusterConnectStatus } from "../api/cluster-connect";
 import type { ClusterConnectStatusResponse } from "../api/cluster-connect-schemas";
+import { getInventorySummary } from "../api/inventory-summary";
+import { getClusterUsage } from "../api/metrics";
 import {
   connectApplication as connectApplicationApi,
   type ApplicationConnectInput,
@@ -313,6 +315,133 @@ export function useClusterConnectionStatus(clusterId: string | null): Connection
   }, [clusterId]);
 
   return view;
+}
+
+export type ActivationEvidenceStatus = "waiting" | "ready" | "error";
+export type ActivationReadinessStatus = "idle" | "waiting" | "ready" | "error";
+
+export interface ClusterActivationReadinessView {
+  status: ActivationReadinessStatus;
+  heartbeat: ActivationEvidenceStatus;
+  inventory: ActivationEvidenceStatus;
+  metrics: ActivationEvidenceStatus;
+}
+
+const IDLE_ACTIVATION: ClusterActivationReadinessView = {
+  status: "idle",
+  heartbeat: "waiting",
+  inventory: "waiting",
+  metrics: "waiting",
+};
+
+interface ObservedActivation extends ClusterActivationReadinessView {
+  clusterId: string;
+}
+
+/**
+ * Waits for three independent, server-observed readiness signals after target
+ * registration: agent heartbeat, an inventory snapshot, and timestamped CPU or
+ * memory telemetry. A connected heartbeat alone never advances the wizard to
+ * Ready, and failed reads remain visible while polling continues.
+ */
+export function useClusterActivationReadiness(
+  clusterId: string | null,
+  connection: ClusterConnectStatusResponse["status"] | null,
+): ClusterActivationReadinessView {
+  const [observed, setObserved] = useState<ObservedActivation | null>(null);
+
+  useEffect(() => {
+    if (!clusterId || connection !== "connected") return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let controller: AbortController | null = null;
+
+    const schedule = () => {
+      if (cancelled || timer !== null || document.hidden) return;
+      timer = setTimeout(() => {
+        timer = null;
+        void poll();
+      }, POLL_INTERVAL_MS);
+    };
+    const poll = async () => {
+      if (cancelled || document.hidden || controller !== null) return;
+      controller = new AbortController();
+      const signal = controller.signal;
+      const [inventoryResult, metricsResult] = await Promise.allSettled([
+        getInventorySummary(clusterId, signal),
+        getClusterUsage(clusterId, { limit: 1 }, signal),
+      ]);
+      controller = null;
+      if (cancelled || signal.aborted) return;
+
+      const inventory = inventoryResult.status === "rejected"
+        ? "error"
+        : inventoryResult.value.latest_snapshot !== null
+          && inventoryResult.value.counts_evidence.completeness !== "unavailable"
+          ? "ready"
+          : "waiting";
+      const metrics = metricsResult.status === "rejected"
+        ? "error"
+        : metricsResult.value.samples.some((sample) => (
+          sample.sampled_at !== null
+          && (sample.usage.cpu_pct !== null && sample.usage.cpu_pct !== undefined
+            || sample.usage.mem_pct !== null && sample.usage.mem_pct !== undefined)
+        ))
+          ? "ready"
+          : "waiting";
+      const status = inventory === "ready" && metrics === "ready"
+        ? "ready"
+        : inventory === "error" || metrics === "error"
+          ? "error"
+          : "waiting";
+      setObserved({
+        clusterId,
+        status,
+        heartbeat: "ready",
+        inventory,
+        metrics,
+      });
+      if (status !== "ready") schedule();
+    };
+    const onVisibility = () => {
+      if (document.hidden) {
+        if (timer !== null) clearTimeout(timer);
+        timer = null;
+        controller?.abort();
+        controller = null;
+        return;
+      }
+      void poll();
+    };
+
+    document.addEventListener("visibilitychange", onVisibility);
+    void poll();
+    return () => {
+      cancelled = true;
+      if (timer !== null) clearTimeout(timer);
+      controller?.abort();
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [clusterId, connection]);
+
+  if (!clusterId) return IDLE_ACTIVATION;
+  if (connection !== "connected") {
+    return {
+      status: connection === "expired" ? "error" : "waiting",
+      heartbeat: connection === "expired" ? "error" : "waiting",
+      inventory: "waiting",
+      metrics: "waiting",
+    };
+  }
+  if (observed?.clusterId !== clusterId) {
+    return { ...IDLE_ACTIVATION, status: "waiting", heartbeat: "ready" };
+  }
+  return {
+    status: observed.status,
+    heartbeat: observed.heartbeat,
+    inventory: observed.inventory,
+    metrics: observed.metrics,
+  };
 }
 
 // ── Target registration (explicit-click mutations only) ─────────────────────

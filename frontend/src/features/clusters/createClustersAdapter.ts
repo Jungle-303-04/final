@@ -31,7 +31,7 @@ interface ClusterConnectionWire {
 interface ClusterUnregisterWire {
   cluster_id: string;
   status: "uninstalling" | "cleanup_required" | "disconnected" | "purged";
-  stage: string;
+  stage: "agent_cleanup_queued" | "agent_cleanup_pending" | "registration_revoked" | "purged";
   command_id: string | null;
   command_status_path: string | null;
   uninstall_command: string | null;
@@ -139,8 +139,11 @@ function disconnectReceipt(response: ClusterUnregisterWire): ClusterDisconnectRe
       : response.status === "uninstalling"
         ? "uninstalling"
         : "disconnected",
+    stage: response.stage,
     commandId: response.command_id,
     uninstallCommand: response.uninstall_command,
+    cleanupVerified: response.cleanup_verified,
+    cleanupResources: response.resources,
     residualResources: response.residual_resources,
     failureReason: response.failure_reason,
   };
@@ -156,8 +159,16 @@ function disconnectProgress(response: CommandStatusWire): ClusterDisconnectProgr
   return {
     status: response.status,
     cleanupCompleted: result.cleanup_completed === true,
+    cleanupResources: stringArray(result.resources),
+    residualResources: stringArray(result.residual_resources),
     failureReason,
   };
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
 }
 
 async function withFailure<T>(operation: () => Promise<T>): Promise<T> {

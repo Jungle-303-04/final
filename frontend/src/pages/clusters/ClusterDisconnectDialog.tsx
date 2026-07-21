@@ -76,6 +76,7 @@ export function ClusterDisconnectDialog({
   const confirmed = confirmation === cluster.name;
   const pending = phase === "submitting" || phase === "uninstalling";
   const terminal = phase === "succeeded" || phase === "residual-cleanup";
+  const manualCommandAvailable = Boolean(receipt?.uninstallCommand);
 
   const changeOpen = (nextOpen: boolean) => {
     if (!nextOpen && (pending || phase === "cleanup-required")) {
@@ -95,7 +96,7 @@ export function ClusterDisconnectDialog({
 
   const finishDisconnect = (nextPhase: DisconnectPhase) => {
     setPhase(nextPhase);
-    onDisconnected(cluster.id);
+    if (nextPhase === "succeeded") onDisconnected(cluster.id);
   };
 
   const followCommand = async (
@@ -108,7 +109,14 @@ export function ClusterDisconnectDialog({
     while (!controller.signal.aborted) {
       const progress = await port.loadDisconnect(commandId, controller.signal);
       if (progress.status === "completed" && progress.cleanupCompleted) {
-        finishDisconnect("residual-cleanup");
+        setReceipt((current) => current === null ? current : {
+          ...current,
+          stage: "registration_revoked",
+          cleanupVerified: true,
+          cleanupResources: progress.cleanupResources,
+          residualResources: progress.residualResources,
+        });
+        finishDisconnect(progress.residualResources.length > 0 ? "residual-cleanup" : "succeeded");
         return;
       }
       if (progress.status === "completed" || progress.status === "failed") {
@@ -167,7 +175,17 @@ export function ClusterDisconnectDialog({
       const nextReceipt = await port.confirmManualCleanup(cluster.id, controller.signal);
       if (controller.signal.aborted) return;
       setReceipt(nextReceipt);
-      finishDisconnect("succeeded");
+      if (
+        nextReceipt.status === "disconnected"
+        && nextReceipt.cleanupVerified
+        && nextReceipt.residualResources.length === 0
+      ) {
+        finishDisconnect("succeeded");
+      } else {
+        setPhase(nextReceipt.residualResources.length > 0
+          ? "residual-cleanup"
+          : "cleanup-required");
+      }
     } catch (error) {
       if (isAbortError(error)) return;
       handleFailure(error, reportUnauthorized);
@@ -195,7 +213,7 @@ export function ClusterDisconnectDialog({
       >
         <form className="grid min-w-0 gap-5" onSubmit={(event) => void submit(event)}>
           <DialogHeader>
-            <DialogTitle>{phaseTitle(phase, t)}</DialogTitle>
+            <DialogTitle>{phaseTitle(phase, t, manualCommandAvailable)}</DialogTitle>
             <DialogDescription>
               {phase === "confirm"
                 ? t("clusters.disconnect.description", { name: cluster.name })
@@ -225,12 +243,16 @@ export function ClusterDisconnectDialog({
 
           {pending ? <DisconnectProgress phase={phase} t={t} /> : null}
 
+          {receipt ? <DisconnectEvidence phase={phase} receipt={receipt} /> : null}
+
           {phase === "cleanup-required" || phase === "residual-cleanup" ? (
             <CleanupCommand
               command={receipt?.uninstallCommand ?? null}
               copied={copied}
               copyLabel={t("clusters.disconnect.manual.copy")}
-              description={t("clusters.disconnect.manual.description")}
+              description={manualCommandAvailable
+                ? t("clusters.disconnect.manual.description")
+                : t("clusters.disconnect.manual.unavailable.description")}
               onCopy={() => void copyCommand()}
               residualResources={receipt?.residualResources ?? []}
               resourcesLabel={(count, resources) => t("clusters.disconnect.manual.resources", {
@@ -240,7 +262,9 @@ export function ClusterDisconnectDialog({
               commandLabel={t("clusters.disconnect.manual.command")}
               title={phase === "residual-cleanup"
                 ? t("clusters.disconnect.residual.title")
-                : t("clusters.disconnect.manual.title")}
+                : manualCommandAvailable
+                  ? t("clusters.disconnect.manual.title")
+                  : t("clusters.disconnect.manual.unavailable.title")}
             />
           ) : null}
 
@@ -264,10 +288,14 @@ export function ClusterDisconnectDialog({
               <Button onClick={() => changeOpen(false)} type="button">
                 {t("common.action.close")}
               </Button>
-            ) : phase === "cleanup-required" ? (
+            ) : phase === "cleanup-required" && manualCommandAvailable ? (
               <Button onClick={() => void confirmCleanup()} type="button">
                 <ShieldCheck aria-hidden="true" />
-                {t("clusters.disconnect.manual.force")}
+                {t("clusters.disconnect.manual.confirm")}
+              </Button>
+            ) : phase === "cleanup-required" ? (
+              <Button onClick={() => changeOpen(false)} type="button" variant="outline">
+                {t("common.action.close")}
               </Button>
             ) : pending ? (
               <div className="flex w-full items-center justify-between gap-3">
@@ -326,6 +354,71 @@ function DisconnectProgress({ phase, t }: { phase: DisconnectPhase; t: Translati
         </li>
       ))}
     </ol>
+  );
+}
+
+function DisconnectEvidence({
+  phase,
+  receipt,
+}: {
+  phase: DisconnectPhase;
+  receipt: ClusterDisconnectReceipt;
+}) {
+  const cleanupFinished = receipt.cleanupVerified
+    || phase === "residual-cleanup"
+    || phase === "succeeded";
+  const registrationRevoked = receipt.stage === "registration_revoked" || cleanupFinished;
+  const noInstalledAgentResources = receipt.status === "disconnected"
+    && receipt.commandId === null
+    && receipt.cleanupResources.length === 0;
+  const rows = [
+    {
+      label: "Deployment · ServiceAccount · RBAC 정리",
+      value: noInstalledAgentResources
+        ? "정리 대상 없음"
+        : cleanupFinished
+        ? "서버 완료 증적 확인"
+        : receipt.stage === "agent_cleanup_queued"
+          ? "에이전트 명령 대기"
+          : "확인 필요",
+      complete: cleanupFinished || noInstalledAgentResources,
+    },
+    {
+      label: "에이전트 자격 증명 폐기",
+      value: registrationRevoked ? "폐기 확인" : "관리 DB 응답 대기",
+      complete: registrationRevoked,
+    },
+    {
+      label: "관리 DB 등록 상태",
+      value: registrationRevoked ? "등록 해제 확인" : receipt.stage,
+      complete: registrationRevoked,
+    },
+    {
+      label: "잔여 리소스",
+      value: `${receipt.residualResources.length}개`,
+      complete: cleanupFinished && receipt.residualResources.length === 0,
+    },
+  ];
+
+  return (
+    <section className="grid gap-2 rounded-xl border bg-muted/20 p-3" aria-label="서버가 보고한 연결 해제 증적">
+      {rows.map((row) => (
+        <div className="flex min-w-0 items-center gap-2 text-xs" key={row.label}>
+          {row.complete ? (
+            <Check aria-hidden="true" className="size-4 shrink-0 text-emerald-600" />
+          ) : (
+            <span aria-hidden="true" className="size-4 shrink-0 rounded-full border" />
+          )}
+          <span className="min-w-0 flex-1 truncate text-muted-foreground">{row.label}</span>
+          <span className="shrink-0 font-medium">{row.value}</span>
+        </div>
+      ))}
+      {receipt.cleanupResources.length > 0 ? (
+        <p className="break-words text-xs text-muted-foreground">
+          서버 보고 정리 대상 {receipt.cleanupResources.length}개 · {receipt.cleanupResources.join(", ")}
+        </p>
+      ) : null}
+    </section>
   );
 }
 
@@ -391,8 +484,13 @@ function CleanupCommand({
 function phaseTitle(
   phase: DisconnectPhase,
   t: TranslationFunction,
+  manualCommandAvailable: boolean,
 ): string {
-  if (phase === "cleanup-required") return t("clusters.disconnect.manual.heading");
+  if (phase === "cleanup-required") {
+    return manualCommandAvailable
+      ? t("clusters.disconnect.manual.heading")
+      : t("clusters.disconnect.manual.unavailable.heading");
+  }
   if (phase === "residual-cleanup") return t("clusters.disconnect.agentStopped.title");
   if (phase === "succeeded") return t("clusters.disconnect.success.title");
   return t("clusters.disconnect.title");

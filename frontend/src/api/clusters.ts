@@ -17,13 +17,21 @@ export interface UnregisterClusterOptions {
 const clusterUnregisterResponseSchema = z.strictObject({
   cluster_id: z.string().min(1),
   status: z.enum(["uninstalling", "cleanup_required", "disconnected", "purged"]),
-  stage: z.string().min(1),
+  stage: z.enum([
+    "agent_cleanup_queued",
+    "agent_cleanup_pending",
+    "registration_revoked",
+    "purged",
+  ]),
   command_id: z.string().min(1).nullable(),
   command_status_path: z.string().min(1).nullable(),
-  uninstall_command: z.string().min(1).nullable(),
+  // Older management planes do not expose a manual command or expanded
+  // resource list. Defaults preserve that absence instead of failing the
+  // entire unregister response or inventing browser-side cleanup evidence.
+  uninstall_command: z.string().min(1).nullable().optional().default(null),
   cleanup_verified: z.boolean(),
-  resources: z.array(z.string()),
-  residual_resources: z.array(z.string()),
+  resources: z.array(z.string()).optional().default([]),
+  residual_resources: z.array(z.string()).optional().default([]),
   failure_reason: z.string().nullable(),
 });
 

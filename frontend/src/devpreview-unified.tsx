@@ -19,6 +19,9 @@ import { ConnectWizard } from "./devpreview-connect";
 import { TopologyView } from "./devpreview-topology";
 import { GithubIcon } from "./devpreview/brandIcons";
 import { DevpreviewContractProvider, useDevpreviewContracts } from "./devpreview/contracts";
+import { ClusterLifecycleControl } from "./devpreview/ClusterLifecycleControl";
+import { AuthSessionGateProvider } from "./features/auth/AuthSessionGate";
+import { I18nProvider } from "./shared/i18n";
 import { activeIncidentClusterIds, useRcaIssues } from "./devpreview/rcaIssuesFeed";
 import { useCostOverview } from "./devpreview/costFeed";
 import { useSession, sessionInitial } from "./devpreview/sessionFeed";
@@ -1435,6 +1438,23 @@ function App() {
     setToasts((cur) => [...cur, { id, ...t }]);
     window.setTimeout(() => setToasts((cur) => cur.filter((x) => x.id !== id)), 3800);
   };
+  const reportClusterLifecyclePhase = (
+    clusterId: string,
+    phase: "confirm" | "submitting" | "uninstalling" | "cleanup-required" | "residual-cleanup" | "succeeded" | "failed",
+  ) => {
+    if (phase === "confirm") return;
+    const message = {
+      submitting: "연결 해제 요청을 서버에 전달했습니다",
+      uninstalling: "에이전트가 Deployment·ServiceAccount·RBAC 정리를 수행 중입니다",
+      "cleanup-required": "서버가 자동 정리 미완료를 반환했습니다",
+      "residual-cleanup": "등록과 자격 증명이 폐기됐으며 서버가 보고한 잔여 리소스 확인이 필요합니다",
+      succeeded: "서버가 관리 DB 등록 및 자격 증명 폐기를 확인했습니다",
+      failed: "서버가 연결 해제 실패를 반환했습니다",
+    }[phase];
+    const title = `${clusterId} · ${phase === "failed" ? "연결 해제 실패" : "연결 해제"}`;
+    setNotes((current) => [{ id: ++noteSeq.current, icon: "connect", title, body: message }, ...current]);
+    pushToast({ title, sub: message, tone: phase === "failed" ? "crit" : "ok" });
+  };
   // 관련 리소스 이동 — 현재 로드된 라이브 rows에서 이름으로 찾고,
   // 없으면 최소 객체({name, ns})로 상세를 연다(기존 fallback 유지).
   const openRef = (kid: string, name: string) => {
@@ -1536,6 +1556,22 @@ function App() {
             {contract.clusters.map((cluster) => <option key={cluster.id} value={cluster.id}>{cluster.id}</option>)}
           </select>
         </label>
+        )}
+        {surface === "resources" && resView !== "flow" && (
+          <ClusterLifecycleControl
+            cluster={scope.cluster
+              ? contract.clusters.find((cluster) => cluster.id === scope.cluster) ?? null
+              : null}
+            onDisconnected={(clusterId) => {
+              if (scope.cluster === clusterId) {
+                setScope({ level: "clusters" });
+                setDrillCl(null);
+              }
+              contract.refresh();
+            }}
+            onPhaseChange={reportClusterLifecyclePhase}
+            roles={session.roles}
+          />
         )}
         {surface === "resources" && resView !== "flow" && (
         <span style={{ position: "relative" }}>
@@ -1907,7 +1943,11 @@ function App() {
 export function UnifiedApp() {
   return (
     <DevpreviewContractProvider>
-      <App />
+      <I18nProvider navigatorLanguage="ko-KR" storage={null}>
+        <AuthSessionGateProvider reportUnauthorized={() => undefined}>
+          <App />
+        </AuthSessionGateProvider>
+      </I18nProvider>
     </DevpreviewContractProvider>
   );
 }
