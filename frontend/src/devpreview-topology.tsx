@@ -18,6 +18,7 @@ import {
   type EdgeTelemetry,
 } from "./devpreview/trafficTelemetryFeed";
 import type { TrafficVerdict } from "./devpreview/trafficTelemetryFeed";
+import { statusLabel } from "./devpreview/statusLabel";
 import "./styles/tokens.css";
 import "./styles/foundation.css";
 
@@ -332,7 +333,7 @@ export function TopologyView({ embedded = false, onOpenService, focusId, onFocus
                   <circle cx={p.x + 14} cy={p.y + 16} r={4} fill={HEALTH_COLOR[s.health]} />
                   <text x={p.x + 26} y={p.y + 20} fontSize="11" fontWeight="600" fill={UI.ink} fontFamily={MONO} letterSpacing="-0.01em" style={{ pointerEvents: "none" }}>{s.name.length > 15 ? `${s.name.slice(0, 14)}…` : s.name}</text>
                   <text x={p.x + 13} y={p.y + 36} fontSize="8.5" fill={UI.ink3} style={{ pointerEvents: "none" }}>{s.kind}{s.namespace ? ` · ${s.namespace}` : ""}</text>
-                  <text x={p.x + 13} y={p.y + 47} fontSize="8" fill={UI.ink3} style={{ pointerEvents: "none" }}>{s.category} · {s.status}</text>
+                  <text x={p.x + 13} y={p.y + 47} fontSize="8" fill={UI.ink3} style={{ pointerEvents: "none" }}>{s.category} · {statusLabel(s.status)}</text>
                 </g>
               );
             })}

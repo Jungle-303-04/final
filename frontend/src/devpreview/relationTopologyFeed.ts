@@ -137,14 +137,70 @@ export function useRelationTopology(
   useEffect(() => {
     const ids = key ? key.split(",") : [];
     const controller = new AbortController();
-    void getRelationTopology({ clusters: ids }, controller.signal)
-      .then((endpoint) => {
+    // `GET /api/topology`는 그래프 클러스터가 정확히 1개일 때만 유효하다(len != 1 → 422).
+    // 다중/전체 클러스터 스코프는 클러스터별로 개별 조회한 뒤 클라이언트에서 union한다.
+    if (ids.length === 0) {
+      void Promise.resolve().then(() => {
+        if (!controller.signal.aborted) setView({ ...LOADING, status: "unavailable" });
+      });
+      return () => controller.abort();
+    }
+    if (ids.length === 1) {
+      void getRelationTopology({ clusters: ids }, controller.signal)
+        .then((endpoint) => {
+          if (controller.signal.aborted) return;
+          setView(toRelationTopologyView(endpoint));
+        })
+        .catch((cause: unknown) => {
+          if (controller.signal.aborted || isAbortError(cause)) return;
+          setView((prev) => ({ ...prev, status: "error" }));
+        });
+      return () => controller.abort();
+    }
+    void Promise.all(ids.map((id) => (
+      getRelationTopology({ clusters: [id] }, controller.signal)
+        .then(toRelationTopologyView)
+        .catch((cause: unknown): RelationTopologyView | null => {
+          if (isAbortError(cause)) return null;
+          return null;
+        })
+    )))
+      .then((views) => {
         if (controller.signal.aborted) return;
-        setView(toRelationTopologyView(endpoint));
-      })
-      .catch((cause: unknown) => {
-        if (controller.signal.aborted || isAbortError(cause)) return;
-        setView((prev) => ({ ...prev, status: "error" }));
+        const ready = views.filter(
+          (candidate): candidate is RelationTopologyView => candidate !== null && candidate.status === "ready",
+        );
+        if (ready.length === 0) {
+          setView({ ...LOADING, status: "unavailable" });
+          return;
+        }
+        const nodeMap = new Map<string, RelationNodeView>();
+        const edgeMap = new Map<string, RelationEdgeView>();
+        const rootIds: string[] = [];
+        const reasons = new Set<string>();
+        let truncated = false;
+        let omittedNodeCount = 0;
+        let omittedEdgeCount = 0;
+        for (const snapshot of ready) {
+          for (const node of snapshot.nodes) nodeMap.set(node.id, node);
+          for (const edge of snapshot.edges) edgeMap.set(edge.id, edge);
+          rootIds.push(...snapshot.rootIds);
+          snapshot.partialReasonCodes.forEach((code) => reasons.add(code));
+          truncated = truncated || snapshot.truncated;
+          omittedNodeCount += snapshot.omittedNodeCount;
+          omittedEdgeCount += snapshot.omittedEdgeCount;
+        }
+        setView({
+          status: "ready",
+          nodes: [...nodeMap.values()],
+          edges: [...edgeMap.values()],
+          rootIds: [...new Set(rootIds)],
+          truncated,
+          omittedNodeCount,
+          omittedEdgeCount,
+          partialReasonCodes: [...reasons],
+          clusterId: null,
+        });
       });
     return () => controller.abort();
   }, [key]);

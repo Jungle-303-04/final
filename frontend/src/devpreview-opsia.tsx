@@ -9,6 +9,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { Box, ChevronRight, ChevronLeft, Plug, FileCog, Cpu, Activity, Server, Network } from "lucide-react";
 import { UI, BLUE, HP, TINT, MONO, TYPE, SOFT, SPRING, PAGE, PRESENT_SCALE, DUR, inkA, blueA, LINE3, INK4, BRAND, cardA } from "./devpreview/theme";
 import { AwsIcon, GithubIcon } from "./devpreview/brandIcons";
+import { statusLabel } from "./devpreview/statusLabel";
 import { useDevpreviewContracts, type DevpreviewCluster } from "./devpreview/contracts";
 import { useClusterSummaries, type ClusterSummaryView } from "./devpreview/clusterSummaryFeed";
 import { useClusterTopology, type InvNode, type InvPod } from "./devpreview/inventoryTopologyFeed";
@@ -37,7 +38,7 @@ type TipData = { x: number; y: number; label: string; status: string; health: st
 // ── 커서 추적 툴팁 정보(노드/파드 공용) ─────────────────────────────
 function HealthChip({ health }: { health: string }) {
   const sev = healthSev(health);
-  const label = health || "관측 안 됨";
+  const label = statusLabel(health); // 매핑에 없는 원시값은 원문 유지(honest)
   if (sev === "unknown") {
     return <span style={{ fontSize: TYPE.micro, fontWeight: 600, color: UI.ink3, border: `1px solid ${UI.line}`, borderRadius: 5, padding: "1px 6px", whiteSpace: "nowrap" }}>{label}</span>;
   }
@@ -242,7 +243,7 @@ function NodeCard({ node, onOpen, onTip }: {
         <Server size={13} strokeWidth={2} style={{ color: UI.ink3, flexShrink: 0, marginTop: 2 }} />
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ fontSize: TYPE.body, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink, fontFamily: MONO, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{node.name}</div>
-          <div style={{ fontSize: TYPE.caption2, color: UI.ink3, marginTop: 2 }}>{node.status || "상태 관측 안 됨"}</div>
+          <div style={{ fontSize: TYPE.caption2, color: UI.ink3, marginTop: 2 }}>{node.status ? statusLabel(node.status) : "상태 관측 안 됨"}</div>
         </div>
         <span style={{ width: 8, height: 8, borderRadius: 999, background: sevColor(sev), flexShrink: 0, marginTop: 4 }} />
       </div>
@@ -271,7 +272,7 @@ function PodRow({ pod, onClick, onTip }: {
       <span style={{ width: 10, height: 10, borderRadius: 3, background: sevColor(sev) }} />
       <span style={{ fontSize: TYPE.body, fontWeight: 600, fontFamily: MONO, color: UI.ink, letterSpacing: "-0.01em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{pod.name}</span>
       <span style={{ fontSize: TYPE.caption, fontFamily: MONO, color: UI.ink3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{pod.namespace ?? "—"}</span>
-      <span style={{ fontSize: TYPE.caption, fontFamily: MONO, color: UI.ink2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{pod.status || "—"}</span>
+      <span style={{ fontSize: TYPE.caption, fontFamily: MONO, color: UI.ink2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{pod.status ? statusLabel(pod.status) : "—"}</span>
       <span style={{ justifySelf: "start" }}><HealthChip health={pod.health} /></span>
     </motion.button>
   );
@@ -444,11 +445,13 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
                 {view.level === "nodes" && (<>
                   <ClusterOverview cl={activeClusterObj} meta={activeClusterMeta} onKind={onOpenKind} />
                   {topology.status === "loading" ? (
-                    <EmptyState label="인벤토리 불러오는 중…" />
+                    <NodeSkeleton />
                   ) : topology.status === "unavailable" ? (
-                    <EmptyState label="인벤토리 관측 안 됨" />
+                    <EmptyState icon={<Server size={18} strokeWidth={1.75} />} label="인벤토리 관측 안 됨"
+                      hint="에이전트가 아직 이 클러스터의 노드 인벤토리를 보고하지 않았습니다." />
                   ) : nodes.length === 0 ? (
-                    <EmptyState label="관측된 노드가 없습니다" />
+                    <EmptyState icon={<Cpu size={18} strokeWidth={1.75} />} label="관측된 노드가 없습니다"
+                      hint="이 클러스터에서 준비된 노드가 아직 관측되지 않았습니다." />
                   ) : (
                     /* 노드: 4칸 그리드. 계약이 주는 정체성·상태만 — 용량 병합/파드 밀도 표기 없음 */
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 12 }}>
@@ -469,15 +472,21 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
                     </div>
                     {/* 정직성: 인벤토리 계약은 파드의 노드 귀속을 노출하지 않는다.
                         따라서 이 클러스터에서 관측된 파드 전체를 표시한다(노드별 필터 불가). */}
-                    <div style={{ fontSize: TYPE.caption2, color: UI.ink3, marginBottom: 14 }}>
-                      인벤토리 계약은 파드→노드 귀속을 노출하지 않아, 이 클러스터에서 관측된 파드를 표시합니다.
+                    <div style={{ display: "flex", alignItems: "flex-start", gap: 8, background: UI.bg2, border: `1px solid ${UI.line}`, borderRadius: 10, padding: "9px 12px", marginBottom: 14 }}>
+                      <Network size={13} strokeWidth={2} style={{ color: UI.ink3, flexShrink: 0, marginTop: 1 }} />
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: TYPE.label2, fontWeight: 600, color: UI.ink2 }}>노드 범위 관측 미지원 · 클러스터 전체 파드 표시</div>
+                        <div style={{ fontSize: TYPE.caption2, color: UI.ink3, marginTop: 2 }}>인벤토리 계약이 파드의 노드 귀속을 노출하지 않아, 이 클러스터에서 관측된 파드 전체를 보여줍니다.</div>
+                      </div>
                     </div>
                     {topology.status === "loading" ? (
-                      <EmptyState label="인벤토리 불러오는 중…" flush />
+                      <PodSkeleton />
                     ) : topology.status === "unavailable" ? (
-                      <EmptyState label="인벤토리 관측 안 됨" flush />
+                      <EmptyState icon={<Box size={18} strokeWidth={1.75} />} label="인벤토리 관측 안 됨"
+                        hint="에이전트가 아직 이 클러스터의 파드 인벤토리를 보고하지 않았습니다." flush />
                     ) : pods.length === 0 ? (
-                      <EmptyState label="관측된 파드가 없습니다" flush />
+                      <EmptyState icon={<Box size={18} strokeWidth={1.75} />} label="관측된 파드가 없습니다"
+                        hint="이 클러스터에서 실행 중인 파드가 아직 관측되지 않았습니다." flush />
                     ) : (<>
                       <div style={{ display: "grid", gridTemplateColumns: "12px minmax(160px,1.8fr) minmax(90px,1fr) 92px 96px", alignItems: "center", gap: 12, padding: "0 10px 7px", borderBottom: `1px solid ${UI.line}`, fontSize: TYPE.micro, fontWeight: 600, letterSpacing: "0.07em", color: UI.ink3 }}>
                         <span /><span>파드</span><span>네임스페이스</span><span>상태</span><span>헬스</span>
@@ -510,7 +519,7 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
               <span style={{ fontSize: TYPE.label2, fontWeight: 700, fontFamily: MONO, color: UI.ink, letterSpacing: "-0.01em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tip.label}</span>
             </div>
             <div style={{ fontSize: TYPE.caption, color: UI.ink3, marginTop: 3, marginLeft: 13 }}>
-              {(tip.status || "상태 관측 안 됨")} · {tip.health || "헬스 관측 안 됨"}
+              {(tip.status ? statusLabel(tip.status) : "상태 관측 안 됨")} · {tip.health ? statusLabel(tip.health) : "헬스 관측 안 됨"}
             </div>
           </motion.div>
         )}
@@ -524,19 +533,65 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
         .op .kindlink:hover { color: ${BLUE} !important; } .op .kindlink:hover b { color: ${BLUE}; }
         .pulsedot { animation: pd 1.5s ease-in-out infinite; }
         @keyframes pd { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+        .op .op-skel { display: block; background: linear-gradient(90deg, ${inkA(0.05)} 25%, ${inkA(0.09)} 37%, ${inkA(0.05)} 63%); background-size: 400% 100%; animation: skel 1.4s ease-in-out infinite; }
+        @keyframes skel { 0% { background-position: 100% 0; } 100% { background-position: 0 0; } }
         .op ::-webkit-scrollbar { width: 8px; } .op ::-webkit-scrollbar-thumb { background: ${inkA(0.12)}; border-radius: 99px; }
-        @media (prefers-reduced-motion: reduce) { .pulsedot { animation: none !important; } }
+        @media (prefers-reduced-motion: reduce) { .pulsedot, .op .op-skel { animation: none !important; } }
       `}</style>
     </div>
   );
 }
 
-function EmptyState({ label, flush = false }: { label: string; flush?: boolean }) {
+// ── 빈 상태 — 아이콘 + 제목 + 부연으로 정돈(투박한 한 줄 텍스트 대신). 정직한 "관측 안 됨" 문구 유지.
+function EmptyState({ icon, label, hint, flush = false }: { icon?: React.ReactNode; label: string; hint?: string; flush?: boolean }) {
   return (
     <div style={{
+      display: "flex", flexDirection: "column", alignItems: "center", gap: 8,
       background: flush ? "transparent" : UI.card, border: flush ? "none" : `1px solid ${UI.line}`, borderRadius: 14,
-      padding: "40px 18px", textAlign: "center", fontSize: TYPE.body, color: UI.ink3,
-    }}>{label}</div>
+      padding: "44px 20px", textAlign: "center",
+    }}>
+      {icon && <span style={{ width: 40, height: 40, borderRadius: 12, background: inkA(0.04), display: "grid", placeItems: "center", color: UI.ink3, flexShrink: 0 }}>{icon}</span>}
+      <span style={{ fontSize: TYPE.body, fontWeight: 700, color: UI.ink2 }}>{label}</span>
+      {hint && <span style={{ fontSize: TYPE.caption, color: UI.ink3, maxWidth: 320, lineHeight: 1.5 }}>{hint}</span>}
+    </div>
+  );
+}
+
+// ── 로딩 스켈레톤 — 실데이터 도착 전 레이아웃 자리를 잡아 깜빡임/점프를 줄인다. shimmer는 .op-skel.
+function NodeSkeleton() {
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 12 }}>
+      {Array.from({ length: 8 }).map((_, i) => (
+        <div key={i} style={{ display: "flex", flexDirection: "column", gap: 10, minHeight: 96, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 16, padding: 16, boxSizing: "border-box" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span className="op-skel" style={{ width: 13, height: 13, borderRadius: 4 }} />
+            <span className="op-skel" style={{ flex: 1, height: 11, borderRadius: 5 }} />
+          </div>
+          <span className="op-skel" style={{ width: "52%", height: 9, borderRadius: 5 }} />
+          <span className="op-skel" style={{ width: 54, height: 17, borderRadius: 6, marginTop: "auto" }} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function PodSkeleton() {
+  const cols = "12px minmax(160px,1.8fr) minmax(90px,1fr) 92px 96px";
+  return (
+    <div>
+      <div style={{ display: "grid", gridTemplateColumns: cols, alignItems: "center", gap: 12, padding: "0 10px 7px", borderBottom: `1px solid ${UI.line}`, fontSize: TYPE.micro, fontWeight: 600, letterSpacing: "0.07em", color: UI.ink3 }}>
+        <span /><span>파드</span><span>네임스페이스</span><span>상태</span><span>헬스</span>
+      </div>
+      {Array.from({ length: 6 }).map((_, i) => (
+        <div key={i} style={{ display: "grid", gridTemplateColumns: cols, alignItems: "center", gap: 12, padding: "9px 10px" }}>
+          <span className="op-skel" style={{ width: 10, height: 10, borderRadius: 3 }} />
+          <span className="op-skel" style={{ width: `${68 - i * 4}%`, height: 10, borderRadius: 5 }} />
+          <span className="op-skel" style={{ width: "62%", height: 9, borderRadius: 5 }} />
+          <span className="op-skel" style={{ width: 46, height: 9, borderRadius: 5 }} />
+          <span className="op-skel" style={{ width: 42, height: 17, borderRadius: 6 }} />
+        </div>
+      ))}
+    </div>
   );
 }
 

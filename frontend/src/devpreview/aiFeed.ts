@@ -301,3 +301,62 @@ export async function loadConversationTurns(
     .map((message, index) => projectMessageTurn(message, index))
     .filter((turn): turn is AiTurn => turn !== null);
 }
+
+// ── conversation detail (selected history, read only) ─────────────────────────
+
+export type AiConversationDetailStatus =
+  | "idle"
+  | "loading"
+  | "ready"
+  | "unavailable";
+
+export interface AiConversationDetailFeed {
+  status: AiConversationDetailStatus;
+  turns: AiTurn[];
+}
+
+interface DetailState {
+  forId: string | null;
+  failed: boolean;
+  turns: AiTurn[];
+}
+
+/**
+ * Reads the selected conversation's stored messages as renderable turns from
+ * `GET /api/ai/conversations/{id}`. A `null` id is `idle` (no conversation
+ * open); a load failure is an honest `unavailable`. Selecting another
+ * conversation aborts the obsolete request so a stale detail cannot overwrite
+ * the current one. Only server role/content render — nothing is fabricated.
+ *
+ * `loading` and `idle` are derived from the requested id versus the id the last
+ * settled result belongs to, so the effect only ever calls setState inside
+ * `.then`/`.catch` (never synchronously at the top).
+ */
+export function useConversationDetail(
+  conversationId: string | null,
+): AiConversationDetailFeed {
+  const [state, setState] = useState<DetailState>({
+    forId: null,
+    failed: false,
+    turns: [],
+  });
+  useEffect(() => {
+    if (conversationId === null) return;
+    const controller = new AbortController();
+    void loadConversationTurns(conversationId, controller.signal)
+      .then((turns) => {
+        if (controller.signal.aborted) return;
+        setState({ forId: conversationId, failed: false, turns });
+      })
+      .catch((cause: unknown) => {
+        if (controller.signal.aborted || isAbortError(cause)) return;
+        setState({ forId: conversationId, failed: true, turns: [] });
+      });
+    return () => controller.abort();
+  }, [conversationId]);
+
+  if (conversationId === null) return { status: "idle", turns: [] };
+  if (state.forId !== conversationId) return { status: "loading", turns: [] };
+  if (state.failed) return { status: "unavailable", turns: [] };
+  return { status: "ready", turns: state.turns };
+}

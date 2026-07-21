@@ -8,7 +8,7 @@ import {
   Rocket, Database, Boxes, Copy, LayoutGrid, Play, Timer, Plug, DoorOpen, ShieldCheck, MoveDiagonal,
   HardDrive, Cpu, Folder, Activity, UserCog, Eye, Radio, ChevronDown, Pin,
   Home, ListTree, AlertTriangle, Clock, Coins, Settings, Sparkles, PanelLeftClose, PanelLeftOpen,
-  Bell, Pencil, Check, Hourglass, Webhook, SignalHigh, Building2, LogOut,
+  Bell, Pencil, Check, Hourglass, Webhook, SignalHigh, Building2, LogOut, RefreshCw,
 } from "lucide-react";
 import { OpsiaMap, HomeClusterSection } from "./devpreview-opsia";
 import { WidgetFrame, RatioBar, Donut, RankList, MultiLine, MiniTimeline } from "./devpreview/widgets";
@@ -29,6 +29,7 @@ import { useAlertEvents } from "./devpreview/alertsFeed";
 import { useRelationTopology } from "./devpreview/relationTopologyFeed";
 import { logout as logoutApi } from "./devpreview/sessionFeed";
 import { useInventoryResources, useInventoryKindCounts, kindToResourceType } from "./devpreview/inventoryResourcesFeed";
+import { statusLabel, isCriticalStatus } from "./devpreview/statusLabel";
 import { UI, BLUE, BLUE2, HP, TINT, MONO, TYPE, SOFT, SPRING, PRESENT_SCALE, DUR, inkA, blueA, MARK, cardA, GLASS, critA } from "./devpreview/theme";
 import "./styles/tokens.css";
 import "./styles/foundation.css";
@@ -266,10 +267,10 @@ function CellView({ cell, v, bad }: { cell: Cell; v: unknown; bad?: boolean }) {
   if (cell.t === "ready") return <span style={{ fontSize: TYPE.label, fontFamily: MONO, fontWeight: 600, color: bad ? HP.crit : TINT.ok.fg }}>{String(v)}</span>;
   if (cell.t === "status") {
     const s = String(v);
-    const tone = bad || /Crash|OOM|Fail|Error|Evict/.test(s) ? "red" : /Pending|Provisioning/.test(s) ? "blue" : /Cordoned|Suspend|Terminat/.test(s) ? "gray" : "green";
-    return <Badge text={s} tone={tone} />;
+    const tone = bad || isCriticalStatus(s) || /Crash|OOM|Fail|Error|Evict/.test(s) ? "red" : /Pending|Provisioning/.test(s) ? "blue" : /Cordoned|Suspend|Terminat/.test(s) ? "gray" : "green";
+    return <Badge text={statusLabel(s)} tone={tone} />;
   }
-  if (cell.t === "badge") return <Badge text={String(v)} tone={bad ? "red" : cell.tone ?? "gray"} />;
+  if (cell.t === "badge") return <Badge text={statusLabel(String(v))} tone={bad ? "red" : cell.tone ?? "gray"} />;
   if (cell.t === "num") return <span style={{ fontSize: TYPE.label2, fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: UI.ink2 }}>{String(v)}</span>;
   if (cell.t === "ns") return <span style={{ fontSize: TYPE.label2, color: UI.ink2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{String(v)}</span>;
   if (cell.t === "mono") return <span style={{ fontSize: TYPE.label, fontFamily: MONO, color: UI.ink3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{String(v)}</span>;
@@ -370,6 +371,16 @@ function KV({ k, v, mono, tone }: { k: string; v: string; mono?: boolean; tone?:
   );
 }
 
+// 관측 계약이 없는 섹션의 일관된 빈 상태 — 지어내지 않고 정직하게 비운다(원본의 깔끔한 empty-state 톤).
+function Empty({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, border: `1px dashed ${UI.line}`, background: UI.bg2, borderRadius: 10, padding: "10px 12px", fontSize: TYPE.label, color: UI.ink3, lineHeight: 1.5 }}>
+      <Eye size={13} style={{ color: UI.ink3, flexShrink: 0 }} />
+      <span>{children}</span>
+    </div>
+  );
+}
+
 
 // RelGraph/TINT_G 제거 — 합성 소유·참조 관계도(rs/deploy/svc/pod/cm/netpol 이름 지어내기)를
 // 렌더하던 DetailOverlay '관련 리소스' 섹션이 "관측 안 됨"으로 바뀌며 미사용.
@@ -392,8 +403,8 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
   const ns = String(row.ns ?? "–");
   const bad = !!row.bad;
   // 관측된 상태/헬스/클러스터만 표시 — 노드명·호스트/파드 IP·QoS·소유관계는 라이브 인벤토리 계약에 없어 지어내지 않는다.
-  const phase = row.status != null && String(row.status) ? String(row.status) : "관측 안 됨";
-  const healthVal = row.health != null && String(row.health) ? String(row.health) : "관측 안 됨";
+  const phase = row.status != null && String(row.status) ? statusLabel(String(row.status)) : "관측 안 됨";
+  const healthVal = row.health != null && String(row.health) ? statusLabel(String(row.health)) : "관측 안 됨";
   const clusterVal = row.cluster != null && String(row.cluster) ? String(row.cluster) : "관측 안 됨";
   // 관측 전용: 이 환경에는 리소스 변경(뮤테이션) 실행 계약이 없어 YAML 편집/적용/비교 상태를 두지 않는다.
   // 드로어 폭 — 왼쪽 가장자리 드래그로 조절 (전체 화면일 땐 비활성)
@@ -416,9 +427,10 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
 
   return (
     <>
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: DUR.fade }}
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: 0.1 } }} transition={{ duration: DUR.fade }}
         onClick={onClose} style={{ position: "fixed", top: topInset, right: 0, bottom: 0, left: leftInset, background: inkA(0.07), zIndex: 70 }} />
-      <motion.aside initial={{ x: 40, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 30, opacity: 0 }} transition={{ type: "spring", bounce: 0.06, visualDuration: 0.36 }}
+      {/* 닫기 즉시 반응 — 열림은 스프링, 닫힘은 짧은 ease-in으로 지연 없이 사라진다(P1-12) */}
+      <motion.aside initial={{ x: 40, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 24, opacity: 0, transition: { duration: 0.14, ease: [0.4, 0, 1, 1] } }} transition={{ type: "spring", bounce: 0.06, visualDuration: 0.36 }}
         style={{ position: "fixed", top: topInset, right: 0, bottom: 0,
           /* 상단바·사이드바·서브사이드바는 덮지 않는다 — 콘텐츠 영역만 */
           width: full ? viewportW - leftInset : dw, maxWidth: viewportW - leftInset,
@@ -469,7 +481,7 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
               {bad && (
                 <Sec title="운영 이슈" icon={Activity}>
                   <div style={{ display: "flex", alignItems: "center", gap: 9, border: `1px solid ${TINT.crit.bd}`, background: TINT.crit.bg, borderRadius: 10, padding: "10px 12px" }}>
-                    <Badge text="critical" tone="red" />
+                    <Badge text={statusLabel("critical")} tone="red" />
                     <span style={{ fontSize: TYPE.body, fontWeight: 700, color: UI.ink }}>{phase}</span>
                     <span style={{ fontSize: TYPE.label, color: UI.ink2 }}>관측된 상태 · 상세 원인은 이 리소스의 계약에 없습니다</span>
                   </div>
@@ -510,21 +522,21 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
               {/* 환경 변수 (파드 전용) — 계약이 컨테이너 환경 변수를 노출하지 않는다 */}
               {isPod && (
                 <Sec title="환경 변수" defaultOpen={false}>
-                  <div style={{ fontSize: TYPE.label, color: UI.ink3 }}>관측 안 됨 — 라이브 인벤토리 계약은 컨테이너 환경 변수를 노출하지 않습니다.</div>
+                  <Empty>관측 안 됨 — 라이브 인벤토리 계약은 컨테이너 환경 변수를 노출하지 않습니다.</Empty>
                 </Sec>
               )}
 
               {/* 컨디션 (워크로드·파드) — 계약이 컨디션을 노출하지 않는다 */}
               {wp && (
               <Sec title="컨디션">
-                <div style={{ fontSize: TYPE.label, color: UI.ink3 }}>관측 안 됨 — 이 리소스의 컨디션 계약이 없습니다.</div>
+                <Empty>관측 안 됨 — 이 리소스의 컨디션 계약이 없습니다.</Empty>
               </Sec>
               )}
 
               {/* 권한 (워크로드·파드) — 계약이 ServiceAccount·RBAC를 노출하지 않는다 */}
               {wp && (
               <Sec title="ServiceAccount 권한" icon={ShieldCheck}>
-                <div style={{ fontSize: TYPE.label, color: UI.ink3 }}>관측 안 됨 — 라이브 인벤토리 계약은 ServiceAccount·RBAC 정보를 노출하지 않습니다.</div>
+                <Empty>관측 안 됨 — 라이브 인벤토리 계약은 ServiceAccount·RBAC 정보를 노출하지 않습니다.</Empty>
               </Sec>
               )}
 
@@ -538,33 +550,33 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
               {/* 메트릭 (워크로드·파드) — 메트릭 시계열 계약이 배선되어 있지 않다 */}
               {wp && (
               <Sec title="메트릭" icon={Activity}>
-                <div style={{ fontSize: TYPE.label, color: UI.ink3 }}>메트릭 관측 안 됨 — 이 환경에는 메트릭 시계열 계약이 배선되어 있지 않습니다.</div>
+                <Empty>메트릭 관측 안 됨 — 이 환경에는 메트릭 시계열 계약이 배선되어 있지 않습니다.</Empty>
               </Sec>
               )}
 
               {/* 데이터 (ConfigMap·Secret) — 계약이 데이터 항목을 노출하지 않는다 */}
               {(kind.id === "ConfigMap" || kind.id === "Secret") && (
                 <Sec title="데이터" icon={FileCog}>
-                  <div style={{ fontSize: TYPE.label, color: UI.ink3 }}>관측 안 됨 — 라이브 인벤토리 계약은 {kind.id === "Secret" ? "Secret" : "ConfigMap"} 데이터를 노출하지 않습니다.</div>
+                  <Empty>관측 안 됨 — 라이브 인벤토리 계약은 {kind.id === "Secret" ? "Secret" : "ConfigMap"} 데이터를 노출하지 않습니다.</Empty>
                 </Sec>
               )}
 
               {/* 관련 리소스 — 계약이 리소스 간 소유·참조 관계를 노출하지 않는다(합성 관계도 제거) */}
               <Sec title="관련 리소스" icon={Copy}>
-                <div style={{ fontSize: TYPE.label, color: UI.ink3 }}>관측 안 됨 — 라이브 인벤토리 계약은 리소스 간 소유·참조 관계를 노출하지 않습니다.</div>
+                <Empty>관측 안 됨 — 라이브 인벤토리 계약은 리소스 간 소유·참조 관계를 노출하지 않습니다.</Empty>
               </Sec>
 
               {/* 최근 이벤트 — 라이브 인벤토리는 이벤트 스트림을 노출하지 않는다(합성 이벤트 제거) */}
               <Sec title="최근 이벤트" icon={Activity}>
-                <div style={{ fontSize: TYPE.label, color: UI.ink3 }}>관측 안 됨 — 이 리소스의 이벤트 계약이 없습니다.</div>
+                <Empty>관측 안 됨 — 이 리소스의 이벤트 계약이 없습니다.</Empty>
               </Sec>
 
               {/* 레이블 / 어노테이션 / 메타데이터 — 레이블·어노테이션은 계약에 없다 */}
               <Sec title="레이블">
-                <div style={{ fontSize: TYPE.label, color: UI.ink3 }}>관측 안 됨</div>
+                <Empty>관측 안 됨 — 라이브 인벤토리 계약은 레이블을 노출하지 않습니다.</Empty>
               </Sec>
               <Sec title="어노테이션" defaultOpen={false}>
-                <div style={{ fontSize: TYPE.label, color: UI.ink3 }}>관측 안 됨</div>
+                <Empty>관측 안 됨 — 라이브 인벤토리 계약은 어노테이션을 노출하지 않습니다.</Empty>
               </Sec>
               <Sec title="메타데이터">
                 <KV k="UID" v={row.uid != null && String(row.uid) ? String(row.uid) : "관측 안 됨"} mono />
@@ -576,7 +588,7 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
               {/* 점검 결과 (워크로드·파드) — 점검(audit) 계약이 배선되어 있지 않다 */}
               {wp && (
               <Sec title="점검 결과" icon={ShieldCheck}>
-                <div style={{ fontSize: TYPE.label, color: UI.ink3 }}>관측 안 됨 — 이 환경에는 리소스 점검(audit) 계약이 배선되어 있지 않습니다.</div>
+                <Empty>관측 안 됨 — 이 환경에는 리소스 점검(audit) 계약이 배선되어 있지 않습니다.</Empty>
               </Sec>
               )}
             </div>
@@ -1222,18 +1234,19 @@ function App() {
         surface={surface} onSurface={(sf) => { setSurface(sf); if (sf === "connect") setConnectView(null); }} />
 
       <div style={{ flex: 1, minWidth: 0 }}>
-      {/* 상단 크롬 — 클러스터·네임스페이스·검색·자동 갱신 */}
+      {/* 상단 크롬 — 워크스페이스·스코프·네임스페이스·검색 (내부 표기 배지 제거) */}
       <header ref={headerRef} style={{ position: "sticky", top: 0, zIndex: 74, display: "flex", alignItems: "center", gap: 10, padding: "12px 18px", borderBottom: `1px solid ${UI.line}`, background: UI.card }}>
         {/* 워크스페이스 — 정체성은 항상 맨 왼쪽(D20). 데모 세계는 워크스페이스 1개라 사실 표시만 */}
         <span style={{ display: "flex", alignItems: "center", gap: 7, fontSize: TYPE.body, fontWeight: 700, color: UI.ink, paddingRight: 12, borderRight: `1px solid ${UI.line2}` }}>
           <Building2 size={14} style={{ color: UI.ink3 }} />{contract.workspaceId ?? "워크스페이스 확인 중"}
         </span>
+        {/* 새로고침 — 내부/기술 표기("실제 계약") 텍스트 제거, 상태점 + 아이콘만(P1-10) */}
         <button type="button" onClick={contract.refresh}
-          title={contract.error ?? "실제 백엔드 계약"}
-          style={{ display: "flex", alignItems: "center", gap: 6, border: "none", background: "transparent", padding: 0, fontSize: TYPE.caption, color: contract.status === "error" ? HP.crit : UI.ink3, cursor: "pointer" }}>
+          title={contract.error ?? "새로고침"}
+          style={{ display: "flex", alignItems: "center", gap: 5, border: "none", background: "transparent", padding: 4, color: contract.status === "error" ? HP.crit : UI.ink3, cursor: "pointer" }}>
           <span className={contract.status === "loading" ? "livedot" : undefined}
             style={{ width: 6, height: 6, borderRadius: 999, background: contract.status === "error" ? HP.crit : contract.status === "ready" ? HP.ok : HP.pending }} />
-          실제 계약
+          <RefreshCw size={13} style={{ color: contract.status === "error" ? HP.crit : UI.ink3 }} />
         </button>
         {/* 현재 스코프 표시 — 물리 스코프가 실제 적용되는 관점(지도·목록)에서만. 흐름은 서비스 수준 */}
         {surface === "resources" && resView !== "flow" && (
@@ -1262,7 +1275,6 @@ function App() {
           </AnimatePresence>
         </span>
         )}
-        {surface === "resources" && <span className="livedot" style={{ width: 7, height: 7, borderRadius: 999, background: HP.ok }} />}
         <div style={{ flex: 1, maxWidth: 520, margin: "0 auto", display: "flex", alignItems: "center", gap: 8, border: `1px solid ${UI.line}`, background: UI.bg2, borderRadius: 9, padding: "6px 12px" }}>
           <Search size={13} style={{ color: UI.ink3 }} />
           {/* 전역 검색(D6) — 홈에서 입력하면 결과가 있는 리소스 목록으로 이동한다(무반응 인풋 금지) */}
@@ -1271,9 +1283,6 @@ function App() {
             placeholder="전체 검색 — 리소스·화면 이동" style={{ border: "none", outline: "none", background: "transparent", fontSize: TYPE.body, color: UI.ink, width: "100%" }} />
           <span style={{ fontSize: TYPE.caption, fontFamily: MONO, color: UI.ink3, border: `1px solid ${UI.line}`, borderRadius: 4, padding: "1px 5px" }}>⌘K</span>
         </div>
-        <span className="hide-narrow" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: TYPE.label, color: UI.ink2 }}>
-          <span className="livedot" style={{ width: 6, height: 6, borderRadius: 999, background: HP.ok }} />자동 갱신
-        </span>
         {/* 알림 벨 — 배지 수는 맵의 장애 수와 같은 인벤토리에서 나온다 */}
         <span style={{ position: "relative" }}>
           <button className="gnav" onClick={() => setBellOpen(!bellOpen)}
@@ -1469,6 +1478,16 @@ function App() {
                     ))}
                   </span>
                 </div>
+                {/* 노드 선택 스코프 정직 표기(P1-13) — 파드→노드 귀속 계약이 없어 노드 단위로 파드를 추릴 수 없다.
+                     사용자가 "이 노드의 파드"로 오인하지 않도록 클러스터 전체 관측 파드임을 명시한다. */}
+                {scope.level === "pods" && scope.node && (
+                  <div style={{ display: "flex", alignItems: "flex-start", gap: 8, border: `1px solid ${TINT.warn.bd}`, background: TINT.warn.bg, borderRadius: 10, padding: "9px 12px" }}>
+                    <AlertTriangle size={14} style={{ color: TINT.warn.fg, flexShrink: 0, marginTop: 1 }} />
+                    <span style={{ fontSize: TYPE.label, color: UI.ink2, lineHeight: 1.5 }}>
+                      <b style={{ fontWeight: 700, color: TINT.warn.fg }}>노드 범위 관측 미지원</b> · 파드→노드 귀속 계약이 없어 <b style={{ fontFamily: MONO }}>{scope.node}</b> 노드만의 파드를 추릴 수 없습니다. 아래 목록은 <b>클러스터 전체 관측 파드</b>입니다.
+                    </span>
+                  </div>
+                )}
                 {/* 표 교체는 대기 없이 즉시 — exit를 기다리면 전환이 느리고, 탭 스로틀 시 멈춘다 */}
                 <motion.div key={kindId} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={SOFT}>
                   {/* 라이브 인벤토리 상태를 정직하게 표시 — 데이터 없으면 관측 안 됨 */}

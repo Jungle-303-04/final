@@ -10,8 +10,8 @@ import "./styles/foundation.css";
 import { Spinner } from "./shared/ui/primitives/spinner";
 import { emitAction } from "./devpreview/bus";
 import {
-  buildAiContext, createAiAlertRule, loadConversationTurns, sendAiChatTurn,
-  useAiConversations, useAiSuggestions,
+  buildAiContext, createAiAlertRule, sendAiChatTurn,
+  useAiConversations, useConversationDetail, useAiSuggestions,
 } from "./devpreview/aiFeed";
 import type {
   AiMessagePart, AiPageLink, AiResultPart, AiStepsPart, AiTextPart, AiTone, AiTurn,
@@ -400,8 +400,12 @@ export function AiPanel({ onClose, embedded = false, contextView = "resources", 
   const [listOpen, setListOpen] = useState(false);
   const [input, setInput] = useState("");
   const [error, setError] = useState<string | null>(null);
+  // AI history: 목록에서 고른 대화 id. null이면 라이브 대화 화면.
+  const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const suggestions = useAiSuggestions(contextView, contextScope);
   const conversations = useAiConversations();
+  const detail = useConversationDetail(selectedConversationId);
+  const viewingHistory = selectedConversationId !== null;
   const idSeq = useRef(0);
   const chatAbort = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -421,7 +425,7 @@ export function AiPanel({ onClose, embedded = false, contextView = "resources", 
   // 서버가 주지 않는 reasoning step·related link 는 만들지 않는다.
   const send = (text: string) => {
     const trimmed = text.trim(); if (!trimmed || thinking) return;
-    setInput(""); setError(null);
+    setInput(""); setError(null); setSelectedConversationId(null); // 질문 전송 시 라이브 화면으로
     idSeq.current += 1;
     const userTurn: AiTurn = { id: `u${idSeq.current}`, role: "user", question: trimmed, collapsed: false, createdAt: now() };
     setTurns((prev) => [...prev, userTurn]);
@@ -442,25 +446,21 @@ export function AiPanel({ onClose, embedded = false, contextView = "resources", 
       });
   };
 
-  // AI history: 저장된 대화를 열어 서버 role/content 만 투영해 렌더링한다
+  // AI history: 목록에서 대화를 고르면 선택 id만 바꾼다. 실제 이력 조회는
+  // useConversationDetail(selectedConversationId)가 담당(서버 role/content만 투영).
   const openConversation = (id: string) => {
-    setListOpen(false); setError(null);
-    chatAbort.current?.abort();
-    const controller = new AbortController();
-    chatAbort.current = controller;
-    setThinking(true);
-    void loadConversationTurns(id, controller.signal)
-      .then((loaded) => {
-        if (controller.signal.aborted) return;
-        setThinking(false); setTurns(loaded);
-      })
-      .catch((cause: unknown) => {
-        if (controller.signal.aborted || isAbort(cause)) return;
-        setThinking(false);
-      });
+    chatAbort.current?.abort(); setThinking(false); setError(null);
+    setListOpen(false); setSelectedConversationId(id);
   };
 
-  const newChat = () => { chatAbort.current?.abort(); setTurns([]); setError(null); setInput(""); setThinking(false); };
+  const newChat = () => { chatAbort.current?.abort(); setSelectedConversationId(null); setTurns([]); setError(null); setInput(""); setThinking(false); };
+
+  // 저장된 대화의 이력 턴과 라이브 대화 턴을 같은 표면으로 렌더한다
+  const renderTurn = (turn: AiTurn) => {
+    if (turn.role === "user") return <UserTurn key={turn.id} onShown={noop} turn={turn} />;
+    if (turn.collapsed) return <CollapsedTurn key={turn.id} onShown={noop} turn={turn} />;
+    return <AssistantTurn key={turn.id} onComplete={noop} turn={turn} />;
+  };
 
   return (
     <div className={`opsia-ai relative flex ${embedded ? "h-full w-full min-w-0" : "h-screen w-[460px]"} flex-col overflow-hidden border-l border-black/[0.06] bg-gradient-to-b from-[oklch(0.99_0.002_255)] to-[oklch(0.97_0.003_255)] shadow-2xl`}>
@@ -493,25 +493,42 @@ export function AiPanel({ onClose, embedded = false, contextView = "resources", 
       ) : null}
 
       <div className="chatscroll flex-1 space-y-3.5 overflow-y-auto scroll-smooth px-4 py-5 [scrollbar-gutter:stable]" ref={scrollRef}>
-        {turns.length === 0 && !thinking ? (
-          <div className="mx-auto mt-8 grid max-w-[85%] place-items-center gap-2 text-center">
-            <span className="grid size-11 place-items-center rounded-2xl bg-black/[0.04] text-muted-foreground"><Sparkles className="size-5" /></span>
-            <p className="text-[13px] text-muted-foreground">현재 화면 맥락으로 질문해 보세요. 답변은 관측된 근거에 기반합니다.</p>
-          </div>
-        ) : null}
-        {turns.map((turn) => {
-          if (turn.role === "user") return <UserTurn key={turn.id} onShown={noop} turn={turn} />;
-          if (turn.collapsed) return <CollapsedTurn key={turn.id} onShown={noop} turn={turn} />;
-          return <AssistantTurn key={turn.id} onComplete={noop} turn={turn} />;
-        })}
-        {thinking ? <Thinking /> : null}
-        {error !== null ? (
-          <div className="mr-auto flex w-full max-w-[97%] items-center gap-2.5 rounded-2xl border border-black/[0.06] bg-card px-4 py-3 text-[12.5px]" style={{ animation: `fadeUp 0.35s ${SPRING}` }}>
-            <CircleAlert className="size-4 shrink-0" style={{ color: "var(--ap-red)" }} />
-            <span className="flex-1 text-muted-foreground">답변을 가져오지 못했습니다.</span>
-            <button className="shrink-0 rounded-lg px-2.5 py-1 font-medium ap-accent transition-colors hover:bg-black/[0.04]" onClick={() => send(error)} type="button">다시 시도</button>
-          </div>
-        ) : null}
+        {viewingHistory ? (
+          // 저장된 대화 이력 (읽기 전용). 상세가 없거나 못 불러오면 정직한 빈 상태.
+          detail.status === "loading" ? (
+            <Thinking />
+          ) : detail.status === "unavailable" ? (
+            <div className="mr-auto flex w-full max-w-[97%] items-center gap-2.5 rounded-2xl border border-black/[0.06] bg-card px-4 py-3 text-[12.5px]" style={{ animation: `fadeUp 0.35s ${SPRING}` }}>
+              <CircleAlert className="size-4 shrink-0" style={{ color: "var(--ap-red)" }} />
+              <span className="flex-1 text-muted-foreground">이 대화의 상세 이력은 관측되지 않습니다.</span>
+            </div>
+          ) : detail.turns.length === 0 ? (
+            <div className="mx-auto mt-8 grid max-w-[85%] place-items-center gap-2 text-center">
+              <span className="grid size-11 place-items-center rounded-2xl bg-black/[0.04] text-muted-foreground"><Sparkles className="size-5" /></span>
+              <p className="text-[13px] text-muted-foreground">이 대화의 상세 이력은 관측되지 않습니다.</p>
+            </div>
+          ) : (
+            detail.turns.map(renderTurn)
+          )
+        ) : (
+          <>
+            {turns.length === 0 && !thinking ? (
+              <div className="mx-auto mt-8 grid max-w-[85%] place-items-center gap-2 text-center">
+                <span className="grid size-11 place-items-center rounded-2xl bg-black/[0.04] text-muted-foreground"><Sparkles className="size-5" /></span>
+                <p className="text-[13px] text-muted-foreground">현재 화면 맥락으로 질문해 보세요. 답변은 관측된 근거에 기반합니다.</p>
+              </div>
+            ) : null}
+            {turns.map(renderTurn)}
+            {thinking ? <Thinking /> : null}
+            {error !== null ? (
+              <div className="mr-auto flex w-full max-w-[97%] items-center gap-2.5 rounded-2xl border border-black/[0.06] bg-card px-4 py-3 text-[12.5px]" style={{ animation: `fadeUp 0.35s ${SPRING}` }}>
+                <CircleAlert className="size-4 shrink-0" style={{ color: "var(--ap-red)" }} />
+                <span className="flex-1 text-muted-foreground">답변을 가져오지 못했습니다.</span>
+                <button className="shrink-0 rounded-lg px-2.5 py-1 font-medium ap-accent transition-colors hover:bg-black/[0.04]" onClick={() => send(error)} type="button">다시 시도</button>
+              </div>
+            ) : null}
+          </>
+        )}
       </div>
 
       <div className="border-t border-black/[0.05] bg-white/50 px-3.5 pb-3.5 pt-3 backdrop-blur-xl">

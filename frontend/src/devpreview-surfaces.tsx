@@ -5,10 +5,10 @@ import { useState } from "react";
 import { motion } from "motion/react";
 import {
   Rocket, Package, AlertTriangle, Bell, Clock, ShieldCheck, Coins,
-  Building2, Globe, Radio, Check, Sparkles, X,
+  Building2, Globe, Check, Sparkles, X, Palette, RefreshCw, Lock, Pin,
 } from "lucide-react";
 import { UI, BLUE, HP, TINT, MONO, TYPE, SOFT, DUR, PRESENT_SCALE, inkA, blueA, critA, BRAND } from "./devpreview/theme";
-import { GithubIcon, AwsIcon } from "./devpreview/brandIcons";
+import { GithubIcon } from "./devpreview/brandIcons";
 import { useCostOverview } from "./devpreview/costFeed";
 import { useChecksOverview } from "./devpreview/checksFeed";
 import { useRcaIssueDetails, useRecoveryPlan, type RcaIssueDetailView } from "./devpreview/rcaDetailFeed";
@@ -17,7 +17,10 @@ import { useAiConversations } from "./devpreview/aiFeed";
 import { useAlertEvents, useAlertRules, useAlertChannels } from "./devpreview/alertsFeed";
 import { useApplications, useHelmReleases } from "./devpreview/deployFeed";
 import { useChangeTimeline } from "./devpreview/changeTimelineFeed";
+import { useTimelineBoard } from "./devpreview/timelineFeed";
+import { useUiPreferences, useRefreshPolicies, useSettingsAccess } from "./devpreview/settingsFeed";
 import { MiniTimeline } from "./devpreview/widgets";
+import { statusLabel } from "./devpreview/statusLabel";
 
 // ── 상대 시간 포맷 — 서버 타임스탬프(ISO 또는 epoch ms)를 사람이 읽는 근사치로 ──
 function fromNow(input: string | number | null): string {
@@ -33,6 +36,58 @@ function fromNow(input: string | number | null): string {
   if (hr < 24) return `${hr}시간 전`;
   const day = Math.floor(hr / 24);
   return `${day}일 전`;
+}
+
+// ── 상태 라벨 — 공용 statusLabel(신규 헬퍼) 우선, 이 서피스에서만 쓰는 소수 토큰은
+//    로컬 보강(헬퍼 파일은 동시 편집 금지라 여기서 덧댄다). 매핑에 없으면 원문 유지. ──
+const LOCAL_STATUS_KO: Record<string, string> = {
+  firing: "발생 중",
+  live: "실시간",
+  stale: "지연",
+  partial: "부분",
+};
+function koLabel(raw: string | null | undefined): string {
+  const key = raw?.trim().toLowerCase();
+  return (key ? LOCAL_STATUS_KO[key] : undefined) ?? statusLabel(raw);
+}
+
+// ── reason code 한글화 — 백엔드가 준 원시 스네이크 코드(:cluster 등 콜론 접미사 포함)를
+//    사용자 친화 한글 문구로. 매핑에 없으면 일반 안내로 폴백하고, 원시 코드는 호출부에서
+//    작은 부가표기로만 노출한다(코드 나열 대신 정돈된 안내). ──
+const REASON_KO: Record<string, string> = {
+  checks_observation_unavailable: "점검 관측 데이터가 아직 없습니다",
+  checks_definition_unavailable: "점검 정의(카탈로그)가 아직 없습니다",
+  checks_observation_stale: "점검 관측 데이터가 오래되었습니다",
+  checks_observation_partial: "점검 관측이 부분적으로만 수집되었습니다",
+  checks_observation_clock_skew: "점검 관측 시각에 편차가 있습니다",
+  checks_namespace_scope_partial: "일부 네임스페이스만 점검 범위에 포함되었습니다",
+  checks_catalog_conflict: "점검 카탈로그 정의가 충돌합니다",
+  application_bindings_incomplete: "애플리케이션 바인딩이 아직 완료되지 않았습니다",
+  cost_observation_unavailable: "비용 관측 데이터가 아직 없습니다",
+  cost_observation_not_integrated: "비용 관측이 아직 연동되지 않았습니다",
+  node_pricing_observation_not_integrated: "노드 단가 관측이 아직 연동되지 않았습니다",
+};
+function reasonLabel(code: string): string {
+  const prefix = code.split(":")[0];
+  return REASON_KO[code] ?? REASON_KO[prefix] ?? "관측 데이터가 아직 없습니다";
+}
+// 정돈된 honest 안내 — 원시 코드 프리픽스로 중복 제거해 한글 한 줄씩, 원시 코드는 작은 표기로만.
+function ReasonNotes({ codes }: { codes: string[] }) {
+  const seen = new Set<string>();
+  const rows: string[] = [];
+  for (const c of codes) { const k = c.split(":")[0]; if (!seen.has(k)) { seen.add(k); rows.push(k); } }
+  if (rows.length === 0) return null;
+  return (
+    <ul style={{ display: "flex", flexDirection: "column", gap: 5, margin: "8px 0 0", padding: 0, listStyle: "none" }}>
+      {rows.map((k) => (
+        <li key={k} style={{ display: "flex", alignItems: "baseline", gap: 8, fontSize: TYPE.caption2, color: UI.ink2 }}>
+          <span style={{ width: 4, height: 4, borderRadius: 999, background: HP.warn, flexShrink: 0, transform: "translateY(-2px)" }} />
+          <span style={{ flex: 1, minWidth: 0 }}>{reasonLabel(k)}</span>
+          <code style={{ fontFamily: MONO, fontSize: TYPE.micro, color: UI.ink3, opacity: 0.65, whiteSpace: "nowrap" }}>{k}</code>
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 // ── 공통 프레임: 제목 + 주 액션 1개(P-43) + 탭 ──
@@ -127,17 +182,17 @@ const Mono = ({ children, dim }: { children: React.ReactNode; dim?: boolean }) =
 // 정직한 gap으로, Helm은 커버리지 unavailable + reason code를 그대로 렌더한다.
 // 읽기 전용 — 여기서 어떤 배포/동기화 변형(mutation)도 발생시키지 않는다.
 function healthPill(status: string | null): React.ReactNode {
-  if (status === "healthy" || status === "ready") return <Pill tone="ok" label="정상" />;
-  if (status === "degraded" || status === "warning") return <Pill tone="warn" label={status} />;
-  if (status === "critical" || status === "failed" || status === "unhealthy") return <Pill tone="crit" label={status} />;
-  return <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>{status ? `${status} · 관측 안 됨` : "관측 안 됨"}</span>;
+  if (status === "healthy" || status === "ready") return <Pill tone="ok" label={koLabel(status)} />;
+  if (status === "degraded" || status === "warning") return <Pill tone="warn" label={koLabel(status)} />;
+  if (status === "critical" || status === "failed" || status === "unhealthy") return <Pill tone="crit" label={koLabel(status)} />;
+  return <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>{status ? koLabel(status) : "관측 안 됨"}</span>;
 }
 function deliveryPill(status: string | null): React.ReactNode {
   if (status === null) return <Mono dim>—</Mono>;
-  if (status === "succeeded" || status === "synced" || status === "healthy") return <Pill tone="ok" label={status} />;
-  if (status === "failed" || status === "degraded" || status === "error") return <Pill tone="crit" label={status} />;
-  if (status === "pending" || status === "progressing" || status === "running") return <Pill tone="info" label={status} />;
-  return <Pill tone="warn" label={status} />;
+  if (status === "succeeded" || status === "synced" || status === "healthy") return <Pill tone="ok" label={koLabel(status)} />;
+  if (status === "failed" || status === "degraded" || status === "error") return <Pill tone="crit" label={koLabel(status)} />;
+  if (status === "pending" || status === "progressing" || status === "running") return <Pill tone="info" label={koLabel(status)} />;
+  return <Pill tone="warn" label={koLabel(status)} />;
 }
 const emptyRow = (msg: string) => <div style={{ padding: "14px 15px", fontSize: TYPE.label2, color: UI.ink3 }}>{msg}</div>;
 export function DeploySurface({ pendingRepos = [], onOpenRef: _onOpenRef, onAddRepo }: {
@@ -236,13 +291,7 @@ export function DeploySurface({ pendingRepos = [], onOpenRef: _onOpenRef, onAddR
               <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: "14px 15px" }}>
                 <span style={{ fontSize: TYPE.body, fontWeight: 700, color: UI.ink2 }}>Helm 릴리스 관측 안 됨</span>
                 <span style={{ fontSize: TYPE.label2, color: UI.ink3 }}>현재 스코프에서 Helm 저장소 관측이 완결되지 않았습니다.</span>
-                {helm.reasonCodes.length > 0 && (
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 2 }}>
-                    {helm.reasonCodes.slice(0, 12).map((rc) => (
-                      <span key={rc} style={{ fontSize: TYPE.micro, fontFamily: MONO, color: UI.ink3, background: inkA(0.04), border: `1px solid ${UI.line2}`, borderRadius: 6, padding: "1px 6px" }}>{rc}</span>
-                    ))}
-                  </div>
-                )}
+                <ReasonNotes codes={helm.reasonCodes} />
               </div>
             )
             : helm.items.map((h, i) => (
@@ -322,7 +371,7 @@ export function IssueDetail({ name, symptom, cluster, svc, ns, onClose, onOpenRe
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                 <Mono>{name}</Mono>
                 {sev && <Pill tone={sev.tone} label={sev.label} />}
-                {status && <span style={{ fontSize: TYPE.caption, fontWeight: 700, color: UI.ink2, background: inkA(0.05), borderRadius: 999, padding: "2px 9px" }}>{status}</span>}
+                {status && <span style={{ fontSize: TYPE.caption, fontWeight: 700, color: UI.ink2, background: inkA(0.05), borderRadius: 999, padding: "2px 9px" }}>{koLabel(status)}</span>}
               </div>
               <div style={{ fontSize: TYPE.label2, color: UI.ink2, marginTop: 4 }}>{symptom}</div>
               <div style={{ fontSize: TYPE.caption2, color: UI.ink3, marginTop: 3, fontFamily: MONO }}>{svc} · {ns} · {cluster}</div>
@@ -490,7 +539,7 @@ export function IssuesSurface({ sessionRules: _sessionRules = [], onOpenRef: _on
       <ChipRow chips={[
         { label: "장애", value: critCount, crit: critCount > 0 },
         { label: "주의", value: warnCount, warn: true },
-        { label: "open", value: openCount },
+        { label: "미해결", value: openCount },
         { label: "규칙", value: alertRules.status === "ready" ? alertRules.items.length : "—" },
       ]} />
       {tab === "이슈" && (
@@ -508,11 +557,11 @@ export function IssuesSurface({ sessionRules: _sessionRules = [], onOpenRef: _on
             return (
               <TRow key={iss.correlationId} cols={incCols} i={i}
                 onClick={() => setRca(iss)} cells={[
-                <Pill key="s" tone={iss.severity === "warning" ? "warn" : iss.severity === "critical" ? "crit" : "ok"} label={iss.severity ?? "정보"} />,
+                <Pill key="s" tone={iss.severity === "warning" ? "warn" : iss.severity === "critical" ? "crit" : "ok"} label={iss.severity ? koLabel(iss.severity) : "정보"} />,
                 <span key="t"><Mono>{label}</Mono><span style={{ fontSize: TYPE.label, color: UI.ink2 }}> · {iss.symptom ?? iss.status}</span></span>,
                 <Mono key="d" dim>{[iss.resourceKind, iss.clusterId].filter(Boolean).join(" · ") || "-"}</Mono>,
                 <Mono key="w" dim>{iss.namespace ?? "-"}</Mono>,
-                <Pill key="st" tone={resolved ? "ok" : "warn"} label={iss.status} />,
+                <Pill key="st" tone={resolved ? "ok" : "warn"} label={koLabel(iss.status)} />,
               ]} />
             );
           })}
@@ -520,7 +569,7 @@ export function IssuesSurface({ sessionRules: _sessionRules = [], onOpenRef: _on
       )}
       {tab === "알림 규칙" && (
         <Card pad={0}>
-          <div style={{ padding: "10px 15px", borderBottom: `1px solid ${UI.line2}`, fontSize: TYPE.caption2, color: UI.ink3 }}>실 GET /api/alert-rules · 읽기 전용(이 환경에서 규칙 편집·활성 토글 미지원)</div>
+          <div style={{ padding: "10px 15px", borderBottom: `1px solid ${UI.line2}`, fontSize: TYPE.caption2, color: UI.ink3 }}>규칙은 보기 전용입니다 · 이 데모에서는 규칙 편집·활성 토글이 지원되지 않습니다</div>
           <THead cols={ruleCols} />
           {alertRules.status === "loading" ? emptyRow("불러오는 중…")
             : alertRules.status === "unavailable" ? emptyRow("알림 규칙을 불러오지 못했습니다.")
@@ -529,7 +578,7 @@ export function IssuesSurface({ sessionRules: _sessionRules = [], onOpenRef: _on
               <TRow key={r.ruleId} cols={ruleCols} i={i} cells={[
                 <span key="n" style={{ display: "flex", alignItems: "center", gap: 7 }}><Bell size={13} style={{ color: BLUE, flexShrink: 0 }} /><span style={{ fontSize: TYPE.label2, fontWeight: 600 }}>{r.name}</span></span>,
                 <span key="c" style={{ fontSize: TYPE.label, color: UI.ink2, fontFamily: MONO }}>{r.metric} {r.comparator} {r.threshold}</span>,
-                <Pill key="s" tone={severityTone(r.severity)} label={r.severity} />,
+                <Pill key="s" tone={severityTone(r.severity)} label={koLabel(r.severity)} />,
                 <Mono key="ch">{r.channels.length}</Mono>,
                 <Pill key="e" tone={r.enabled ? "ok" : "info"} label={r.enabled ? "활성" : "중지"} />,
               ]} />
@@ -541,9 +590,11 @@ export function IssuesSurface({ sessionRules: _sessionRules = [], onOpenRef: _on
 }
 
 // ── 타임라인 /timeline (5.9 — P-21 문법 + 유형 필터 칩 P-22) ──
-// UI-PHASE2-001: 실 GET /api/changes(trailing 24h). 서버가 돌려준 변경 이벤트만
-// 렌더하고, 빈 창은 정직한 "관측된 변경 없음", 실패는 정직한 unavailable로 처리한다.
-// 변경 이벤트에는 리소스 ref가 없어 행 클릭 열기 대신 읽기 전용으로 표시한다.
+// UI-PHASE2-001 §2: 실 timeline API로 재배선. 활동 개요·문제 수·커버리지 공백은
+// GET /api/timeline/capabilities → POST /api/timeline/overview에서, 고정 항목은
+// GET /api/timeline/pins에서 조회한다(useTimelineBoard). 읽을 수 있는 변경 스트림은
+// 실 GET /api/changes(useChangeTimeline). 예전의 "핀·라이브 스트림·전체 스냅샷은
+// 미지원" 오판 표기를 제거하고, 실제 데이터가 비면 정직한 빈 상태로 둔다.
 type TlCat = "전체" | "이슈" | "배포" | "구성";
 function changeCat(kind: string): Exclude<TlCat, "전체"> {
   if (kind === "incident") return "이슈";
@@ -558,6 +609,7 @@ function changeTone(severity: string): "ok" | "warn" | "crit" {
 export function TimelineSurface({ onOpenRef: _onOpenRef }: { onOpenRef: (kind: string, name: string) => void }) {
   const [cat, setCat] = useState<TlCat>("전체");
   const feed = useChangeTimeline();
+  const board = useTimelineBoard();
   const items = feed.events.map((e) => ({
     id: e.id,
     time: fromNow(e.occurredMs),
@@ -566,8 +618,23 @@ export function TimelineSurface({ onOpenRef: _onOpenRef }: { onOpenRef: (kind: s
     title: e.title,
   }));
   const shown = cat === "전체" ? items : items.filter((i) => i.cat === cat);
+  const activityChips = board.activityFacets.filter((f) => f.count > 0);
   return (
     <Page title="타임라인" icon={Clock}>
+      {/* 실 timeline/overview 파생 요약(대표 클러스터 스코프) + 실 timeline/pins 고정 수 */}
+      <ChipRow chips={[
+        { label: "이벤트", value: board.overviewStatus === "ready" ? board.totalEvents : "—" },
+        { label: "문제", value: board.overviewStatus === "ready" ? board.totalProblems : "—", warn: board.overviewStatus === "ready" && board.totalProblems > 0 },
+        { label: "커버리지 공백", value: board.overviewStatus === "ready" ? board.coverageGaps : "—", warn: board.overviewStatus === "ready" && board.coverageGaps > 0 },
+        { label: "고정", value: board.pins.status === "ready" ? board.pins.items.length : "—" },
+      ]} />
+      {activityChips.length > 0 && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          {activityChips.map((f) => (
+            <span key={f.activity} style={segStyle}>{koLabel(f.activity)} <b style={numStyle}>{f.count}</b></span>
+          ))}
+        </div>
+      )}
       <div style={{ display: "flex", gap: 6 }}>
         {(["전체", "배포", "이슈", "구성"] as const).map((c) => (
           <button key={c} onClick={() => setCat(c)}
@@ -587,11 +654,31 @@ export function TimelineSurface({ onOpenRef: _onOpenRef }: { onOpenRef: (kind: s
           <MiniTimeline items={shown.map(({ cat: _c, ...it }) => it)} />
         )}
       </Card>
-      {/* 정직한 스코프 표기 — 이 계약(GET /api/changes)은 trailing 24h 변경 이벤트만
-          노출한다. 핀(pin)·라이브 스트림·전체 스냅샷 parity는 이 계약에서 관측되지
-          않으므로, 있는 것처럼 보이는 컨트롤을 두지 않고 미지원으로 명시한다. */}
+      {/* 고정한 항목 — 실 GET /api/timeline/pins(서버 진실). 비면 정직한 빈 상태 */}
+      <Card pad={0}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "11px 15px", borderBottom: `1px solid ${UI.line2}` }}>
+          <Pin size={13} style={{ color: BLUE }} />
+          <span style={{ fontSize: TYPE.label, fontWeight: 700, color: UI.ink3 }}>고정한 항목</span>
+        </div>
+        {board.pins.status === "loading" ? emptyRow("불러오는 중…")
+          : board.pins.status === "unavailable" ? emptyRow("고정 항목을 불러오지 못했습니다.")
+          : board.pins.status === "unsupported" ? emptyRow("이 워크스페이스에서는 고정 기능이 제공되지 않습니다.")
+          : board.pins.items.length === 0 ? emptyRow("고정한 항목 없음")
+          : board.pins.items.map((p) => (
+            <div key={p.pinId} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 15px", borderTop: `1px solid ${UI.line2}` }}>
+              <Pill tone="info" label={p.kind === "resource" ? "리소스" : "애플리케이션"} />
+              <span style={{ minWidth: 0, flex: 1 }}>
+                <span style={{ display: "block", fontSize: TYPE.label2, fontWeight: 700, fontFamily: MONO, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.label}</span>
+                {p.sublabel && <span style={{ display: "block", fontSize: TYPE.caption2, color: UI.ink3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.sublabel}</span>}
+              </span>
+            </div>
+          ))}
+      </Card>
+      {/* 정직한 표기 — 개요/문제/커버리지/고정은 실 timeline API 조회값이다. 관측 소스 모드만 부기 */}
       <span style={{ fontSize: TYPE.caption2, color: UI.ink3 }}>
-        최근 24시간 변경 이벤트만 표시 · 핀 · 라이브 스트림 · 전체 스냅샷은 이 계약에서 관측 안 됨(미지원)
+        {board.status === "unavailable"
+          ? "타임라인 개요를 불러오지 못했습니다 · 변경 스트림은 최근 24시간"
+          : `개요·고정은 실 timeline API 조회 · 관측 소스 ${board.selectedSourceMode ? koLabel(board.selectedSourceMode) : "—"} · 변경 스트림은 최근 24시간`}
       </span>
     </Page>
   );
@@ -621,13 +708,7 @@ export function ChecksSurface({ onOpenRef: _onOpenRef }: { onOpenRef: (kind: str
         <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: "4px 2px" }}>
           <span style={{ fontSize: TYPE.title3, fontWeight: 700, color: UI.ink2 }}>점검 결과 관측 안 됨</span>
           <span style={{ fontSize: TYPE.label2, color: UI.ink3 }}>에이전트 기반 평가 수집기가 통합되기 전까지 점검 결과·카탈로그를 사용할 수 없습니다.</span>
-          {checks.reasonCodes.length > 0 && (
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 4 }}>
-              {checks.reasonCodes.slice(0, 12).map((rc) => (
-                <span key={rc} style={{ fontSize: TYPE.micro, fontFamily: MONO, color: UI.ink3, background: inkA(0.04), border: `1px solid ${UI.line2}`, borderRadius: 6, padding: "1px 6px" }}>{rc}</span>
-              ))}
-            </div>
-          )}
+          <ReasonNotes codes={checks.reasonCodes} />
         </div>
       </Card>
       <Card pad={0}>
@@ -640,7 +721,7 @@ export function ChecksSurface({ onOpenRef: _onOpenRef }: { onOpenRef: (kind: str
                 <span style={{ fontSize: TYPE.label2, fontWeight: 700, fontFamily: MONO, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.clusterId}</span>
                 <span style={{ fontSize: TYPE.caption2, color: UI.ink3 }}>{s.namespaces.length ? `${s.namespaces.length}개 네임스페이스` : "전체 네임스페이스"}</span>
               </span>
-              <Pill tone={s.freshness === "live" ? "ok" : s.freshness === "disconnected" ? "crit" : "warn"} label={s.freshness} />
+              <Pill tone={s.freshness === "live" ? "ok" : s.freshness === "disconnected" ? "crit" : "warn"} label={koLabel(s.freshness)} />
             </div>
           ))}
       </Card>
@@ -661,9 +742,9 @@ export function CostSurface({ onOpenRef: _onOpenRef }: { onOpenRef: (kind: strin
           <span style={{ fontSize: TYPE.label2, color: UI.ink3 }}>비용을 불러오지 못했습니다.</span>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "6px 4px" }}>
-            <span style={{ fontSize: TYPE.title3, fontWeight: 700, color: UI.ink2 }}>비용 관측 안 됨</span>
-            <span style={{ fontSize: TYPE.label2, color: UI.ink3 }}>현재 스코프에 대해 비용 관측이 통합되지 않았습니다.</span>
-            <span style={{ fontSize: TYPE.caption2, fontFamily: MONO, color: UI.ink3 }}>{cost.reasonCodes.length ? cost.reasonCodes.join(" · ") : "cost_observation_unavailable"}</span>
+            <span style={{ fontSize: TYPE.title3, fontWeight: 700, color: UI.ink2 }}>비용 관측 데이터가 아직 없습니다</span>
+            <span style={{ fontSize: TYPE.label2, color: UI.ink3 }}>현재 스코프에 대해 비용 관측이 아직 연동되지 않았습니다.</span>
+            <ReasonNotes codes={cost.reasonCodes.length ? cost.reasonCodes : ["cost_observation_unavailable"]} />
           </div>
         )}
       </Card>
@@ -672,13 +753,33 @@ export function CostSurface({ onOpenRef: _onOpenRef }: { onOpenRef: (kind: strin
 }
 
 // ── 설정 /settings (D20 — 전역 앱 설정만. 연결·클러스터 관리는 각자의 문맥에) ──
-// UI-PHASE2-001: 워크스페이스·계정은 실 GET /api/auth/session에서. 멤버 수/워크
-// 스페이스 표시명은 세션이 제공하지 않으므로 위조하지 않는다. 통합(Prometheus/
-// EKS/GitHub) 연결 상태는 설정 API 미통합 — "연결됨"을 가짜로 표시하지 않고
-// 정직한 "확인 안 됨"으로 둔다.
-const gapLabel = <span style={{ fontSize: TYPE.label, fontWeight: 700, color: UI.ink3 }}>확인 안 됨</span>;
+// UI-PHASE2-001 §3: 워크스페이스·계정은 실 GET /api/auth/session. 테마·언어는 실
+// GET/PUT /api/settings(UiPreferences)로 저장한다(낙관적 UI, 실패 시 서버 진실로
+// 롤백, CSRF는 api 레이어). 접근 프로필은 GET /api/settings/access, 자동 갱신
+// 정책은 GET /api/refresh-policies 실 조회. 예전의 "미지원/변경할 수 없습니다/연결
+// 상태 확인 불가" 오판 표기를 제거했다. 토스트 토글만 이 브라우저 로컬 설정으로 남긴다.
+function Segmented<T extends string>({ value, options, onPick, disabled }: {
+  value: T | null; options: { id: T; label: string }[]; onPick: (id: T) => void; disabled?: boolean;
+}) {
+  return (
+    <div style={{ display: "flex", gap: 2, background: inkA(0.05), borderRadius: 9, padding: 2 }}>
+      {options.map((o) => {
+        const active = o.id === value;
+        return (
+          <button key={o.id} onClick={() => { if (!disabled && !active) onPick(o.id); }} disabled={disabled}
+            style={{ border: "none", background: active ? UI.card : "transparent", color: active ? UI.ink : UI.ink3, borderRadius: 7, padding: "4px 12px", fontSize: TYPE.label, fontWeight: 700, cursor: disabled ? "not-allowed" : active ? "default" : "pointer", boxShadow: active ? `0 1px 3px ${inkA(0.14)}` : "none", opacity: disabled ? 0.55 : 1 }}>
+            {o.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 export function SettingsSurface() {
   const session = useSession();
+  const prefs = useUiPreferences();
+  const refresh = useRefreshPolicies();
+  const access = useSettingsAccess();
   const [noise, setNoise] = useState(() => { try { return sessionStorage.getItem("opsia-demo-toast-crit-only") === "1"; } catch { return false; } });
   const toggleNoise = () => setNoise((v) => { const n = !v; try { sessionStorage.setItem("opsia-demo-toast-crit-only", n ? "1" : "0"); } catch { /* 데모 */ } return n; });
   const workspaceSub = session.status === "loading" ? "세션 확인 중…"
@@ -687,6 +788,13 @@ export function SettingsSurface() {
   const accountName = session.displayName ?? session.email ?? session.userId ?? "—";
   const accountSub = session.status !== "ready" ? "—"
     : session.roles.length ? session.roles.join(", ") : "역할 없음";
+  const prefsReady = prefs.status === "ready";
+  const prefsDisabled = !prefsReady || prefs.saving;
+  const prefsSub = prefs.status === "loading" ? "환경설정 불러오는 중…"
+    : prefs.status === "unavailable" ? "환경설정을 불러오지 못했습니다"
+    : prefs.saveError ? "저장 실패 · 이전 값으로 되돌렸습니다"
+    : prefs.saving ? "저장 중…"
+    : "이 계정의 서버 저장 환경설정입니다";
   return (
     <Page title="설정" icon={Building2}>
       <Card pad={0}>
@@ -697,22 +805,70 @@ export function SettingsSurface() {
             <span style={{ fontSize: TYPE.label2, color: UI.ink2, maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{accountName}</span>
             <span style={{ width: 26, height: 26, borderRadius: 999, background: inkA(0.08), display: "grid", placeItems: "center", fontSize: TYPE.label, fontWeight: 800, color: UI.ink2 }}>{session.status === "ready" ? sessionInitial(session) : "?"}</span>
           </span>} />
-        <SettingsRow icon={Globe} title="언어" sub="인터페이스 표시 언어 · 서버 설정 계약 미노출(관측 전용)" right={<Mono>한국어</Mono>} />
-        <SettingsRow icon={Bell} title="토스트 알림" sub="장애 사건만 토스트로 표시 (벨에는 전부 기록) · 이 브라우저 세션에만 저장(서버 미동기)" right={
+        <SettingsRow icon={Palette} title="테마" sub={prefsSub} right={
+          <Segmented value={prefsReady ? prefs.theme : null} disabled={prefsDisabled}
+            onPick={(theme) => prefs.save({ theme })}
+            options={[{ id: "system", label: "시스템" }, { id: "light", label: "라이트" }, { id: "dark", label: "다크" }]} />} />
+        <SettingsRow icon={Globe} title="언어" sub="인터페이스 표시 언어 · 서버에 저장됩니다" right={
+          <Segmented value={prefsReady ? prefs.locale : null} disabled={prefsDisabled}
+            onPick={(locale) => prefs.save({ locale })}
+            options={[{ id: "en", label: "English" }, { id: "ko", label: "한국어" }]} />} />
+        <SettingsRow icon={Bell} title="토스트 알림" sub="장애 사건만 토스트로 알림 · 벨에는 전부 기록 · 이 브라우저에만 저장됩니다" right={
           <button onClick={toggleNoise} style={{ width: 34, height: 20, borderRadius: 999, border: "none", cursor: "pointer", background: noise ? HP.ok : inkA(0.15), position: "relative", transition: "background .2s" }}>
             <span style={{ position: "absolute", top: 2, left: noise ? 16 : 2, width: 16, height: 16, borderRadius: 999, background: UI.card, boxShadow: `0 1px 3px ${inkA(0.3)}`, transition: "left .2s" }} />
           </button>} />
       </Card>
+      {/* 접근 권한 — 실 GET /api/settings/access(대표 클러스터 스코프) */}
       <Card pad={0}>
-        <SettingsRow icon={Radio} title="Prometheus" sub="메트릭 수집 · 연결 상태 미확인(설정 API 미통합)" right={gapLabel} />
-        <SettingsRow icon={AwsIcon as never} title="Amazon EKS" sub="클러스터 프로바이더 · 연결 상태 미확인" right={gapLabel} />
-        <SettingsRow icon={GithubIcon as never} title="GitHub" sub="저장소 웹훅 · 연결 상태 미확인" right={gapLabel} />
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "11px 15px", borderBottom: `1px solid ${UI.line2}` }}>
+          <Lock size={13} style={{ color: BLUE }} />
+          <span style={{ fontSize: TYPE.label, fontWeight: 700, color: UI.ink3 }}>접근 권한{access.clusterId ? ` · ${access.clusterId}` : ""}</span>
+        </div>
+        {access.status === "loading" ? emptyRow("불러오는 중…")
+          : access.status === "unavailable" ? emptyRow("접근 프로필을 불러오지 못했습니다.")
+          : access.clusterId === null ? emptyRow("등록된 클러스터가 없어 접근 프로필을 조회할 수 없습니다.")
+          : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: "12px 15px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                {access.roles.length ? access.roles.map((r) => <Pill key={r} tone="info" label={r} />) : <span style={{ fontSize: TYPE.label2, color: UI.ink3 }}>역할 없음</span>}
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <span style={segStyle}>허용 권한 <b style={numStyle}>{access.allowedCount}/{access.permissionCount}</b></span>
+                <Pill tone={access.kubernetesRulesObserved ? "ok" : "warn"} label={access.kubernetesRulesObserved ? "K8s 권한 관측됨" : "K8s 권한 미관측"} />
+                {access.restrictedResourceCount !== null && access.restrictedResourceCount > 0 && (
+                  <span style={segStyle}>제한 리소스 <b style={numStyle}>{access.restrictedResourceCount}</b></span>
+                )}
+              </div>
+            </div>
+          )}
       </Card>
-      {/* 정직한 표기 — 워크스페이스·계정은 실 GET /api/auth/session 읽기. 설정 변경
-          (settings/access/refresh) 계약이 백엔드에 존재하지 않으므로 저장되는 변경
-          컨트롤을 두지 않고 관측 전용으로 둔다. 토스트 토글만 이 세션 로컬 데모 설정. */}
-      <span style={{ fontSize: TYPE.caption2, color: UI.ink3 }}>워크스페이스·계정·통합은 관측 전용 · 서버 설정 변경 계약 미노출</span>
-      <span style={{ fontSize: TYPE.caption2, fontFamily: MONO, color: UI.ink3 }}>Opsia Console 0.1.0 · demo</span>
+      {/* 자동 갱신 정책 — 실 GET /api/refresh-policies(서버 소유 캐던스) */}
+      <Card pad={0}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "11px 15px", borderBottom: `1px solid ${UI.line2}` }}>
+          <RefreshCw size={13} style={{ color: BLUE }} />
+          <span style={{ fontSize: TYPE.label, fontWeight: 700, color: UI.ink3 }}>자동 갱신 정책</span>
+        </div>
+        {refresh.status === "loading" ? emptyRow("불러오는 중…")
+          : refresh.status === "unavailable" ? emptyRow("자동 갱신 정책을 불러오지 못했습니다.")
+          : refresh.items.length === 0 ? emptyRow("등록된 정책 없음")
+          : (
+            <div style={{ maxHeight: 260, overflowY: "auto" }}>
+              {refresh.items.map((p) => (
+                <div key={p.key} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "9px 15px", borderTop: `1px solid ${UI.line2}` }}>
+                  <Mono>{p.key}</Mono>
+                  <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    {p.eventInvalidation && <Pill tone="info" label="이벤트 무효화" />}
+                    <span style={{ fontSize: TYPE.caption2, color: UI.ink3, fontFamily: MONO }}>{p.staleAfterSeconds !== null ? `stale ${p.staleAfterSeconds}s · ` : ""}refresh {p.refreshAfterSeconds}s</span>
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+      </Card>
+      {/* 정직한 표기 — 테마·언어는 실 PUT /api/settings 저장(낙관적, 실패 시 롤백).
+          접근·자동 갱신 정책은 실 조회. 토스트 토글만 이 브라우저 로컬 데모 설정. */}
+      <span style={{ fontSize: TYPE.caption2, color: UI.ink3 }}>테마·언어는 서버에 저장됩니다(실패 시 이전 값으로 되돌림) · 접근·자동 갱신 정책은 실시간 조회</span>
+      <span style={{ fontSize: TYPE.caption2, fontFamily: MONO, color: UI.ink3 }}>Opsia Console 0.1.0{prefs.revision !== null ? ` · prefs r${prefs.revision}` : ""}</span>
     </Page>
   );
 }
@@ -751,10 +907,10 @@ export function AlertsSurface({ onOpenRef }: { onOpenRef: (kind: string, name: s
           : events.items.length === 0 ? emptyRow("관측된 알림 없음")
           : events.items.map((n, i) => (
             <TRow key={n.eventId} cols={evCols} i={i} onClick={() => onOpenRef(n.kind, n.name)} cells={[
-              <Pill key="s" tone={severityTone(n.severity)} label={n.severity} />,
+              <Pill key="s" tone={severityTone(n.severity)} label={koLabel(n.severity)} />,
               <span key="t" style={{ fontSize: TYPE.label2, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{n.kind} · {n.name}{n.namespace ? ` · ${n.namespace}` : ""}</span>,
               <Mono key="r" dim>{n.ruleName ?? "—"}</Mono>,
-              <span key="st" style={{ fontSize: TYPE.label, color: UI.ink3 }}>{n.status}</span>,
+              <span key="st" style={{ fontSize: TYPE.label, color: UI.ink3 }}>{koLabel(n.status)}</span>,
               <Mono key="w" dim>{fromNow(n.firedAt)}</Mono>,
             ]} />
           ))}
@@ -785,7 +941,7 @@ export function AlertsSurface({ onOpenRef }: { onOpenRef: (kind: string, name: s
             <TRow key={c.channelId} cols={chCols} i={i} cells={[
               <Mono key="n">{c.name}</Mono>,
               <span key="k" style={{ fontSize: TYPE.label, color: UI.ink2 }}>{c.kind}</span>,
-              <span key="m" style={{ fontSize: TYPE.label, color: UI.ink3 }}>{c.minSeverity}</span>,
+              <span key="m" style={{ fontSize: TYPE.label, color: UI.ink3 }}>{koLabel(c.minSeverity)}</span>,
               <Pill key="e" tone={c.enabled ? "ok" : "info"} label={c.enabled ? "활성" : "중지"} />,
             ]} />
           ))}

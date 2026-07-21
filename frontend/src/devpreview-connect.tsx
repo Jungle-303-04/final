@@ -47,6 +47,7 @@ import {
   type ConnectionStatusView,
   type ProviderAvailability,
 } from "./devpreview/connectFeed";
+import { statusLabel } from "./devpreview/statusLabel";
 import "./styles/tokens.css";
 import "./styles/foundation.css";
 
@@ -150,7 +151,7 @@ function NextButton({ show, label, onClick }: { show: boolean; label: string; on
 }
 
 const BackBtn = ({ onClick }: { onClick: () => void }) => (
-  <button onClick={onClick} className="btn-ghost grid shrink-0 place-items-center" style={{ borderRadius: 14, width: 50, height: 50 }}><ArrowLeft className="size-[18px] c-2" /></button>
+  <button onClick={onClick} aria-label="뒤로" className="btn-ghost grid shrink-0 place-items-center" style={{ borderRadius: 14, width: 50, height: 50 }}><ArrowLeft className="size-[18px] c-2" /></button>
 );
 
 function ShellHeader({ icon: Icon, title, sub, onClose }: { icon: typeof Server; title: string; sub: string; onClose: () => void }) {
@@ -162,7 +163,7 @@ function ShellHeader({ icon: Icon, title, sub, onClose }: { icon: typeof Server;
           <h1 className="text-[19px] font-semibold tracking-[-0.02em] c-ink">{title}</h1>
           <p className="mt-1 text-[13px] c-2">{sub}</p>
         </div>
-        <button onClick={onClose} className="grid size-9 place-items-center rounded-full c-3 transition-colors hover:bg-soft" style={{ marginTop: -4 }}><X className="size-5" /></button>
+        <button onClick={onClose} aria-label="닫기" className="grid size-9 place-items-center rounded-full c-3 transition-colors hover:bg-soft" style={{ marginTop: -4 }}><X className="size-5" /></button>
       </div>
       <div style={{ padding: "0 36px" }}><div className="hairline" /></div>
     </>
@@ -414,7 +415,7 @@ function PreflightPanel({ result }: { result: TargetPreflightResponse }) {
           {ok ? <Check className="size-[15px] c-green" strokeWidth={3} /> : <AlertCircle className="size-[15px] c-orange" />}
         </span>
         <span className="text-[13px] font-semibold c-ink">{ok ? "사전검증 통과" : "사전검증: 확인 필요"}</span>
-        <span className="ml-auto font-mono text-[11.5px] c-3">{result.connection_status}</span>
+        <span className="ml-auto font-mono text-[11.5px] c-3">{statusLabel(result.connection_status)}</span>
       </div>
       {result.errors.map((e) => <div key={e} className="font-mono text-[11.5px] c-red">· {e}</div>)}
       {result.warnings.map((w) => <div key={w} className="font-mono text-[11.5px] c-orange">· {w}</div>)}
@@ -629,6 +630,14 @@ export function ConnectWizard({ embedded = false, initialView = null, onDismiss 
   // 컨텍스트 모달 모드: 뒤로가기가 없는 단일 위저드 진입이므로 닫기는 모달을 닫는다(런처로 돌아가지 않음)
   const closeView = () => { if (onDismiss) onDismiss(); else setView(null); };
 
+  // Esc 키로 마법사 닫기(브라우저 confirm/alert 없이 상태 토글/콜백만).
+  useEffect(() => {
+    if (!view) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") closeView(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [view]);
+
   // 실제 연결 완료 시점에만 셸 알림으로 연결(관측된 결과 기반 · 타이머 흉내 없음).
   const completeCluster = (name: string) => {
     emitAction({ kind: "connect", title: "클러스터 연결됨", body: `${name} · 메트릭 수집 시작`, scope: "cluster", ref: name });
@@ -648,9 +657,10 @@ export function ConnectWizard({ embedded = false, initialView = null, onDismiss 
         {view && (
           <>
             <motion.div key="backdrop" className="absolute inset-0" style={{ background: "rgba(0,0,0,0.28)", backdropFilter: "blur(5px)" }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={closeView} />
-            <div className="absolute inset-0 overflow-y-auto">
+            {/* 바깥(배경) 클릭 시 닫기 · 모달 컨텐츠 클릭은 stopPropagation으로 전파 차단 */}
+            <div className="absolute inset-0 overflow-y-auto" onClick={closeView}>
               <div className="flex min-h-full justify-center px-6" style={{ paddingTop: "6vh", paddingBottom: "6vh" }}>
-                <motion.div key={view} initial={{ opacity: 0, y: 22, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 16, scale: 0.98 }} transition={{ type: "spring", visualDuration: 0.42, bounce: 0.2 }}
+                <motion.div key={view} onClick={(e) => e.stopPropagation()} initial={{ opacity: 0, y: 22, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 16, scale: 0.98 }} transition={{ type: "spring", visualDuration: 0.42, bounce: 0.2 }}
                   style={{ width: 580, maxWidth: "100%", borderRadius: 26, alignSelf: "flex-start", boxShadow: "0 44px 100px -30px rgba(0,0,0,0.4), 0 8px 24px -12px rgba(0,0,0,0.15)" }} className="modal-surface overflow-hidden">
                   {view === "repo"
                     ? <RepoWizard providers={providers} onClose={closeView} />
