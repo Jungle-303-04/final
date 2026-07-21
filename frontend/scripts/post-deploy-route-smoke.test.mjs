@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { chromium } from "playwright";
 
 import {
   ROUTE_CRITICAL_API_CONTRACTS,
@@ -197,6 +198,26 @@ describe("post-deploy route smoke helpers", () => {
     const fixture = Array.from({ length: 10 }, (_, index) => `route-${index} 화면으로 이동`);
     expect(fixture).toHaveLength(10);
     expect(new Set(fixture).size).toBe(10);
+  });
+
+  it("uses a real DOM fixture: ten GlobalNav buttons, widgets excluded, live labels survive removal", async () => {
+    const browser = await chromium.launch({ headless: true });
+    const page = await browser.newPage();
+    const labels = [...Array(9)].map((_, i) => `표면${i + 1} 화면으로 이동`).concat("설정 화면으로 이동");
+    await page.setContent(`<nav data-slot="global-navigation">${labels.map((label) => `<button aria-label="${label}">${label}</button>`).join("")}</nav><div id="widgets">${Array.from({length: 8}, (_, i) => `<button aria-label="위젯${i} 화면으로 이동">widget</button>`).join("")}</div>`);
+    await page.locator('[data-slot="global-navigation"] button').evaluateAll((buttons) => buttons.forEach((button) => button.addEventListener("click", () => {
+      buttons.forEach((item) => item.removeAttribute("aria-current"));
+      button.setAttribute("aria-current", "page");
+      if (button.getAttribute("aria-label") === "설정 화면으로 이동") document.querySelector("#widgets")?.remove();
+    })));
+    const nav = page.locator('[data-slot="global-navigation"] button[aria-label$=" 화면으로 이동"]');
+    expect(await nav.count()).toBe(10);
+    expect(await page.locator('#widgets button[aria-label$=" 화면으로 이동"]').count()).toBe(8);
+    const snapshot = await nav.evaluateAll((items) => items.map((item) => item.getAttribute("aria-label")));
+    for (const label of snapshot) await page.locator('[data-slot="global-navigation"]').getByRole("button", { name: label, exact: true }).click();
+    expect(await page.locator("#widgets").count()).toBe(0);
+    expect(await page.locator('[data-slot="global-navigation"] button[aria-current="page"]').getAttribute("aria-label")).toBe("설정 화면으로 이동");
+    await browser.close();
   });
 
   it("preserves DOM order when the current URL is not a released navigation route", () => {
