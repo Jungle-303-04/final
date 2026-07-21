@@ -223,6 +223,24 @@ def test_backend_scope_skips_only_the_redundant_frontend_full_gate() -> None:
     assert setup_node["with"]["cache-dependency-path"] == "frontend/package-lock.json"
 
 
+def test_frontend_gate_installs_the_real_browser_runtime_before_tests() -> None:
+    frontend = workflow_document()["jobs"]["frontend"]
+    install = next(
+        step
+        for step in frontend["steps"]
+        if step.get("name") == "Install frontend browser test runtime"
+    )
+
+    assert install["if"] == (
+        "${{ needs.source-proof.outputs.gate_scope != 'BACKEND' "
+        "&& needs.source-proof.outputs.gate_scope != 'REUSE' "
+        "&& needs.source-proof.outputs.gate_scope != 'DOCS' }}"
+    )
+    assert install["working-directory"] == "frontend"
+    assert "npm ci --include=dev --no-audit --no-fund" in install["run"]
+    assert "playwright install --with-deps chromium" in install["run"]
+
+
 def test_frontend_scope_runs_impacted_tests_with_full_static_and_build_checks() -> None:
     frontend = workflow_document()["jobs"]["frontend"]
     fetch_base = next(
