@@ -67,6 +67,7 @@ from packages.storage.engine import DatabaseConnection, iso_or_none
 INVENTORY_UPSERT_CHUNK = 500
 TIMELINE_COVERAGE_READ_CHUNK = 128
 TIMELINE_COVERAGE_RESPONSE_LIMIT = 256
+KUBERNETES_EVENT_CAPTURE_CANDIDATE_LIMIT = 128
 
 SYNTHETIC_NAMESPACE = None
 HEALTH_RESOURCE_TYPE = "health"
@@ -502,27 +503,65 @@ def latest_complete_kubernetes_event_batch(
     workspace_id: str,
     cluster_id: str,
 ) -> KubernetesEventFactBatch | None:
-    """Read the newest complete Event fact cut, never an inventory Event resource row."""
+    """Read a recent complete Event fact cut without scanning snapshot JSON history.
+
+    ``summary`` is a large TOAST value and the old JSON-path predicates forced
+    PostgreSQL to decode historical payloads until it found a complete capture.  The
+    dedicated ``event_capture`` projection is covered by the Timeline capture partial
+    index, so inspect only a bounded set of recent projections in Python.  Once a safe
+    authoritative candidate is found, fetch that single snapshot body by primary key.
+
+    Returning ``None`` when no authoritative capture exists inside the bounded window
+    is deliberately fail-closed: it may suppress an Event delta, but it can never
+    invent a previous complete cut or block current inventory/metric persistence.
+    """
     snapshot = ClusterInventorySnapshotRecord.__table__
-    capture = snapshot.c.summary["summary"][EVENT_CAPTURE_SUMMARY_KEY]
-    statement = (
-        select(snapshot.c.summary)
+    candidate_statement = (
+        select(snapshot.c.snapshot_id, snapshot.c.event_capture)
         .where(
             snapshot.c.workspace_id == workspace_id,
             snapshot.c.cluster_id == cluster_id,
             snapshot.c.status != "ignored_stale",
-            capture["complete"].as_boolean().is_(True),
-            capture["truncated"].as_boolean().is_(False),
-            capture["reason"].astext == EVENT_CAPTURE_REASON_COMPLETE,
+            snapshot.c.event_capture.is_not(None),
+            snapshot.c.event_capture_observed_at.is_not(None),
         )
-        .order_by(snapshot.c.collected_at.desc(), snapshot.c.created_at.desc())
-        .limit(1)
+        .order_by(
+            snapshot.c.event_capture_observed_at.desc(),
+            snapshot.c.collected_at.desc(),
+            snapshot.c.created_at.desc(),
+            snapshot.c.snapshot_id.desc(),
+        )
+        .limit(KUBERNETES_EVENT_CAPTURE_CANDIDATE_LIMIT)
     )
-    rows = conn.execute(statement).mappings().all()
-    row = rows[0] if rows else None
-    if not isinstance(row, Mapping):
+
+    candidate_snapshot_id: str | None = None
+    for row in conn.execute(candidate_statement).mappings().all():
+        if not isinstance(row, Mapping):
+            continue
+        capture_projection = row.get("event_capture")
+        if not isinstance(capture_projection, Mapping):
+            continue
+        capture = KubernetesEventCapture.from_snapshot_summary(
+            {EVENT_CAPTURE_SUMMARY_KEY: dict(capture_projection)}
+        )
+        if capture.authoritative:
+            snapshot_id = row.get("snapshot_id")
+            if snapshot_id is not None:
+                candidate_snapshot_id = str(snapshot_id)
+                break
+
+    if candidate_snapshot_id is None:
         return None
-    snapshot_summary = row.get("summary")
+
+    snapshot_summary = conn.execute(
+        select(snapshot.c.summary)
+        .where(
+            snapshot.c.snapshot_id == candidate_snapshot_id,
+            snapshot.c.workspace_id == workspace_id,
+            snapshot.c.cluster_id == cluster_id,
+        )
+        .limit(1)
+    ).scalar_one_or_none()
     if not isinstance(snapshot_summary, Mapping):
         return None
     source_summary = snapshot_summary.get("summary")

@@ -111,6 +111,10 @@ export function useDevpreviewContracts(): DevpreviewContractState {
 
 export function projectCluster(cluster: DevpreviewClusterSummary): DevpreviewCluster {
   const configuredName = cluster.settings.name;
+  const providerConfig = cluster.settings.provider_config;
+  const eksClusterName = isRecord(providerConfig)
+    ? providerConfig.eks_cluster_name
+    : null;
   const configuredRole = cluster.settings.cluster_role;
   const role = configuredRole === "management" || cluster.environment === "management"
     ? "management"
@@ -120,9 +124,12 @@ export function projectCluster(cluster: DevpreviewClusterSummary): DevpreviewClu
     id: cluster.cluster_id,
     workspaceId: cluster.workspace_id,
     name: cluster.name,
-    displayName: typeof configuredName === "string" && configuredName.trim()
-      ? configuredName
-      : cluster.name,
+    // EKS 화면의 식별자는 AWS의 실제 cluster name과 반드시 같아야 한다.
+    // 등록 시 붙인 별칭/한글 이름을 우선하면 같은 클러스터가 다른 대상으로
+    // 보이거나 중복처럼 보이므로, EKS는 provider_config의 원본 이름을 사용한다.
+    displayName: cluster.provider === "eks"
+      ? textOrNull(eksClusterName) ?? cluster.name
+      : textOrNull(configuredName) ?? cluster.name,
     environment: cluster.environment,
     provider: cluster.provider ?? "unknown",
     connectionStatus: cluster.connection_status,
@@ -137,6 +144,14 @@ export function projectCluster(cluster: DevpreviewClusterSummary): DevpreviewClu
     role,
     readOnly: role === "management",
   };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function textOrNull(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 function contractErrorMessage(cause: unknown): string {

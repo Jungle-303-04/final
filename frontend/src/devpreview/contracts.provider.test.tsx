@@ -17,7 +17,11 @@ const CLUSTER = {
   provider: "eks",
   observation_mode: "agent",
   status: "registered",
-  settings: { name: "Production", cluster_role: "target" },
+  settings: {
+    name: "Production",
+    cluster_role: "target",
+    provider_config: { eks_cluster_name: "cluster-1" },
+  },
   connection_status: "online",
   connection_stage: "ready",
   last_agent_id: "agent-1",
@@ -61,7 +65,7 @@ describe("DevpreviewContractProvider cluster boundary", () => {
 
     await waitFor(() => {
       expect(screen.getByTestId("contract-state").textContent)
-        .toBe("ready:workspace-1:Production");
+        .toBe("ready:workspace-1:cluster-1");
     });
 
     expect(listClustersMock).toHaveBeenCalledOnce();

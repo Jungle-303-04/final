@@ -9,6 +9,7 @@ function contractCluster(input: {
   displayName: string;
   environment: string;
   role: "management" | "target";
+  eksClusterName?: string;
 }) {
   return {
     workspace_id: "default",
@@ -21,6 +22,9 @@ function contractCluster(input: {
     settings: {
       name: input.displayName,
       cluster_role: input.role,
+      provider_config: input.eksClusterName
+        ? { eks_cluster_name: input.eksClusterName }
+        : {},
     },
     connection_status: "online",
     connection_stage: "ready" as const,
@@ -72,5 +76,17 @@ describe("devpreview projectCluster", () => {
       role: "target",
       readOnly: false,
     });
+  });
+
+  it("uses the actual AWS EKS cluster name instead of a registration alias", () => {
+    const target = projectCluster(contractCluster({
+      clusterId: "game-server-live",
+      displayName: "게임 서버",
+      environment: "production",
+      role: "target",
+      eksClusterName: "game-server",
+    }));
+
+    expect(target.displayName).toBe("game-server");
   });
 });
