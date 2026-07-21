@@ -40,3 +40,26 @@ export function resourceManifestFailureText(cause: unknown): string {
   }
   return cause instanceof Error ? cause.message : "요청을 완료하지 못했습니다.";
 }
+
+export type ResourceManifestRemediation =
+  | "connect-repository"
+  | "reauthenticate"
+  | "request-access"
+  | "retry"
+  | "none";
+
+const SOURCE_NOT_FOUND = "No exact GitOps source binding was found for this live resource.";
+const SOURCE_PERMISSION_REQUIRED = "manifest_source_permission_required";
+
+export function resourceManifestFailureRemediation(cause: unknown): ResourceManifestRemediation {
+  if (!isApiError(cause)) return "retry";
+  if (cause.kind === "unauthorized") return "reauthenticate";
+  if (cause.kind === "forbidden") return "request-access";
+  return "retry";
+}
+
+export function resourceManifestSourceRemediation(reason: string | null): ResourceManifestRemediation {
+  if (reason === SOURCE_NOT_FOUND) return "connect-repository";
+  if (reason === SOURCE_PERMISSION_REQUIRED) return "request-access";
+  return "none";
+}

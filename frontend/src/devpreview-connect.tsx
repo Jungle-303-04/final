@@ -354,8 +354,14 @@ type RepoTargetInput = {
   environment: string;
 };
 
-function RepoTargetStep({ source, onBack, onComplete }: {
+export interface RepositoryConnectionContext {
+  clusterId?: string;
+  namespace?: string;
+}
+
+function RepoTargetStep({ source, context, onBack, onComplete }: {
   source: RepoSource;
+  context?: RepositoryConnectionContext;
   onBack: () => void;
   onComplete: (repo: string) => void;
 }) {
@@ -366,8 +372,8 @@ function RepoTargetStep({ source, onBack, onComplete }: {
     name: defaultName,
     branch: source.defaultBranch,
     manifestPath: "",
-    clusterId: "",
-    namespace: "sandbox",
+    clusterId: context?.clusterId ?? "",
+    namespace: context?.namespace?.trim() || "sandbox",
     environment: "development",
   });
   const [clusters, setClusters] = useState<ClusterSummaryView[]>([]);
@@ -384,7 +390,12 @@ function RepoTargetStep({ source, onBack, onComplete }: {
         if (controller.signal.aborted) return;
         const connected = response.clusters.filter((cluster) => ["online", "connected"].includes(cluster.connection_status.toLowerCase()));
         setClusters(connected);
-        setInput((current) => ({ ...current, clusterId: current.clusterId || connected[0]?.cluster_id || "" }));
+        setInput((current) => ({
+          ...current,
+          clusterId: connected.some((cluster) => cluster.cluster_id === current.clusterId)
+            ? current.clusterId
+            : connected[0]?.cluster_id || "",
+        }));
         setClusterStatus("ready");
       })
       .catch((cause: unknown) => {
@@ -538,12 +549,12 @@ function RepoDoneStep({ repo, onDone }: { repo: string; onDone: () => void }) {
   );
 }
 
-function RepoWizard({ providers, onClose, onComplete }: { providers: ClusterProvidersView; onClose: () => void; onComplete: (repo: string) => void }) {
+function RepoWizard({ providers, context, onClose, onComplete }: { providers: ClusterProvidersView; context?: RepositoryConnectionContext; onClose: () => void; onComplete: (repo: string) => void }) {
   const [step, setStep] = useState(0);
   const [source, setSource] = useState<RepoSource | null>(null);
   const el = {
     0: <RepoStep key="s0" providers={providers} onNext={(value) => { setSource(value); setStep(1); }} />,
-    1: source ? <RepoTargetStep key="s1" source={source} onBack={() => setStep(0)} onComplete={() => setStep(2)} /> : null,
+    1: source ? <RepoTargetStep key="s1" source={source} context={context} onBack={() => setStep(0)} onComplete={() => setStep(2)} /> : null,
     2: source ? <RepoDoneStep key="s2" repo={source.normalizedRepo} onDone={() => onComplete(source.normalizedRepo)} /> : null,
   }[step];
   return (<><ShellHeader icon={GitBranch} title="Git 저장소 연결" sub="Git 원문 검증 · 배포 대상 등록 · Safe PR 준비" onClose={onClose} /><Steps steps={REPO_STEPS} active={step} /><Body>{el}</Body></>);
@@ -995,7 +1006,21 @@ function Launcher({ onPick }: { onPick: (v: "repo" | "cluster") => void }) {
 }
 
 // ── 루트 ─────────────────────────────
-export function ConnectWizard({ embedded = false, initialView = null, onDismiss }: { embedded?: boolean; initialView?: null | "repo" | "cluster"; onDismiss?: () => void } = {}) {
+interface ConnectWizardProps {
+  embedded?: boolean;
+  initialView?: null | "repo" | "cluster";
+  onDismiss?: () => void;
+  repositoryContext?: RepositoryConnectionContext;
+  onRepositoryComplete?: (repo: string) => void;
+}
+
+export function ConnectWizard({
+  embedded = false,
+  initialView = null,
+  onDismiss,
+  repositoryContext,
+  onRepositoryComplete,
+}: ConnectWizardProps = {}) {
   const [view, setView] = useState<null | "repo" | "cluster">(initialView);
   const providers = useClusterProviders();
   // 컨텍스트 모달 모드: 뒤로가기가 없는 단일 위저드 진입이므로 닫기는 모달을 닫는다(런처로 돌아가지 않음)
@@ -1016,6 +1041,7 @@ export function ConnectWizard({ embedded = false, initialView = null, onDismiss 
   };
   const completeRepo = (repo: string) => {
     emitAction({ kind: "connect", title: "저장소 연결됨", body: `${repo} · GitOps 대상 등록 완료`, scope: "repo", ref: repo });
+    onRepositoryComplete?.(repo);
     closeView();
   };
 
@@ -1039,7 +1065,7 @@ export function ConnectWizard({ embedded = false, initialView = null, onDismiss 
                   tabIndex={-1} autoFocus onClick={(e) => e.stopPropagation()} initial={{ opacity: 0, y: 22, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 16, scale: 0.98 }} transition={{ type: "spring", visualDuration: 0.42, bounce: 0.2 }}
                   style={{ width: 580, maxWidth: "100%", borderRadius: 26, alignSelf: "flex-start", boxShadow: "0 44px 100px -30px rgba(0,0,0,0.4), 0 8px 24px -12px rgba(0,0,0,0.15)" }} className="modal-surface overflow-hidden">
                   {view === "repo"
-                    ? <RepoWizard providers={providers} onClose={closeView} onComplete={completeRepo} />
+                    ? <RepoWizard providers={providers} context={repositoryContext} onClose={closeView} onComplete={completeRepo} />
                     : <ClusterWizard providers={providers} onClose={closeView} onComplete={completeCluster} />}
                 </motion.div>
               </div>

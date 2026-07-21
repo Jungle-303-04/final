@@ -11,6 +11,7 @@ from fastapi import HTTPException
 from domains.gitops.repository_discovery import RepositoryDiscoveryService
 from domains.manifest_editor.repository import ManifestEditorRepository
 from domains.manifest_editor.router import (
+    SOURCE_PERMISSION_REQUIRED,
     apply_resource_manifest_now,
     approve_resource_manifest_edit,
     edit_workflow_id,
@@ -298,6 +299,18 @@ class PodOwnerManifestDb(ManifestApprovalDb):
         )
 
 
+class ManifestSourcePermissionDeniedDb(ManifestApprovalDb):
+    def can_access(
+        self,
+        _user_id: str,
+        _workspace_id: str,
+        resource_type: str,
+        _resource_id: str,
+        _permission: str,
+    ) -> bool:
+        return resource_type != "application"
+
+
 class ManifestApprovalClient:
     async def branch_sha(self, repo_ref: str, branch: str) -> str:
         assert (repo_ref, branch) == ("project/repo", "main")
@@ -371,6 +384,26 @@ def test_pod_source_keeps_live_yaml_read_only_and_edits_exact_owner_controller()
     assert response.edit_target.kind == "Deployment"
     assert response.edit_target.name == "checkout-api"
     assert response.content == SOURCE
+
+
+def test_source_read_distinguishes_missing_binding_from_application_permission() -> None:
+    response = asyncio.run(
+        get_resource_manifest_source(
+            "resource-1",
+            None,
+            SimpleNamespace(
+                workspace_id="workspace-1",
+                user_id="operator-1",
+                roles=("release_operator",),
+            ),
+            ManifestSourcePermissionDeniedDb(),
+            RepositoryDiscoveryService(ManifestApprovalClient()),
+        )
+    )
+
+    assert response.status == "unsupported"
+    assert response.choices == []
+    assert response.reason == SOURCE_PERMISSION_REQUIRED
 
 
 def test_controller_owner_resolution_follows_complete_same_snapshot_uid_chain(

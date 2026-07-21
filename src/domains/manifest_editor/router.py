@@ -91,6 +91,7 @@ SAFE_PR_MANIFEST_EDIT_KIND = "safe_pr_manifest_edit"
 UNSUPPORTED_SOURCE = "Only a single raw YAML GitHub source can be edited safely."
 STALE_SOURCE = "The Git source changed after it was loaded. Reload before approving."
 SOURCE_NOT_FOUND = "No exact GitOps source binding was found for this live resource."
+SOURCE_PERMISSION_REQUIRED = "manifest_source_permission_required"
 OWNER_SOURCE_NOT_FOUND = (
     "No exact Deployment, StatefulSet, or DaemonSet owner was observed for this Pod."
 )
@@ -128,14 +129,19 @@ async def get_resource_manifest_source(
             reason=str(context["edit_unavailable_reason"]),
             **projection,
         )
-    sources = authorized_sources(db, current, context, application_id=application_id)
+    sources, source_permission_denied = authorized_sources_with_access(
+        db,
+        current,
+        context,
+        application_id=application_id,
+    )
     choices = [source_choice(source) for source in sources]
     if not sources:
         return ResourceManifestSourceResponse(
             resource_id=resource_id,
             status="unsupported",
             choices=[],
-            reason=SOURCE_NOT_FOUND,
+            reason=(SOURCE_PERMISSION_REQUIRED if source_permission_denied else SOURCE_NOT_FOUND),
             **projection,
         )
     if application_id is None and len(sources) > 1:
@@ -1255,14 +1261,31 @@ def authorized_sources(
     *,
     application_id: str | None,
 ) -> list[dict[str, Any]]:
+    sources, _permission_denied = authorized_sources_with_access(
+        db,
+        current,
+        context,
+        application_id=application_id,
+    )
+    return sources
+
+
+def authorized_sources_with_access(
+    db: Any,
+    current: Any,
+    context: dict[str, Any],
+    *,
+    application_id: str | None,
+) -> tuple[list[dict[str, Any]], bool]:
     if context.get("edit_unavailable_reason") is not None:
-        return []
+        return [], False
     rows = db.list_resource_manifest_sources(
         workspace_id=context["workspace_id"],
         resource_id=str(context["resource"]["inventory_key"]),
         cluster_id=context["cluster_id"],
     )
     sources: list[dict[str, Any]] = []
+    permission_denied = False
     for row in rows:
         source = dict(row)
         if application_id is not None and source.get("application_id") != application_id:
@@ -1278,10 +1301,11 @@ def authorized_sources(
             )
         except HTTPException as exc:
             if exc.status_code == 403:
+                permission_denied = True
                 continue
             raise
         sources.append(source)
-    return sources
+    return sources, permission_denied
 
 
 def exact_source(

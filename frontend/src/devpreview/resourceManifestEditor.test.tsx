@@ -58,6 +58,119 @@ describe("LiveResourceManifestEditor", () => {
     expect(screen.getByText("Owner Deployment/checkout-api")).toBeTruthy();
   });
 
+  it("offers the real repository wizard only when the Git source binding is missing", async () => {
+    const user = userEvent.setup();
+    const onConnectRepository = vi.fn();
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
+      ...SOURCE,
+      status: "unsupported",
+      choices: [],
+      selected: null,
+      base_sha: null,
+      source_sha256: null,
+      content: null,
+      reason: "No exact GitOps source binding was found for this live resource.",
+    }), { status: 200 }));
+
+    render(
+      <LiveResourceManifestEditor
+        resourceId="pod-1"
+        onConnectRepository={onConnectRepository}
+      />,
+    );
+
+    expect(await screen.findByText(
+      "Git 원본이 연결되지 않아 수정할 수 없습니다. 저장소를 연결해 권한과 원본 경로를 확인하세요.",
+    )).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "저장소 연결" }));
+    expect(onConnectRepository).toHaveBeenCalledOnce();
+  });
+
+  it("keeps source selection ahead of repository connection when bindings are ambiguous", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
+      ...SOURCE,
+      status: "ambiguous",
+      choices: [SOURCE.selected, { ...SOURCE.selected, application_id: "app-2", application_name: "checkout-copy" }],
+      selected: null,
+      base_sha: null,
+      source_sha256: null,
+      content: null,
+      reason: "Choose the application source that owns this resource.",
+    }), { status: 200 }));
+
+    render(<LiveResourceManifestEditor resourceId="pod-1" onConnectRepository={vi.fn()} />);
+
+    expect(await screen.findByRole("combobox", { name: "YAML 애플리케이션 소스" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "저장소 연결" })).toBeNull();
+  });
+
+  it("separates application permission remediation from a missing repository", async () => {
+    const user = userEvent.setup();
+    const onRequestAccess = vi.fn();
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
+      ...SOURCE,
+      status: "unsupported",
+      choices: [],
+      selected: null,
+      base_sha: null,
+      source_sha256: null,
+      content: null,
+      reason: "manifest_source_permission_required",
+    }), { status: 200 }));
+
+    render(
+      <LiveResourceManifestEditor resourceId="pod-1" onRequestAccess={onRequestAccess} />,
+    );
+
+    expect(await screen.findByText("YAML 접근 권한이 없습니다")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "저장소 연결" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "권한 요청" }));
+    expect(onRequestAccess).toHaveBeenCalledOnce();
+  });
+
+  it("separates expired authentication from source and permission remediation", async () => {
+    const user = userEvent.setup();
+    const onReauthenticate = vi.fn();
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
+      detail: "authentication required",
+    }), { status: 401 }));
+
+    render(
+      <LiveResourceManifestEditor resourceId="pod-1" onReauthenticate={onReauthenticate} />,
+    );
+
+    expect(await screen.findByText("로그인이 필요합니다")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "저장소 연결" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "다시 로그인" }));
+    expect(onReauthenticate).toHaveBeenCalledOnce();
+  });
+
+  it("reloads the same resource identity after a repository binding completes", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        ...SOURCE,
+        status: "unsupported",
+        choices: [],
+        selected: null,
+        base_sha: null,
+        source_sha256: null,
+        content: null,
+        reason: "No exact GitOps source binding was found for this live resource.",
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(SOURCE), { status: 200 }));
+
+    const view = render(<LiveResourceManifestEditor resourceId="pod-1" refreshKey={0} />);
+    expect(await screen.findByText("편집 가능한 Git YAML 없음")).toBeTruthy();
+
+    view.rerender(<LiveResourceManifestEditor resourceId="pod-1" refreshKey={1} />);
+
+    expect(await screen.findByRole("textbox", { name: "Git YAML 원본 편집기" })).toBeTruthy();
+    expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
+      "/api/resource-manifests/pod-1",
+      "/api/resource-manifests/pod-1",
+    ]);
+  });
+
   it("records the exact Safe PR artifact before queuing emergency owner apply", async () => {
     const user = userEvent.setup();
     const desired = SOURCE_YAML.replace("replicas: 2", "replicas: 3");

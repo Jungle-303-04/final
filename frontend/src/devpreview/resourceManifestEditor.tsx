@@ -7,19 +7,38 @@ import {
   getResourceManifestSource,
   manifestIdempotencyKey,
   previewResourceManifestEdit,
+  resourceManifestFailureRemediation,
   resourceManifestFailureText,
+  resourceManifestSourceRemediation,
   type CommandStatus,
   type ResourceManifestApplyEndpoint,
   type ResourceManifestApproveEndpoint,
   type ResourceManifestPreviewEndpoint,
   type ResourceManifestSourceEndpoint,
+  type ResourceManifestRemediation,
 } from "./resourceManifestFeed";
 import { reasonLabel } from "./statusLabel";
 import { BLUE, HP, MONO, TINT, TYPE, UI, inkA } from "./theme";
 
 type Phase = "loading" | "ready" | "previewing" | "submitting" | "failed";
 
-export function LiveResourceManifestEditor({ resourceId, resolving = false }: { resourceId: string; resolving?: boolean }) {
+interface LiveResourceManifestEditorProps {
+  resourceId: string;
+  resolving?: boolean;
+  refreshKey?: number;
+  onConnectRepository?: () => void;
+  onReauthenticate?: () => void;
+  onRequestAccess?: () => void;
+}
+
+export function LiveResourceManifestEditor({
+  resourceId,
+  resolving = false,
+  refreshKey = 0,
+  onConnectRepository,
+  onReauthenticate,
+  onRequestAccess,
+}: LiveResourceManifestEditorProps) {
   const [phase, setPhase] = useState<Phase>("loading");
   const [source, setSource] = useState<ResourceManifestSourceEndpoint | null>(null);
   const [applicationId, setApplicationId] = useState("");
@@ -32,6 +51,7 @@ export function LiveResourceManifestEditor({ resourceId, resolving = false }: { 
   const [applyReceipt, setApplyReceipt] = useState<ResourceManifestApplyEndpoint | null>(null);
   const [applyStatus, setApplyStatus] = useState<CommandStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [failureRemediation, setFailureRemediation] = useState<ResourceManifestRemediation>("none");
   const controller = useRef<AbortController | null>(null);
 
   const load = async (selectedApplicationId?: string | null) => {
@@ -40,6 +60,7 @@ export function LiveResourceManifestEditor({ resourceId, resolving = false }: { 
     controller.current = next;
     setPhase("loading");
     setError(null);
+    setFailureRemediation("none");
     setPreview(null);
     setApproval(null);
     setEmergencyApproval(null);
@@ -55,6 +76,7 @@ export function LiveResourceManifestEditor({ resourceId, resolving = false }: { 
     } catch (cause) {
       if (next.signal.aborted) return;
       setError(resourceManifestFailureText(cause));
+      setFailureRemediation(resourceManifestFailureRemediation(cause));
       setPhase("failed");
     }
   };
@@ -77,16 +99,18 @@ export function LiveResourceManifestEditor({ resourceId, resolving = false }: { 
         setApplyReceipt(null);
         setApplyStatus(null);
         setError(null);
+        setFailureRemediation("none");
         setPhase("ready");
       } catch (cause) {
         if (next.signal.aborted) return;
         setSource(null);
         setError(resourceManifestFailureText(cause));
+        setFailureRemediation(resourceManifestFailureRemediation(cause));
         setPhase("failed");
       }
     })();
     return () => next.abort();
-  }, [resourceId]);
+  }, [refreshKey, resourceId]);
 
   useEffect(() => {
     if (!applyReceipt?.command_id) return;
@@ -193,6 +217,35 @@ export function LiveResourceManifestEditor({ resourceId, resolving = false }: { 
   if (phase === "loading" || (!sourceIsCurrent && phase !== "failed")) {
     return <ManifestNotice title="YAML 소스 확인 중">Git에 고정된 실제 매니페스트와 편집 권한을 조회하고 있습니다.</ManifestNotice>;
   }
+  if (phase === "failed" && !source) {
+    const title = failureRemediation === "reauthenticate"
+      ? "로그인이 필요합니다"
+      : failureRemediation === "request-access"
+        ? "YAML 접근 권한이 없습니다"
+        : "YAML 원본 조회 실패";
+    return (
+      <div style={{ padding: "18px 0", display: "grid", gap: 10 }}>
+        <ManifestNotice tone="warn" title={title}>
+          {failureRemediation === "reauthenticate"
+            ? "세션을 다시 인증한 뒤 같은 리소스의 YAML을 조회하세요."
+            : failureRemediation === "request-access"
+              ? "워크스페이스 관리자에게 애플리케이션 매니페스트 조회 권한을 요청하세요."
+              : error ?? "YAML 원본을 불러오지 못했습니다."}
+        </ManifestNotice>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {failureRemediation === "reauthenticate" && onReauthenticate && (
+            <ActionButton disabled={false} onClick={onReauthenticate}>다시 로그인</ActionButton>
+          )}
+          {failureRemediation === "request-access" && onRequestAccess && (
+            <ActionButton disabled={false} onClick={onRequestAccess}>권한 요청</ActionButton>
+          )}
+          {failureRemediation === "retry" && (
+            <ActionButton disabled={false} onClick={() => void load()}>다시 시도</ActionButton>
+          )}
+        </div>
+      </div>
+    );
+  }
   if (source?.status === "ambiguous") {
     return (
       <div style={{ padding: "18px 0", display: "grid", gap: 10 }}>
@@ -212,15 +265,28 @@ export function LiveResourceManifestEditor({ resourceId, resolving = false }: { 
     );
   }
   if (!source || source.status !== "available" || !source.selected || !source.content) {
+    const remediation = resourceManifestSourceRemediation(source?.reason ?? null);
     return (
       <div style={{ padding: "18px 0", display: "grid", gap: 10 }}>
         {source && <LiveManifestPanel source={source} />}
-        <ManifestNotice tone="warn" title="편집 가능한 Git YAML 없음">
-          {source?.reason ? reasonLabel(source.reason) : error ?? "이 리소스에 연결된 현재 YAML 원본을 찾지 못했습니다."}
+        <ManifestNotice tone="warn" title={remediation === "request-access" ? "YAML 접근 권한이 없습니다" : "편집 가능한 Git YAML 없음"}>
+          {remediation === "connect-repository"
+            ? "Git 원본이 연결되지 않아 수정할 수 없습니다. 저장소를 연결해 권한과 원본 경로를 확인하세요."
+            : remediation === "request-access"
+              ? "연결된 Git 원본이 있지만 현재 계정에는 애플리케이션 매니페스트 조회 권한이 없습니다."
+              : source?.reason ? reasonLabel(source.reason) : error ?? "이 리소스에 연결된 현재 YAML 원본을 찾지 못했습니다."}
         </ManifestNotice>
-        <small style={{ color: UI.ink3, lineHeight: 1.5 }}>
-          인벤토리 원문을 합성하지 않습니다. 활성 애플리케이션·배포 바인딩·GitHub raw YAML 연결이 있어야 편집할 수 있습니다.
-        </small>
+        {remediation === "connect-repository" && onConnectRepository && (
+          <ActionButton primary disabled={false} onClick={onConnectRepository}>저장소 연결</ActionButton>
+        )}
+        {remediation === "request-access" && onRequestAccess && (
+          <ActionButton disabled={false} onClick={onRequestAccess}>권한 요청</ActionButton>
+        )}
+        {remediation === "none" && (
+          <small style={{ color: UI.ink3, lineHeight: 1.5 }}>
+            인벤토리 원문을 합성하지 않습니다. 활성 애플리케이션·배포 바인딩·GitHub raw YAML 연결이 있어야 편집할 수 있습니다.
+          </small>
+        )}
       </div>
     );
   }

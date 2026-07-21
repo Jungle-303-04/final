@@ -15,7 +15,7 @@ import { DASHBOARD_WIDGET_GRID_CLASS, DASHBOARD_WIDGET_GRID_ITEM_CLASS, WidgetFr
 import { DeploySurface, IssuesSurface, TimelineSurface, ChecksSurface, CostSurface, SettingsSurface, AlertsSurface, AiHistorySurface, IssueDetail, type RcaIncident } from "./devpreview-surfaces";
 import { AiPanel } from "./devpreview-ai";
 import { onAction, type DemoAction } from "./devpreview/bus";
-import { ConnectWizard } from "./devpreview-connect";
+import { ConnectWizard, type RepositoryConnectionContext } from "./devpreview-connect";
 import { TopologyView } from "./devpreview-topology";
 import { GithubIcon } from "./devpreview/brandIcons";
 import { DevpreviewContractProvider, useDevpreviewContracts } from "./devpreview/contracts";
@@ -455,7 +455,7 @@ function RetryNote({ onRetry, label }: { onRetry: () => void; label?: string }) 
 // hlYaml/YAML_FONT 제거 — 합성 YAML 매니페스트를 렌더하던 DetailOverlay YAML 탭이
 // 관측 전용("관측 안 됨")으로 바뀌면서 더 이상 쓰이지 않는다.
 
-function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, forceFull = false, rightInset = 0, leftInset = 0, topInset = TOPBAR_H, viewportW = 1280 }: { kind: Kind; row: Row; onClose: () => void; onToast?: (t: { title: string; sub: string; tone: "ok" | "crit" }) => void; onOpenRef?: (kindId: string, name: string) => void; onShowPods?: (base: string) => void; forceFull?: boolean; rightInset?: number; leftInset?: number; topInset?: number; viewportW?: number }) {
+function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, onConnectRepository, onRequestManifestAccess, manifestRefreshKey = 0, forceFull = false, rightInset = 0, leftInset = 0, topInset = TOPBAR_H, viewportW = 1280 }: { kind: Kind; row: Row; onClose: () => void; onToast?: (t: { title: string; sub: string; tone: "ok" | "crit" }) => void; onOpenRef?: (kindId: string, name: string) => void; onShowPods?: (base: string) => void; onConnectRepository?: (context: RepositoryConnectionContext) => void; onRequestManifestAccess?: () => void; manifestRefreshKey?: number; forceFull?: boolean; rightInset?: number; leftInset?: number; topInset?: number; viewportW?: number }) {
   const tabs = TABS_FOR(kind.id);
   const [tab, setTab] = useState<DetailTab>(tabs[0]);
   const [fullSelf, setFull] = useState(false);   // 전체 화면 (원본 레퍼런스의 ⤢)
@@ -769,7 +769,17 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
           )}
 
           {tab === "yaml" && (
-            <LiveResourceManifestEditor resourceId={resourceId} resolving={observedResourceId === "" && resolvedIdentity.status === "loading"} />
+            <LiveResourceManifestEditor
+              resourceId={resourceId}
+              resolving={observedResourceId === "" && resolvedIdentity.status === "loading"}
+              refreshKey={manifestRefreshKey}
+              onConnectRepository={() => onConnectRepository?.({
+                clusterId: row.cluster != null && String(row.cluster) ? String(row.cluster) : undefined,
+                namespace: row.ns != null && String(row.ns) ? String(row.ns) : undefined,
+              })}
+              onReauthenticate={() => window.location.reload()}
+              onRequestAccess={onRequestManifestAccess}
+            />
           )}
 
 
@@ -1341,6 +1351,8 @@ function App() {
   const [drillCl, setDrillCl] = useState<string | null>(null); // 홈 카드 → 지도 드릴 스코프 전달(D21)
   const [connectView, setConnectView] = useState<null | "repo" | "cluster">(null); // 연결 위저드 딥오픈 대상 (설정 서피스)
   const [connectModal, setConnectModal] = useState<null | "repo" | "cluster">(null); // 문맥 진입 = 모달 팝업
+  const [repositoryConnectContext, setRepositoryConnectContext] = useState<RepositoryConnectionContext | null>(null);
+  const [manifestRefreshKey, setManifestRefreshKey] = useState(0);
   // 세션 중 등록한 연결 대기 항목 — 등록의 결과가 목록에 보여야 한다(로그아웃=세션 초기화로 함께 소멸)
   const [pendingCl, setPendingCl] = useState<string[]>(() => { try { return JSON.parse(sessionStorage.getItem("opsia-demo-pending-cl") || "[]"); } catch { return []; } });
   const [pendingRepo, setPendingRepo] = useState<string[]>(() => { try { return JSON.parse(sessionStorage.getItem("opsia-demo-pending-repo") || "[]"); } catch { return []; } });
@@ -1934,15 +1946,28 @@ function App() {
       <AnimatePresence>
         {connectModal && (
           <motion.div key="cmw" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: DUR.fade }}
-            style={{ position: "fixed", top: topH, left: navCollapsed ? 60 : 208, right: 0, bottom: 0, zIndex: 69 }}>
-            <ConnectWizard key={connectModal} embedded initialView={connectModal} onDismiss={() => setConnectModal(null)} />
+            style={{ position: "fixed", top: topH, left: navCollapsed ? 60 : 208, right: 0, bottom: 0, zIndex: 76 }}>
+            <ConnectWizard
+              key={connectModal}
+              embedded
+              initialView={connectModal}
+              repositoryContext={repositoryConnectContext ?? undefined}
+              onRepositoryComplete={() => {
+                setManifestRefreshKey((current) => current + 1);
+                setRepositoryConnectContext(null);
+              }}
+              onDismiss={() => {
+                setRepositoryConnectContext(null);
+                setConnectModal(null);
+              }}
+            />
           </motion.div>
         )}
       </AnimatePresence>
 
       {/* 상세 — 최상위 레이어 오버레이 (Esc로 닫힘) */}
       <AnimatePresence>
-        {detail && <DetailOverlay key={`${detail.kind.id}-${String(detail.row.cluster ?? "")}-${String(detail.row._key ?? detail.row.name)}`} kind={detail.kind} row={detail.row} onClose={() => setDetail(null)} onToast={pushToast} onOpenRef={openRef} onShowPods={(b) => { setDetail(null); setSurface("resources"); setResView("list"); setKindId("Pod"); setQ(b); }} forceFull={aiOpen} rightInset={aiOpen ? aiW : 0} leftInset={navCollapsed ? 60 : 208} topInset={topH} viewportW={vwCss} />}
+        {detail && <DetailOverlay key={`${detail.kind.id}-${String(detail.row.cluster ?? "")}-${String(detail.row._key ?? detail.row.name)}`} kind={detail.kind} row={detail.row} onClose={() => setDetail(null)} onToast={pushToast} onOpenRef={openRef} onShowPods={(b) => { setDetail(null); setSurface("resources"); setResView("list"); setKindId("Pod"); setQ(b); }} onConnectRepository={(context) => { setRepositoryConnectContext(context); setConnectModal("repo"); }} onRequestManifestAccess={() => { setDetail(null); setSurface("settings"); }} manifestRefreshKey={manifestRefreshKey} forceFull={aiOpen} rightInset={aiOpen ? aiW : 0} leftInset={navCollapsed ? 60 : 208} topInset={topH} viewportW={vwCss} />}
       </AnimatePresence>
       {/* 이슈 RCA 사이드바 — 셸 레벨 렌더(서피스 transform 밖) */}
       <AnimatePresence>

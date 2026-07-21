@@ -140,7 +140,15 @@ beforeEach(() => {
 describe("devpreview live repository connection", () => {
   it("renders only server discovery results and validates the selected manifest before connecting", async () => {
     const user = userEvent.setup();
-    render(<ConnectWizard embedded initialView="repo" />);
+    const onRepositoryComplete = vi.fn();
+    render(
+      <ConnectWizard
+        embedded
+        initialView="repo"
+        repositoryContext={{ clusterId: "cluster-1", namespace: "yaml-demo" }}
+        onRepositoryComplete={onRepositoryComplete}
+      />,
+    );
 
     expect(screen.queryByText(/저장소 서버 연동은 미지원/)).toBeNull();
     expect(screen.getByText("서버 지원 소스 제공자(라이브)")).toBeTruthy();
@@ -170,6 +178,8 @@ describe("devpreview live repository connection", () => {
     expect(screen.getByRole("option", { name: "main" })).toBeTruthy();
     expect(screen.getByRole("option", { name: "GameFleet · deploy/gamefleet.yaml" })).toBeTruthy();
     expect(screen.queryByRole("option", { name: "invented-branch" })).toBeNull();
+    expect((screen.getByLabelText("네임스페이스") as HTMLInputElement).value).toBe("yaml-demo");
+    expect((screen.getByLabelText("연결된 클러스터") as HTMLSelectElement).value).toBe("cluster-1");
 
     await user.click(screen.getByRole("button", { name: "서버 검증 후 연결" }));
 
@@ -186,11 +196,13 @@ describe("devpreview live repository connection", () => {
         branch: "release/demo",
         manifestPath: "deploy/gamefleet.yaml",
         clusterId: "cluster-1",
-        namespace: "sandbox",
+        namespace: "yaml-demo",
         environment: "development",
       });
     });
 
     expect(await screen.findByText("저장소 연결 완료")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "GitOps에서 확인" }));
+    expect(onRepositoryComplete).toHaveBeenCalledWith("team/game");
   });
 });
