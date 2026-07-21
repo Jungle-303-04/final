@@ -1605,7 +1605,11 @@ function App() {
       {/* 상단 크롬 — 워크스페이스·스코프·네임스페이스·검색 (내부 표기 배지 제거) */}
       <header ref={headerRef} style={{ position: "sticky", top: 0, zIndex: 74, display: "flex", alignItems: "center", flexWrap: "wrap", gap: 10, padding: "12px 18px", borderBottom: `1px solid ${UI.line}`, background: UI.card }}>
         {/* 워크스페이스 — 정체성은 항상 맨 왼쪽(D20). 데모 세계는 워크스페이스 1개라 사실 표시만 */}
-        <span style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0, maxWidth: "30%", fontSize: TYPE.body, fontWeight: 700, color: UI.ink, paddingRight: 12, borderRight: `1px solid ${UI.line2}`, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        <span
+          data-slot="workspace-identity"
+          data-workspace-id={contract.workspaceId ?? ""}
+          style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0, maxWidth: "30%", fontSize: TYPE.body, fontWeight: 700, color: UI.ink, paddingRight: 12, borderRight: `1px solid ${UI.line2}`, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+        >
           <Building2 size={14} style={{ color: UI.ink3 }} />{workspaceLabel(contract.workspaceId)}
         </span>
         {/* 새로고침 — 내부/기술 표기("실제 계약") 텍스트 제거, 상태점 + 아이콘만(P1-10) */}

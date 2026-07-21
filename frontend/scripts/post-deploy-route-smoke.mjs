@@ -447,10 +447,17 @@ async function runUnifiedShellSmoke(page, baseUrl, diagnostics) {
     loadCatalog: () => requestBrowserJson(page, baseUrl, "/api/auth/workspaces"),
     loadSession: () => requestBrowserJson(page, baseUrl, "/api/auth/session"),
   });
-  await root
-    .getByText(currentWorkspace.workspace_id, { exact: true })
-    .first()
-    .waitFor({ state: "visible", timeout: AUTH_BOOTSTRAP_TIMEOUT_MS });
+  const workspaceIdentity = root.locator('[data-slot="workspace-identity"]').first();
+  await workspaceIdentity.waitFor({ state: "visible", timeout: AUTH_BOOTSTRAP_TIMEOUT_MS });
+  assert.equal(
+    await workspaceIdentity.getAttribute("data-workspace-id"),
+    currentWorkspace.workspace_id,
+    "unified workspace identity must preserve the authenticated workspace id",
+  );
+  assert.ok(
+    (await workspaceIdentity.innerText()).trim().length > 0,
+    "unified workspace identity must expose a non-empty product label",
+  );
 
   const navigation = page.locator(UNIFIED_NAVIGATION_SELECTOR);
   const surfaceCount = await navigation.count();
