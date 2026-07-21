@@ -374,7 +374,7 @@ describe("post-deploy route smoke helpers", () => {
       listeners.get(event)?.forEach((listener) => listener(value));
     };
     const request = {
-      url: () => "https://example.test/api/checks?secret=redacted",
+      url: () => "https://example.test/api/checks/overview?secret=redacted",
     };
     const observer = createRouteNetworkObserver(page, "https://example.test");
 
@@ -409,7 +409,7 @@ describe("post-deploy route smoke helpers", () => {
         slowCriticalApi: [{
           durationMs: 425,
           in_flight: false,
-          path: "/api/checks",
+          path: "/api/checks/overview",
           status: 200,
         }],
       });
