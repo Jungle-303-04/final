@@ -28,6 +28,21 @@ describe("cluster connect API", () => {
     );
   });
 
+  it("accepts the POSIX-only receipt served by an older replica during rollout", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({
+      cluster_id: "production-rolling-a1b2",
+      install_command: "curl -fsSL https://kyro.example/api/install/token | kubectl apply -f -",
+      expires_at: "2026-07-14T06:00:00Z",
+    }));
+
+    await expect(connectCluster({ name: "Production rolling", provider: "aws" }))
+      .resolves.toMatchObject({
+        cluster_id: "production-rolling-a1b2",
+        powershell_install_command:
+          "curl -fsSL https://kyro.example/api/install/token | kubectl apply -f -",
+      });
+  });
+
   it("encodes the cluster identity for connection polling", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({
       status: "waiting",
