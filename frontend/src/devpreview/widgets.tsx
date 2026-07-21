@@ -237,7 +237,7 @@ export function MiniTimeline({ items, onPick, columns = 1 }: {
       {stacks.map((stack, si) => (
       <div key={si} style={{ display: "flex", flexDirection: "column" }}>
       {stack.map((it, i) => (
-        <motion.div key={it.id} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} transition={{ ...SOFT, delay: i * 0.05 }}
+        <motion.div key={it.id} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} transition={{ ...SOFT, delay: Math.min(i, 8) * 0.04 }}
           style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
           <span style={{ width: 52, flexShrink: 0, whiteSpace: "nowrap", fontSize: TYPE.micro, fontFamily: MONO, color: UI.ink3, paddingTop: 2, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{it.time}</span>
           <span style={{ display: "flex", flexDirection: "column", alignItems: "center", alignSelf: "stretch", flexShrink: 0 }}>

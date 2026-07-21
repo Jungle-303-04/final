@@ -11,6 +11,7 @@
     "test": "vitest run --maxWorkers=2 --testTimeout=120000",
     "lint": "eslint src scripts/*.mjs --max-warnings 0",
     "smoke:routes": "node scripts/post-deploy-route-smoke.mjs",
+    "perf:devpreview": "node scripts/devpreview-performance-gate.mjs",
     "check:design": "node scripts/product-design-guard.mjs",
     "check:bundle": "npm run build && node scripts/check-initial-bundle.mjs",
     "check": "npm run typecheck && npm run lint && npm run test && npm run check:design && npm run check:bundle",

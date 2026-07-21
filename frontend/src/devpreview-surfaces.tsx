@@ -608,6 +608,7 @@ function changeTone(severity: string): "ok" | "warn" | "crit" {
 }
 export function TimelineSurface({ onOpenRef: _onOpenRef }: { onOpenRef: (kind: string, name: string) => void }) {
   const [cat, setCat] = useState<TlCat>("전체");
+  const [page, setPage] = useState(0);
   const feed = useChangeTimeline();
   const board = useTimelineBoard();
   const items = feed.events.map((e) => ({
@@ -618,6 +619,12 @@ export function TimelineSurface({ onOpenRef: _onOpenRef }: { onOpenRef: (kind: s
     title: e.title,
   }));
   const shown = cat === "전체" ? items : items.filter((i) => i.cat === cat);
+  // 수백 개 변경을 한 프레임에 motion 노드로 만들면 진입 시 긴 작업과 레이아웃
+  // 이동이 발생한다. 모든 항목은 보존하되 화면 DOM은 페이지당 60개로 제한한다.
+  const pageSize = 60;
+  const pageCount = Math.max(1, Math.ceil(shown.length / pageSize));
+  const safePage = Math.min(page, pageCount - 1);
+  const visibleItems = shown.slice(safePage * pageSize, (safePage + 1) * pageSize);
   const activityChips = board.activityFacets.filter((f) => f.count > 0);
   return (
     <Page title="타임라인" icon={Clock}>
@@ -637,21 +644,34 @@ export function TimelineSurface({ onOpenRef: _onOpenRef }: { onOpenRef: (kind: s
       )}
       <div style={{ display: "flex", gap: 6 }}>
         {(["전체", "배포", "이슈", "구성"] as const).map((c) => (
-          <button key={c} onClick={() => setCat(c)}
+          <button key={c} onClick={() => { setCat(c); setPage(0); }}
             style={{ display: "flex", alignItems: "center", gap: 5, border: `1px solid ${cat === c ? blueA(0.45) : UI.line}`, background: cat === c ? blueA(0.07) : UI.card, color: cat === c ? BLUE : UI.ink2, borderRadius: 999, padding: "4px 13px", fontSize: TYPE.label, fontWeight: 700, cursor: "pointer" }}>{c}
             <span style={{ fontFamily: MONO, fontSize: TYPE.micro, color: cat === c ? BLUE : UI.ink3 }}>{c === "전체" ? items.length : items.filter((i) => i.cat === c).length}</span>
           </button>
         ))}
       </div>
-      <Card>
-        {feed.status === "loading" ? (
-          <span style={{ fontSize: TYPE.label2, color: UI.ink3 }}>불러오는 중…</span>
-        ) : feed.status === "unavailable" ? (
-          <span style={{ fontSize: TYPE.label2, color: UI.ink3 }}>타임라인을 불러오지 못했습니다.</span>
-        ) : shown.length === 0 ? (
-          <span style={{ fontSize: TYPE.label2, color: UI.ink3 }}>최근 24시간 내 관측된 변경 없음</span>
-        ) : (
-          <MiniTimeline items={shown.map(({ cat: _c, ...it }) => it)} />
+      <Card pad={0}>
+        <div style={{ height: 440, overflowY: "auto", padding: 15, scrollbarGutter: "stable" }}>
+          {feed.status === "loading" ? (
+            <span style={{ fontSize: TYPE.label2, color: UI.ink3 }}>불러오는 중…</span>
+          ) : feed.status === "unavailable" ? (
+            <span style={{ fontSize: TYPE.label2, color: UI.ink3 }}>타임라인을 불러오지 못했습니다.</span>
+          ) : shown.length === 0 ? (
+            <span style={{ fontSize: TYPE.label2, color: UI.ink3 }}>최근 24시간 내 관측된 변경 없음</span>
+          ) : (
+            <MiniTimeline items={visibleItems.map(({ cat: _c, ...it }) => it)} />
+          )}
+        </div>
+        {shown.length > pageSize && (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, minHeight: 38, padding: "5px 12px", borderTop: `1px solid ${UI.line2}` }}>
+            <span style={{ marginRight: "auto", fontSize: TYPE.caption2, color: UI.ink3 }}>
+              {safePage * pageSize + 1}–{Math.min((safePage + 1) * pageSize, shown.length)} / {shown.length}
+            </span>
+            <button type="button" disabled={safePage === 0} onClick={() => setPage((value) => Math.max(0, value - 1))}
+              style={{ border: `1px solid ${UI.line}`, background: UI.card, color: safePage === 0 ? UI.ink3 : UI.ink2, borderRadius: 7, padding: "4px 9px", fontSize: TYPE.caption2, cursor: safePage === 0 ? "default" : "pointer" }}>이전</button>
+            <button type="button" disabled={safePage >= pageCount - 1} onClick={() => setPage((value) => Math.min(pageCount - 1, value + 1))}
+              style={{ border: `1px solid ${UI.line}`, background: UI.card, color: safePage >= pageCount - 1 ? UI.ink3 : UI.ink2, borderRadius: 7, padding: "4px 9px", fontSize: TYPE.caption2, cursor: safePage >= pageCount - 1 ? "default" : "pointer" }}>다음</button>
+          </div>
         )}
       </Card>
       {/* 고정한 항목 — 실 GET /api/timeline/pins(서버 진실). 비면 정직한 빈 상태 */}
