@@ -1,6 +1,10 @@
 import type { IssuesMessageKey } from "../../keys/issues";
 
 export const issuesKo = {
+  "issues.workspace.tabs": "이슈 작업 영역",
+  "issues.workspace.active": "진행 중",
+  "issues.workspace.rca": "RCA",
+  "issues.workspace.checks": "예방 점검",
   "issues.surface.list": "이슈",
   "issues.surface.listEmpty": "현재 감지된 인시던트가 없습니다.",
   "issues.surface.listLoading": "이슈 불러오는 중",

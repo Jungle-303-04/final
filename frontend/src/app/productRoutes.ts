@@ -28,6 +28,13 @@ export interface ProductRouteDefinition {
   match: "exact" | "prefix";
   landing: boolean;
   family: ProductRouteFamily;
+  navigation: boolean;
+  redirect: ProductRouteRedirect | null;
+}
+
+export interface ProductRouteRedirect {
+  path: `/${string}`;
+  search: readonly (readonly [key: string, value: string])[];
 }
 
 /**
@@ -51,6 +58,8 @@ export const PRODUCT_ROUTE_CATALOG = [
   route("checks", "Checks", "/checks", "g u", {
     aliases: ["/audit"],
     family: "reference-primary",
+    navigation: false,
+    redirect: { path: "/issues", search: [["view", "checks"]] },
   }),
   route("cost", "Cost", "/cost", "g c", { family: "reference-primary" }),
   route("clusters", "Clusters", "/clusters", "g k"),
@@ -59,17 +68,21 @@ export const PRODUCT_ROUTE_CATALOG = [
 ] as const satisfies readonly ProductRouteDefinition[];
 
 export function referenceNavigationRoutes(): readonly ProductRouteDefinition[] {
-  return PRODUCT_ROUTE_CATALOG.filter(({ family }) => family === "reference-primary");
+  return PRODUCT_ROUTE_CATALOG.filter(({ family, navigation }) => (
+    family === "reference-primary" && navigation
+  ));
 }
 
 export function productKeyboardNavigationRoutes(): readonly ProductRouteDefinition[] {
-  return PRODUCT_ROUTE_CATALOG;
+  return PRODUCT_ROUTE_CATALOG.filter(({ navigation }) => navigation);
 }
 
 export function productNavigationForReleasedSurfaces(
   releasedSurfaceIds: ReadonlySet<ProductSurfaceId>,
 ): readonly ProductRouteDefinition[] {
-  return PRODUCT_ROUTE_CATALOG.filter((routeDefinition) => releasedSurfaceIds.has(routeDefinition.id));
+  return PRODUCT_ROUTE_CATALOG.filter((routeDefinition) => (
+    routeDefinition.navigation && releasedSurfaceIds.has(routeDefinition.id)
+  ));
 }
 
 export function landingProductRouteForReleasedSurfaces(
@@ -118,6 +131,8 @@ function route(
     match: behavior.match ?? "prefix",
     landing: behavior.landing ?? false,
     family: behavior.family ?? "product",
+    navigation: behavior.navigation ?? true,
+    redirect: behavior.redirect ?? null,
   };
 }
 
@@ -126,6 +141,8 @@ interface ProductRouteBehavior {
   family?: ProductRouteFamily;
   match?: "exact" | "prefix";
   landing?: boolean;
+  navigation?: boolean;
+  redirect?: ProductRouteRedirect;
 }
 
 function failToResolveLandingRoute(

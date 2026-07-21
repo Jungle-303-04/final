@@ -1,6 +1,10 @@
 import type { IssuesMessageKey } from "../../keys/issues";
 
 export const issuesEn = {
+  "issues.workspace.tabs": "Issue workspace",
+  "issues.workspace.active": "Active",
+  "issues.workspace.rca": "RCA",
+  "issues.workspace.checks": "Preventive checks",
   "issues.surface.list": "Incidents",
   "issues.surface.listEmpty": "No incidents are currently detected.",
   "issues.surface.listLoading": "Loading issues",

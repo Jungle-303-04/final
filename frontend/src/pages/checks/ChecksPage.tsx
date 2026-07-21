@@ -20,7 +20,13 @@ import { Badge } from "../../shared/ui/primitives/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "../../shared/ui/primitives/card";
 import { useChecksDetail, useChecksOverview } from "./useChecksData";
 
-export function ChecksPage({ port }: { port: ChecksPort }) {
+export function ChecksPage({
+  embedded = false,
+  port,
+}: {
+  embedded?: boolean;
+  port: ChecksPort;
+}) {
   const clusterScope = useClusterScope();
   const filters = useUnifiedFilter();
   const selection = scopeSelection(clusterScope);
@@ -35,31 +41,44 @@ export function ChecksPage({ port }: { port: ChecksPort }) {
   if (selection.kind === "error") {
     return <ProductStateScreen kind="error" issue={{ code: "unknown", safeDetail: CHECKS_COPY.scopeSelectionUnavailable }} placement="content" />;
   }
-  return <ChecksReadyPage checkId={checkId} clusterIds={selection.clusterIds} namespaces={namespaces} port={port} />;
+  return (
+    <ChecksReadyPage
+      checkId={checkId}
+      clusterIds={selection.clusterIds}
+      embedded={embedded}
+      namespaces={namespaces}
+      port={port}
+    />
+  );
 }
 
 function ChecksReadyPage({
   checkId,
   clusterIds,
+  embedded,
   namespaces,
   port,
 }: {
   checkId: string | null;
   clusterIds: readonly string[];
+  embedded: boolean;
   namespaces: readonly string[];
   port: ChecksPort;
 }) {
   const data = useChecksOverview(port, { clusterIds, namespaces });
-  return (
-    <ProductPageFrame className="gap-4">
-      <header className="grid min-w-0 gap-1">
-        <h1 className="text-2xl font-semibold tracking-tight">{CHECKS_COPY.title}</h1>
-        <p className="max-w-3xl text-sm leading-6 text-muted-foreground">{CHECKS_COPY.description}</p>
+  const content = (
+    <>
+      <header className={embedded ? "sr-only" : "grid min-w-0 gap-1"}>
+        <h1 className={embedded ? undefined : "text-2xl font-semibold tracking-tight"}>{CHECKS_COPY.title}</h1>
+        <p className={embedded ? undefined : "max-w-3xl text-sm leading-6 text-muted-foreground"}>{CHECKS_COPY.description}</p>
       </header>
       <ChecksOverviewContent frame={data.frame} onRefresh={data.refresh} />
       {checkId === null ? null : <ChecksDetailPanel checkId={checkId} clusterIds={clusterIds} namespaces={namespaces} port={port} />}
-    </ProductPageFrame>
+    </>
   );
+  return embedded
+    ? <section aria-label={CHECKS_COPY.title} className="grid min-w-0 gap-4">{content}</section>
+    : <ProductPageFrame className="gap-4">{content}</ProductPageFrame>;
 }
 
 function ChecksOverviewContent({

@@ -63,6 +63,37 @@ describe("deferred product routes", () => {
       expect(screen.getByText("GitOps surface")).toBeTruthy();
     });
   });
+
+  it.each(["/checks", "/audit"])(
+    "redirects the legacy %s entry into preventive checks inside Issues",
+    async (legacyPath) => {
+      const composition = createProductComposition([
+        { id: "home", loader: surfaceLoader(HomeSurface) },
+        { id: "issues", loader: surfaceLoader(IssuesSurface) },
+      ], authPort, testClusterScope);
+      const router = createMemoryRouter([{
+        path: "*",
+        element: (
+          <I18nProvider navigatorLanguage="ko-KR" storage={null}>
+            <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
+              <AuthSessionGateProvider reportUnauthorized={vi.fn()}>
+                <ProductRouter auth={testAuth} composition={composition} />
+              </AuthSessionGateProvider>
+            </ThemeProvider>
+          </I18nProvider>
+        ),
+      }], { initialEntries: [`${legacyPath}?clusters=cluster-1`] });
+
+      render(<RouterProvider router={router} />);
+
+      expect(await screen.findByText("Issues surface")).toBeTruthy();
+      await waitFor(() => {
+        expect(router.state.location.pathname).toBe("/issues");
+        expect(router.state.location.search).toContain("clusters=cluster-1");
+        expect(router.state.location.search).toContain("view=checks");
+      });
+    },
+  );
 });
 
 function surfaceLoader(Component: ComponentType) {
@@ -75,4 +106,8 @@ function HomeSurface() {
 
 function GitOpsSurface() {
   return <p>GitOps surface</p>;
+}
+
+function IssuesSurface() {
+  return <p>Issues surface</p>;
 }

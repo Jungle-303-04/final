@@ -1,4 +1,8 @@
 export type IssuesMessageKey =
+  | "issues.workspace.tabs"
+  | "issues.workspace.active"
+  | "issues.workspace.rca"
+  | "issues.workspace.checks"
   | "issues.surface.list"
   | "issues.surface.listEmpty"
   | "issues.surface.listLoading"

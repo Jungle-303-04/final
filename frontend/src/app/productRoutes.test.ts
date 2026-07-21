@@ -23,7 +23,6 @@ describe("product route release registry", () => {
         ["traffic", "/traffic", "g f"],
         ["helm", "/helm", "g m"],
         ["gitops", "/gitops", "g o"],
-        ["checks", "/checks", "g u"],
         ["cost", "/cost", "g c"],
       ]);
   });
@@ -49,6 +48,18 @@ describe("product route release registry", () => {
 
   it("does not release a navigation entry without a registered surface", () => {
     expect(productNavigationForReleasedSurfaces(new Set())).toEqual([]);
+  });
+
+  it("keeps preventive checks addressable without duplicating the top-level navigation", () => {
+    const checks = PRODUCT_ROUTE_CATALOG.find((route) => route.id === "checks");
+    expect(checks).toMatchObject({
+      aliases: ["/audit"],
+      navigation: false,
+      path: "/checks",
+      redirect: { path: "/issues", search: [["view", "checks"]] },
+    });
+    expect(productNavigationForReleasedSurfaces(new Set<ProductSurfaceId>(["issues", "checks"]))
+      .map((route) => route.id)).toEqual(["issues"]);
   });
 
   it("shows only surfaces released by the composition root", () => {

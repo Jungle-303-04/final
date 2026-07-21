@@ -3,9 +3,12 @@ import { useClusterScope } from "../../features/cluster-scope/ClusterScopeProvid
 import type { ClusterScopeFailure } from "../../features/cluster-scope/clusterScopeContract";
 import { IssuesSurface } from "../../features/issues/IssuesSurface";
 import type {
+  IssueList,
+  IssueSummary,
   IssuesFailureCode,
   IssuesPort,
 } from "../../features/issues/issuesContract";
+import type { ChecksPort } from "../../features/checks/checksContract";
 import type { IssuesSurfaceCopy } from "../../features/issues/issuesSurfaceContract";
 import {
   issueAuditEventLabel,
@@ -26,6 +29,14 @@ import type { MessageKey, TranslationFunction } from "../../shared/i18n/types";
 import { humanizeFilterValue } from "../../shared/presentation/humanizeFilterValue";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "../../shared/ui/primitives/tabs";
+import { useRouteSearchParam } from "../../features/filters/routeSearchAdapter";
+import { ChecksPage } from "../checks/ChecksPage";
 
 const FAILURE_MESSAGE: Record<IssuesFailureCode, MessageKey> = {
   unauthorized: "issues.surface.failure.unauthorized",
@@ -85,12 +96,26 @@ const CAUSE_MESSAGE: Record<string, MessageKey> = {
   registry_unavailable: "issues.cause.registryUnavailable",
 };
 
-export function IssuesPage({ port }: { port: IssuesPort }) {
+type IssuesWorkspaceView = "active" | "rca" | "checks";
+
+export function IssuesPage({
+  checksPort,
+  port,
+}: {
+  checksPort?: ChecksPort;
+  port: IssuesPort;
+}) {
   const scope = useClusterScope();
   const { formatDate, formatNumber, t } = useI18n();
+  const [requestedView, setRequestedView] = useRouteSearchParam("view");
+  const view = issuesWorkspaceView(requestedView, checksPort !== undefined);
   const copy = useMemo(
     () => createIssuesCopy(t, formatNumber, formatDate),
     [formatDate, formatNumber, t],
+  );
+  const scopedPort = useMemo(
+    () => view === "rca" ? filteredIssuesPort(port, isRcaIssue) : filteredIssuesPort(port, isActiveIssue),
+    [port, view],
   );
 
   if (scope.selection.kind === "resolving") {
@@ -132,17 +157,89 @@ export function IssuesPage({ port }: { port: IssuesPort }) {
   const clusterId = scope.selection.kind === "unfiltered"
     ? null
     : scope.selection.cluster.id;
-
   return (
     <ProductPageFrame>
-      <IssuesSurface
-        clusterId={clusterId}
-        copy={copy}
-        port={port}
-        recoverySelection={{ state: "enabled" }}
-      />
+      <Tabs
+        onValueChange={(next) => {
+          if (next === "active" || next === "rca" || (next === "checks" && checksPort !== undefined)) {
+            setRequestedView(next === "active" ? null : next);
+          }
+        }}
+        value={view}
+      >
+        <TabsList aria-label={t("issues.workspace.tabs")} className="max-w-full overflow-x-auto" variant="line">
+          <TabsTrigger value="active">{t("issues.workspace.active")}</TabsTrigger>
+          <TabsTrigger value="rca">{t("issues.workspace.rca")}</TabsTrigger>
+          {checksPort === undefined ? null : (
+            <TabsTrigger value="checks">{t("issues.workspace.checks")}</TabsTrigger>
+          )}
+        </TabsList>
+        <TabsContent value="active">
+          {view === "active" ? (
+            <IssuesSurface
+              clusterId={clusterId}
+              copy={copy}
+              port={scopedPort}
+              recoverySelection={{ state: "enabled" }}
+            />
+          ) : null}
+        </TabsContent>
+        <TabsContent value="rca">
+          {view === "rca" ? (
+            <IssuesSurface
+              clusterId={clusterId}
+              copy={copy}
+              port={scopedPort}
+              recoverySelection={{ state: "enabled" }}
+            />
+          ) : null}
+        </TabsContent>
+        {checksPort === undefined ? null : (
+          <TabsContent value="checks">
+            {view === "checks" ? <ChecksPage embedded port={checksPort} /> : null}
+          </TabsContent>
+        )}
+      </Tabs>
     </ProductPageFrame>
   );
+}
+
+function issuesWorkspaceView(
+  raw: string | null,
+  checksAvailable: boolean,
+): IssuesWorkspaceView {
+  if (raw === "rca") return "rca";
+  if (raw === "checks" && checksAvailable) return "checks";
+  return "active";
+}
+
+function filteredIssuesPort(
+  port: IssuesPort,
+  predicate: (issue: IssueSummary) => boolean,
+): IssuesPort {
+  return {
+    ...port,
+    async listIssues(clusterId, limit, signal): Promise<IssueList> {
+      const result = await port.listIssues(clusterId, limit, signal);
+      const items = result.items.filter(predicate);
+      return { ...result, items, returned: items.length };
+    },
+  };
+}
+
+function isActiveIssue(issue: IssueSummary): boolean {
+  const status = normalizeIssueStatus(issue.status);
+  return status !== "resolved" && status !== "incident_resolved";
+}
+
+function isRcaIssue(issue: IssueSummary): boolean {
+  if (issue.rootCause !== null || issue.confidence !== null) return true;
+  if ((issue.supportingEvidence?.length ?? 0) > 0) return true;
+  return /^(?:rca_|evidence_|recovery_|approval_|command_|pr_)/.test(normalizeIssueStatus(issue.status));
+}
+
+function normalizeIssueStatus(value: string): string {
+  return value.trim().toLowerCase().replace(/[.\s-]+/g, "_");
 }
 
 function createIssuesCopy(

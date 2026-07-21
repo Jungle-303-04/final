@@ -26,7 +26,6 @@ describe("shell shortcut registry", () => {
         ["route:traffic", "g f", false],
         ["route:helm", "g m", false],
         ["route:gitops", "g o", false],
-        ["route:checks", "g u", false],
         ["route:cost", "g c", false],
       ]));
     expect(definitions.find((definition) => definition.id === "command"))

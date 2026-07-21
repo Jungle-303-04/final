@@ -20,6 +20,7 @@ import {
   type ProductRouteDefinition,
 } from "./productRoutes";
 import { navLabelKeys } from "./ProductShellNavigation";
+import { mergeRouteSearch, type RouteSearchEntry } from "../features/filters/routeSearchAdapter";
 
 export function ProductRouter({
   auth,
@@ -80,7 +81,24 @@ export function ProductRouter({
               ];
             })}
             {PRODUCT_ROUTE_CATALOG
-              .filter((routeDefinition) => !composition.releasedSurfaceIds.has(routeDefinition.id))
+              .filter((routeDefinition) => routeDefinition.redirect !== null)
+              .flatMap((routeDefinition) => productRoutePaths(routeDefinition).map((routePath) => (
+                <Route
+                  element={(
+                    <ProductFallbackRedirect
+                      path={routeDefinition.redirect!.path}
+                      search={routeDefinition.redirect!.search}
+                    />
+                  )}
+                  key={`redirect:${routeDefinition.id}:${routePath}`}
+                  path={routePathForDefinition(routeDefinition, routePath)}
+                />
+              )))}
+            {PRODUCT_ROUTE_CATALOG
+              .filter((routeDefinition) => (
+                routeDefinition.redirect === null &&
+                !composition.releasedSurfaceIds.has(routeDefinition.id)
+              ))
               .flatMap((routeDefinition) => productRoutePaths(routeDefinition).map((routePath) => (
                 <Route
                   element={<ProductUnavailableRoute routeDefinition={routeDefinition} />}
@@ -130,7 +148,13 @@ function routePathForDefinition(
   return routeDefinition.match === "prefix" ? `${path}/*` : path;
 }
 
-function ProductFallbackRedirect({ path }: { path: `/${string}` }) {
+function ProductFallbackRedirect({
+  path,
+  search = [],
+}: {
+  path: `/${string}`;
+  search?: readonly RouteSearchEntry[];
+}) {
   const filter = useUnifiedFilter();
-  return <Navigate replace to={filter.navigationHref(path)} />;
+  return <Navigate replace to={mergeRouteSearch(filter.navigationHref(path), search)} />;
 }
