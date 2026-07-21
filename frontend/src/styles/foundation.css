@@ -3,30 +3,6 @@
     box-sizing: border-box;
     border-color: var(--border);
     outline-color: color-mix(in oklch, var(--ring) 50%, transparent);
-    scrollbar-color: color-mix(in oklch, var(--muted-foreground) 42%, transparent) transparent;
-    scrollbar-width: thin;
-  }
-
-  #product-main,
-  [data-scroll-gutter="stable"] {
-    scrollbar-gutter: stable;
-  }
-
-  *::-webkit-scrollbar {
-    width: 0.5rem;
-    height: 0.5rem;
-  }
-
-  *::-webkit-scrollbar-track,
-  *::-webkit-scrollbar-corner {
-    background: transparent;
-  }
-
-  *::-webkit-scrollbar-thumb {
-    background: color-mix(in oklch, var(--muted-foreground) 42%, transparent);
-    background-clip: content-box;
-    border: 2px solid transparent;
-    border-radius: 999px;
   }
 
   html {
@@ -41,17 +17,6 @@
     background: var(--background);
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
-  }
-
-  [data-slot="product-header"] {
-    contain: layout;
-  }
-
-  [data-slot="product-header-workspace"],
-  [data-slot="product-header-account"],
-  [data-slot="workspace-switcher-trigger"],
-  [data-slot="sidebar-text"] {
-    white-space: nowrap;
   }
 
   button,
@@ -74,36 +39,7 @@
   }
 }
 
-@media (min-width: 768px) {
-  html[data-product-sidebar-state="collapsed"] [data-slot="product-shell-loading"] {
-    grid-template-columns: var(--product-sidebar-width-collapsed) minmax(0, 1fr);
-  }
-
-  html[data-product-sidebar-state="expanded"] [data-slot="product-shell-loading"] {
-    grid-template-columns: var(--product-sidebar-width) minmax(0, 1fr);
-  }
-
-  [data-slot="product-shell-loading"] > div > header {
-    height: var(--product-shell-header-height);
-    min-height: var(--product-shell-header-height);
-    flex-wrap: nowrap;
-    overflow: hidden;
-  }
-
-  html[data-product-sidebar-state="collapsed"] [data-slot="product-shell-loading"] > aside {
-    padding-inline: 0.625rem;
-  }
-
-  html[data-product-sidebar-state="collapsed"] [data-slot="product-shell-loading"] > aside > div:first-child > :last-child {
-    display: none;
-  }
-}
-
 @media (forced-colors: active) {
-  * {
-    scrollbar-color: ButtonText Canvas;
-  }
-
   :focus-visible {
     outline: 2px solid CanvasText;
     outline-offset: 2px;

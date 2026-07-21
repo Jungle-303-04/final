@@ -11,9 +11,9 @@ describe("product-owned Badge", () => {
     render(<Badge variant="warning">관측 지연</Badge>);
 
     const badge = screen.getByText("관측 지연");
-    expect(badge.className).toContain("text-tint-warn-fg");
-    expect(badge.className).toContain("bg-tint-warn-bg");
-    expect(badge.className).toContain("border-tint-warn-border");
+    expect(badge.className).toContain("text-warning-foreground");
+    expect(badge.className).toContain("bg-status-warning/10");
+    expect(badge.className).toContain("border-status-warning/30");
     expect(badgeVariants({ variant: "warning" })).not.toContain("text-amber");
   });
 });

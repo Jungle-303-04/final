@@ -1,31 +1,32 @@
-import { LoaderCircle, RefreshCw } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { Boxes, Ellipsis, Layers3, LoaderCircle, Server, ShieldCheck, TriangleAlert, Unplug } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-
 import { ClusterProviderIcon } from "../../features/cluster-scope/ClusterProviderIcon";
 import type {
   HomeClusterChoice,
   HomeConnectionState,
-  HomeUsageSnapshot,
 } from "../../features/home/homeContract";
-import { captureRouteMorph } from "../../motion/useCameraMorph";
 import { STAGGER_MS, useStagger } from "../../motion/useStagger";
-import { useI18n } from "../../shared/i18n";
-import { StatusPill, type StatusTone } from "../../shared/ui/status";
+import { captureRouteMorph } from "../../motion/useCameraMorph";
+import { useI18n, type MessageKey } from "../../shared/i18n";
+import { StatusMark, type StatusTone } from "../../shared/ui/StatusMark";
 import { Button } from "../../shared/ui/primitives/button";
-import { Card, CardContent, CardHeader, CardTitle } from "../../shared/ui/primitives/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "../../shared/ui/primitives/card";
 import { cn } from "@/shared/lib/cn";
 import type { DisconnectPhase } from "./ClusterDisconnectDialog";
-import {
-  ClusterCardMenu,
-  clusterPlatformLabel,
-  connectionReasonKey,
-  disconnectProgressStep,
-  isProductionEnvironment,
-  metricValue,
-  UsageBar,
-} from "./ClusterCardSupport";
-import "../../shared/ui/brand/brand.css";
+
+const connectionLabelKeys: Record<HomeConnectionState, MessageKey> = {
+  online: "clusters.connection.online",
+  stale: "clusters.connection.stale",
+  pending: "clusters.connection.pending",
+  offline: "clusters.connection.offline",
+  unknown: "clusters.connection.unknown",
+};
 
 const connectionTones: Record<HomeConnectionState, StatusTone> = {
   online: "healthy",
@@ -41,33 +42,21 @@ export function ClusterCard({
   href,
   index,
   onDisconnect,
-  onRefresh,
-  usage = null,
-  variant = "fleet",
 }: {
   cluster: HomeClusterChoice;
   disconnectPhase?: DisconnectPhase;
   href: string;
   index: number;
   onDisconnect?: () => void;
-  onRefresh?: () => void;
-  usage?: HomeUsageSnapshot | null;
-  variant?: "fleet" | "map";
 }) {
-  const { formatNumber, t } = useI18n();
+  const { formatNumber, locale, t } = useI18n();
   const cardRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const delay = useStagger(index, STAGGER_MS.node);
   const disconnected = cluster.connectionState !== "online";
-  const simulation = cluster.observationMode === "simulation";
   const disconnectStep = disconnectProgressStep(disconnectPhase);
-  const incidents = cluster.openIncidentCount ?? cluster.incidentCount;
-  const tone = incidents != null && incidents > 0
-    ? "critical"
-    : cluster.health ?? connectionTones[cluster.connectionState];
-  const platform = clusterPlatformLabel(cluster.provider);
 
   useEffect(() => {
     const card = cardRef.current;
@@ -99,113 +88,125 @@ export function ClusterCard({
   return (
     <Card
       className={cn(
-        "motion-node-land relative gap-0 overflow-visible rounded-panel border-border py-0 shadow-none transition-[box-shadow,border-color] duration-(--motion-quick) ease-(--ease-out) hover:border-border-hover hover:shadow-product-hover motion-reduce:transition-none",
-        variant === "map" ? "min-h-44" : "min-h-[12.75rem]",
+        "motion-node-land relative min-h-52 overflow-visible transition-[border-color,box-shadow,transform] duration-(--motion-quick) ease-(--ease-out) hover:-translate-y-0.5 hover:border-ring/50 hover:shadow-md motion-reduce:transition-none",
+        disconnected && "bg-muted/30 text-muted-foreground saturate-0",
       )}
       data-cluster-id={cluster.id}
-      data-variant={variant}
       ref={cardRef}
     >
       <Link
         aria-label={t("clusters.card.openResources", { name: cluster.name })}
-        className="flex min-h-full flex-1 flex-col rounded-panel outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+        className="flex flex-1 flex-col gap-(--card-spacing) rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
         onClick={() => captureRouteMorph(document)}
         to={href}
       >
-        <CardHeader className={cn("gap-0 px-4 pt-4 pb-0", onDisconnect && "pr-12")}>
-          <div className="flex min-w-0 items-start gap-2.5">
-            <span
-              className="brand-provider-tile grid size-[30px] shrink-0 place-items-center rounded-md text-primary-foreground"
-              data-provider={cluster.provider}
-            >
-              <ClusterProviderIcon appearance="compact" className="text-primary-foreground [&_svg]:fill-current" provider={cluster.provider} />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="flex min-w-0 items-center gap-1.5">
-                <CardTitle
-                  className="truncate font-mono text-title-3 font-bold tracking-[-0.02em]"
-                  title={cluster.name}
-                >
-                  {cluster.name}
-                </CardTitle>
-                {isProductionEnvironment(cluster.environment) ? (
-                  <span className="shrink-0 rounded-sm border border-tint-warn-border bg-tint-warn-bg px-1.5 py-px text-micro font-semibold text-tint-warn-fg">
-                    {t("clusters.card.environment.productionShort")}
-                  </span>
-                ) : null}
-              </span>
-              <p className="mt-0.5 truncate font-mono text-caption-2 text-caption-foreground">
-                {platform} · {cluster.kubernetesVersion ?? t("clusters.card.kubernetesVersionUnavailable")}
-              </p>
-            </span>
-            {incidents != null && incidents > 0 ? (
-              <span className="shrink-0 rounded-full bg-destructive px-2.5 py-1 text-caption font-bold tabular-nums text-primary-foreground">
-                {t("clusters.card.criticalLabel")} {formatNumber(incidents)}
-              </span>
-            ) : (
-              <StatusPill label={tone === "healthy" ? t("clusters.card.active") : undefined} pulse={tone === "healthy"} tone={tone} />
-            )}
+        <CardHeader className={cn(
+          "grid-cols-[auto_minmax(0,1fr)] items-center gap-3",
+          onDisconnect && "pr-14",
+        )}>
+          <ClusterProviderIcon appearance="card" provider={cluster.provider} />
+          <div className="min-w-0">
+            <CardTitle className="truncate text-lg">{cluster.name}</CardTitle>
+            <p className="mt-1 truncate text-xs text-muted-foreground">{cluster.environment}</p>
           </div>
         </CardHeader>
-        <CardContent className="grid flex-1 content-between gap-3 p-4">
-          <p className="flex min-w-0 flex-nowrap items-center gap-x-3.5 overflow-hidden text-label tabular-nums text-muted-foreground" data-slot="cluster-card-counts">
-            <span className="shrink-0 whitespace-nowrap">
-              {t("clusters.card.nodesLabel")}{" "}
-              <b className="font-mono text-foreground">
-                {metricValue(usage?.nodesReady, formatNumber)}/{metricValue(usage?.nodesTotal ?? cluster.nodeCount, formatNumber)}
-              </b>{" "}
-              {t("clusters.card.readySuffix")}
-            </span>
-            <span className="shrink-0 whitespace-nowrap">
-              {t("clusters.card.podsLabel")}{" "}
-              <b className="font-mono text-foreground">{metricValue(usage?.podsTotal ?? cluster.podCount, formatNumber)}</b>
-              {incidents != null && incidents > 0 ? (
-                <b className="font-mono text-destructive"> · {t("clusters.card.criticalLabel")} {formatNumber(incidents)}</b>
-              ) : null}
-            </span>
-            <span className="min-w-0 truncate whitespace-nowrap" title={`${t("clusters.card.namespacesLabel")} ${metricValue(cluster.namespaceCount, formatNumber)}`}>
-              {t("clusters.card.namespacesLabel")}{" "}
-              <b className="font-mono text-foreground">{metricValue(cluster.namespaceCount, formatNumber)}</b>
-            </span>
-          </p>
-          <div className="grid gap-[7px]">
-            <UsageBar
-              label={t("home.metric.cpu")}
-              unavailableLabel={t("common.value.unavailable")}
-              value={usage?.cpuPercent ?? null}
+
+        <CardContent className="grid flex-1 content-between gap-4">
+          <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-y bg-muted/25 px-3 py-2.5">
+            <StatusMark
+              label={t(connectionLabelKeys[cluster.connectionState])}
+              tone={connectionTones[cluster.connectionState]}
             />
-            <UsageBar
-              label={t("clusters.card.memoryShort")}
-              unavailableLabel={t("common.value.unavailable")}
-              value={usage?.memoryPercent ?? null}
-            />
+            {disconnected && cluster.lastObservedAt ? (
+              <p className="min-w-0 truncate text-xs text-muted-foreground">
+                {t("clusters.lastResponse", {
+                  time: formatRelativeTime(cluster.lastObservedAt, locale),
+                })}
+              </p>
+            ) : null}
           </div>
-          {simulation ? (
-            <p className="text-caption text-caption-foreground">
-              {t("clusters.simulation.description")}
-            </p>
-          ) : disconnected ? (
-            <p className="text-caption text-caption-foreground">
-              {t(connectionReasonKey(cluster.connectionState))}
-            </p>
-          ) : null}
+
+          <div className="grid gap-3">
+            <div className="flex min-w-0 flex-wrap gap-x-4 gap-y-2 rounded-lg bg-muted/35 px-3 py-2.5 text-xs text-muted-foreground">
+              {(cluster.serverCount ?? cluster.nodeCount) == null ? null : (
+                <ClusterMetric icon={<Server />} label={t("clusters.metric.servers", {
+                  count: formatNumber(cluster.serverCount ?? cluster.nodeCount ?? 0),
+                })} />
+              )}
+              {cluster.podCount === null ? null : (
+                <ClusterMetric icon={<Boxes />} label={t("clusters.metric.pods", {
+                  count: formatNumber(cluster.podCount),
+                })} />
+              )}
+              {cluster.appCount == null ? null : (
+                <ClusterMetric icon={<Layers3 />} label={t("clusters.metric.apps", {
+                  count: formatNumber(cluster.appCount),
+                })} />
+              )}
+            </div>
+
+            {cluster.openIncidentCount == null ? null : cluster.openIncidentCount > 0 ? (
+              <ClusterMetric
+                className="text-destructive"
+                icon={<TriangleAlert />}
+                label={t("clusters.metric.incidents", {
+                  count: formatNumber(cluster.openIncidentCount),
+                })}
+              />
+            ) : disconnected ? null : (
+              <ClusterMetric
+                className="text-status-healthy"
+                icon={<ShieldCheck />}
+                label={t("clusters.metric.healthy")}
+              />
+            )}
+
+          </div>
         </CardContent>
       </Link>
 
       {onDisconnect ? (
-        <ClusterCardMenu
-          disconnectStep={disconnectStep}
-          menuButtonRef={menuButtonRef}
-          menuOpen={menuOpen}
-          menuRef={menuRef}
-          name={cluster.name}
-          onDisconnect={onDisconnect}
-          onOpenChange={setMenuOpen}
-        />
+        <div className="absolute top-2 right-2 z-10" ref={menuRef}>
+          <Button
+            aria-expanded={menuOpen}
+            aria-haspopup="menu"
+            aria-label={t("clusters.card.actions", { name: cluster.name })}
+            onClick={() => setMenuOpen((open) => !open)}
+            ref={menuButtonRef}
+            size="icon-sm"
+            type="button"
+            variant="ghost"
+          >
+            <Ellipsis aria-hidden="true" />
+          </Button>
+          {menuOpen ? (
+            <div
+              aria-label={t("clusters.card.actions", { name: cluster.name })}
+              className="absolute top-full right-0 mt-1 min-w-36 rounded-lg border bg-popover p-1 text-popover-foreground shadow-lg"
+              role="menu"
+            >
+              <button
+                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-destructive outline-none hover:bg-destructive/10 focus-visible:bg-destructive/10"
+                onClick={() => {
+                  setMenuOpen(false);
+                  onDisconnect();
+                }}
+                role="menuitem"
+                type="button"
+              >
+                <Unplug aria-hidden="true" className="size-3.5" />
+                {disconnectStep === null
+                  ? t("clusters.action.disconnect")
+                  : t("clusters.disconnect.resume")}
+              </button>
+            </div>
+          ) : null}
+        </div>
       ) : null}
+
       {disconnectStep !== null && onDisconnect ? (
         <button
-          className="flex w-full min-w-0 items-center gap-2 border-t px-4 py-3 text-left text-xs font-semibold text-warning-foreground transition-colors hover:bg-status-warning/10 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 motion-reduce:transition-none"
+          className="mx-3 mb-3 flex min-w-0 items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/8 px-3 py-2 text-left text-xs font-medium text-amber-800 transition-colors hover:bg-amber-500/12 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 dark:text-amber-200 motion-reduce:transition-none"
           onClick={onDisconnect}
           type="button"
         >
@@ -213,14 +214,44 @@ export function ClusterCard({
           <span className="truncate">{t("clusters.disconnect.cardProgress", { step: disconnectStep })}</span>
         </button>
       ) : null}
-      {disconnectStep === null && disconnected && !simulation && onRefresh ? (
-        <div className="border-t p-3">
-          <Button className="w-full justify-center" onClick={onRefresh} size="sm" type="button" variant="outline">
-            <RefreshCw aria-hidden="true" />
-            {t("clusters.action.checkConnection")}
-          </Button>
-        </div>
-      ) : null}
     </Card>
   );
+}
+
+function disconnectProgressStep(phase: DisconnectPhase | undefined): number | null {
+  if (phase === "submitting") return 1;
+  if (phase === "uninstalling" || phase === "cleanup-required") return 2;
+  return null;
+}
+
+function ClusterMetric({
+  className,
+  icon,
+  label,
+}: {
+  className?: string;
+  icon: ReactNode;
+  label: string;
+}) {
+  return (
+    <span className={cn("inline-flex items-center gap-1.5 text-xs", className)}>
+      <span aria-hidden="true" className="[&_svg]:size-3.5">{icon}</span>
+      {label}
+    </span>
+  );
+}
+
+function formatRelativeTime(value: string, locale: "en" | "ko"): string {
+  const deltaMilliseconds = new Date(value).getTime() - Date.now();
+  const absolute = Math.abs(deltaMilliseconds);
+  const minute = 60_000;
+  const hour = 60 * minute;
+  const day = 24 * hour;
+  const [amount, unit] = absolute < hour
+    ? [Math.round(deltaMilliseconds / minute), "minute" as const]
+    : absolute < day
+      ? [Math.round(deltaMilliseconds / hour), "hour" as const]
+      : [Math.round(deltaMilliseconds / day), "day" as const];
+  const nonZeroAmount = amount === 0 ? -1 : amount;
+  return new Intl.RelativeTimeFormat(locale, { numeric: "auto" }).format(nonZeroAmount, unit);
 }

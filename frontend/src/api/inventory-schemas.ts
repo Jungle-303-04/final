@@ -1,6 +1,4 @@
 import { z } from "zod";
-import { providerResourceDetailSchema } from "./provider-resource-schemas";
-import { resourceAccessDetailEndpointSchema } from "../features/resources/resourceAccessContract";
 
 const nullableStringSchema = z.string().nullable();
 const unknownRecordSchema = z.record(z.string(), z.unknown());
@@ -47,8 +45,6 @@ export const inventoryResourceDetailSchema = z.strictObject({
   cluster_id: z.string(),
   identity: unknownRecordSchema,
   resource: inventoryResourceSchema,
-  provider_detail: providerResourceDetailSchema.nullable().optional(),
-  access: resourceAccessDetailEndpointSchema.nullable().optional(),
   related: z.record(z.string(), z.array(inventoryResourceSchema)),
   events: z.array(inventoryResourceSchema),
 });

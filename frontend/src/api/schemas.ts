@@ -1,62 +1,30 @@
 import { z } from "zod";
-import { recentChangeItemSchema } from "./recent-changes-schemas";
-import {
-  clusterDataCoverageSchema,
-  clusterObservationCoverageSchema,
-} from "./cluster-observation-schemas";
-import type { AuthEndpointSession } from "../features/auth/authEndpointContract";
-import type { AuthEndpointWorkspaceList } from "../features/auth/authEndpointContract";
 
 const nullableStringSchema = z.string().nullable();
 const integerSchema = z.number().int();
 
-const authLogoutCapabilitySchema = z.strictObject({
-  action: z.enum(["end_session", "upstream_identity_required"]),
+export const authLogoutDescriptorSchema = z.strictObject({
+  action: z.string(),
   supported: z.boolean(),
   reauthentication_expected: z.boolean(),
 });
 
 export const authSessionSchema = z.strictObject({
-  authenticated: z.literal(true),
-  auth_enabled: z.literal(true),
-  auth_mode: z.enum(["password", "trusted_proxy"]),
+  authenticated: z.boolean(),
+  auth_enabled: z.boolean().optional(),
+  auth_mode: z.string().optional(),
   display_name: z.string().nullable().optional(),
   email: z.string().nullable().optional(),
-  user_id: z.string().min(1),
-  groups: z.array(z.string().min(1)),
-  roles: z.array(z.string().min(1)).min(1),
-  workspace_id: z.string().min(1),
-  logout: authLogoutCapabilitySchema,
-}).superRefine((session, context) => {
-  const expected = session.auth_mode === "password"
-    ? ["end_session", true, false] as const
-    : ["upstream_identity_required", false, true] as const;
-  const actual = [
-    session.logout.action,
-    session.logout.supported,
-    session.logout.reauthentication_expected,
-  ] as const;
-  if (actual.some((value, index) => value !== expected[index])) {
-    context.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "logout capability must match the authentication authority",
-      path: ["logout"],
-    });
-  }
-}) satisfies z.ZodType<AuthEndpointSession>;
+  user_id: z.string(),
+  groups: z.array(z.string()).optional(),
+  roles: z.array(z.string()),
+  workspace_id: z.string(),
+  logout: authLogoutDescriptorSchema.optional(),
+});
 
 export const logoutResponseSchema = z.strictObject({
   authenticated: z.literal(false),
 });
-
-export const authWorkspaceListSchema = z.strictObject({
-  current_workspace_id: z.string().min(1),
-  items: z.array(z.strictObject({
-    workspace_id: z.string().min(1),
-    name: z.string().min(1),
-    slug: z.string().min(1),
-  })),
-}) satisfies z.ZodType<AuthEndpointWorkspaceList>;
 
 export const fleetHealthSchema = z.enum([
   "healthy",
@@ -65,8 +33,6 @@ export const fleetHealthSchema = z.enum([
   "stale",
   "unknown",
 ]);
-
-export { clusterDataCoverageSchema, clusterObservationCoverageSchema };
 
 export const fleetClusterSummarySchema = z.strictObject({
   cluster_id: z.string(),
@@ -81,7 +47,6 @@ export const fleetClusterSummarySchema = z.strictObject({
   cpu_pct: z.number().nullable(),
   mem_pct: z.number().nullable(),
   last_seen_at: nullableStringSchema,
-  coverage: clusterDataCoverageSchema.nullable().optional(),
 });
 
 export const fleetTotalsSchema = z.strictObject({
@@ -141,10 +106,11 @@ export const rcaIssueItemSchema = rcaTimelineItemSchema.extend({
     "source_incomplete",
     "outside_two_tier_scale",
   ]).nullable(),
-  situation_summary: nullableStringSchema.optional(),
-  recommended_action_summary: nullableStringSchema.optional(),
-  evidence_summary: nullableStringSchema.optional(),
-  evidence_bundle_summary: nullableStringSchema.optional(),
+  // RcaIssueItem AI-authored summaries (str | None, always emitted).
+  situation_summary: z.string().nullable(),
+  recommended_action_summary: z.string().nullable(),
+  evidence_summary: z.string().nullable(),
+  evidence_bundle_summary: z.string().nullable(),
 }).superRefine((item, context) => {
   if (
     item.severity_availability === "available"
@@ -160,92 +126,8 @@ export const rcaIssueItemSchema = rcaTimelineItemSchema.extend({
   }
 });
 
-export const rcaIssueQueueItemSchema = rcaIssueItemSchema.extend({
-  category: z.string().min(1).nullable(),
-  category_availability: z.enum(["available", "unavailable"]),
-  category_reason_code: z.literal("source_incomplete").nullable(),
-}).superRefine((item, context) => {
-  if (
-    item.category_availability === "available"
-    && (item.category === null || item.category_reason_code !== null)
-  ) {
-    context.addIssue({ code: z.ZodIssueCode.custom, message: "available category requires a value" });
-  }
-  if (
-    item.category_availability === "unavailable"
-    && (item.category !== null || item.category_reason_code === null)
-  ) {
-    context.addIssue({ code: z.ZodIssueCode.custom, message: "unavailable category requires a reason" });
-  }
-});
-
-const rcaIssueQueueFacetSchema = z.strictObject({
-  value: z.string().min(1),
-  count: integerSchema.nonnegative(),
-});
-
-const rcaIssueQueueVisibilitySchema = z.strictObject({
-  state: z.enum(["complete", "partial", "restricted"]),
-  completeness: z.enum(["exact", "partial", "unavailable"]),
-  authorized_cluster_count: integerSchema.nonnegative(),
-  requested_namespaces: z.array(z.string().min(1)),
-  reason_codes: z.array(z.string().min(1)),
-}).superRefine((visibility, context) => {
-  if (visibility.state !== "complete" && visibility.reason_codes.length === 0) {
-    context.addIssue({ code: z.ZodIssueCode.custom, message: "incomplete visibility requires a reason" });
-  }
-  if (visibility.state === "complete" && visibility.completeness !== "exact") {
-    context.addIssue({ code: z.ZodIssueCode.custom, message: "complete visibility must be exact" });
-  }
-});
-
 export const rcaIssueListSchema = z.strictObject({
-  items: z.array(rcaIssueQueueItemSchema),
-  total: integerSchema.nonnegative(),
-  total_matched: integerSchema.nonnegative(),
-  count_completeness: z.literal("exact"),
-  recent_changes: z.array(recentChangeItemSchema.extend({ incident_id: z.string().min(1) })),
-  visibility: rcaIssueQueueVisibilitySchema,
-  facets: z.strictObject({
-    namespaces: z.array(rcaIssueQueueFacetSchema),
-    severities: z.array(rcaIssueQueueFacetSchema),
-    categories: z.array(rcaIssueQueueFacetSchema),
-  }),
-}).superRefine((queue, context) => {
-  if (queue.total !== queue.items.length || queue.total > queue.total_matched) {
-    context.addIssue({ code: z.ZodIssueCode.custom, message: "queue counts are inconsistent" });
-  }
-  const incidents = new Set(queue.items.flatMap((item) => item.incident_id ? [item.incident_id] : []));
-  if (queue.recent_changes.some((change) => !incidents.has(change.incident_id))) {
-    context.addIssue({ code: z.ZodIssueCode.custom, message: "recent change is outside the queue page" });
-  }
-});
-
-export const resourceIssueOnsetSchema = z.strictObject({
-  first_observed_at: z.string().datetime({ offset: true }),
-  source: z.literal("timeline_created_at"),
-  timing_kind: z.null(),
-  timing_availability: z.literal("unavailable"),
-  timing_reason_code: z.literal("health_transition_evidence_unavailable"),
-});
-
-export const resourceIssueItemSchema = rcaIssueItemSchema.extend({
-  onset: resourceIssueOnsetSchema,
-});
-
-export const resourceIssueListSchema = z.strictObject({
-  scope: z.strictObject({
-    workspace_id: z.string().min(1),
-    cluster_id: z.string().min(1),
-    namespaces: z.array(z.string()),
-    freshness: z.enum(["live", "stale", "partial", "disconnected"]),
-  }),
-  coverage_availability: z.enum(["available", "partial", "unavailable"]),
-  observed_at: z.string().nullable(),
-  reason_codes: z.array(z.string()),
-  items: z.array(resourceIssueItemSchema),
-  limit: z.number().int().min(1).max(100),
-  has_more: z.boolean(),
+  items: z.array(rcaIssueItemSchema),
 });
 
 export type AuthSession = z.infer<typeof authSessionSchema>;
@@ -256,7 +138,4 @@ export type FleetSummary = z.infer<typeof fleetSummarySchema>;
 export type RcaTimelineItem = z.infer<typeof rcaTimelineItemSchema>;
 export type RcaTimeline = z.infer<typeof rcaTimelineSchema>;
 export type RcaIssueItem = z.infer<typeof rcaIssueItemSchema>;
-export type RcaIssueQueueItem = z.infer<typeof rcaIssueQueueItemSchema>;
 export type RcaIssueList = z.infer<typeof rcaIssueListSchema>;
-export type ResourceIssueItem = z.infer<typeof resourceIssueItemSchema>;
-export type ResourceIssueList = z.infer<typeof resourceIssueListSchema>;

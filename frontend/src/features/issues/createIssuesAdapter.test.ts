@@ -150,32 +150,9 @@ const recoveryPlan = {
     validation_checks: ["rollout healthy"],
     rollback_plan: "Restore the previous limit",
     evidence_refs: ["evidence-1"],
-    recommendation_reason: null,
-    expected_outcome: null,
-    risk_explanation: null,
-    rollback_reason: null,
   }],
 };
 describe("createIssuesAdapter", () => {
-  it("loads only the composition-injected issues audit refresh policy", async () => {
-    const policy = {
-      staleAfterSeconds: 30,
-      refreshAfterSeconds: 43,
-      keepLastSuccess: true as const,
-      pauseWhenHidden: true as const,
-      eventInvalidation: false,
-      retryAfterSeconds: null,
-      retryLimit: null,
-      postMutationRefreshAfterSeconds: null,
-    };
-    const getPolicy = vi.fn().mockResolvedValue(policy);
-
-    await expect(
-      createIssuesAdapter(endpoints(), { getPolicy }).loadIssuesAuditRefreshPolicy(),
-    ).resolves.toBe(policy);
-    expect(getPolicy).toHaveBeenCalledWith("issues_audit", undefined);
-  });
-
   it("loads the list and detail through canonical request boundaries", async () => {
     const dependencies = endpoints();
     const port = createIssuesAdapter(dependencies);
@@ -189,11 +166,8 @@ describe("createIssuesAdapter", () => {
       correlationId: "correlation-1",
     });
     expect(dependencies.listRcaTimeline).toHaveBeenCalledWith({
-      categories: [],
       clusterId: "cluster-1",
       limit: 25,
-      namespaces: [],
-      severities: [],
       signal: undefined,
     });
     expect(dependencies.getRcaIncident).toHaveBeenCalledWith("incident-1", {

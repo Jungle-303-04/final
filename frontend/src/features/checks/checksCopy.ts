@@ -1,50 +1,25 @@
-import type { TranslationFunction } from "../../shared/i18n";
-
-export type ChecksCopy = ReturnType<typeof createChecksCopy>;
-
-const checksCopyCache = new WeakMap<TranslationFunction, ChecksCopy>();
-
-/** Product-owned copy. Check titles, messages, and Kubernetes values remain server evidence. */
-export function checksCopy(t: TranslationFunction) {
-  const cached = checksCopyCache.get(t);
-  if (cached) return cached;
-  const copy = createChecksCopy(t);
-  checksCopyCache.set(t, copy);
-  return copy;
-}
-
-function createChecksCopy(t: TranslationFunction) {
-  return {
-    title: t("checks.title"),
-    description: t("checks.description"),
-    refresh: t("common.action.refresh"),
-    refreshPending: t("checks.refresh.pending"),
-    refreshSucceeded: t("checks.refresh.succeeded"),
-    refreshReconnecting: t("checks.refresh.reconnecting"),
-    refreshCancelled: t("checks.refresh.cancelled"),
-    refreshFailed: t("checks.refresh.failed"),
-    scope: t("checks.scope.title"),
-    scopeUnavailable: t("checks.scope.unavailable"),
-    scopeReasonUnavailable: t("checks.scope.reason.unavailable"),
-    scopeReasonPartial: t("checks.scope.reason.partial"),
-    scopeReasonAuthorization: t("checks.scope.reason.authorization"),
-    scopeReasonGeneric: t("checks.scope.reason.generic"),
-    scopeSelectionUnavailable: t("checks.scope.selectionUnavailable"),
-    noNamespaces: t("checks.scope.allNamespaces"),
-    notObserved: t("checks.value.notObserved"),
-    resultStatus: t("checks.result.title"),
-    resultUnavailable: t("checks.result.unavailable"),
-    findingCount: t("checks.result.findingCount"),
-    noFindings: t("checks.result.empty"),
-    catalogStatus: t("checks.catalog.title"),
-    catalogUnavailable: t("checks.catalog.unavailable"),
-    visibilityStatus: t("checks.visibility.title"),
-    visibilityUnavailable: t("checks.visibility.unavailable"),
-    observedNamespaces: t("checks.visibility.observedNamespaces"),
-    missingOptionalKinds: t("checks.visibility.missingOptionalKinds"),
-    detailStatus: t("checks.detail.title"),
-    detailUnavailable: t("checks.detail.unavailable"),
-    reasonsLabel: t("checks.reasons.label"),
-    settingsAction: t("checks.settings.action"),
-  } as const;
-}
+export const CHECKS_COPY = {
+  title: "Checks",
+  description: "Evidence-backed configuration and workload checks for the selected cluster scope.",
+  refresh: "Refresh",
+  refreshPending: "Refreshing Checks data.",
+  refreshSucceeded: "Checks data refreshed.",
+  refreshReconnecting: "Reconnecting Checks data.",
+  refreshCancelled: "Checks refresh was cancelled.",
+  scope: "Scope coverage",
+  scopeUnavailable: "Some selected cluster snapshots are unavailable or incomplete.",
+  scopeReasonUnavailable: "Some selected clusters have no current inventory snapshot.",
+  scopeReasonPartial: "Some selected inventory snapshots are incomplete.",
+  scopeReasonAuthorization: "No authorized cluster scope is available.",
+  scopeReasonGeneric: "Some scope evidence is unavailable.",
+  scopeSelectionUnavailable: "The selected cluster scope cannot be resolved.",
+  noNamespaces: "All namespaces",
+  notObserved: "Not observed",
+  resultStatus: "Check results",
+  resultUnavailable: "Check findings are unavailable until an agent-backed evaluation collector is integrated.",
+  catalogStatus: "Check catalog",
+  catalogUnavailable: "Check definitions and remediation guidance are unavailable until the collector publishes a catalog.",
+  detailStatus: "Requested check",
+  detailUnavailable: "This requested check cannot be resolved until the catalog and result collector are integrated.",
+  refreshFailed: "Could not refresh Checks data.",
+} as const;

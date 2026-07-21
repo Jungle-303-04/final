@@ -4,18 +4,12 @@ import {
   clusterUsageResponseSchema,
   commandStatusSchema,
   prometheusQueryDefinitionSchema,
-  scopedMetricQueryRequestSchema,
-  scopedMetricQueryResponseSchema,
   telemetryCommandResultSchema,
   type AgentDebugQueryReceipt,
   type ClusterUsageResponse,
   type CommandStatus,
   type PrometheusQueryDefinition,
   type PrometheusRangeResult,
-  type ScopedMetricCategory,
-  type ScopedMetricQueryReceipt,
-  type ScopedMetricQueryRequest,
-  type ScopedMetricQueryResponse,
 } from './metrics-schemas';
 import {encodePathSegment, withQuery} from './url';
 
@@ -26,7 +20,6 @@ const DEFAULT_USAGE_LIMIT = 288;
 const MIN_USAGE_LIMIT = 1;
 const MAX_USAGE_LIMIT = 2_000;
 const TELEMETRY_QUERY_ACTION = 'telemetry.query.run';
-const SCOPED_METRIC_POLL_CONCURRENCY = 3;
 
 export interface ClusterUsageOptions {
   limit?: number;
@@ -50,21 +43,6 @@ export interface PrometheusQueryRun {
   receipt: AgentDebugQueryReceipt;
   command: MetricCommandSummary;
   result: PrometheusRangeResult;
-}
-
-export interface ScopedMetricObservation {
-  category: ScopedMetricCategory;
-  unit: ScopedMetricQueryReceipt['unit'];
-  queryName: string;
-  command: MetricCommandSummary;
-  result: PrometheusRangeResult;
-}
-
-export interface ScopedMetricQueryRun {
-  endpoint: ScopedMetricQueryResponse;
-  completeness: 'exact' | 'partial' | 'unavailable';
-  observations: ScopedMetricObservation[];
-  reasonCodes: string[];
 }
 
 export type MetricQueryExecutionErrorKind =
@@ -218,136 +196,6 @@ export async function runPrometheusQuery(
     command: commandSummary(command),
     result,
   };
-}
-
-/**
- * Runs one typed, server-owned metric batch. The browser never supplies PromQL;
- * terminal command failures are isolated so one missing series cannot discard
- * valid observations from the same resource frame.
- */
-export async function runScopedMetricQuery(
-  request: ScopedMetricQueryRequest,
-  options: RunPrometheusQueryOptions = {},
-): Promise<ScopedMetricQueryRun> {
-  const body = scopedMetricQueryRequestSchema.parse(request);
-  const endpoint = await apiRequest('/api/metrics/query', scopedMetricQueryResponseSchema, {
-    method: 'POST',
-    headers: {'content-type': 'application/json'},
-    body: JSON.stringify(body),
-    signal: options.signal,
-  });
-  const responseCategories = endpoint.queries.map((query) => query.category);
-  if (
-    endpoint.scope.cluster_id !== body.cluster_id ||
-    endpoint.coverage.requested !== body.categories.length ||
-    new Set(responseCategories).size !== responseCategories.length ||
-    responseCategories.some((category) => !body.categories.includes(category)) ||
-    (body.subject.kind === 'pvc') !== (endpoint.refresh_policy_key === 'metrics_pvc')
-  ) {
-    throw invalidTelemetryPayload('Scoped metric response did not match its request scope.');
-  }
-  if (endpoint.availability === 'unavailable') {
-    return {
-      endpoint,
-      completeness: 'unavailable',
-      observations: [],
-      reasonCodes: [...endpoint.reason_codes],
-    };
-  }
-
-  const outcomes = await mapConcurrent(
-    endpoint.queries,
-    SCOPED_METRIC_POLL_CONCURRENCY,
-    (receipt) => observeScopedMetric(endpoint, receipt, options),
-  );
-  const observations: ScopedMetricObservation[] = [];
-  const reasonCodes = [...endpoint.reason_codes];
-  for (const outcome of outcomes) {
-    if ('observation' in outcome) observations.push(outcome.observation);
-    else reasonCodes.push(`${outcome.category}:${outcome.reason}`);
-  }
-  const completeness = observations.length === 0
-    ? 'unavailable'
-    : reasonCodes.length === 0 && endpoint.availability === 'queued'
-      ? 'exact'
-      : 'partial';
-  return { endpoint, completeness, observations, reasonCodes };
-}
-
-async function observeScopedMetric(
-  endpoint: ScopedMetricQueryResponse,
-  receipt: ScopedMetricQueryReceipt,
-  options: RunPrometheusQueryOptions,
-): Promise<
-  | { observation: ScopedMetricObservation }
-  | { category: ScopedMetricCategory; reason: string }
-> {
-  try {
-    const command = await pollCommand(receipt.command_id, options);
-    if (command.status === 'failed') {
-      return { category: receipt.category, reason: 'command_failed' };
-    }
-    if (
-      command.action !== TELEMETRY_QUERY_ACTION ||
-      command.cluster_id !== endpoint.scope.cluster_id
-    ) {
-      return { category: receipt.category, reason: 'invalid_result' };
-    }
-    const parsed = telemetryCommandResultSchema.safeParse(command.result);
-    if (
-      !parsed.success ||
-      parsed.data.cluster_id !== endpoint.scope.cluster_id ||
-      parsed.data.query.name !== receipt.query_name
-    ) {
-      return { category: receipt.category, reason: 'invalid_result' };
-    }
-    const result = parsed.data.result.results[receipt.query_name];
-    if (result === undefined || result.point_count === 0) {
-      return { category: receipt.category, reason: 'empty_result' };
-    }
-    return {
-      observation: {
-        category: receipt.category,
-        unit: receipt.unit,
-        queryName: receipt.query_name,
-        command: commandSummary(command),
-        result,
-      },
-    };
-  } catch (error) {
-    if (isAbortError(error)) throw error;
-    return {
-      category: receipt.category,
-      reason: error instanceof MetricQueryExecutionError && error.kind === 'timeout'
-        ? 'timeout'
-        : 'invalid_result',
-    };
-  }
-}
-
-async function mapConcurrent<T, R>(
-  values: readonly T[],
-  concurrency: number,
-  operation: (value: T) => Promise<R>,
-): Promise<R[]> {
-  const output = new Array<R>(values.length);
-  let cursor = 0;
-  async function worker(): Promise<void> {
-    while (cursor < values.length) {
-      const index = cursor;
-      cursor += 1;
-      const value = values[index];
-      if (value !== undefined) output[index] = await operation(value);
-    }
-  }
-  await Promise.all(
-    Array.from({length: Math.min(concurrency, values.length)}, () => worker()),
-  );
-  return output;
-}
-
-function isAbortError(error: unknown): boolean {
-  return error instanceof DOMException && error.name === 'AbortError';
 }
 
 function assertUsageLimit(limit: number): void {

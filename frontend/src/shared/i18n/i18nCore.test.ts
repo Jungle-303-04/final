@@ -24,49 +24,18 @@ describe("i18n catalogs", () => {
     expect(koreanKeys).toEqual(englishKeys);
     expect(en["shell.nav.home"]).toBe("Home");
     expect(ko["shell.nav.home"]).toBe("홈");
-    for (const key of englishKeys) {
-      expect(placeholders(en[key as MessageKey])).toEqual(
-        placeholders(ko[key as MessageKey]),
-      );
-    }
   });
 
   it("accepts only a MessageKey as the translation lookup key", () => {
     const key: MessageKey = "common.action.retry";
     expect(translate("en", key)).toBe("Retry");
   });
-
-  it("localizes the Helm upgrade empty selection", () => {
-    expect(translate("en", "helm.upgrade.selectValue")).toBe("Select a value");
-    expect(translate("ko", "helm.upgrade.selectValue")).toBe("값 선택");
-  });
-
-  it("localizes connection choreography", () => {
-    expect(translate("en", "connections.launcher.description"))
-      .toBe("What would you like to connect?");
-    expect(translate("ko", "connections.launcher.description"))
-      .toBe("무엇을 연결할까요?");
-  });
-
-  it("uses the demo-v3 three-view resource vocabulary", () => {
-    expect([
-      translate("ko", "resources.surface.view.map"),
-      translate("ko", "resources.surface.view.list"),
-      translate("ko", "resources.surface.view.flow"),
-    ]).toEqual(["인프라", "쿠버네티스", "트래픽"]);
-    expect([
-      translate("en", "resources.surface.view.map"),
-      translate("en", "resources.surface.view.list"),
-      translate("en", "resources.surface.view.flow"),
-    ]).toEqual(["Infrastructure", "Kubernetes", "Traffic"]);
-  });
 });
 
 describe("locale resolution", () => {
-  it("defaults to Korean and honors supported explicit navigator languages", () => {
-    expect(detectNavigatorLocale(undefined)).toBe("ko");
+  it("defaults to English and detects Korean navigator languages", () => {
+    expect(detectNavigatorLocale(undefined)).toBe("en");
     expect(detectNavigatorLocale("en-US")).toBe("en");
-    expect(detectNavigatorLocale("fr-FR")).toBe("ko");
     expect(detectNavigatorLocale("ko")).toBe("ko");
     expect(detectNavigatorLocale("ko-KR")).toBe("ko");
     expect(detectNavigatorLocale("KO_kr")).toBe("ko");
@@ -156,9 +125,4 @@ function memoryStorage(seed: Record<string, string> = {}): StorageLike {
     getItem: (key) => values.get(key) ?? null,
     setItem: (key, value) => { values.set(key, value); },
   };
-}
-
-function placeholders(message: string): string[] {
-  return Array.from(message.matchAll(/\{([A-Za-z][A-Za-z0-9_]*)\}/gu), ([, name]) => name)
-    .sort();
 }

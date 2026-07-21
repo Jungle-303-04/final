@@ -6,7 +6,6 @@ import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
 import {
   type HomeClusterChoices,
   type HomeClusterOverview,
-  type HomeInsights,
   type HomeNodeCollection,
   type HomePodCollection,
   type HomePort,
@@ -17,18 +16,15 @@ import {
   type HomeSelectedNodeResolution,
 } from "./homePageStateModel";
 import { useHomeClusterFrame } from "./useHomeClusterFrame";
-import { useServerRefreshScheduler } from "../../shared/data/useServerRefreshScheduler";
+import { useHomeRefreshClock } from "./useHomeRefreshClock";
 
 export type { HomeResourceState } from "./homePageStateModel";
 
 export interface HomePageState {
-  boardWindowAnchorMs: number;
-  boardRefreshRevision: number;
   clusterSelection: ClusterScopeSelection;
   choices: HomeResourceState<HomeClusterChoices>;
   clusterAccess: HomeClusterAccess;
   overview: HomeResourceState<HomeClusterOverview>;
-  insights: HomeResourceState<HomeInsights>;
   nodes: HomeResourceState<HomeNodeCollection>;
   pods: HomeResourceState<HomePodCollection>;
   selectedClusterId: string | null;
@@ -36,9 +32,7 @@ export interface HomePageState {
   selectedNodeResolution: HomeSelectedNodeResolution;
   selectedClusterExists: boolean;
   dataUpdatedAt: number;
-  refreshIntervalSeconds: number | null;
   refresh: () => void;
-  refreshInsights: () => void;
   selectCluster: (clusterId: string) => void;
   selectNode: (nodeName: string) => void;
   closeNode: () => void;
@@ -56,32 +50,25 @@ export function useHomePageState(port: HomePort): HomePageState {
   const focusPodHeading = useRef(false);
   const selectedClusterId = clusterScope.requestedClusterId;
   const selectedNodeName = filter.detail.node;
-  const [dashboardRevision, setDashboardRevision] = useState(0);
-  const [boardWindowAnchorMs, setBoardWindowAnchorMs] = useState(() => Date.now());
-  const dashboardRefresh = useServerRefreshScheduler(
-    () => {
-      setBoardWindowAnchorMs(Date.now());
-      setDashboardRevision((current) => current + 1);
-    },
-  );
-  const observedDashboardRevision = useRef(dashboardRevision);
+  const {
+    refresh: refreshFrame,
+    podRevision,
+    summaryRevision,
+  } = useHomeRefreshClock(true);
+  const observedSummaryRevision = useRef(summaryRevision);
   const resumedFromBackground = useRef(false);
-  const observedScopeInvalidation = useRef({ revision: 0, scopeKey: null as string | null });
   const [dataUpdatedAt, setDataUpdatedAt] = useState(0);
-  const dashboardPolicy = clusterScope.dashboardRefreshPolicy;
-  const refreshIntervalSeconds = dashboardPolicy?.refreshAfterSeconds ?? null;
   const selectedClusterExists = clusterScope.selectedClusterExists;
   const scopeKey = clusterScope.scopeKey;
   const clusterFrame = useHomeClusterFrame({
     clusterId: selectedClusterExists ? selectedClusterId : null,
     port,
-    podRefreshRevision: dashboardRevision,
-    refreshRevision: dashboardRevision,
+    podRefreshRevision: podRevision,
+    refreshRevision: summaryRevision,
     reportUnauthorized,
     scopeKey,
     selectedNodeName,
   });
-  const refreshInsights = clusterFrame.refreshInsights;
   const choicesData = choices.phase === "ready" ? choices.data : null;
   const overviewData = clusterFrame.overview.phase === "ready"
     ? clusterFrame.overview.data
@@ -89,22 +76,19 @@ export function useHomePageState(port: HomePort): HomePageState {
   const nodesData = clusterFrame.nodes.phase === "ready"
     ? clusterFrame.nodes.data
     : null;
-  const insightsData = clusterFrame.insights.phase === "ready"
-    ? clusterFrame.insights.data
-    : null;
   const podsData = clusterFrame.pods.phase === "ready"
     ? clusterFrame.pods.data
     : null;
 
   useEffect(() => {
-    if (observedDashboardRevision.current === dashboardRevision) return;
-    observedDashboardRevision.current = dashboardRevision;
+    if (observedSummaryRevision.current === summaryRevision) return;
+    observedSummaryRevision.current = summaryRevision;
     if (resumedFromBackground.current) {
       resumedFromBackground.current = false;
       return;
     }
     refreshClusterScope();
-  }, [dashboardRevision, refreshClusterScope]);
+  }, [refreshClusterScope, summaryRevision]);
 
   useEffect(() => {
     const rememberVisibilityResume = () => {
@@ -115,58 +99,7 @@ export function useHomePageState(port: HomePort): HomePageState {
   }, []);
 
   useEffect(() => {
-    if (!selectedClusterExists || scopeKey === null) {
-      dashboardRefresh.backgroundFailure();
-      return;
-    }
-    const sections = selectedNodeName === null
-      ? [clusterFrame.overview, clusterFrame.nodes]
-      : [clusterFrame.overview, clusterFrame.nodes, clusterFrame.pods];
-    if (sections.some((section) =>
-      section.phase === "failed" ||
-      (section.phase === "ready" && section.refreshFailure !== null)
-    )) {
-      dashboardRefresh.backgroundFailure();
-      return;
-    }
-    if (!sections.every((section) => section.phase === "ready" && !section.refreshing)) return;
-
-    if (dashboardPolicy === null) return;
-    dashboardRefresh.acceptSuccess(dashboardPolicy);
-  }, [
-    clusterFrame.nodes,
-    clusterFrame.overview,
-    clusterFrame.pods,
-    dashboardRefresh,
-    dashboardPolicy,
-    scopeKey,
-    selectedClusterExists,
-    selectedNodeName,
-  ]);
-
-  useEffect(() => {
-    const current = observedScopeInvalidation.current;
-    if (current.scopeKey !== scopeKey) {
-      observedScopeInvalidation.current = {
-        revision: clusterScope.scopeInvalidationRevision,
-        scopeKey,
-      };
-      return;
-    }
-    if (clusterScope.scopeInvalidationRevision <= current.revision) return;
-    observedScopeInvalidation.current = {
-      revision: clusterScope.scopeInvalidationRevision,
-      scopeKey,
-    };
-    dashboardRefresh.requestEventInvalidation();
-  }, [
-    clusterScope.scopeInvalidationRevision,
-    dashboardRefresh,
-    scopeKey,
-  ]);
-
-  useEffect(() => {
-    const successfulData = [choicesData, overviewData, insightsData, nodesData, podsData];
+    const successfulData = [choicesData, overviewData, nodesData, podsData];
     if (successfulData.every((value) => value === null)) return;
     let active = true;
     queueMicrotask(() => {
@@ -175,7 +108,7 @@ export function useHomePageState(port: HomePort): HomePageState {
     return () => {
       active = false;
     };
-  }, [choicesData, insightsData, nodesData, overviewData, podsData]);
+  }, [choicesData, nodesData, overviewData, podsData]);
 
   useEffect(() => {
     if (!focusPodHeading.current || !selectedNodeName || clusterFrame.pods.phase === "idle") return;
@@ -210,13 +143,10 @@ export function useHomePageState(port: HomePort): HomePageState {
   }, [selectedClusterId, selectedNodeName, updateNodeSelection]);
 
   const refresh = useCallback(() => {
-    dashboardRefresh.requestRefresh();
-    refreshInsights();
-  }, [dashboardRefresh, refreshInsights]);
+    refreshFrame();
+  }, [refreshFrame]);
 
   return useMemo(() => ({
-    boardWindowAnchorMs,
-    boardRefreshRevision: dashboardRevision,
     choices,
     clusterSelection: clusterScope.selection,
     ...clusterFrame,
@@ -224,7 +154,6 @@ export function useHomePageState(port: HomePort): HomePageState {
     selectedNodeName,
     selectedClusterExists,
     dataUpdatedAt,
-    refreshIntervalSeconds,
     refresh,
     selectCluster: clusterScope.selectCluster,
     selectNode,
@@ -234,7 +163,7 @@ export function useHomePageState(port: HomePort): HomePageState {
       else nodeButtons.current.delete(nodeName);
     },
   }), [
-    boardWindowAnchorMs, choices, closeNode, clusterFrame, dashboardRevision, dataUpdatedAt, refresh, refreshIntervalSeconds, selectNode, selectedClusterExists,
+    choices, closeNode, clusterFrame, dataUpdatedAt, refresh, selectNode, selectedClusterExists,
     clusterScope.selectCluster, clusterScope.selection,
     selectedClusterId, selectedNodeName,
   ]);

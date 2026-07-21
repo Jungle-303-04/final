@@ -30,15 +30,6 @@ describe("resource manifest adapter", () => {
       diff: "+spec: {}\n",
       errors: [],
       warnings: ["Safe PR only"],
-      apply_availability: "available",
-      apply_reason_codes: [],
-      impact: [{
-        api_version: "apps/v1",
-        kind: "Deployment",
-        namespace: "shop",
-        name: "checkout-api",
-        selected: true,
-      }],
     });
     const approveResourceManifestEdit = vi.fn().mockResolvedValue({
       accepted: true,
@@ -48,47 +39,9 @@ describe("resource manifest adapter", () => {
       approval_id: "approval-1",
       sync_state: "awaiting_pr_merge",
     });
-    const applyResourceManifestNow = vi.fn().mockResolvedValue({
-      accepted: true,
-      command_id: "cmd-1",
-      event_id: "event-command-1",
-      audit_event_id: "event-command-1",
-      correlation_id: "correlation-command-1",
-      status: "queued",
-    });
-    const getResourceManifestCreateCapability = vi.fn().mockResolvedValue({
-      cluster_id: "cluster-1",
-      namespace: "shop",
-      snapshot_id: "snapshot-1",
-      available: true,
-      reason_codes: [],
-      max_documents: 100,
-      max_bytes: 1_048_576,
-      resources: [{ api_version: "apps/v1", kind: "Deployment", resource: "deployments", force_supported: true }],
-    });
-    const dryRunResourceManifestCreate = vi.fn().mockResolvedValue({
-      accepted: true,
-      command_id: "cmd-dry-run-1",
-      event_id: "event-dry-run-1",
-      audit_event_id: "event-dry-run-1",
-      correlation_id: "correlation-dry-run-1",
-      status: "queued",
-    });
-    const createResourceManifest = vi.fn().mockResolvedValue({
-      accepted: true,
-      command_id: "cmd-create-1",
-      event_id: "event-create-1",
-      audit_event_id: "event-create-1",
-      correlation_id: "correlation-create-1",
-      status: "queued",
-    });
     const port = createResourceManifestAdapter({
       approveResourceManifestEdit,
-      applyResourceManifestNow,
-      createResourceManifest,
-      dryRunResourceManifestCreate,
       getResourceManifestSource,
-      getResourceManifestCreateCapability,
       previewResourceManifestEdit,
     });
     const input = {
@@ -118,41 +71,5 @@ describe("resource manifest adapter", () => {
       expect.objectContaining({ confirmed: true, reason: "approved" }),
       undefined,
     );
-    await expect(port.applyNow("resource-1", {
-      ...input,
-      desiredSha256: `sha256:${"c".repeat(64)}`,
-      reason: "apply now",
-    })).resolves.toMatchObject({ commandId: "cmd-1", status: "queued" });
-    expect(applyResourceManifestNow).toHaveBeenCalledWith(
-      "resource-1",
-      expect.objectContaining({
-        confirmation: true,
-        expectedDesiredSha256: `sha256:${"c".repeat(64)}`,
-      }),
-      undefined,
-    );
-    await expect(port.loadCreateCapability("cluster-1", "shop")).resolves.toMatchObject({
-      available: true,
-      resources: [{ apiVersion: "apps/v1", kind: "Deployment", forceSupported: true }],
-    });
-    await expect(port.dryRunCreate({
-      clusterId: "cluster-1",
-      namespace: "shop",
-      snapshotId: "snapshot-1",
-      editedYaml: "kind: Deployment",
-      force: false,
-      reason: "validate",
-    })).resolves.toMatchObject({ commandId: "cmd-dry-run-1" });
-    await expect(port.createResources({
-      clusterId: "cluster-1",
-      namespace: "shop",
-      snapshotId: "snapshot-1",
-      editedYaml: "kind: Deployment",
-      desiredSha256: `sha256:${"d".repeat(64)}`,
-      dryRunCommandId: "cmd-dry-run-1",
-      force: true,
-      forceConfirmation: true,
-      reason: "create",
-    })).resolves.toMatchObject({ commandId: "cmd-create-1" });
   });
 });

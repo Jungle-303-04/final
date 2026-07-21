@@ -28,36 +28,23 @@ const cluster: HomeClusterChoice = {
 
 afterEach(cleanup);
 
-
-function countsText(container: HTMLElement): string {
-  const counts = container.querySelector("[data-slot='cluster-card-counts']");
-  return (counts?.textContent ?? "").replace(/\s+/gu, " ").trim();
-}
-
 describe("ClusterCard", () => {
-  it("renders the D1 status, identity, count line, mini bars, and staggered entrance", () => {
+  it("renders the canonical provider, verified metrics, and staggered card entrance", () => {
     const { container } = renderCard(cluster, 2);
 
     expect(screen.getByRole("img", { name: "Amazon Elastic Kubernetes Service" })
       .getAttribute("data-provider")).toBe("eks");
-    expect(screen.getByText("Critical 1")).toBeTruthy();
-    const counts = countsText(container);
-    expect(counts).toContain("Nodes —/8 ready");
-    expect(counts).toContain("Pods 47 · Critical 1");
-    expect(counts).toContain("Namespaces —");
-    expect(screen.getByRole("img", { name: "CPU —" })).toBeTruthy();
-    expect(screen.getByRole("img", { name: "MEM —" })).toBeTruthy();
+    expect(screen.getByText("Servers 8")).toBeTruthy();
+    expect(screen.getByText("Pods 47")).toBeTruthy();
+    expect(screen.getByText("Apps 6")).toBeTruthy();
+    expect(screen.getByText("Incidents 1")).toBeTruthy();
     expect((container.querySelector("[data-cluster-id='cluster-1']") as HTMLElement).style.animationDelay)
       .toBe("140ms");
     expect(container.querySelectorAll("[data-morph-id]")).toHaveLength(0);
-    const card = container.querySelector("[data-cluster-id='cluster-1']");
-    expect(card?.className).not.toContain("hover:-translate");
-    expect(card?.className).toContain("hover:shadow-product-hover");
-    expect(card?.textContent).not.toContain("Apps 6");
   });
 
   it("omits unknown counts instead of presenting them as zero", () => {
-    const { container } = renderCard({
+    renderCard({
       ...cluster,
       nodeCount: null,
       podCount: null,
@@ -67,13 +54,11 @@ describe("ClusterCard", () => {
       openIncidentCount: null,
     });
 
-    const counts = countsText(container);
-    expect(counts).toContain("Nodes —/— ready");
-    expect(counts).toContain("Pods —");
-    expect(counts).toContain("Namespaces —");
-    // 데모 문법: 장애 0·미상은 표기하지 않는다(빈 값의 침묵)
-    expect(counts).not.toContain("Critical");
-    expect(screen.queryByText(/\b0\b/u)).toBeNull();
+    expect(screen.queryByText(/Servers/)).toBeNull();
+    expect(screen.queryByText(/Pods/)).toBeNull();
+    expect(screen.queryByText(/Apps/)).toBeNull();
+    expect(screen.queryByText(/Incidents/)).toBeNull();
+    expect(screen.queryByText("Healthy")).toBeNull();
   });
 
   it("does not label a pending registration healthy before it connects", () => {
@@ -84,40 +69,8 @@ describe("ClusterCard", () => {
       openIncidentCount: 0,
     });
 
-    expect(screen.getByText("Warning")).toBeTruthy();
-    expect(screen.getByText("Waiting for the outbound agent's first heartbeat.")).toBeTruthy();
-  });
-
-  it("keeps disconnected content readable and labels synthetic evidence", () => {
-    const { container } = renderCard({
-      ...cluster,
-      connectionState: "pending",
-      observationMode: "simulation",
-      lastObservedAt: null,
-    });
-
-    const card = container.querySelector("[data-cluster-id='cluster-1']");
-    expect(card?.className).not.toContain("saturate-0");
-    expect(screen.getByText("Synthetic read-only evidence; cluster actions are unavailable.")).toBeTruthy();
-  });
-
-  it("uses the selected cluster overview as the only CPU and memory evidence", () => {
-    const { container } = renderCard(cluster, 0, undefined, undefined, {
-      observedAt: null,
-      podsRunning: 45,
-      podsTotal: 47,
-      nodesReady: 7,
-      nodesTotal: 8,
-      restartCount: 2,
-      cpuPercent: 42.5,
-      memoryPercent: 61.25,
-    });
-
-    const counts = countsText(container);
-    expect(counts).toContain("Nodes 7/8 ready");
-    expect(counts).toContain("Pods 47 · Critical 1");
-    expect(screen.getByRole("img", { name: "CPU 42.5%" })).toBeTruthy();
-    expect(screen.getByRole("img", { name: "MEM 61.25%" })).toBeTruthy();
+    expect(screen.getByText("Waiting for connection")).toBeTruthy();
+    expect(screen.queryByText("Healthy")).toBeNull();
   });
 
   it("links the whole card to the canonical Resources URL", () => {
@@ -160,16 +113,6 @@ function renderCard(
   index = 0,
   onDisconnect?: () => void,
   disconnectPhase?: "uninstalling",
-  usage?: {
-    observedAt: string | null;
-    podsRunning: number;
-    podsTotal: number;
-    nodesReady: number;
-    nodesTotal: number;
-    restartCount: number;
-    cpuPercent: number | null;
-    memoryPercent: number | null;
-  },
 ) {
   return render(
     <I18nProvider navigatorLanguage="en-US" storage={null}>
@@ -180,7 +123,6 @@ function renderCard(
           index={index}
           disconnectPhase={disconnectPhase}
           onDisconnect={onDisconnect}
-          usage={usage}
         />
       </MemoryRouter>
     </I18nProvider>,

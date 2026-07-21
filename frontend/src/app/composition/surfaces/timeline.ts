@@ -1,8 +1,24 @@
 import type { ComponentType } from "react";
-import type { TimelinePort } from "../../../features/timeline/timelineContract";
+import {
+  getTimelineCapabilities,
+  getTimelineOverview,
+  getTimelinePins,
+  getTimelineSnapshot,
+  removeTimelinePin,
+  subscribeTimelineEvents,
+  upsertTimelinePin,
+} from "../../../api";
+import { createTimelineAdapter } from "../../../features/timeline/createTimelineAdapter";
 import { createTimelineSurface } from "../../../pages/timeline/createTimelineSurface";
-import type { RcaContextPort } from "../../../features/issues/rcaContextContract";
 
-export function loadTimelineSurface(port: TimelinePort, rcaContextPort: RcaContextPort): ComponentType {
-  return createTimelineSurface(port, rcaContextPort);
+export function loadTimelineSurface(): ComponentType {
+  return createTimelineSurface(createTimelineAdapter({
+    getTimelineCapabilities,
+    getTimelineOverview,
+    getTimelinePins,
+    getTimelineSnapshot,
+    removeTimelinePin,
+    subscribeTimelineEvents,
+    upsertTimelinePin,
+  }));
 }

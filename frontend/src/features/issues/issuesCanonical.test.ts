@@ -90,19 +90,9 @@ describe("Issues canonical list", () => {
       pullRequestUrl: "https://example.invalid/pull/1",
       errorReason: null,
       updatedAt: "2026-07-12T15:00:00.000Z",
-      situationSummary: null,
-      recommendedActionSummary: null,
-      evidenceSummary: null,
-      evidenceBundleSummary: null,
     });
     expect(result.items[1]?.status).toBe("vendor_future_literal");
-    expect(result).toMatchObject({
-      total: 2,
-      totalMatched: 2,
-      visibility: { state: "unknown", completeness: "unknown" },
-      facets: { namespaces: [], severities: [], categories: [] },
-      recentChanges: [],
-    });
+    expect(result).not.toHaveProperty("total");
     expect(result).not.toHaveProperty("hasMore");
     expect(result).not.toHaveProperty("severityFacets");
     expect(result).not.toHaveProperty("categoryFacets");
@@ -133,58 +123,6 @@ describe("Issues canonical list", () => {
       { severity: "critical", availability: "available" },
       { severity: null, availability: "unavailable" },
     ]);
-  });
-
-  it("keeps exact queue counts, visibility, category, and bounded change evidence", () => {
-    const result = toIssueList(
-      canonicalIssueListRequest("cluster-a", 2, {
-        namespaces: ["cluster-a/payments"],
-        severities: ["critical"],
-        categories: ["container_restart"],
-      }),
-      {
-        items: [endpointItem({
-          category: "container_restart",
-          category_availability: "available",
-          category_reason_code: null,
-        })],
-        total: 1,
-        total_matched: 7,
-        count_completeness: "exact",
-        recent_changes: [],
-        visibility: {
-          state: "partial",
-          completeness: "partial",
-          authorized_cluster_count: 1,
-          requested_namespaces: ["cluster-a/payments"],
-          reason_codes: ["legacy_category_projection_incomplete"],
-        },
-        facets: {
-          namespaces: [{ value: "cluster-a/payments", count: 7 }],
-          severities: [{ value: "critical", count: 7 }],
-          categories: [{ value: "container_restart", count: 6 }],
-        },
-      },
-    );
-
-    expect(result).toMatchObject({
-      total: 1,
-      totalMatched: 7,
-      completeness: "partial",
-      filters: {
-        namespaces: ["cluster-a/payments"],
-        severities: ["critical"],
-        categories: ["container_restart"],
-      },
-      visibility: {
-        state: "partial",
-        reasonCodes: ["legacy_category_projection_incomplete"],
-      },
-      facets: {
-        categories: [{ value: "container_restart", count: 6 }],
-      },
-      items: [{ category: "container_restart", categoryAvailability: "available" }],
-    });
   });
 
   it("isolates invalid identities, duplicates, and mismatched non-null clusters", () => {

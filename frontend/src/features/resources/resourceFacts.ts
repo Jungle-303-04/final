@@ -1,6 +1,5 @@
 import type {
   ResourceFacts,
-  ResourceMetadataEntry,
 } from "./resourcesContract";
 import {
   involvedFact,
@@ -43,32 +42,9 @@ export function toResourceFacts(
       return serviceFacts(summary, warn);
     case "event":
       return eventFacts(summary, warn);
-    case "resourcequota":
-      return resourceQuotaFacts(summary, warn);
     default:
       return { type: "generic" };
   }
-}
-
-function resourceQuotaFacts(
-  summary: Record<string, unknown>,
-  warn: ResourceFactWarningSink,
-): ResourceFacts {
-  return {
-    type: "resource-quota",
-    hard: optionalFact("hard", [], () => quantityEntries(summary.hard), warn),
-    used: optionalFact("used", [], () => quantityEntries(summary.used), warn),
-  };
-}
-
-function quantityEntries(value: unknown): ResourceMetadataEntry[] {
-  const record = responseRecord(value);
-  return Object.entries(record)
-    .map(([key, quantity]) => {
-      if (typeof quantity !== "string") invalidResponse();
-      return { key, value: quantity };
-    })
-    .sort((left, right) => left.key.localeCompare(right.key));
 }
 
 function podFacts(
@@ -126,22 +102,16 @@ function podFacts(
     containerNames: optionalFact(
       "containerNames",
       [],
-      () => podContainerNames(summary.containers, summary.ephemeral_containers),
+      () => podContainerNames(summary.containers),
       warn,
     ),
   };
 }
 
-function podContainerNames(value: unknown, ephemeralValue: unknown): string[] {
+function podContainerNames(value: unknown): string[] {
   if (value === null || value === undefined) return [];
   if (!Array.isArray(value)) invalidResponse();
-  const regular = responseStringArray(value.map((item) => responseRecord(item).name));
-  if (ephemeralValue === null || ephemeralValue === undefined) return regular;
-  if (!Array.isArray(ephemeralValue)) invalidResponse();
-  return Array.from(new Set([
-    ...regular,
-    ...responseStringArray(ephemeralValue.map((item) => responseRecord(item).name)),
-  ]));
+  return responseStringArray(value.map((item) => responseRecord(item).name));
 }
 
 function nodeFacts(

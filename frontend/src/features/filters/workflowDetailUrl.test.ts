@@ -32,14 +32,4 @@ describe("workflow detail URL state", () => {
     expect(serializeProductFilterUrl(parsed.state, parsed.detail))
       .toBe("?clusters=cluster-1&view=relations");
   });
-
-  it.each(["map", "list", "flow"] as const)(
-    "round-trips the canonical Resources surface view %s",
-    (view) => {
-      const parsed = parseProductFilterUrl(`?view=${view}`);
-
-      expect(parsed.detail.resourceSurfaceView).toBe(view);
-      expect(serializeProductFilterUrl(parsed.state, parsed.detail)).toBe(`?view=${view}`);
-    },
-  );
 });

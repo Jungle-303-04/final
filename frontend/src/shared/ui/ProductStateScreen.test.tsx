@@ -8,9 +8,8 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ReactElement, ReactNode } from "react";
-import { I18nProvider, useI18n } from "../i18n";
-import { PRODUCT_LOCALE_STORAGE_KEY, type LocaleStorage } from "../i18n/locale";
+import type { ReactElement } from "react";
+import { I18nProvider } from "../i18n";
 import { ProductStateScreen } from "./ProductStateScreen";
 
 afterEach(cleanup);
@@ -22,7 +21,6 @@ describe("ProductStateScreen", () => {
 
     expect(main.getAttribute("aria-busy")).toBe("true");
     expect(main.getAttribute("aria-label")).toBe("세션 확인 중");
-    expect(main.getAttribute("data-product-state")).toBe("loading");
     expect(screen.getByRole("status", { name: "세션 확인 중" })).toBeTruthy();
     expect(screen.queryByRole("heading")).toBeNull();
     expect(container.querySelector('[data-slot="product-page-frame"]')).toBeTruthy();
@@ -46,13 +44,8 @@ describe("ProductStateScreen", () => {
   it("keeps the zero-approval release gate calm and non-interactive", () => {
     const { container } = render(<ProductStateScreen kind="release" />);
     const main = screen.getByRole("main");
-    const state = container.querySelector('[data-slot="empty"]');
 
     expect(main.getAttribute("aria-busy")).toBeNull();
-    expect(main.getAttribute("data-product-state")).toBe("release");
-    expect(state?.className).toContain("border-0");
-    expect(state?.className).toContain("bg-transparent");
-    expect(state?.className).not.toContain("shadow");
     expect(container.querySelector("[aria-live]")).toBeNull();
     expect(container.querySelector('[data-slot="badge"]')).toBeNull();
     expect(screen.getByRole("heading", { name: "서비스 연결을 확인하고 있습니다" })).toBeTruthy();
@@ -184,7 +177,7 @@ describe("ProductStateScreen", () => {
   });
 
   it("gives a missing item its own quiet state", () => {
-    renderWithLocale(<ProductStateScreen kind="not-found" />, "en");
+    renderWithLocale(<ProductStateScreen kind="not-found" />, "en-US");
 
     expect(screen.getByRole("heading", { name: "We couldn't find that item" })).toBeTruthy();
     expect(screen.queryByRole("alert")).toBeNull();
@@ -198,40 +191,13 @@ describe("ProductStateScreen", () => {
         issue={{ code: "network" }}
         retry={{ pending: false, onRetry: vi.fn() }}
       />,
-      "en",
+      "en-US",
     );
 
     expect(screen.getByRole("heading", { name: "Unable to reach the control plane" }))
       .toBeTruthy();
     expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy();
     expect(screen.getByRole("alert").textContent).toContain("Connection error");
-  });
-
-  it("updates loading and unknown-error copy immediately when locale changes", async () => {
-    renderBase(
-      <I18nProvider navigatorLanguage="en-US" storage={localeStorage("en")}>
-        <LocaleSwitchFixture>
-          <ProductStateScreen
-            issue={{ code: "unknown" }}
-            kind="error"
-            placement="content"
-          />
-          <ProductStateScreen kind="loading" placement="content" />
-        </LocaleSwitchFixture>
-      </I18nProvider>,
-    );
-
-    expect(screen.getByRole("heading", {
-      name: "Unable to read the verified response",
-    })).toBeTruthy();
-    expect(screen.getByRole("region", { name: "Loading" })).toBeTruthy();
-    expect(screen.getByRole("alert").textContent).toContain("Response error");
-
-    await userEvent.setup().click(screen.getByRole("button", { name: "한국어로 전환" }));
-
-    expect(screen.getByRole("heading", { name: "정보를 불러오지 못했습니다" })).toBeTruthy();
-    expect(screen.getByRole("region", { name: "불러오는 중" })).toBeTruthy();
-    expect(screen.getByRole("alert").textContent).toContain("응답 오류");
   });
 
   it("uses a named section instead of nesting main landmarks for content placement", () => {
@@ -244,44 +210,23 @@ describe("ProductStateScreen", () => {
     expect(screen.getAllByRole("main")).toHaveLength(1);
     const region = screen.getByRole("region", { name: "불러오는 중" });
     expect(region).toBeTruthy();
-    expect(region.getAttribute("data-product-state")).toBe("loading");
     expect(screen.queryByRole("heading")).toBeNull();
     expect(screen.getByRole("status", { name: "불러오는 중" })).toBeTruthy();
   });
 });
 
 function render(element: ReactElement) {
-  return renderWithLocale(element, "ko");
+  return renderWithLocale(element, "ko-KR");
 }
 
-function renderWithLocale(element: ReactElement, locale: "en" | "ko") {
+function renderWithLocale(element: ReactElement, navigatorLanguage: string) {
   return renderBase(element, {
     wrapper: ({ children }) => (
-      <I18nProvider
-        navigatorLanguage={locale === "ko" ? "ko-KR" : "en-US"}
-        storage={localeStorage(locale)}
-      >
+      <I18nProvider navigatorLanguage={navigatorLanguage} storage={null}>
         {children}
       </I18nProvider>
     ),
   });
-}
-
-function localeStorage(locale: "en" | "ko"): LocaleStorage {
-  return {
-    getItem: (key) => key === PRODUCT_LOCALE_STORAGE_KEY ? locale : null,
-    setItem: () => undefined,
-  };
-}
-
-function LocaleSwitchFixture({ children }: { children: ReactNode }) {
-  const { setLocale } = useI18n();
-  return (
-    <>
-      <button onClick={() => setLocale("ko")} type="button">한국어로 전환</button>
-      {children}
-    </>
-  );
 }
 
 function assertProductStateTypeContracts() {

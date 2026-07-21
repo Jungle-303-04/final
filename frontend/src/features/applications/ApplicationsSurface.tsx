@@ -1,10 +1,10 @@
-import { Boxes, GitBranch } from "lucide-react";
-import { useMemo } from "react";
+import { Boxes, GitBranch, Grid2X2, List } from "lucide-react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useI18n } from "../../shared/i18n";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
-import { buttonVariants } from "../../shared/ui/primitives/button";
+import { Button, buttonVariants } from "../../shared/ui/primitives/button";
 import {
   Empty,
   EmptyContent,
@@ -13,6 +13,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "../../shared/ui/primitives/empty";
+import { ApplicationCard } from "./ApplicationCard";
 import { ApplicationDetailWorkspace, openApplicationDetail } from "./ApplicationDetailWorkspace";
 import { ApplicationsFailureState, ApplicationsRefreshControl } from "./ApplicationsState";
 import { ApplicationsTable } from "./ApplicationsTable";
@@ -21,6 +22,8 @@ import { applicationsCopy } from "../../shared/i18n/applicationSurfaceCopy";
 import type { ApplicationsPort } from "./applicationsContract";
 import { useApplicationCatalog } from "./useApplicationsData";
 import { useUnifiedFilter } from "../filters/UnifiedFilterProvider";
+
+type ApplicationsView = "grid" | "table";
 
 export function ApplicationsSurface({ port }: { port: ApplicationsPort }) {
   const filter = useUnifiedFilter();
@@ -38,6 +41,9 @@ function ApplicationsCatalog({
   filter: ReturnType<typeof useUnifiedFilter>;
   port: ApplicationsPort;
 }) {
+  const { locale } = useI18n();
+  const copy = applicationsCopy(locale);
+  const [view, setView] = useState<ApplicationsView>("grid");
   const catalogFilter = useMemo(
     () => applicationCatalogFilterFromState(filter.state),
     [filter.state],
@@ -48,23 +54,40 @@ function ApplicationsCatalog({
   if (catalog.phase === "failed") return <ApplicationsFailureState failure={catalog.failure} onRetry={refresh} />;
   const open = (applicationId: string) => openApplicationDetail(filter, applicationId);
   return (
-    <ProductPageFrame aria-busy={catalog.refreshing} className="pt-0">
+    <ProductPageFrame aria-busy={catalog.refreshing}>
+      <header className="flex min-w-0 flex-wrap items-start justify-between gap-3">
+        <div className="grid min-w-0 gap-1">
+          <h2 className="text-2xl font-semibold tracking-tight">{copy.title}</h2>
+          <p className="text-sm text-muted-foreground">{copy.description}</p>
+        </div>
+        <ApplicationsRefreshControl onRefresh={refresh} resource={catalog} />
+      </header>
+      <div className="flex min-w-0 items-center justify-end">
+        <div className="flex items-center gap-1" role="group" aria-label={copy.title}>
+          <Button aria-label={copy.gridView} aria-pressed={view === "grid"} onClick={() => setView("grid")} size="icon" type="button" variant={view === "grid" ? "secondary" : "ghost"}><Grid2X2 aria-hidden="true" /></Button>
+          <Button aria-label={copy.tableView} aria-pressed={view === "table"} onClick={() => setView("table")} size="icon" type="button" variant={view === "table" ? "secondary" : "ghost"}><List aria-hidden="true" /></Button>
+        </div>
+      </div>
       {catalog.data.length === 0 ? (
-        <ApplicationsEmptyState href={repositoryConnectionHref(filter)} />
+        <ApplicationsEmptyState href={gitOpsCreateHref(filter)} />
+      ) : view === "grid" ? (
+        <ul className="grid min-w-0 gap-4 md:grid-cols-2 2xl:grid-cols-3">
+          {catalog.data.map((application) => (
+            <li className="min-w-0" key={application.id}>
+              <ApplicationCard application={application} onOpen={() => open(application.id)} />
+            </li>
+          ))}
+        </ul>
       ) : (
-        <ApplicationsTable
-          applications={catalog.data}
-          onOpen={open}
-          refreshControl={<ApplicationsRefreshControl onRefresh={refresh} resource={catalog} />}
-        />
+        <ApplicationsTable applications={catalog.data} onOpen={open} />
       )}
     </ProductPageFrame>
   );
 }
 
 function ApplicationsEmptyState({ href }: { href: string }) {
-  const { t } = useI18n();
-  const copy = applicationsCopy(t);
+  const { locale } = useI18n();
+  const copy = applicationsCopy(locale);
   return (
     <Empty className="min-h-80 rounded-xl border bg-card px-6 py-12 shadow-sm">
       <EmptyMedia className="bg-primary/10 text-primary" variant="icon">
@@ -86,9 +109,8 @@ function ApplicationsEmptyState({ href }: { href: string }) {
   );
 }
 
-function repositoryConnectionHref(filter: ReturnType<typeof useUnifiedFilter>): string {
-  return filter.navigationHref("/deploy", {
-    ...filter.detail,
-    surfaceTab: "repositories",
-  });
+function gitOpsCreateHref(filter: ReturnType<typeof useUnifiedFilter>): string {
+  const href = filter.navigationHref("/gitops");
+  const separator = href.includes("?") ? "&" : "?";
+  return `${href}${separator}mode=new`;
 }

@@ -39,12 +39,9 @@ export function toResourceCapabilities(
         minimum: input.minimum,
         maximum: input.maximum,
         default: input.default,
-        prefillResultKey: input.prefill_result_key,
       })),
       method: item.method,
       path: item.path,
-      requestContext: item.request_context,
-      resultIntent: item.result_intent,
     })),
   };
 }

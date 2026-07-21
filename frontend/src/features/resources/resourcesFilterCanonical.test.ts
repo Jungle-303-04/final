@@ -5,7 +5,6 @@ import {
   toResourcesLabelFacetPage,
   toResourcesResourcePage,
 } from "./resourcesFilterCanonical";
-import type { ResourcesFilterEndpointResourceItem } from "./resourcesFilterEndpointContract";
 import {
   FACET_PAGE,
   FILTER_SNAPSHOT,
@@ -100,45 +99,6 @@ describe("Resources filter canonical projections", () => {
         stale: true,
         partialReasonCodes: ["restricted-source"],
       },
-    });
-  });
-
-  it("maps server-owned table metrics onto the existing resource row", () => {
-    const row = {
-      ...endpointFilteredResource(),
-      metrics: {
-        kind: "pod" as const,
-        resource_uid: "uid-pod-1",
-        source_snapshot_id: "snapshot-42",
-        observed_at: "2026-07-17T01:00:00Z",
-        measurement_window: "30s",
-        cpu_mcores: 250,
-        memory_mib: 192,
-        cpu_request_mcores: 150,
-        cpu_limit_mcores: 600,
-        memory_request_mib: 192,
-        memory_limit_mib: 384,
-        completeness: "exact" as const,
-        reason_codes: [],
-      },
-    } as ResourcesFilterEndpointResourceItem & { metrics: Record<string, unknown> };
-
-    const result = toResourcesResourcePage({ ...RESOURCE_PAGE, items: [row] });
-
-    expect(result.items[0]?.resource.tableMetrics).toEqual({
-      kind: "pod",
-      resourceUid: "uid-pod-1",
-      sourceSnapshotId: "snapshot-42",
-      observedAt: "2026-07-17T01:00:00.000Z",
-      measurementWindow: "30s",
-      cpuMillicores: 250,
-      memoryMebibytes: 192,
-      cpuRequestMillicores: 150,
-      cpuLimitMillicores: 600,
-      memoryRequestMebibytes: 192,
-      memoryLimitMebibytes: 384,
-      completeness: "exact",
-      reasonCodes: [],
     });
   });
 

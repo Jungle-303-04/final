@@ -55,6 +55,7 @@ describe("ResourcesPage scope and collection semantics", () => {
 
     expect(await screen.findByRole("table", { name: "리소스 목록" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "파드, 3개" })).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "클러스터, 리소스 2개" }));
     await user.click(screen.getByRole("button", { name: "노드, 2개" }));
 
     await waitFor(() => expect(listResources).toHaveBeenLastCalledWith(
@@ -145,7 +146,6 @@ describe("ResourcesPage scope and collection semantics", () => {
       () =>
         expect(port.loadCatalog).toHaveBeenCalledWith(
           "cluster-1",
-          [],
           expect.any(AbortSignal),
         ),
       { timeout: 5_000 },
@@ -204,26 +204,6 @@ describe("ResourcesPage scope and collection semantics", () => {
     expect(
       screen.queryByRole("heading", { name: "정보를 불러오지 못했습니다" }),
     ).toBeNull();
-  });
-
-  it("keeps a section 429 inside the resource surface", async () => {
-    const reportUnauthorized = vi.fn();
-    const port = resourcesPort({
-      loadCatalog: vi
-        .fn()
-        .mockRejectedValue(new ResourcesPortFailure("rate-limited", 23)),
-    });
-    renderResources(
-      port,
-      "/resources?clusters=cluster-1&resources.types=pod",
-      resourcesClusterPort(),
-      reportUnauthorized,
-    );
-
-    expect(
-      await screen.findByRole("heading", { name: "요청 한도에 도달했습니다" }),
-    ).toBeTruthy();
-    expect(reportUnauthorized).not.toHaveBeenCalled();
   });
 
   it("renders a first-class cluster-read 403 and removes cached resource content", async () => {
@@ -298,10 +278,15 @@ describe("ResourcesPage scope and collection semantics", () => {
     expect(
       screen.queryByRole("searchbox", { name: "Search displayed results" }),
     ).toBeNull();
-    expect(within(table).getAllByText("Running").length).toBeGreaterThan(0);
-    expect(within(table).getAllByText("Pod").length).toBeGreaterThan(0);
+    const includeInactive = screen.getByRole("button", {
+      name: "Include inactive resources",
+    });
+    expect(includeInactive.className).toContain("h-7");
+    expect(includeInactive.closest('[data-slot="resources-graph-toolbar"]')).toBeTruthy();
     expect(document.querySelector('[aria-label="Resource filters"]')).toBeNull();
     expect(screen.getByText("Types currently observed in this cluster")).toBeTruthy();
+    expect(within(table).getAllByText("Running").length).toBeGreaterThan(0);
+    expect(within(table).getAllByText("Pod").length).toBeGreaterThan(0);
   });
 
 });

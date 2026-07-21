@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import {
   ASYNC_IDLE,
@@ -10,49 +10,31 @@ import {
   type AsyncResourceState,
 } from "../../shared/data/asyncResourceState";
 import { acquireSharedRequest } from "../../shared/data/sharedRequest";
-import { useServerRefreshScheduler } from "../../shared/data/useServerRefreshScheduler";
+import { useVisibleRefreshClock } from "../../shared/data/useVisibleRefreshClock";
 import {
   HelmPortFailure,
   type HelmPort,
   type HelmReleaseDetail,
   type HelmReleaseDetailRequest,
   type HelmReleaseList,
-  type HelmReleaseUpgradeBatch,
-  type HelmReleaseUpgradeInfo,
-  type HelmReleaseVersionList,
 } from "../../features/helm/helmContract";
 
-export interface HelmReleaseListView extends HelmReleaseList {
-  upgrades: HelmReleaseUpgradeBatch;
-}
-
-export interface HelmReleaseDetailView extends HelmReleaseDetail {
-  upgradeInfo: HelmReleaseUpgradeInfo;
-  availableVersions: HelmReleaseVersionList;
-}
+const HELM_READ_REFRESH_INTERVAL_MS = 30_000;
 
 export function useHelmReleaseList(
   port: HelmPort,
   clusterIds: readonly string[],
 ): {
-  frame: AsyncResourceState<HelmReleaseListView, HelmPortFailure>;
+  frame: AsyncResourceState<HelmReleaseList, HelmPortFailure>;
   refresh: () => void;
-  refreshAfterMutation: () => void;
 } {
-  const [revision, setRevision] = useState(0);
-  const refreshController = useServerRefreshScheduler(
-    () => setRevision((current) => current + 1),
-  );
-  const scopeKey = JSON.stringify([...new Set(clusterIds)].sort());
+  const { refresh, revision } = useVisibleRefreshClock(true, HELM_READ_REFRESH_INTERVAL_MS);
   const canonicalClusterIds = useMemo(
-    () => JSON.parse(scopeKey) as string[],
-    [scopeKey],
+    () => [...new Set(clusterIds)].sort(),
+    [clusterIds],
   );
-  const [frame, setFrame] = useState<AsyncResourceState<HelmReleaseListView, HelmPortFailure>>(ASYNC_LOADING);
-
-  useEffect(() => {
-    refreshController.backgroundFailure();
-  }, [refreshController, scopeKey]);
+  const scopeKey = canonicalClusterIds.join("\u001f");
+  const [frame, setFrame] = useState<AsyncResourceState<HelmReleaseList, HelmPortFailure>>(ASYNC_LOADING);
 
   useEffect(() => {
     let active = true;
@@ -62,31 +44,14 @@ export function useHelmReleaseList(
     const request = acquireSharedRequest(
       port,
       `helm-releases:${scopeKey}:r${revision}`,
-      async (signal) => {
-        const scope = { clusterIds: canonicalClusterIds };
-        const [releaseList, upgrades] = await Promise.all([
-          port.listReleases(scope, signal),
-          port.checkReleaseUpgrades(scope, signal),
-        ]);
-        return {
-          ...releaseList,
-          upgrades,
-          refreshAfterSeconds: Math.min(
-            releaseList.refreshAfterSeconds,
-            upgrades.refreshAfterSeconds,
-          ),
-        };
-      },
+      (signal) => port.listReleases({ clusterIds: canonicalClusterIds }, signal),
     );
     void request.promise.then(
       (data) => {
-        if (!active) return;
-        setFrame(asyncResourceSuccess(data));
-        refreshController.acceptSuccess(data);
+        if (active) setFrame(asyncResourceSuccess(data));
       },
       (error: unknown) => {
         if (!active || isAbortError(error)) return;
-        refreshController.backgroundFailure();
         setFrame((current) => asyncResourceFailure(current, toPortFailure(error)));
       },
     );
@@ -94,52 +59,26 @@ export function useHelmReleaseList(
       active = false;
       request.release();
     };
-  }, [canonicalClusterIds, port, refreshController, revision, scopeKey]);
+  }, [canonicalClusterIds, port, revision, scopeKey]);
 
-  const refreshAfterMutation = useCallback(() => {
-    if (frame.phase !== "ready") return;
-    refreshController.requestMutationRefresh(frame.data.postMutationRefreshAfterSeconds);
-  }, [frame, refreshController]);
-
-  return {
-    frame,
-    refresh: refreshController.requestRefresh,
-    refreshAfterMutation,
-  };
+  return { frame, refresh };
 }
 
 export function useHelmReleaseDetail(
   port: HelmPort,
   request: HelmReleaseDetailRequest | null,
 ): {
-  frame: AsyncResourceState<HelmReleaseDetailView, HelmPortFailure>;
+  frame: AsyncResourceState<HelmReleaseDetail, HelmPortFailure>;
   refresh: () => void;
-  refreshAfterMutation: () => void;
 } {
-  const [revision, setRevision] = useState(0);
-  const refreshController = useServerRefreshScheduler(
-    () => setRevision((current) => current + 1),
-  );
+  const { refresh, revision } = useVisibleRefreshClock(request !== null, HELM_READ_REFRESH_INTERVAL_MS);
   const identityKey = request
-    ? JSON.stringify([request.clusterId, request.namespace, request.releaseName])
+    ? [request.clusterId, request.namespace, request.releaseName].join("\u001f")
     : null;
-  const canonicalRequest = useMemo<HelmReleaseDetailRequest | null>(() => {
-    if (identityKey === null) return null;
-    const [clusterId, namespace, releaseName] = JSON.parse(identityKey) as [
-      string,
-      string,
-      string,
-    ];
-    return { clusterId, namespace, releaseName };
-  }, [identityKey]);
-  const [frame, setFrame] = useState<AsyncResourceState<HelmReleaseDetailView, HelmPortFailure>>(ASYNC_IDLE);
+  const [frame, setFrame] = useState<AsyncResourceState<HelmReleaseDetail, HelmPortFailure>>(ASYNC_IDLE);
 
   useEffect(() => {
-    refreshController.backgroundFailure();
-  }, [identityKey, refreshController]);
-
-  useEffect(() => {
-    if (canonicalRequest === null || identityKey === null) {
+    if (request === null || identityKey === null) {
       queueMicrotask(() => setFrame(ASYNC_IDLE));
       return;
     }
@@ -150,33 +89,14 @@ export function useHelmReleaseDetail(
     const sharedRequest = acquireSharedRequest(
       port,
       `helm-release:${identityKey}:r${revision}`,
-      async (signal) => {
-        const [detail, upgradeInfo, availableVersions] = await Promise.all([
-          port.getRelease(canonicalRequest, signal),
-          port.getReleaseUpgradeInfo(canonicalRequest, signal),
-          port.listReleaseVersions(canonicalRequest, signal),
-        ]);
-        return {
-          ...detail,
-          upgradeInfo,
-          availableVersions,
-          refreshAfterSeconds: Math.min(
-            detail.refreshAfterSeconds,
-            upgradeInfo.refreshAfterSeconds,
-            availableVersions.refreshAfterSeconds,
-          ),
-        };
-      },
+      (signal) => port.getRelease(request, signal),
     );
     void sharedRequest.promise.then(
       (data) => {
-        if (!active) return;
-        setFrame(asyncResourceSuccess(data));
-        refreshController.acceptSuccess(data);
+        if (active) setFrame(asyncResourceSuccess(data));
       },
       (error: unknown) => {
         if (!active || isAbortError(error)) return;
-        refreshController.backgroundFailure();
         setFrame((current) => asyncResourceFailure(current, toPortFailure(error)));
       },
     );
@@ -184,18 +104,9 @@ export function useHelmReleaseDetail(
       active = false;
       sharedRequest.release();
     };
-  }, [canonicalRequest, identityKey, port, refreshController, revision]);
+  }, [identityKey, port, request, revision]);
 
-  const refreshAfterMutation = useCallback(() => {
-    if (frame.phase !== "ready") return;
-    refreshController.requestMutationRefresh(frame.data.postMutationRefreshAfterSeconds);
-  }, [frame, refreshController]);
-
-  return {
-    frame,
-    refresh: refreshController.requestRefresh,
-    refreshAfterMutation,
-  };
+  return { frame, refresh };
 }
 
 function toPortFailure(error: unknown): HelmPortFailure {

@@ -16,7 +16,6 @@ import {
   decodeResourceDetail,
   decodeResourceTarget,
   encodeResourceDetail,
-  encodeResourceTarget,
 } from "./resourcesUrlState";
 
 export function useResourcesDetailState(
@@ -110,7 +109,7 @@ export function useResourcesDetailState(
   }, [filter, setRetryBlocks]);
 
   const openDetail = useCallback(
-    (identity: ResourceIdentity, tab: string | null = null) => {
+    (identity: ResourceIdentity) => {
       if (selectedClusterId === null) return;
       restoreRowKey.current = identityKey(identity);
       filter.updateFilters(
@@ -127,7 +126,7 @@ export function useResourcesDetailState(
           full: false,
           resource: null,
           resourceKind: null,
-          tab,
+          tab: null,
         }),
         "detail-open",
       );
@@ -137,42 +136,16 @@ export function useResourcesDetailState(
 
   const navigateDetail = useCallback((identity: ResourceIdentity) => {
     restoreRowKey.current = identityKey(identity);
-    if (identity.resourceType !== selectedResourceType) {
-      filter.updateFilters(
-        (current) => ({
-          ...current,
-          resources: {
-            ...current.resources,
-            types: [identity.resourceType],
-          },
-        }),
-        "chip-add",
-      );
-    }
     filter.updateDetail(
       (current) => ({
         ...current,
         detail: encodeResourceDetail(identity),
+        full: false,
         resource: null,
         resourceKind: null,
         tab: null,
       }),
       "detail-tab",
-    );
-  }, [filter, selectedResourceType]);
-
-  const openDetailTarget = useCallback((clusterId: string, identity: ResourceIdentity) => {
-    const target = encodeResourceTarget(clusterId, identity);
-    filter.updateDetail(
-      (current) => ({
-        ...current,
-        detail: null,
-        full: false,
-        resource: target.resource,
-        resourceKind: target.kind,
-        tab: null,
-      }),
-      "detail-open",
     );
   }, [filter]);
 
@@ -191,7 +164,6 @@ export function useResourcesDetailState(
     detailRequested,
     detailTarget,
     openDetail,
-    openDetailTarget,
     navigateDetail,
     registerRowButton,
   };

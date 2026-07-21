@@ -122,6 +122,7 @@ describe("workspace Resources filter API", () => {
         cluster: { cluster_id: "cluster-a", name: "production", provider: "private-cloud" },
         application_ids: ["app-checkout"],
         application_binding_completeness: "partial",
+        metrics: null,
       }],
       next_cursor: null,
       has_more: false,
@@ -151,57 +152,6 @@ describe("workspace Resources filter API", () => {
       "/api/resources?clusters=cluster-a%2Ccluster%2Fb&namespaces=cluster-a%2Fshop&applications=app-checkout&resources.types=pod%2Cworkload&resources.health=degraded%2Chealthy&labels=team%3Dcheckout%2Ctier%3Dcritical&resources.q=api+checkout&resources.includeDeleted=false&cursor=cursor%2F1&limit=100",
       expect.objectContaining({ method: "GET", credentials: "include" }),
     );
-  });
-
-  it("accepts snapshot-bound Pod table metrics without treating missing values as zero", async () => {
-    const metrics = {
-      kind: "pod",
-      resource_uid: "uid-checkout",
-      source_snapshot_id: "snapshot-42",
-      observed_at: "2026-07-17T01:00:00Z",
-      measurement_window: "30s",
-      cpu_mcores: 250,
-      memory_mib: 192,
-      cpu_request_mcores: 150,
-      cpu_limit_mcores: 600,
-      memory_request_mib: 192,
-      memory_limit_mib: null,
-      completeness: "partial",
-      reason_codes: ["pod_memory_limit_unavailable"],
-    };
-    const payload = {
-      items: [{
-        resource: {
-          ...RESOURCE,
-          resource_type: "pod",
-          api_version: "v1",
-          kind: "Pod",
-          uid: "uid-checkout",
-        },
-        cluster: { cluster_id: "cluster-a", name: "production", provider: "eks" },
-        application_ids: [],
-        application_binding_completeness: "exact",
-        metrics,
-      }],
-      next_cursor: null,
-      has_more: false,
-      counts: {
-        filtered_count: 1,
-        unfiltered_count: 1,
-        filtered_count_completeness: "exact",
-        unfiltered_count_completeness: "exact",
-      },
-      snapshot: SNAPSHOT,
-    };
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse(payload));
-
-    const response = await listFilteredResources({ resourceTypes: ["pod"] });
-
-    expect(response.items[0]?.metrics).toEqual(metrics);
-    const parsedMetrics = response.items[0]?.metrics;
-    expect(parsedMetrics?.kind).toBe("pod");
-    if (parsedMetrics?.kind !== "pod") throw new Error("expected Pod table metrics");
-    expect(parsedMetrics.memory_limit_mib).toBeNull();
   });
 
   it("loads server-computed Label facets without changing the selected AND set", async () => {

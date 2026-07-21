@@ -99,8 +99,6 @@ export interface IssueRcaReport {
   evidenceRef: string | null;
   supportingEvidence: string[];
   missingEvidence: string[];
-  evidenceSummary: string | null;
-  evidenceBundleSummary: string | null;
   secondarySymptoms: string[];
   selectedCandidateId: string | null;
   candidates: IssueCandidateScore[];

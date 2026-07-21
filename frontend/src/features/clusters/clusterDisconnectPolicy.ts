@@ -4,9 +4,7 @@ export function canOfferClusterDisconnect(
   roles: readonly string[] | null | undefined,
   cluster: HomeClusterChoice,
 ): boolean {
-  return roles?.includes("service_admin") === true
-    && cluster.observationMode !== "simulation"
-    && !isManagementCluster(cluster);
+  return roles?.includes("service_admin") === true && !isManagementCluster(cluster);
 }
 
 export function activeClusterChoices<T extends HomeClusterChoice>(clusters: readonly T[]): T[] {
@@ -25,6 +23,6 @@ export function refreshAfterClusterDisconnect(
   scope.refresh();
 }
 
-export function isManagementCluster(cluster: HomeClusterChoice): boolean {
+function isManagementCluster(cluster: HomeClusterChoice): boolean {
   return cluster.environment.trim().toLocaleLowerCase() === "management";
 }

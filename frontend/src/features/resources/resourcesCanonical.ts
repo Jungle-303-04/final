@@ -1,6 +1,5 @@
 import type {
   ResourceCatalog,
-  ResourceApiDiscovery,
   ResourceDataQualityWarning,
   ResourceDetail,
   ResourceHealthCounts,
@@ -10,7 +9,6 @@ import type {
   ResourceSummary,
 } from "./resourcesContract";
 import type {
-  KubernetesApiResourcesEndpoint,
   ResourcesEndpointInventorySummary,
   ResourcesEndpointResourceDetail,
   ResourcesEndpointResourceList,
@@ -38,16 +36,12 @@ import {
   responseTimestamp,
   safeAdd,
 } from "./resourcesValidation";
-import { toProviderResourceDetail } from "./providerResourceCanonical";
-import { toResourceAccessDetail } from "./resourceAccessContract";
 
 export function toResourceCatalog(
   requestedClusterId: string,
   wire: ResourcesEndpointInventorySummary,
-  apiWire: KubernetesApiResourcesEndpoint,
 ): ResourceCatalog {
   assertSameIdentity(wire.cluster_id, requestedClusterId);
-  assertSameIdentity(apiWire.cluster_id, requestedClusterId);
   const byResourceType = new Map<string, ResourceHealthCounts>();
   for (const rawCount of wire.counts) {
     const record = responseRecord(rawCount);
@@ -56,23 +50,6 @@ export function toResourceCatalog(
     const counts = byResourceType.get(resourceType) ?? emptyHealthCounts();
     counts[tone] = safeAdd(counts[tone], nonNegativeInteger(record.count));
     byResourceType.set(resourceType, counts);
-  }
-  const evidence = resourceCountEvidence(wire.counts_evidence);
-  const apiDiscovery = toApiResourceDiscovery(apiWire);
-  const hasConcreteWorkloadCounts = [...WORKLOAD_RESOURCE_TYPES].some(
-    (resourceType) => byResourceType.has(resourceType),
-  );
-  if (hasConcreteWorkloadCounts) byResourceType.delete("workload");
-  if (evidence.completeness === "observed") {
-    for (const resource of apiDiscovery.resources) {
-      if (!resource.verbs.includes("list")) continue;
-      const resourceType = DISCOVERED_RESOURCE_TYPES.get(
-        `${resource.apiVersion}:${resource.kind}`,
-      );
-      if (resourceType && !byResourceType.has(resourceType)) {
-        byResourceType.set(resourceType, emptyHealthCounts());
-      }
-    }
   }
   const items = [...byResourceType.entries()]
     .map(([resourceType, healthCounts]) => ({
@@ -83,113 +60,9 @@ export function toResourceCatalog(
     .sort((left, right) => left.resourceType.localeCompare(right.resourceType));
   return {
     clusterId: requestedClusterId,
-    completeness: evidence.completeness,
-    observedAt: evidence.observedAt,
-    namespaceScope: evidence.namespaceScope,
-    reasonCodes: evidence.reasonCodes,
-    forbidden: evidence.forbidden,
+    completeness: "unknown",
+    observedAt: catalogObservedAt(wire.latest_snapshot),
     items,
-    apiDiscovery,
-  };
-}
-
-const WORKLOAD_RESOURCE_TYPES = new Set([
-  "deployment",
-  "statefulset",
-  "daemonset",
-  "replicaset",
-  "job",
-  "cronjob",
-]);
-
-const DISCOVERED_RESOURCE_TYPES = new Map<string, string>([
-  ["v1:Pod", "pod"],
-  ["v1:Node", "node"],
-  ["v1:ConfigMap", "configmap"],
-  ["v1:Secret", "secret"],
-  ["apps/v1:Deployment", "deployment"],
-  ["apps/v1:StatefulSet", "statefulset"],
-  ["apps/v1:DaemonSet", "daemonset"],
-  ["apps/v1:ReplicaSet", "replicaset"],
-  ["batch/v1:Job", "job"],
-  ["batch/v1:CronJob", "cronjob"],
-  ["v1:Service", "service"],
-  ["discovery.k8s.io/v1:EndpointSlice", "endpoint"],
-  ["networking.k8s.io/v1:Ingress", "ingress"],
-  ["networking.k8s.io/v1:NetworkPolicy", "networkpolicy"],
-  ["autoscaling/v2:HorizontalPodAutoscaler", "hpa"],
-  ["autoscaling/v1:HorizontalPodAutoscaler", "hpa"],
-  ["v1:PersistentVolumeClaim", "pvc"],
-  ["v1:PersistentVolume", "persistentvolume"],
-  ["storage.k8s.io/v1:StorageClass", "storageclass"],
-  ["v1:ResourceQuota", "resourcequota"],
-  ["v1:Event", "event"],
-]);
-
-function resourceCountEvidence(
-  value: ResourcesEndpointInventorySummary["counts_evidence"],
-): Pick<
-  ResourceCatalog,
-  "completeness" | "observedAt" | "namespaceScope" | "reasonCodes" | "forbidden"
-> {
-  const namespaceScope = value.namespace_scope.map(responseIdentity);
-  const reasonCodes = value.reason_codes.map(responseIdentity);
-  if (new Set(namespaceScope).size !== namespaceScope.length
-    || [...namespaceScope].sort().some((item, index) => item !== namespaceScope[index])
-    || new Set(reasonCodes).size !== reasonCodes.length) invalidResponse();
-  const observedAt = responseTimestamp(value.observed_at);
-  if (value.completeness === "observed" && (observedAt === null || reasonCodes.length > 0)) {
-    invalidResponse();
-  }
-  if (value.completeness !== "observed" && reasonCodes.length === 0) invalidResponse();
-  if (value.completeness === "unavailable" && (observedAt !== null || value.forbidden.length > 0)) {
-    invalidResponse();
-  }
-  return {
-    completeness: value.completeness,
-    observedAt,
-    namespaceScope,
-    reasonCodes,
-    forbidden: value.forbidden.map((item) => ({
-      namespace: responseOptionalIdentity(item.namespace),
-      apiGroup: item.api_group,
-      version: responseIdentity(item.version),
-      resource: responseIdentity(item.resource),
-      kind: responseIdentity(item.kind),
-      namespaced: item.namespaced,
-      reasonCode: item.reason_code,
-    })),
-  };
-}
-
-function toApiResourceDiscovery(
-  wire: KubernetesApiResourcesEndpoint,
-): ResourceApiDiscovery {
-  if (wire.discovery === null) {
-    if (!wire.unavailable_reason) invalidResponse();
-    return {
-      completeness: "unavailable",
-      observedAt: null,
-      reasonCodes: [wire.unavailable_reason],
-      resources: [],
-    };
-  }
-  if (wire.unavailable_reason !== null) invalidResponse();
-  return {
-    completeness: wire.discovery.completeness,
-    observedAt: responseTimestamp(wire.discovery.observed_at),
-    reasonCodes: [...wire.discovery.reason_codes],
-    resources: wire.discovery.resources.map((resource) => ({
-      apiVersion: responseIdentity(resource.api_version),
-      group: resource.group,
-      version: responseIdentity(resource.version),
-      pluralName: responseIdentity(resource.name),
-      singularName: resource.singular_name,
-      kind: responseIdentity(resource.kind),
-      namespaced: resource.namespaced,
-      isCrd: resource.is_crd,
-      verbs: [...resource.verbs],
-    })),
   };
 }
 
@@ -293,8 +166,6 @@ export function toResourceDetail(
     clusterId: requestedClusterId,
     identity: requestedIdentity,
     resource,
-    providerDetail: toProviderResourceDetail(wire.provider_detail),
-    access: toResourceAccessDetail(wire.access),
     relatedCompleteness: "unknown",
     related,
     relatedExcludedCount,
@@ -303,6 +174,10 @@ export function toResourceDetail(
     eventExcludedCount: projectedEvents.excludedCount,
     dataQualityWarnings,
   };
+}
+
+function catalogObservedAt(snapshot: Record<string, unknown> | null): string | null {
+  return snapshot === null ? null : responseTimestamp(responseRecord(snapshot).collected_at);
 }
 
 function assertDetailIdentity(

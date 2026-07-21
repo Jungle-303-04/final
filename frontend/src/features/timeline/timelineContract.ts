@@ -348,10 +348,6 @@ export interface TimelineSnapshot {
   policy: TimelineRealtimePolicy;
   events: readonly TimelineEvent[];
   coverage: readonly TimelineCoverage[];
-  /** True when the server returned the newest safe event window only. */
-  truncated: boolean;
-  /** Server-owned maximum represented by a truncated snapshot. */
-  eventLimit: number | null;
   /** The pin revision bound into this snapshot, or null for a non-pinned read. */
   pinSetRevision: number | null;
 }

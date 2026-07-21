@@ -11,50 +11,40 @@ import {
 } from "./productRoutes";
 
 describe("product route release registry", () => {
-  it("keeps every supported primary navigation surface in the product descriptor", () => {
+  it("keeps every upstream primary navigation surface in the product descriptor", () => {
     expect(referenceNavigationRoutes().map((route) => [route.id, route.path, route.shortcut]))
       .toEqual([
         ["home", "/home", "g h"],
         ["resources", "/resources", "g r"],
-        ["deploy", "/deploy", "g d"],
         ["issues", "/issues", "g i"],
+        ["topology", "/topology", "g t"],
+        ["applications", "/applications", "g a"],
         ["timeline", "/timeline", "g l"],
+        ["traffic", "/traffic", "g f"],
+        ["helm", "/helm", "g m"],
+        ["gitops", "/gitops", "g o"],
         ["checks", "/checks", "g u"],
         ["cost", "/cost", "g c"],
-        ["alerts", "/alerts", "g b"],
-        ["ai", "/ai", "g a"],
-        ["settings", "/settings", "g s"],
       ]);
   });
 
-  it("keeps legacy URLs outside the ten-item reference navigation", () => {
+  it("keeps product-only surfaces separate from the upstream primary route order", () => {
     expect(PRODUCT_ROUTE_CATALOG.map((route) => route.id)).toEqual([
       "home",
       "resources",
-      "deploy",
       "issues",
+      "topology",
+      "applications",
       "timeline",
+      "traffic",
+      "helm",
+      "gitops",
       "checks",
       "cost",
-      "alerts",
-      "ai",
-      "settings",
       "clusters",
-      "traffic",
-      "applications",
-      "gitops",
-      "helm",
+      "alerts",
+      "settings",
     ]);
-    expect(PRODUCT_ROUTE_CATALOG.filter((route) => route.navigation)).toHaveLength(10);
-    expect(PRODUCT_ROUTE_CATALOG.filter((route) => route.redirectTo !== null)
-      .map(({ id, redirectTo, redirectSection }) => [id, redirectTo, redirectSection]))
-      .toEqual([
-        ["clusters", "home", null],
-        ["traffic", "resources", null],
-        ["applications", "deploy", "applications"],
-        ["gitops", "deploy", "repositories"],
-        ["helm", "deploy", "helm"],
-      ]);
   });
 
   it("does not release a navigation entry without a registered surface", () => {
@@ -87,10 +77,8 @@ describe("product route release registry", () => {
     ["/home", "home"],
     ["/clusters", "clusters"],
     ["/resources/pods", "resources"],
-    ["/deploy", "deploy"],
-    ["/applications", "applications"],
     ["/alerts", "alerts"],
-    ["/ai", "ai"],
+    ["/topology", "topology"],
     ["/timeline", "timeline"],
     ["/traffic", "traffic"],
     ["/helm", "helm"],
@@ -114,10 +102,8 @@ describe("product route release registry", () => {
     }
   });
 
-  it("falls unknown and removed routes back to Home", () => {
+  it("falls unknown routes back to Home without treating known upstream screens as retired", () => {
     expect(resolveProductRoute("/not-a-route").id).toBe("home");
     expect(resolveProductRoute("/legacy-metrics").id).toBe("home");
-    expect(productRouteForPath("/topology")).toBeNull();
-    expect(resolveProductRoute("/topology").id).toBe("home");
   });
 });

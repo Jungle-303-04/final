@@ -8,100 +8,14 @@ describe("Cost overview API", () => {
   it("serializes scope and preserves unavailable cost evidence as null", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse(overview()));
 
-    await expect(getCostOverview({
-      clusterIds: ["cluster-b", "cluster-a", "cluster-a"],
-      namespaces: ["cluster-a/shop"],
-      timeRange: "7d",
-    })).resolves.toMatchObject({
+    await expect(getCostOverview({ clusterIds: ["cluster-b", "cluster-a", "cluster-a"] })).resolves.toMatchObject({
       observation: { currency: null, data_window: null },
       summary: { hourly_cost: null, monthly_projection: null, savings_recommendations: null },
-      trend: { availability: "unavailable", range: "7d", series: [] },
       refresh_after_seconds: 60,
-      trend_refresh_after_seconds: 120,
-      nodes_refresh_after_seconds: 120,
     });
 
     expect(COST_OVERVIEW_PATH).toBe("/api/cost/overview");
-    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/cost/overview?clusters=cluster-a%2Ccluster-b&namespaces=cluster-a%2Fshop&range=7d");
-  });
-
-  it("accepts bounded observed trend series and rejects oversized responses", async () => {
-    const fixture = overview();
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({
-      ...fixture,
-      trend: {
-        availability: "available",
-        range: "24h",
-        currency: "KRW",
-        reason_codes: [],
-        series: [{
-          key: "namespace/shop",
-          label: "shop",
-          points: [
-            { timestamp: 1_721_100_000, rate_micros: 1_000_000 },
-            { timestamp: 1_721_100_300, rate_micros: 2_000_000 },
-          ],
-        }],
-      },
-    }));
-
-    await expect(getCostOverview()).resolves.toMatchObject({
-      trend: { availability: "available", currency: "KRW" },
-    });
-
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({
-      ...fixture,
-      trend: {
-        availability: "available",
-        range: "24h",
-        currency: "KRW",
-        reason_codes: [],
-        series: [{
-          key: "namespace/shop",
-          label: "shop",
-          points: Array.from({ length: 481 }, (_, index) => ({
-            timestamp: 1_721_100_000 + index,
-            rate_micros: index,
-          })),
-        }],
-      },
-    }));
-    await expect(getCostOverview()).rejects.toMatchObject({ kind: "invalid-payload" });
-  });
-
-  it("accepts observed allocation summaries and rejects partial values without reasons", async () => {
-    const fixture = overview();
-    const observed = {
-      ...fixture,
-      observation: {
-        availability: "available",
-        observed_at: "2026-07-17T09:00:00Z",
-        currency: "USD",
-        data_window: "1h",
-        reason_codes: [],
-      },
-      summary: {
-        availability: "available",
-        hourly_cost: 2_000_000,
-        monthly_projection: 1_460_000_000,
-        storage_cost: 500_000,
-        idle_cost: null,
-        efficiency: null,
-        savings_recommendations: null,
-        reason_codes: [],
-      },
-    };
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse(observed));
-    await expect(getCostOverview()).resolves.toMatchObject({
-      observation: { availability: "available", currency: "USD" },
-      summary: { availability: "available", hourly_cost: 2_000_000 },
-    });
-
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({
-      ...observed,
-      observation: { ...observed.observation, availability: "partial" },
-    }));
-    await expect(getCostOverview()).rejects.toMatchObject({ kind: "invalid-payload" });
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/cost/overview?clusters=cluster-a%2Ccluster-b");
   });
 
   it("fails closed if unavailable cost has a numeric amount, currency, or recommendation", async () => {
@@ -138,7 +52,7 @@ function overview() {
       observed_at: null,
       currency: null,
       data_window: null,
-      reason_codes: ["cost_observation_unavailable"],
+      reason_codes: ["cost_observation_not_integrated"],
     },
     summary: {
       availability: "unavailable",
@@ -148,14 +62,14 @@ function overview() {
       idle_cost: null,
       efficiency: null,
       savings_recommendations: null,
-      reason_codes: ["cost_observation_unavailable"],
+      reason_codes: ["cost_observation_not_integrated"],
     },
     trend: {
       availability: "unavailable",
-      range: "7d",
+      range: "24h",
       currency: null,
       series: [],
-      reason_codes: ["cost_observation_unavailable"],
+      reason_codes: ["cost_observation_not_integrated"],
     },
     refresh_after_seconds: 60,
     trend_refresh_after_seconds: 120,

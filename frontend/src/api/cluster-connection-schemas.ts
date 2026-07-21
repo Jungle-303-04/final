@@ -8,7 +8,6 @@ export const clusterConnectionStatusSchema = z.strictObject({
   cluster_id: z.string(),
   connection_status: z.string(),
   connection_stage: connectionStageSchema.optional(),
-  refresh_after_seconds: z.number().min(0.25).max(30).nullable(),
   last_agent_id: z.string().nullable(),
   last_seen_at: z.string().nullable(),
   agents: z.array(clusterAgentStatusSchema),

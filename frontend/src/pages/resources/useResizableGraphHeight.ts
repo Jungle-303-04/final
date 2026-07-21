@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState, type PointerEvent as ReactPointerEvent } from "react";
 
-export const DEFAULT_GRAPH_HEIGHT = 560;
-export const MIN_GRAPH_HEIGHT = 420;
-export const MAX_GRAPH_HEIGHT = 880;
-export const GRAPH_HEIGHT_STORAGE_KEY = "kyro:resources:relation-graph-height:v2";
+export const DEFAULT_GRAPH_HEIGHT = 720;
+export const MIN_GRAPH_HEIGHT = 480;
+export const MAX_GRAPH_HEIGHT = 1_040;
+export const GRAPH_HEIGHT_STORAGE_KEY = "opsia:product-graph-height";
 
 export function clampGraphHeight(value: number): number {
   if (!Number.isFinite(value)) return DEFAULT_GRAPH_HEIGHT;

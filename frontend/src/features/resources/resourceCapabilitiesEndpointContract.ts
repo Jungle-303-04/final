@@ -1,27 +1,16 @@
 import type {
   ResourceActionCapability,
-  ResourceActionExecutionContext,
   ResourceActionStatus,
 } from "./resourceCapabilitiesContract";
 
-export interface ResourceDeletionPreviewEndpoint {
-  root: ResourceDeletionRefEndpoint;
-  dependents: ResourceDeletionRefEndpoint[];
-  revision: string;
-  truncated: false;
-  max_dependents: number;
-}
-
-export interface ResourceDeletionRefEndpoint {
-  api_group: string;
-  version: string;
-  kind: string;
-  namespace: string | null;
-  name: string;
-  uid: string;
-  resource_version: string;
-}
-
+/**
+ * Raw wire shape returned by `GET /api/capabilities`. Hand-written and decoupled
+ * from the api/zod layer (the architecture boundary forbids importing from
+ * `../../api` here), but kept STRUCTURALLY IDENTICAL to the inferred output of
+ * the gateway's `resourceCapabilitiesSchema`. Mirror any schema change here:
+ * the `resource-files` execution variant, boolean inputs with boolean defaults,
+ * `prefill_result_key`, and the `request_context` / `result_intent` intents.
+ */
 export interface ResourceCapabilitiesEndpointResponse {
   subject: {
     resource_id: string;
@@ -53,7 +42,11 @@ export interface ResourceCapabilitiesEndpointResponse {
     method: "POST" | "WEBSOCKET";
     path: string;
     request_context: "simple" | "exact-resource" | "rollback";
-    result_intent: "refresh-resource" | "resource-summary" | "terminal-session" | "resource-files";
+    result_intent:
+      | "refresh-resource"
+      | "resource-summary"
+      | "terminal-session"
+      | "resource-files";
   }>;
 }
 
@@ -65,18 +58,9 @@ export interface ResourceCapabilitiesEndpointDependencies {
 }
 
 export interface ResourceActionsEndpointDependencies {
-  getResourceDeletionPreview(
-    actionPath: string,
-    signal?: AbortSignal,
-  ): Promise<ResourceDeletionPreviewEndpoint>;
-  getWorkloadRollbackPreview?(
-    actionPath: string,
-    signal?: AbortSignal,
-  ): Promise<WorkloadRollbackPreviewEndpoint>;
   executeResourceCapability(
     capability: ResourceActionCapability,
     values: Readonly<Record<string, unknown>>,
-    context?: ResourceActionExecutionContext,
     signal?: AbortSignal,
   ): Promise<{
     accepted: true;
@@ -86,35 +70,4 @@ export interface ResourceActionsEndpointDependencies {
     command_id: string;
     status: ResourceActionStatus;
   }>;
-}
-
-export interface WorkloadRollbackPreviewEndpoint {
-  availability: "available" | "unavailable";
-  completeness: "exact" | "partial";
-  reason: string | null;
-  snapshot_id: string;
-  current: {
-    resource: ResourceRollbackRefEndpoint;
-    resource_version: string;
-    template_sha256: string;
-  };
-  revisions: Array<{
-    revision: string;
-    resource: ResourceRollbackRefEndpoint;
-    resource_version: string;
-    created_at: string | null;
-    template_sha256: string;
-    preview_revision: string;
-    changes: Array<{ path: string; before: string; after: string }>;
-  }>;
-  next_cursor: number | null;
-}
-
-export interface ResourceRollbackRefEndpoint {
-  api_group: string;
-  version: string;
-  kind: string;
-  namespace: string | null;
-  name: string;
-  uid: string;
 }

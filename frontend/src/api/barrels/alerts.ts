@@ -1,9 +1,7 @@
 export {
   ALERT_CHANNELS_PATH,
   ALERT_CHANNEL_TEST_PATH,
-  deleteAlertChannel,
   listAlertChannels,
-  saveAlertChannel,
   testAlertChannel,
 } from "../alert-channels";
 export {
@@ -11,12 +9,10 @@ export {
   alertChannelSchema,
   alertChannelTestRequestSchema,
   alertChannelTestResponseSchema,
-  alertChannelUpsertRequestSchema,
   type AlertChannel,
   type AlertChannelList,
   type AlertChannelTestInput,
   type AlertChannelTestResponse,
-  type AlertChannelUpsertInput,
 } from "../alert-channels-schemas";
 export {
   ALERT_EVENTS_PATH,

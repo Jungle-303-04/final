@@ -8,10 +8,10 @@ import {
 } from "./useResizableGraphHeight";
 
 describe("resizable graph height", () => {
-  it("uses the v3 dense 560px default and 420px to 880px bounds", () => {
-    expect(DEFAULT_GRAPH_HEIGHT).toBe(560);
-    expect(MIN_GRAPH_HEIGHT).toBe(420);
-    expect(MAX_GRAPH_HEIGHT).toBe(880);
+  it("uses the approved 720px default and 480px to 1040px bounds", () => {
+    expect(DEFAULT_GRAPH_HEIGHT).toBe(720);
+    expect(MIN_GRAPH_HEIGHT).toBe(480);
+    expect(MAX_GRAPH_HEIGHT).toBe(1_040);
   });
 
   it("clamps persisted and dragged values without accepting invalid numbers", () => {

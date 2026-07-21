@@ -1,15 +1,11 @@
 import type { ComponentType } from "react";
 
-import type { AlertChannelsPort } from "../../features/alerts/alertChannelsContract";
-import type { AlertRulesPort } from "../../features/alerts/alertRulesContract";
 import { AlertsPage } from "./AlertsPage";
+import type { AlertRulesPort } from "../../features/alerts/alertRulesContract";
 
-export function createAlertsSurface(
-  rulesPort: AlertRulesPort,
-  channelsPort: AlertChannelsPort,
-): ComponentType {
+export function createAlertsSurface(rulesPort: AlertRulesPort): ComponentType {
   function AlertsSurfaceRoute() {
-    return <AlertsPage channelsPort={channelsPort} rulesPort={rulesPort} />;
+    return <AlertsPage rulesPort={rulesPort} />;
   }
   AlertsSurfaceRoute.displayName = "AlertsSurfaceRoute";
   return AlertsSurfaceRoute;

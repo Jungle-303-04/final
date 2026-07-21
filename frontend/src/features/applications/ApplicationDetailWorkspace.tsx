@@ -28,7 +28,6 @@ import {
 } from "./ApplicationDetailPanels";
 import { ApplicationDriftPanel } from "./ApplicationDriftPanel";
 import { ApplicationTopologyPanel } from "./ApplicationTopologyPanel";
-import { WorkloadCostPanel } from "../cost/WorkloadCostPanel";
 import { ApplicationsFailureState, ApplicationsRefreshControl } from "./ApplicationsState";
 import {
   applicationGitOpsChangeHref,
@@ -46,7 +45,7 @@ import {
   useApplicationDrift,
 } from "./useApplicationsData";
 
-const APPLICATION_TABS = ["overview", "topology", "history", "cost", "resources", "deployments", "drift", "incidents"] as const;
+const APPLICATION_TABS = ["overview", "topology", "history", "resources", "deployments", "drift", "incidents"] as const;
 type ApplicationTab = (typeof APPLICATION_TABS)[number];
 const APPLICATION_SCOPE_VALUE = "__application__";
 
@@ -59,9 +58,9 @@ export function ApplicationDetailWorkspace({
   filter: UnifiedFilterController;
   port: ApplicationsPort;
 }) {
-  const { t } = useI18n();
-  const copy = applicationsCopy(t);
-  const requestedTab = applicationTab(filter.detail.tab);
+  const { locale } = useI18n();
+  const copy = applicationsCopy(locale);
+  const activeTab = applicationTab(filter.detail.tab);
   const requestedInstanceId = filter.detail.applicationInstance ?? null;
   const requestedWorkloadKey = filter.detail.applicationWorkload ?? null;
   const [detail, refreshDetail] = useApplicationDetail(
@@ -71,7 +70,6 @@ export function ApplicationDetailWorkspace({
     requestedWorkloadKey,
   );
   const workloadSelected = detail.phase === "ready" && detail.data?.scope.selectedScope === "workload";
-  const activeTab = requestedTab === "cost" && !workloadSelected ? "overview" : requestedTab;
   const [deployments, refreshDeployments] = useApplicationDeployments(
     port,
     applicationId,
@@ -182,7 +180,6 @@ export function ApplicationDetailWorkspace({
           <TabsTrigger value="overview">{copy.overview}</TabsTrigger>
           <TabsTrigger value="topology">{copy.topology}</TabsTrigger>
           <TabsTrigger value="history">{copy.history}</TabsTrigger>
-          {isWorkloadScope ? <TabsTrigger value="cost">{copy.cost}</TabsTrigger> : null}
           {!isWorkloadScope ? <>
             <TabsTrigger value="resources">{copy.resources}</TabsTrigger>
             <TabsTrigger value="deployments">{copy.deployments}</TabsTrigger>
@@ -203,9 +200,6 @@ export function ApplicationDetailWorkspace({
             ? <ApplicationUnavailableEvidencePanel evidence={workload.history} title={copy.history} />
             : <ApplicationHistoryPanel history={application.history} />}
         </TabsContent>
-        {isWorkloadScope && workload !== null ? (
-          <TabsContent value="cost"><WorkloadCostPanel cost={workload.cost} /></TabsContent>
-        ) : null}
         {!isWorkloadScope ? <>
           <TabsContent value="resources"><ApplicationResourcesPanel detail={application} href={links.resources} /></TabsContent>
           <TabsContent value="deployments">

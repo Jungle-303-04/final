@@ -6,6 +6,12 @@ import {
 } from "../../shared/ui/primitives/accordion";
 import { Badge } from "../../shared/ui/primitives/badge";
 import { Button } from "../../shared/ui/primitives/button";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "../../shared/ui/primitives/card";
 import type { IssueAuditTimelinePage } from "./issuesContract";
 import { IssueEmpty, IssueSectionFrame } from "./IssueSectionFrame";
 import type { IssuesSurfaceCopy, SectionState } from "./issuesSurfaceContract";
@@ -20,20 +26,22 @@ export function IssueAuditTimelinePanel({
   state: SectionState<IssueAuditTimelinePage>;
 }) {
   return (
-    <section className="grid min-w-0 gap-4" aria-label={copy.auditLabel}>
-      <h3 className="text-sm font-semibold">{copy.auditLabel}</h3>
-      <div className="grid gap-3">
+    <Card>
+      <CardHeader className="border-b">
+        <CardTitle>{copy.auditLabel}</CardTitle>
+      </CardHeader>
+      <CardContent className="grid gap-3">
         <IssueSectionFrame copy={copy} state={state} unavailable={copy.auditUnavailable}>
           {(page) => page.items.length === 0 ? (
             <IssueEmpty text={copy.sectionEmpty} />
           ) : (
             <div className="grid gap-3">
-              <ol className="divide-y">
+              <ol className="grid gap-3">
                 {page.items.map((event, index) => {
                   const payload = Object.entries(event.payloadSummary);
                   return (
                     <li
-                      className="relative grid min-w-0 gap-2 overflow-hidden py-4 pl-5 first:pt-0 last:pb-0 before:absolute before:inset-y-3 before:left-0 before:w-0.5 before:bg-primary/60 first:before:top-0 last:before:bottom-0"
+                      className="relative grid min-w-0 gap-2 overflow-hidden rounded-lg border p-3 pl-5 before:absolute before:inset-y-0 before:left-0 before:w-1 before:bg-primary/60"
                       key={event.eventId}
                     >
                       <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -85,8 +93,8 @@ export function IssueAuditTimelinePanel({
             </div>
           )}
         </IssueSectionFrame>
-      </div>
-    </section>
+      </CardContent>
+    </Card>
   );
 }
 

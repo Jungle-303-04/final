@@ -1,10 +1,4 @@
 export type ClusterConnectProvider = "aws" | "gcp" | "azure" | "onprem";
-export type ClusterConnectEnvironment = "development" | "staging" | "production";
-export interface ClusterConnectInput {
-  environment: ClusterConnectEnvironment;
-  name: string;
-  provider: ClusterConnectProvider;
-}
 export type ClusterConnectState = "waiting" | "connected" | "expired";
 export type ClusterConnectStage =
   | "token_issued"
@@ -24,7 +18,6 @@ export interface ClusterConnectReceipt {
 export interface ClusterConnectionSnapshot {
   status: ClusterConnectState;
   stage: ClusterConnectStage;
-  refreshAfterSeconds: number | null;
   agentVersion: string | null;
   lastSeenAt: string | null;
 }
@@ -49,7 +42,7 @@ export class ClustersPortFailure extends Error {
 
 export interface ClustersPort {
   connect(
-    input: ClusterConnectInput,
+    input: { name: string; provider: ClusterConnectProvider },
     signal?: AbortSignal,
   ): Promise<ClusterConnectReceipt>;
   loadConnection(
@@ -62,11 +55,17 @@ export interface ClustersPort {
 export interface ClusterDisconnectPort {
   disconnect(clusterId: string, signal?: AbortSignal): Promise<ClusterDisconnectReceipt>;
   loadDisconnect(commandId: string, signal?: AbortSignal): Promise<ClusterDisconnectProgress>;
+  confirmManualCleanup(
+    clusterId: string,
+    signal?: AbortSignal,
+  ): Promise<ClusterDisconnectReceipt>;
 }
 
 export interface ClusterDisconnectReceipt {
   status: "uninstalling" | "cleanup-required" | "disconnected";
   commandId: string | null;
+  uninstallCommand: string | null;
+  residualResources: string[];
   failureReason: string | null;
 }
 

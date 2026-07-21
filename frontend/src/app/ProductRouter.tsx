@@ -5,7 +5,6 @@ import { AuthSessionControl } from "../features/auth/AuthSessionControl";
 import type { AuthenticatedAuthState } from "../features/auth/authContract";
 import { ClusterScopeProvider } from "../features/cluster-scope/ClusterScopeProvider";
 import { UnifiedFilterProvider, useUnifiedFilter } from "../features/filters/UnifiedFilterProvider";
-import { createEmptyProductDetailQuery } from "../features/filters/filterContract";
 import { OperationStatusStoreProvider } from "../features/operations/OperationStatusStore";
 import { ProductShell } from "./ProductShell";
 import { DesktopRuntimeSync } from "../desktop/DesktopRuntimeSync";
@@ -13,7 +12,6 @@ import type { ProductComposition } from "./productComposition";
 import { RouteSurface } from "./RouteSurface";
 import { WorkloadDetailRoute } from "../pages/workload-detail/WorkloadDetailRoute";
 import { CompareRoute } from "../pages/compare/CompareRoute";
-import { DiagnoseSessionProvider } from "../features/diagnose/DiagnoseSessionContext";
 import {
   landingProductRouteForReleasedSurfaces,
   PRODUCT_ROUTE_CATALOG,
@@ -22,7 +20,6 @@ import {
   type ProductRouteDefinition,
 } from "./productRoutes";
 import { navLabelKeys } from "./ProductShellNavigation";
-import { UiPreferencesSync } from "../features/preferences/UiPreferencesSync";
 
 export function ProductRouter({
   auth,
@@ -46,26 +43,20 @@ export function ProductRouter({
 
   return (
     <OperationStatusStoreProvider store={composition.operationStatusStore}>
-      <DiagnoseSessionProvider port={composition.diagnose}>
-        <UnifiedFilterProvider>
-          <ClusterScopeProvider
-            authorityKey={`${auth.session.workspaceId}:${auth.session.userId}`}
-            port={composition.clusterScope}
-          >
-            <UiPreferencesSync port={composition.shellState} />
-            <DesktopRuntimeSync />
-            <Routes>
+      <UnifiedFilterProvider>
+        <ClusterScopeProvider
+          authorityKey={`${auth.session.workspaceId}:${auth.session.userId}`}
+          port={composition.clusterScope}
+        >
+          <DesktopRuntimeSync />
+          <Routes>
           <Route element={(
             <ProductShell
               auth={auth}
               globalFilterPort={composition.globalFilter}
               aiAssistantPort={composition.aiAssistant}
-              aiConversationHistoryPort={composition.aiConversationHistory}
               logStreamPort={composition.logStream}
               alertEventsPort={composition.alertEvents}
-              shellStatePort={composition.shellState}
-              runtimeStatusPort={composition.runtimeStatus}
-              portForwardSessions={composition.portForwardSessions}
               releasedSurfaceIds={composition.releasedSurfaceIds}
             />
           )}>
@@ -73,11 +64,9 @@ export function ProductRouter({
             {composition.surfaces.flatMap((registration) => {
               const { id } = registration;
               const routeDefinition = routeDefinitionForSurface(id);
-              if (routeDefinition.redirectTo !== null) return [];
-              const routeElement = <RouteSurface key={id} registration={registration} />;
               return [
                 <Route
-                  element={routeElement}
+                  element={<RouteSurface registration={registration} />}
                   key={id}
                   path={routePathForDefinition(routeDefinition, routeDefinition.path)}
                 />,
@@ -91,19 +80,7 @@ export function ProductRouter({
               ];
             })}
             {PRODUCT_ROUTE_CATALOG
-              .filter((routeDefinition) => routeDefinition.redirectTo !== null)
-              .flatMap((routeDefinition) => productRoutePaths(routeDefinition).map((routePath) => (
-                <Route
-                  element={<ProductLegacyRedirect routeDefinition={routeDefinition} />}
-                  key={`redirect:${routeDefinition.id}:${routePath}`}
-                  path={routePathForDefinition(routeDefinition, routePath)}
-                />
-              )))}
-            {PRODUCT_ROUTE_CATALOG
-              .filter((routeDefinition) =>
-                routeDefinition.redirectTo === null &&
-                !composition.releasedSurfaceIds.has(routeDefinition.id)
-              )
+              .filter((routeDefinition) => !composition.releasedSurfaceIds.has(routeDefinition.id))
               .flatMap((routeDefinition) => productRoutePaths(routeDefinition).map((routePath) => (
                 <Route
                   element={<ProductUnavailableRoute routeDefinition={routeDefinition} />}
@@ -112,21 +89,15 @@ export function ProductRouter({
                 />
               )))}
             <Route
-              element={(
-                <WorkloadDetailRoute
-                  port={composition.workloadDetail}
-                  rcaContextPort={composition.rcaContext}
-                />
-              )}
+              element={<WorkloadDetailRoute port={composition.workloadDetail} />}
               path="/workload/:kind/:namespace/:name"
             />
             <Route element={<CompareRoute port={composition.compare} />} path="/compare" />
             <Route path="*" element={<ProductFallbackRedirect path={landingRoute.path} />} />
           </Route>
-            </Routes>
-          </ClusterScopeProvider>
-        </UnifiedFilterProvider>
-      </DiagnoseSessionProvider>
+          </Routes>
+        </ClusterScopeProvider>
+      </UnifiedFilterProvider>
     </OperationStatusStoreProvider>
   );
 }
@@ -162,33 +133,4 @@ function routePathForDefinition(
 function ProductFallbackRedirect({ path }: { path: `/${string}` }) {
   const filter = useUnifiedFilter();
   return <Navigate replace to={filter.navigationHref(path)} />;
-}
-
-function ProductLegacyRedirect({
-  routeDefinition,
-}: {
-  routeDefinition: ProductRouteDefinition;
-}) {
-  const filter = useUnifiedFilter();
-  const target = routeDefinition.redirectTo;
-  if (target === null) return <ProductFallbackRedirect path="/home" />;
-  const targetRoute = routeDefinitionForSurface(target);
-  const targetDetail = routeDefinition.id === "traffic"
-    ? {
-        ...filter.detail,
-        detail: filter.detail.detail ?? filter.detail.resource,
-        resource: null,
-        resourceKind: null,
-        resourceSurfaceView: "flow" as const,
-      }
-    : {
-        ...createEmptyProductDetailQuery(),
-        surfaceTab: routeDefinition.redirectSection ?? undefined,
-      };
-  return (
-    <Navigate
-      replace
-      to={filter.navigationHref(targetRoute.path, targetDetail)}
-    />
-  );
 }

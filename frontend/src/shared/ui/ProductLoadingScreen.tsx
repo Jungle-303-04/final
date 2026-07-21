@@ -33,7 +33,6 @@ export function ProductLoadingScreen({
         aria-busy="true"
         aria-label={label}
         className="min-h-full bg-background text-foreground"
-        data-product-state="loading"
         tabIndex={-1}
       >
         {content}
@@ -46,7 +45,6 @@ export function ProductLoadingScreen({
       aria-busy="true"
       aria-label={label}
       className="min-h-svh bg-background text-foreground"
-      data-product-state="loading"
       id="product-main"
       tabIndex={-1}
     >

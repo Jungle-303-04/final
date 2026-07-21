@@ -39,34 +39,23 @@ export function useAuthSessionGate(): AuthSessionGate {
 }
 
 export function AuthenticatedSessionRender({
-  listWorkspaces,
   onSignOut,
   reportUnauthorized,
   render,
   session,
   signOutIssue,
   signOutPending,
-  switchWorkspace,
 }: {
-  listWorkspaces: AuthenticatedAuthState["listWorkspaces"];
   onSignOut: () => void;
   reportUnauthorized: () => void;
   render: (auth: AuthenticatedAuthState) => ReactNode;
   session: ProductSession;
   signOutIssue: AuthActionIssue | null;
   signOutPending: boolean;
-  switchWorkspace: AuthenticatedAuthState["switchWorkspace"];
 }) {
   return (
     <AuthSessionGateProvider reportUnauthorized={reportUnauthorized}>
-      {render({
-        listWorkspaces,
-        session,
-        signOutIssue,
-        signOutPending,
-        onSignOut,
-        switchWorkspace,
-      })}
+      {render({ session, signOutIssue, signOutPending, onSignOut })}
     </AuthSessionGateProvider>
   );
 }

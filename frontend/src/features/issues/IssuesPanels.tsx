@@ -1,16 +1,15 @@
 import {
+  Activity,
   BrainCircuit,
-  Check,
   ChevronsLeft,
   ChevronsRight,
   CircleCheck,
-  Lightbulb,
+  DatabaseZap,
   ShieldAlert,
-  Sparkle,
+  TriangleAlert,
   X,
   XCircle,
 } from "lucide-react";
-import { useState } from "react";
 import { cn } from "@/shared/lib/cn";
 import { Alert, AlertDescription } from "../../shared/ui/primitives/alert";
 import { humanizeFilterValue } from "../../shared/presentation/humanizeFilterValue";
@@ -18,6 +17,12 @@ import { Badge } from "../../shared/ui/primitives/badge";
 import { Button } from "../../shared/ui/primitives/button";
 import { Progress } from "../../shared/ui/primitives/progress";
 import { Spinner } from "../../shared/ui/primitives/spinner";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "../../shared/ui/primitives/card";
 import {
   Tabs,
   TabsContent,
@@ -37,7 +42,6 @@ import { evidenceFallbackLabel } from "./issueEvidencePresentation";
 import type { IssueRcaNarrative } from "./issuesEvidenceContract";
 import { IssueEmpty, IssueSectionFrame } from "./IssueSectionFrame";
 import {
-  isResolvedIssue,
   issueEvidenceCount,
   issueStatusTone,
   issueTitle,
@@ -48,10 +52,6 @@ import type {
   RecoverySelectionCapability,
   SectionState,
 } from "./issuesSurfaceContract";
-
-const RCA_EVIDENCE_SUMMARY_ID = "issue-rca-evidence-summary";
-const RECOVERY_PANEL_ID = "issue-recovery-panel";
-const DETAIL_TAB_CONTENT_MOTION = "animate-in fade-in-0 slide-in-from-bottom-1 duration-(--motion-soft) ease-(--ease-soft) motion-reduce:animate-none";
 
 export function IssuesPanels({
   capability,
@@ -66,38 +66,17 @@ export function IssuesPanels({
   selected,
   state,
 }: IssuesPanelsProps) {
-  const panelState = state;
-  const [activeTab, setActiveTab] = useState("overview");
-  const evidenceCount = panelState.evidence.data?.items.length ?? issueEvidenceCount(selected);
-  const auditCount = panelState.audit.data?.items.length ?? null;
+  const evidenceCount = state.evidence.data?.items.length ?? issueEvidenceCount(selected);
+  const auditCount = state.audit.data?.items.length ?? null;
   const confidence = selected.confidence === null
     ? null
     : `${Math.round(selected.confidence * 100)}%`;
-  const contextMeta = [
-    { label: copy.cluster, value: selected.clusterId },
-    { label: copy.namespace, value: selected.namespace },
-    { label: copy.resourceKind, value: selected.resourceKind },
-    { label: copy.target, value: selected.resourceName },
-  ].filter((item): item is { label: string; value: string } => Boolean(item.value?.trim()));
-  const contextTitle = contextMeta.map(({ label, value }) => `${label} ${value}`).join(" | ");
-  const jumpToEvidenceSummary = () => {
-    setActiveTab("overview");
-    window.setTimeout(() => {
-      document.getElementById(RCA_EVIDENCE_SUMMARY_ID)?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
-    }, 0);
-  };
-  const jumpToRecovery = () => {
-    setActiveTab("overview");
-    window.setTimeout(() => {
-      document.getElementById(RECOVERY_PANEL_ID)?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
-    }, 0);
-  };
+  const contextPath = [
+    selected.clusterId,
+    selected.namespace,
+    selected.resourceKind,
+    selected.resourceName,
+  ].filter((value): value is string => Boolean(value?.trim()));
 
   return (
     <div
@@ -108,12 +87,11 @@ export function IssuesPanels({
       role="region"
       tabIndex={-1}
     >
-      <div className="min-w-0 lg:max-h-[calc(100vh-10rem)]">
-        <header className="sticky top-0 z-20 flex min-h-16 flex-row items-start gap-3 border-b bg-card/95 px-5 py-4 backdrop-blur supports-[backdrop-filter]:bg-card/85">
+      <Card className="min-w-0 lg:max-h-[calc(100vh-10rem)]">
+        <CardHeader className="sticky top-0 z-20 flex flex-row items-start gap-3 border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/85">
           <div className="flex shrink-0 items-center gap-1">
             <Button
               aria-label={copy.detailClose}
-              className="cursor-pointer"
               onClick={onClose}
               size="icon-sm"
               type="button"
@@ -124,9 +102,9 @@ export function IssuesPanels({
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <h2 className="min-w-0 break-words font-semibold leading-none">
+              <CardTitle className="min-w-0 break-words">
                 {issueTitle(selected)}
-              </h2>
+              </CardTitle>
               <IssueStatusMark label={copy.statusLabel(selected.status)} tone={issueStatusTone(selected.status)} />
               {confidence !== null ? (
                 <Badge variant="outline">
@@ -135,22 +113,16 @@ export function IssuesPanels({
                 </Badge>
               ) : null}
             </div>
-            {contextMeta.length > 0 ? (
-              <dl className="mt-1 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-xs" title={contextTitle}>
-                {contextMeta.map(({ label, value }, index) => (
-                  <div className="inline-flex min-w-0 items-center gap-1" key={`${label}:${value}`}>
-                    {index > 0 ? <span className="shrink-0 text-border">|</span> : null}
-                    <dt className="shrink-0 text-muted-foreground">{label}</dt>
-                    <dd className="min-w-0 truncate font-medium text-foreground/75">{value}</dd>
-                  </div>
-                ))}
-              </dl>
+            {contextPath.length > 0 ? (
+              <p className="mt-1 truncate text-xs text-muted-foreground" title={contextPath.join(" / ")}>
+                {contextPath.join(" / ")}
+              </p>
             ) : null}
           </div>
           <div className="flex shrink-0 items-center gap-1">
             <Button
               aria-label={full ? copy.detailCollapse : copy.detailExpand}
-              className="hidden cursor-pointer lg:inline-flex"
+              className="hidden lg:inline-flex"
               onClick={() => onFullChange(!full)}
               size="icon-sm"
               type="button"
@@ -159,27 +131,22 @@ export function IssuesPanels({
               {full ? <ChevronsRight aria-hidden="true" /> : <ChevronsLeft aria-hidden="true" />}
             </Button>
           </div>
-        </header>
-        <div className="min-w-0 px-5 lg:overflow-y-auto lg:[scrollbar-gutter:stable]">
-          <Tabs
-            onValueChange={(value) => {
-              if (value !== null) setActiveTab(value);
-            }}
-            value={activeTab}
-          >
+        </CardHeader>
+        <CardContent className="min-w-0 lg:overflow-y-auto">
+          <Tabs defaultValue="overview">
             <TabsList
               aria-label={copy.detailLabel}
               className="sticky top-0 z-10 w-full justify-start overflow-x-auto bg-card py-1"
               variant="line"
             >
-              <TabsTrigger className="cursor-pointer" value="overview">{copy.detailLabel}</TabsTrigger>
-              <TabsTrigger className="cursor-pointer" value="evidence">
+              <TabsTrigger value="overview">{copy.detailLabel}</TabsTrigger>
+              <TabsTrigger value="evidence">
                 {copy.evidenceLabel}
                 {evidenceCount !== null ? (
                   <Badge variant="secondary">{copy.listCount(evidenceCount)}</Badge>
                 ) : null}
               </TabsTrigger>
-              <TabsTrigger className="cursor-pointer" value="timeline">
+              <TabsTrigger value="timeline">
                 {copy.auditLabel}
                 {auditCount !== null ? (
                   <Badge variant="secondary">{copy.listCount(auditCount)}</Badge>
@@ -187,144 +154,167 @@ export function IssuesPanels({
               </TabsTrigger>
             </TabsList>
 
-            <TabsContent className={cn("grid min-w-0 gap-6 py-4", DETAIL_TAB_CONTENT_MOTION)} value="overview">
-              <IssueOverview
+            <TabsContent className="grid min-w-0 gap-4 py-4" value="overview">
+              <IssueOverview copy={copy} selected={selected} state={state.detail} />
+              <IssueRecentChangesPanel copy={copy} state={state.recentChanges} />
+              <ReportsPanel copy={copy} state={state.reports} />
+              <RecoveryPanel
+                capability={capability}
                 copy={copy}
-                onJumpToEvidenceSummary={jumpToEvidenceSummary}
+                onSelect={onSelectRecovery}
+                receipt={state.receipt}
                 selected={selected}
-                state={panelState.detail}
+                selectionFailure={state.selectionFailure}
+                selectionPendingId={state.selectionPendingId}
+                state={state.recovery}
+                audit={state.audit.data}
               />
-              <IssueRecentChangesPanel copy={copy} state={panelState.recentChanges} />
-              <ReportsPanel copy={copy} onOpenRecovery={jumpToRecovery} state={panelState.reports} />
-              <div className="scroll-mt-16" id={RECOVERY_PANEL_ID}>
-                <RecoveryPanel
-                  capability={capability}
-                  copy={copy}
-                  onSelect={onSelectRecovery}
-                  receipt={state.receipt}
-                  selected={selected}
-                  selectionFailure={state.selectionFailure}
-                  selectionPendingId={state.selectionPendingId}
-                  state={panelState.recovery}
-                  audit={panelState.audit.data}
-                />
-              </div>
             </TabsContent>
 
-            <TabsContent className={cn("grid min-w-0 gap-4 py-4", DETAIL_TAB_CONTENT_MOTION)} value="evidence">
-              <EvidencePanel copy={copy} state={panelState.evidence} />
+            <TabsContent className="grid min-w-0 gap-4 py-4" value="evidence">
+              <EvidencePanel copy={copy} state={state.evidence} />
             </TabsContent>
 
-            <TabsContent className={cn("grid min-w-0 gap-4 py-4", DETAIL_TAB_CONTENT_MOTION)} value="timeline">
+            <TabsContent className="grid min-w-0 gap-4 py-4" value="timeline">
               <IssueAuditTimelinePanel
                 copy={copy}
                 onLoadMore={onLoadMoreAudit}
-                state={panelState.audit}
+                state={state.audit}
               />
             </TabsContent>
           </Tabs>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
 
 function IssueOverview({
   copy,
-  onJumpToEvidenceSummary,
   selected,
   state,
 }: {
   copy: IssuesSurfaceCopy;
-  onJumpToEvidenceSummary: () => void;
   selected: IssuesPanelsProps["selected"];
   state: IssuesPanelsProps["state"]["detail"];
 }) {
   const listEvidenceCount = issueEvidenceCount(selected);
-  const resolved = isResolvedIssue(selected.status);
-  const confidencePct = selected.confidence === null ? null : Math.round(selected.confidence * 100);
-  const confidence = confidencePct === null ? null : `${confidencePct}%`;
-  const supportingCount = listEvidenceCount === null ? null : copy.listCount(listEvidenceCount);
-  const detail = state.data;
-  const missingEvidence = detail?.missingEvidence ?? selected.missingEvidence ?? [];
-  const missingCount = missingEvidence.length;
-  const summary = selected.situationSummary?.trim()
-    || issueSituationSummary(selected, copy, resolved);
   return (
-    <section className="grid min-w-0 gap-4 border-b pb-6" data-slot="issue-overview">
-      <section className="grid min-w-0 gap-3">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{copy.situationSummary}</h3>
-        <p className="break-words text-base font-medium leading-relaxed text-foreground">{summary}</p>
-        <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs">
-          <Badge variant={resolved ? "secondary" : "outline"}>
-            {resolved ? copy.lifecycleClosed : copy.statusLabel(selected.status)}
-          </Badge>
-          {confidence !== null && confidencePct !== null ? (
-            <span
-              aria-label={`${copy.confidence} ${confidence}`}
-              className="inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-xs"
-            >
-              <span className="font-medium text-muted-foreground">{copy.confidence}</span>
-              <Progress
-                aria-label={`${copy.confidence} ${confidence}`}
-                className={cn(
-                  "w-14 [&_[data-slot=progress-track]]:h-1.5",
-                  confidencePct >= 80
-                    ? "[&_[data-slot=progress-indicator]]:bg-status-healthy"
-                    : confidencePct >= 50
-                      ? "[&_[data-slot=progress-indicator]]:bg-status-warning"
-                      : "[&_[data-slot=progress-indicator]]:bg-destructive",
-                )}
-                value={confidencePct}
-                valueText={confidence}
-              />
-              <span className="font-mono font-semibold tabular-nums text-foreground">{confidence}</span>
-            </span>
-          ) : null}
-          {supportingCount !== null ? (
-            <Badge
-              className="cursor-pointer hover:bg-muted"
-              onClick={onJumpToEvidenceSummary}
-              render={<button type="button" />}
-              variant="outline"
-            >
-              {copy.supportingEvidence} {supportingCount}
-            </Badge>
-          ) : null}
-        </div>
-      </section>
-      {missingCount > 0 ? (
-        <section className="grid min-w-0 gap-2 border-l-2 border-status-warning bg-status-warning/10 py-2 pl-3 pr-2">
-          <h4 className="flex items-center gap-2 text-xs font-medium text-foreground/80">
-            <ShieldAlert aria-hidden="true" className="size-4 text-status-warning" />
-            {copy.missingEvidence}
-          </h4>
-          <ul className="grid gap-1.5 text-xs text-muted-foreground">
-            {missingEvidence.map((item, index) => (
-              <li className="break-words" key={`${item}:${index}`}>• {humanizeFilterValue(item)}</li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
-      {detail?.rootCause ? (
-        <section className="grid min-w-0 gap-1 border-l-2 border-status-warning py-2 pl-3 pr-2">
-          <h4 className="text-xs font-medium text-status-warning">{copy.rootCause}</h4>
-          <p className="break-words text-sm">{copy.causeLabel(detail.rootCause)}</p>
-        </section>
-      ) : null}
+    <section className="@container grid min-w-0 gap-4 rounded-xl border bg-muted/15 p-4">
+      <div className="grid min-w-0 grid-cols-1 gap-2 @md:grid-cols-2 @4xl:grid-cols-4">
+        <MetricFact
+          icon={<Activity aria-hidden="true" />}
+          label={copy.status}
+          value={copy.statusLabel(selected.status)}
+        />
+        <MetricFact
+          icon={<BrainCircuit aria-hidden="true" />}
+          label={copy.confidence}
+          value={selected.confidence === null ? null : `${Math.round(selected.confidence * 100)}%`}
+        />
+        <MetricFact
+          icon={<DatabaseZap aria-hidden="true" />}
+          label={copy.supportingEvidence}
+          value={listEvidenceCount === null ? null : copy.listCount(listEvidenceCount)}
+        />
+        <MetricFact
+          icon={<ShieldAlert aria-hidden="true" />}
+          label={copy.missingEvidence}
+          value={selected.missingEvidence === null
+            ? null
+            : copy.listCount(selected.missingEvidence.length)}
+        />
+      </div>
+      <IssueSectionFrame copy={copy} state={state} unavailable={copy.genericFailure}>
+        {(detail) => (
+          <div className="grid min-w-0 gap-4 border-t pt-4">
+            {detail.dataQualityWarnings.length > 0 ? (
+              <p className="text-sm text-muted-foreground" role="status">
+                {copy.partial(detail.dataQualityWarnings.length)}
+              </p>
+            ) : null}
+            {detail.rootCause ? (
+              <div className="grid gap-1 rounded-lg border border-status-warning/30 bg-status-warning/5 p-3">
+                <p className="flex items-center gap-2 text-xs font-medium text-status-warning">
+                  <TriangleAlert aria-hidden="true" className="size-4" />
+                  {copy.rootCause}
+                </p>
+                <p className="break-words text-sm leading-relaxed">{copy.causeLabel(detail.rootCause)}</p>
+              </div>
+            ) : null}
+            <EvidenceFacts copy={copy} detail={detail} />
+          </div>
+        )}
+      </IssueSectionFrame>
     </section>
   );
 }
 
-function issueSituationSummary(
-  selected: IssuesPanelsProps["selected"],
-  copy: IssuesSurfaceCopy,
-  resolved: boolean,
-): string {
-  const symptom = selected.symptom?.trim() || issueTitle(selected);
-  const cause = selected.rootCause ? copy.causeLabel(selected.rootCause) : null;
-  const status = resolved ? copy.lifecycleClosed : copy.statusLabel(selected.status);
-  return copy.situationSummaryText(humanizeFilterValue(symptom), cause ?? "", status);
+function MetricFact({
+  icon,
+  label,
+  value,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string | null;
+}) {
+  if (value === null) return null;
+  return (
+    <div className="min-w-0 rounded-lg border bg-card px-3 py-2.5">
+      <dt className="flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground [&>svg]:size-3.5 [&>svg]:shrink-0">
+        {icon}<span className="min-w-0 truncate whitespace-nowrap" title={label}>{label}</span>
+      </dt>
+      <dd className="mt-1 truncate text-sm font-semibold tabular-nums" title={value}>{value}</dd>
+    </div>
+  );
+}
+
+function EvidenceFacts({
+  copy,
+  detail,
+}: {
+  copy: IssuesSurfaceCopy;
+  detail: NonNullable<IssuesPanelsProps["state"]["detail"]["data"]>;
+}) {
+  if (detail.supportingEvidence.length === 0 && detail.missingEvidence.length === 0) return null;
+  return (
+    <div className="grid min-w-0 gap-3 lg:grid-cols-2">
+      {detail.supportingEvidence.length > 0 ? (
+        <EvidenceFactList
+          icon={<CircleCheck aria-hidden="true" className="text-status-healthy" />}
+          items={detail.supportingEvidence}
+          label={copy.supportingEvidence}
+        />
+      ) : null}
+      {detail.missingEvidence.length > 0 ? (
+        <EvidenceFactList
+          icon={<ShieldAlert aria-hidden="true" className="text-status-warning" />}
+          items={detail.missingEvidence}
+          label={copy.missingEvidence}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function EvidenceFactList({
+  icon,
+  items,
+  label,
+}: {
+  icon: React.ReactNode;
+  items: readonly string[];
+  label: string;
+}) {
+  return (
+    <section className="min-w-0 rounded-lg border bg-card p-3">
+      <h3 className="flex items-center gap-2 text-xs font-medium [&>svg]:size-4">{icon}{label}</h3>
+      <ul className="mt-2 grid gap-1.5 text-xs text-muted-foreground">
+        {items.map((item, index) => <li className="break-words" key={`${item}:${index}`}>• {item}</li>)}
+      </ul>
+    </section>
+  );
 }
 
 function EvidencePanel({
@@ -335,14 +325,14 @@ function EvidencePanel({
   state: SectionState<IssueEvidencePage>;
 }) {
   return (
-    <IssueSection title={copy.evidenceLabel}>
+    <SectionCard title={copy.evidenceLabel}>
       <IssueSectionFrame copy={copy} state={state} unavailable={copy.evidenceUnavailable}>
         {(page) => page.items.length === 0 ? (
           <IssueEmpty text={copy.sectionEmpty} />
         ) : (
-          <ul className="divide-y">
+          <ul className="grid gap-3">
             {page.items.map((record) => (
-              <li className="grid min-w-0 gap-3 py-4 first:pt-0 last:pb-0" key={record.id}>
+              <li className="grid min-w-0 gap-3 rounded-xl border bg-muted/15 p-3" key={record.id}>
                 <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
                   <p className="truncate font-medium" title={record.summary}>
                     {copy.evidenceRecordLabel(record.summary)}
@@ -364,9 +354,9 @@ function EvidencePanel({
                     </time>
                   ) : null}
                 </div>
-                <ul className="divide-y border-t text-sm text-muted-foreground">
+                <ul className="grid gap-2 text-sm text-muted-foreground">
                   {record.sources.map((source, index) => (
-                    <li className="grid min-w-0 gap-1 py-2.5" key={`${source.source}:${index}`}>
+                    <li className="grid min-w-0 gap-1 rounded-lg border bg-card p-2.5" key={`${source.source}:${index}`}>
                       <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-2">
                         <Badge className="max-w-44 truncate" title={source.source} variant="secondary">
                           {copy.evidenceSourceLabel(source.source)}
@@ -398,455 +388,211 @@ function EvidencePanel({
           </ul>
         )}
       </IssueSectionFrame>
-    </IssueSection>
+    </SectionCard>
   );
 }
 
 function ReportsPanel({
   copy,
-  onOpenRecovery,
   state,
 }: {
   copy: IssuesSurfaceCopy;
-  onOpenRecovery: () => void;
   state: SectionState<IssueRcaReportPage>;
 }) {
   return (
-    <IssueSection title={copy.reportsLabel}>
+    <SectionCard title={copy.reportsLabel}>
       <IssueSectionFrame copy={copy} state={state} unavailable={copy.reportsUnavailable}>
         {(page) => page.items.length === 0 ? (
           <IssueEmpty text={copy.reportsEmpty} />
         ) : (
-          <ul className="grid gap-6">
-            {page.items.map((report, index) => (
-              <li className="grid min-w-0 gap-5" key={report.id}>
-                <ReportMetaHeader copy={copy} report={report} />
-                {report.narrative ? <ReportNarrative copy={copy} narrative={report.narrative} /> : null}
-
-                <dl className="grid min-w-0 gap-2 border-b border-dashed pb-4">
+          <ul className="grid gap-3">
+            {page.items.map((report) => (
+              <li className="grid min-w-0 gap-4 rounded-xl border bg-muted/15 p-4 shadow-sm" key={report.id}>
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                  {report.severity ? (
+                    <IssueStatusMark label={report.severity} tone={issueStatusTone(report.severity)} />
+                  ) : null}
+                  {report.confidence !== null ? (
+                    <Badge variant="outline">
+                      <BrainCircuit aria-hidden="true" />
+                      {Math.round(report.confidence * 100)}%
+                    </Badge>
+                  ) : null}
+                  {report.createdAt ? (
+                    <time className="ml-auto text-xs tabular-nums text-muted-foreground" dateTime={report.createdAt}>
+                      {copy.auditTime(report.createdAt)}
+                    </time>
+                  ) : null}
+                </div>
+                <div className="grid gap-1 rounded-lg border border-status-warning/30 bg-status-warning/5 p-3">
+                  <p className="text-xs font-medium text-muted-foreground">{copy.rootCause}</p>
+                  <p className="break-words text-base font-semibold leading-relaxed">
+                    {report.candidates.find(({ id }) => id === report.selectedCandidateId)?.title
+                      ?? copy.causeLabel(report.rootCause)}
+                  </p>
+                </div>
+                <dl className="grid min-w-0 gap-2 sm:grid-cols-2">
                   {report.symptom ? (
-                    <ReportLine label={copy.symptom} value={humanizeFilterValue(report.symptom)} />
+                    <ReportFact label={copy.symptom} value={humanizeFilterValue(report.symptom)} />
                   ) : null}
                   {[report.namespace, report.resourceKind, report.resourceName].some(Boolean) ? (
-                    <ReportLine
-                      label={copy.impactScope}
-                      value={[report.namespace, report.resourceKind, report.resourceName].filter(Boolean).join(" | ")}
+                    <ReportFact
+                      label={copy.target}
+                      value={[report.namespace, report.resourceKind, report.resourceName].filter(Boolean).join(" / ")}
                     />
                   ) : null}
                 </dl>
-
-                <ReportNumberedSection
-                  body={finalJudgementLabel(report, copy)}
-                  number="01"
-                  title={copy.finalJudgement}
-                />
-                <ReportNumberedSection number="02" title={copy.finalCause}>
-                  <div className="grid min-w-0 gap-3">
-                    <ReportCandidateAccordion copy={copy} report={report} />
+                {report.reason ? (
+                  <section className="grid gap-1 rounded-lg border bg-card px-3 py-2.5">
+                    <h4 className="text-xs font-medium text-muted-foreground">{copy.rootCause}</h4>
+                    <p className="break-words text-sm leading-relaxed">{report.reason}</p>
+                  </section>
+                ) : null}
+                <div className="grid gap-1 rounded-lg border border-status-healthy/30 bg-status-healthy/5 p-3">
+                  <p className="text-xs font-medium text-status-healthy">{copy.recommended}</p>
+                  <p className="break-words text-sm leading-relaxed">
+                    {report.action === "plan_recovery"
+                      ? copy.recoveryLabel
+                      : evidenceFallbackLabel(report.action)}
+                  </p>
+                </div>
+                {report.narrative ? (
+                  <ReportNarrative copy={copy} narrative={report.narrative} />
+                ) : null}
+                <div className="flex flex-wrap gap-2">
+                  {report.supportingEvidence.length > 0 ? (
+                    <Badge variant="secondary">
+                      {copy.supportingEvidence} {copy.listCount(report.supportingEvidence.length)}
+                    </Badge>
+                  ) : null}
+                  {report.missingEvidence.length > 0 ? (
+                    <Badge variant="outline">
+                      {copy.missingEvidence} {copy.listCount(report.missingEvidence.length)}
+                    </Badge>
+                  ) : null}
+                  {report.secondarySymptoms.map((symptom) => (
+                    <Badge key={symptom} title={symptom} variant="outline">
+                      {humanizeFilterValue(symptom)}
+                    </Badge>
+                  ))}
+                  {report.evidenceRef ? (
+                    <Badge className="max-w-full" title={report.evidenceRef} variant="outline">
+                      <span className="max-w-52 truncate">{copy.evidenceLabel} · {report.evidenceRef}</span>
+                    </Badge>
+                  ) : null}
+                </div>
+                {report.supportingEvidence.length > 0 || report.missingEvidence.length > 0 ? (
+                  <div className="grid min-w-0 gap-3 lg:grid-cols-2">
+                    {report.supportingEvidence.length > 0 ? (
+                      <ReportEvidenceList
+                        items={report.supportingEvidence}
+                        label={copy.supportingEvidence}
+                        tone="healthy"
+                      />
+                    ) : null}
+                    {report.missingEvidence.length > 0 ? (
+                      <ReportEvidenceList
+                        items={report.missingEvidence}
+                        label={copy.missingEvidence}
+                        tone="warning"
+                      />
+                    ) : null}
                   </div>
-                </ReportNumberedSection>
-                <ReportNumberedSection
-                  id={index === 0 ? RCA_EVIDENCE_SUMMARY_ID : undefined}
-                  number="03"
-                  title={copy.evidenceSummaryTitle}
-                >
-                  <ReportEvidenceSummary copy={copy} report={report} />
-                </ReportNumberedSection>
-                <ReportNumberedSection number="04" title={copy.evidenceDetailsTitle}>
-                  <ReportSelectedEvidenceDetails copy={copy} report={report} />
-                </ReportNumberedSection>
-                <ReportNumberedSection number="05" title={copy.recommendedActionTitle}>
-                  <div className="grid min-w-0 gap-3">
-                    <p className="break-words text-sm font-semibold leading-relaxed">
-                      {recommendedActionLabel(report, copy)}
-                    </p>
-                    <Button
-                      className="cursor-pointer justify-self-end border-black bg-black text-white hover:bg-black/85 hover:text-white dark:border-white dark:bg-white dark:text-black dark:hover:bg-white/90"
-                      onClick={onOpenRecovery}
-                      size="sm"
-                      type="button"
-                    >
-                      {copy.viewRecoveryAction}
-                    </Button>
-                  </div>
-                </ReportNumberedSection>
+                ) : null}
+                {report.supportingEvidenceRefs.length > 0 ? (
+                  <section className="grid min-w-0 gap-2">
+                    <h4 className="text-xs font-medium text-muted-foreground">{copy.supportingEvidence}</h4>
+                    <ul className="grid gap-2">
+                      {report.supportingEvidenceRefs.map((evidence, index) => (
+                        <li
+                          className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-2 rounded-lg border bg-card p-2.5"
+                          key={`${evidence.source}:${evidence.name}:${index}`}
+                        >
+                          <Badge className="max-w-32 truncate" title={evidence.source} variant="secondary">
+                            {copy.evidenceSourceLabel(evidence.source)}
+                          </Badge>
+                          <div className="grid min-w-0 gap-1">
+                            <span className="truncate text-xs font-medium" title={evidence.name}>
+                              {humanizeFilterValue(evidence.name)}
+                            </span>
+                            {evidence.summary ? (
+                              <p className="line-clamp-3 break-words text-xs leading-relaxed text-muted-foreground" title={evidence.summary}>
+                                {evidence.summary}
+                              </p>
+                            ) : null}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                ) : null}
+                {report.candidates.length > 0 ? (
+                  <section className="grid min-w-0 gap-2">
+                    <h4 className="text-xs font-medium text-muted-foreground">{copy.rootCause}</h4>
+                    <ul className="grid gap-2">
+                      {report.candidates.map((candidate) => (
+                        <li className="grid min-w-0 gap-1 rounded-lg border bg-card p-2.5" key={candidate.id}>
+                          <div className="flex min-w-0 items-center gap-2">
+                            <span className="min-w-0 flex-1 truncate text-xs font-medium" title={candidate.title ?? candidate.id}>
+                              {candidate.title ?? humanizeFilterValue(candidate.id)}
+                            </span>
+                            {candidate.id === report.selectedCandidateId ? (
+                              <Badge variant="secondary">{copy.recommended}</Badge>
+                            ) : null}
+                            {candidate.score !== null ? (
+                              <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                                {Math.round(candidate.score * 100)}%
+                              </span>
+                            ) : null}
+                          </div>
+                          {candidate.reason ? (
+                            <p className="line-clamp-2 break-words text-xs leading-relaxed text-muted-foreground" title={candidate.reason}>
+                              {candidate.reason}
+                            </p>
+                          ) : null}
+                          {candidate.supportingEvidence.length > 0 ? (
+                            <p className="break-words text-[11px] leading-relaxed text-status-healthy">
+                              {copy.supportingEvidence} · {candidate.supportingEvidence.map(evidenceFallbackLabel).join(" · ")}
+                            </p>
+                          ) : null}
+                          {candidate.missingEvidence.length > 0 ? (
+                            <p className="break-words text-[11px] leading-relaxed text-status-warning">
+                              {copy.missingEvidence} · {candidate.missingEvidence.map(evidenceFallbackLabel).join(" · ")}
+                            </p>
+                          ) : null}
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                ) : null}
+                {report.missingEvidenceChecks.length > 0 ? (
+                  <section className="grid min-w-0 gap-2 rounded-lg border border-status-warning/30 bg-status-warning/5 p-3">
+                    <h4 className="text-xs font-medium text-status-warning">{copy.missingEvidence}</h4>
+                    <ul className="grid gap-2">
+                      {report.missingEvidenceChecks.map((check) => (
+                        <li className="grid min-w-0 gap-1 rounded-md border bg-card p-2.5" key={check.checkId}>
+                          <div className="flex min-w-0 items-center gap-2">
+                            <span className="min-w-0 flex-1 truncate text-xs font-medium" title={check.checkId}>
+                              {humanizeFilterValue(check.checkId)}
+                            </span>
+                            {check.status ? <Badge variant="outline">{humanizeFilterValue(check.status)}</Badge> : null}
+                          </div>
+                          {check.source ? (
+                            <p className="text-[11px] text-muted-foreground">{copy.evidenceSourceLabel(check.source)}</p>
+                          ) : null}
+                          {check.reason ? <p className="break-words text-xs leading-relaxed">{check.reason}</p> : null}
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                ) : null}
               </li>
             ))}
           </ul>
         )}
       </IssueSectionFrame>
-    </IssueSection>
+    </SectionCard>
   );
-}
-
-type RcaReportItem = IssueRcaReportPage["items"][number];
-
-function ReportMetaHeader({ copy, report }: { copy: IssuesSurfaceCopy; report: RcaReportItem }) {
-  return (
-    <div className="grid grid-cols-3 gap-3 border-b border-dashed pb-4">
-      <ReportMeta label={copy.actionRisk} value={copy.riskLabel(report.severity)} />
-      <ReportMeta
-        label={copy.confidence}
-        value={report.confidence === null ? copy.valueUnknown : `${Math.round(report.confidence * 100)}%`}
-      />
-      <ReportMeta
-        label={copy.time}
-        value={report.createdAt ? compactReportTime(report.createdAt, copy) : copy.valueUnknown}
-      />
-    </div>
-  );
-}
-
-function ReportMeta({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="grid min-w-0 gap-1">
-      <span className="text-xs font-medium text-muted-foreground">{label}</span>
-      <span className="min-w-0 truncate text-sm font-semibold" title={value}>{value}</span>
-    </div>
-  );
-}
-
-function ReportLine({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="grid min-w-0 grid-cols-[4rem_minmax(0,1fr)] items-center gap-2">
-      <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
-      <dd className="min-w-0 truncate font-medium" title={value}>{value}</dd>
-    </div>
-  );
-}
-
-function ReportNumberedSection({
-  body,
-  children,
-  id,
-  number,
-  title,
-}: {
-  body?: string;
-  children?: React.ReactNode;
-  id?: string;
-  number: string;
-  title: string;
-}) {
-  return (
-    <section className="grid min-w-0 scroll-mt-16 grid-cols-[3.25rem_minmax(0,1fr)] gap-3 border-b border-dashed pb-5 last:border-b-0 last:pb-0" id={id}>
-      <span className="grid min-h-full grid-cols-[auto_auto] gap-2 self-stretch text-lg font-semibold tabular-nums leading-tight text-muted-foreground">
-        <span>{number}</span>
-        <span aria-hidden="true" className="h-full border-l border-foreground/45" />
-      </span>
-      <div className="grid min-w-0 gap-2">
-        <h4 className="text-lg font-semibold leading-tight">{title}</h4>
-        {body ? <p className="break-words text-sm leading-relaxed text-foreground">{body}</p> : null}
-        {children}
-      </div>
-    </section>
-  );
-}
-
-function ReportEvidenceSummary({
-  copy,
-  report,
-}: {
-  copy: IssuesSurfaceCopy;
-  report: RcaReportItem;
-}) {
-  const confirmed = report.supportingEvidenceRefs.length > 0
-    ? report.supportingEvidenceRefs.map((evidence) => evidenceDisplayName(evidence.source, evidence.name, copy))
-    : report.supportingEvidence.map((item) => evidenceDisplayNameFromToken(item, copy));
-  if (confirmed.length === 0) {
-    return <p className="text-sm text-muted-foreground">{copy.sectionEmpty}</p>;
-  }
-  return (
-    <ul className="grid gap-1.5 text-sm leading-relaxed">
-      {confirmed.slice(0, 4).map((item, index) => (
-        <li className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-2" key={`${item}:${index}`}>
-          <CircleCheck aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-status-healthy" />
-          <span className="break-words">{item}</span>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function ReportCandidateAccordion({
-  copy,
-  report,
-}: {
-  copy: IssuesSurfaceCopy;
-  report: RcaReportItem;
-}) {
-  if (report.candidates.length === 0) {
-    return <p className="text-sm text-muted-foreground">{copy.sectionEmpty}</p>;
-  }
-  const selectedCandidate = report.candidates.find(({ id }) => id === report.selectedCandidateId)
-    ?? report.candidates[0];
-  const candidateOptions = report.candidates.filter(({ id }) => id !== selectedCandidate.id);
-  const selectedSupportingCount = selectedCandidate.supportingEvidence.length;
-  const selectedMissingCount = selectedCandidate.missingEvidence.length;
-  return (
-    <div className="grid min-w-0 gap-4">
-      <section className="grid min-w-0 gap-2 bg-muted/35 p-3">
-        <div className="flex min-w-0 items-center gap-2">
-          <h5 className="min-w-0 flex-1 truncate text-sm font-semibold" title={selectedCandidate.title ?? selectedCandidate.id}>
-            {selectedCandidate.title ?? humanizeFilterValue(selectedCandidate.id)}
-          </h5>
-          <Badge className="border-status-healthy/30 bg-status-healthy/10 text-status-healthy" variant="outline">
-            {copy.recommended}
-          </Badge>
-          {selectedCandidate.score !== null ? (
-            <span className="flex shrink-0 items-center gap-1.5">
-              <Progress
-                aria-label={`${copy.confidence} ${Math.round(selectedCandidate.score * 100)}%`}
-                className="w-10 [&_[data-slot=progress-indicator]]:bg-status-healthy [&_[data-slot=progress-track]]:h-1"
-                value={Math.round(selectedCandidate.score * 100)}
-                valueText={`${Math.round(selectedCandidate.score * 100)}%`}
-              />
-              <span className="text-xs font-mono font-semibold tabular-nums text-foreground">{Math.round(selectedCandidate.score * 100)}%</span>
-            </span>
-          ) : null}
-        </div>
-        <p className="text-xs leading-relaxed text-muted-foreground">
-          {copy.evidenceCoverage(selectedSupportingCount, selectedSupportingCount + selectedMissingCount)}
-        </p>
-        {selectedCandidate.supportingEvidence.length > 0 ? (
-          <EvidenceTokenList
-            copy={copy}
-            items={selectedCandidate.supportingEvidence}
-            label={copy.supportingEvidence}
-            tone="healthy"
-          />
-        ) : null}
-        {selectedCandidate.missingEvidence.length > 0 ? (
-          <EvidenceTokenList
-            copy={copy}
-            items={selectedCandidate.missingEvidence}
-            label={copy.missingEvidence}
-            tone="warning"
-          />
-        ) : null}
-      </section>
-      {candidateOptions.length > 0 ? (
-        <section className="grid min-w-0 gap-2">
-          <div className="flex min-w-0 items-center justify-between gap-3">
-            <h5 className="text-xs font-medium text-muted-foreground">{copy.causeCandidates}</h5>
-            <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{copy.itemCount(candidateOptions.length)}</span>
-          </div>
-          <div className="grid overflow-hidden border-y border-dashed">
-            {candidateOptions.map((candidate) => {
-        const supportingCount = candidate.supportingEvidence.length;
-        const missingCount = candidate.missingEvidence.length;
-        return (
-          <details
-            className="group border-b border-dashed last:border-b-0 open:bg-muted/35"
-            key={candidate.id}
-          >
-            <summary className="grid cursor-pointer list-none grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 px-3 py-3 [&::-webkit-details-marker]:hidden">
-              <span className="min-w-0 truncate text-sm font-medium" title={candidate.title ?? candidate.id}>
-                {candidate.title ?? humanizeFilterValue(candidate.id)}
-              </span>
-              {candidate.score !== null ? (
-                <span className="flex shrink-0 items-center gap-1.5">
-                  <Progress
-                    aria-label={`${copy.confidence} ${Math.round(candidate.score * 100)}%`}
-                    className="w-10 [&_[data-slot=progress-indicator]]:bg-muted-foreground/45 [&_[data-slot=progress-track]]:h-1"
-                    value={Math.round(candidate.score * 100)}
-                    valueText={`${Math.round(candidate.score * 100)}%`}
-                  />
-                  <span className="text-xs font-mono tabular-nums text-muted-foreground">{Math.round(candidate.score * 100)}%</span>
-                </span>
-              ) : (
-                <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{copy.valueUnknown}</span>
-              )}
-              <Sparkle
-                aria-hidden="true"
-                className="size-4 shrink-0 text-muted-foreground transition-[color,transform] duration-(--motion-instant) group-hover:text-foreground/80 group-open:rotate-45 group-open:text-foreground motion-reduce:transition-none"
-                strokeWidth={1.8}
-              />
-            </summary>
-            <div className="grid gap-2 border-t px-3 py-3 animate-in fade-in-0 slide-in-from-top-1 duration-(--motion-instant) ease-(--ease-soft) motion-reduce:animate-none">
-              <p className="text-xs leading-relaxed text-muted-foreground">
-                {copy.evidenceCoverage(supportingCount, supportingCount + missingCount)}
-              </p>
-              {candidate.reason ? (
-                <p className="break-words text-xs leading-relaxed text-muted-foreground">{candidate.reason}</p>
-              ) : null}
-              {candidate.supportingEvidence.length > 0 ? (
-                <EvidenceTokenList
-                  copy={copy}
-                  items={candidate.supportingEvidence}
-                  label={copy.supportingEvidence}
-                  tone="healthy"
-                />
-              ) : null}
-              {candidate.missingEvidence.length > 0 ? (
-                <EvidenceTokenList
-                  copy={copy}
-                  items={candidate.missingEvidence}
-                  label={copy.missingEvidence}
-                  tone="warning"
-                />
-              ) : null}
-            </div>
-          </details>
-        );
-            })}
-          </div>
-        </section>
-      ) : null}
-    </div>
-  );
-}
-
-function ReportSelectedEvidenceDetails({
-  copy,
-  report,
-}: {
-  copy: IssuesSurfaceCopy;
-  report: RcaReportItem;
-}) {
-  if (report.supportingEvidenceRefs.length > 0) {
-    return (
-      <ul className="grid gap-2">
-        {report.supportingEvidenceRefs.map((evidence, index) => (
-          <li
-            className="grid min-w-0 grid-cols-[7.25rem_minmax(0,1fr)] items-start gap-3 py-2"
-            key={`${evidence.source}:${evidence.name}:${index}`}
-          >
-            <Badge className="w-fit max-w-full truncate" title={evidence.source} variant="secondary">
-              {evidenceSourceDisplayName(evidence.source, copy)}
-            </Badge>
-            <div className="grid min-w-0 gap-1">
-              <span className="truncate text-sm font-medium" title={evidence.name}>
-                {evidenceNameDisplayName(evidence.name, copy)}
-              </span>
-              {evidence.summary ? (
-                <p className="line-clamp-3 break-words text-xs leading-relaxed text-muted-foreground" title={evidence.summary}>
-                  {evidence.summary}
-                </p>
-              ) : null}
-            </div>
-          </li>
-        ))}
-      </ul>
-    );
-  }
-  const selected = report.candidates.find(({ id }) => id === report.selectedCandidateId);
-  const fallback = selected?.supportingEvidence.length
-    ? selected.supportingEvidence
-    : report.supportingEvidence;
-  if (fallback.length === 0) return <p className="text-sm text-muted-foreground">{copy.sectionEmpty}</p>;
-  return (
-    <EvidenceTokenList
-      copy={copy}
-      items={fallback}
-      label={copy.supportingEvidence}
-      tone="healthy"
-    />
-  );
-}
-
-function EvidenceTokenList({
-  copy,
-  items,
-  label,
-  tone,
-}: {
-  copy: IssuesSurfaceCopy;
-  items: readonly string[];
-  label: string;
-  tone: "healthy" | "warning";
-}) {
-  return (
-    <section className="grid gap-1">
-      <h5
-        className={cn(
-          "flex items-center gap-1.5 text-xs font-medium",
-          tone === "healthy" ? "text-status-healthy" : "text-foreground/80",
-        )}
-      >
-        {tone === "warning" ? (
-          <ShieldAlert aria-hidden="true" className="size-3.5 text-status-warning" />
-        ) : null}
-        {label}
-      </h5>
-      <ul className="flex flex-wrap gap-1.5">
-        {items.map((item) => (
-          <li
-            className={cn(
-              "inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs",
-              tone === "healthy"
-                ? "border-status-healthy/25 bg-status-healthy/8 text-foreground/80"
-                : "border-dashed border-status-warning/40 bg-status-warning/8 text-foreground/80",
-            )}
-            key={item}
-          >
-            <span
-              aria-hidden="true"
-              className={cn(
-                "size-1.5 shrink-0 rounded-full",
-                tone === "healthy" ? "bg-status-healthy" : "bg-status-warning",
-              )}
-            />
-            <span className="break-words">{evidenceDisplayNameFromToken(item, copy)}</span>
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
-
-function selectedCandidateTitle(report: RcaReportItem, copy: IssuesSurfaceCopy): string {
-  return report.candidates.find(({ id }) => id === report.selectedCandidateId)?.title
-    ?? copy.causeLabel(report.rootCause);
-}
-
-function finalJudgementLabel(report: RcaReportItem, copy: IssuesSurfaceCopy): string {
-  const cause = selectedCandidateTitle(report, copy);
-  const symptom = report.symptom ? humanizeFilterValue(report.symptom) : copy.listLabel;
-  return copy.finalJudgementText(cause, symptom);
-}
-
-function recommendedActionLabel(report: RcaReportItem, copy: IssuesSurfaceCopy): string {
-  if (report.action === "plan_recovery") {
-    if (report.rootCause === "oom_killed") return copy.memoryRecommendation;
-    return copy.reviewRecoveryPlan;
-  }
-  return evidenceFallbackLabel(report.action);
-}
-
-function compactReportTime(value: string, copy: IssuesSurfaceCopy): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return copy.auditTime(value);
-  const month = date.getMonth() + 1;
-  const day = date.getDate();
-  const hours = `${date.getHours()}`.padStart(2, "0");
-  const minutes = `${date.getMinutes()}`.padStart(2, "0");
-  return `${month}.${day} ${hours}:${minutes}`;
-}
-
-function evidenceDisplayName(source: string, name: string, copy: IssuesSurfaceCopy): string {
-  const sourceLabel = evidenceSourceDisplayName(source, copy);
-  const nameLabel = evidenceNameDisplayName(name, copy);
-  if (sourceLabel === nameLabel) return sourceLabel;
-  return `${sourceLabel} · ${nameLabel}`;
-}
-
-function evidenceDisplayNameFromToken(token: string, copy: IssuesSurfaceCopy): string {
-  const [source, name] = token.split(":", 2);
-  if (!name) return evidenceFallbackLabel(token);
-  return evidenceDisplayName(source, name, copy);
-}
-
-function evidenceSourceDisplayName(source: string, copy: IssuesSurfaceCopy): string {
-  const normalized = source.trim().toLowerCase();
-  if (normalized === "kubernetes") return "Kubernetes";
-  if (normalized === "logs") return "Loki";
-  if (normalized === "metrics" || normalized === "traces") return copy.evidenceSourceLabel(source);
-  return humanizeFilterValue(source);
-}
-
-function evidenceNameDisplayName(name: string, copy: IssuesSurfaceCopy): string {
-  return copy.evidenceNameLabel(name);
 }
 
 function ReportNarrative({
@@ -857,7 +603,7 @@ function ReportNarrative({
   narrative: IssueRcaNarrative;
 }) {
   return (
-    <article className="grid min-w-0 gap-4 border-y border-primary/20 py-4">
+    <article className="grid min-w-0 gap-3 rounded-xl border border-primary/20 bg-primary/[0.03] p-4">
       <header className="flex items-center gap-2 text-sm font-semibold">
         <BrainCircuit aria-hidden="true" className="size-4 text-primary" />
         <h4>{copy.narrativeLabel}</h4>
@@ -870,7 +616,7 @@ function ReportNarrative({
         <NarrativeText label={copy.narrativeImpact} value={narrative.impact} />
         <NarrativeText label={copy.narrativeReasoning} value={narrative.reasoning} />
       </div>
-      <section className="grid gap-1 border-l-2 border-status-healthy py-2 pl-3">
+      <section className="grid gap-1 rounded-lg border border-status-healthy/30 bg-card p-3">
         <h5 className="text-xs font-medium text-status-healthy">
           {copy.narrativeRecommendedAction}
         </h5>
@@ -907,13 +653,51 @@ function NarrativeText({ label, value }: { label: string; value: string }) {
 
 function NarrativeList({ items, label }: { items: readonly string[]; label: string }) {
   return (
-    <section className="grid min-w-0 gap-1.5 border-t pt-3">
+    <section className="grid min-w-0 gap-1.5 rounded-lg border bg-card p-3">
       <h5 className="text-xs font-medium text-muted-foreground">{label}</h5>
       <ul className="grid gap-1.5 text-xs leading-relaxed">
         {items.map((item, index) => (
           <li className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-2" key={`${item}:${index}`}>
             <span aria-hidden="true">•</span>
             <span className="break-words">{item}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function ReportFact({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0 rounded-lg border bg-card px-3 py-2.5">
+      <dt className="text-[11px] text-muted-foreground">{label}</dt>
+      <dd className="mt-1 truncate text-sm font-medium" title={value}>{value}</dd>
+    </div>
+  );
+}
+
+function ReportEvidenceList({
+  items,
+  label,
+  tone,
+}: {
+  items: readonly string[];
+  label: string;
+  tone: "healthy" | "warning";
+}) {
+  return (
+    <section className="min-w-0 rounded-lg border bg-card p-3">
+      <h4 className={tone === "healthy"
+        ? "text-xs font-medium text-status-healthy"
+        : "text-xs font-medium text-status-warning"}
+      >
+        {label} · {items.length}
+      </h4>
+      <ul className="mt-2 grid gap-1.5 text-xs leading-relaxed">
+        {items.map((item, index) => (
+          <li className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-2" key={`${item}:${index}`}>
+            <span aria-hidden="true">•</span>
+            <span className="break-words" title={item}>{evidenceFallbackLabel(item)}</span>
           </li>
         ))}
       </ul>
@@ -942,12 +726,6 @@ function RecoveryPanel({
   selectionPendingId: string | null;
   state: SectionState<IssueRecoveryPlan>;
 }) {
-  const candidateScope = `${selected.correlationId}:${state.data?.id ?? ""}`;
-  const [openCandidates, setOpenCandidates] = useState<{
-    ids: ReadonlySet<string>;
-    scope: string;
-  }>({ ids: new Set(), scope: candidateScope });
-
   const recoveryProgress = issueRecoveryProgress({
     audit,
     plan: state.data,
@@ -959,7 +737,7 @@ function RecoveryPanel({
     selectionPending: selectionPendingId !== null,
   });
   return (
-    <IssueSection contentClassName="gap-5" title={copy.recoveryLabel}>
+    <SectionCard title={copy.recoveryLabel}>
       <RecoveryProgress
         copy={copy}
         progress={recoveryProgress}
@@ -981,245 +759,78 @@ function RecoveryPanel({
         </Alert>
       ) : null}
       <IssueSectionFrame copy={copy} state={state} unavailable={copy.recoveryUnavailable}>
-        {(plan) => {
-          const displayPlan = plan;
-          const recommendedCandidate = displayPlan.candidates.find(({ id }) => id === displayPlan.recommendedActionId)
-            ?? displayPlan.candidates[0];
-          const candidateOptions = displayPlan.candidates.filter(({ id }) => id !== recommendedCandidate?.id);
-          const resolvedOpenCandidateIds = openCandidates.scope === candidateScope
-            ? openCandidates.ids
-            : new Set<string>();
-          const toggleCandidate = (candidateId: string) => {
-            setOpenCandidates((current) => {
-              const next = new Set(current.scope === candidateScope ? current.ids : []);
-              if (next.has(candidateId)) next.delete(candidateId);
-              else next.add(candidateId);
-              return { ids: next, scope: candidateScope };
-            });
-          };
-          return (
-          <div className="grid gap-4">
-            <Badge className="w-fit" variant="outline">{copy.statusLabel(displayPlan.status)}</Badge>
-            {displayPlan.candidates.length === 0 ? <IssueEmpty text={copy.sectionEmpty} /> : (
-              <section className="grid gap-3 border-t border-dashed pt-4">
-                <div className="flex min-w-0 items-end justify-between gap-3">
-                  <h3 className="text-xs font-semibold text-muted-foreground">{copy.recommendedRecoveryActions}</h3>
-                  <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-                    {copy.itemCount(1)}
-                  </span>
-                </div>
-                {recommendedCandidate ? (
-                  <section className="grid min-w-0 gap-3 bg-muted/35 p-3">
-                    <div className="flex min-w-0 items-center gap-2">
-                      <span className="flex min-w-0 flex-1 items-center gap-2">
-                        <Lightbulb aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
-                        <h4 className="min-w-0 truncate text-sm font-semibold leading-snug" title={recommendedCandidate.title}>
-                          {recommendedCandidate.title}
-                        </h4>
-                      </span>
-                      <Badge className="border-status-healthy/30 bg-status-healthy/10 text-status-healthy" variant="outline">
-                        {copy.recommended}
-                      </Badge>
-                      <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-                        {Math.round(recommendedCandidate.score * 100)}%
-                      </span>
+        {(plan) => (
+          <div className="grid gap-3">
+            <Badge variant="outline">{copy.statusLabel(plan.status)}</Badge>
+            {plan.candidates.length === 0 ? <IssueEmpty text={copy.sectionEmpty} /> : (
+              <ul className="grid gap-3">
+                {plan.candidates.map((candidate) => (
+                  <li className="grid min-w-0 gap-3 rounded-xl border bg-muted/15 p-3" key={candidate.id}>
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                      <span className="break-words font-medium">{candidate.title}</span>
+                      {candidate.id === plan.recommendedActionId
+                        ? <Badge variant="secondary">{copy.recommended}</Badge>
+                        : null}
+                      {candidate.approvalRequired
+                        ? <Badge variant="outline">{copy.approvalRequired}</Badge>
+                        : null}
                     </div>
-                    <RecoveryCandidateDetails
-                      candidate={recommendedCandidate}
-                      capability={capability}
-                      copy={copy}
-                      onSelect={onSelect}
-                      selectionPendingId={selectionPendingId}
-                    />
-                  </section>
-                ) : null}
-                {candidateOptions.length > 0 ? (
-                  <>
-                    <div className="flex min-w-0 items-center justify-between gap-3 pt-1">
-                      <h3 className="text-xs font-semibold text-muted-foreground">{copy.otherRecoveryCandidates}</h3>
-                      <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-                        {copy.itemCount(candidateOptions.length)}
-                      </span>
+                    <p className="break-words text-sm text-muted-foreground">
+                      {candidate.description}
+                    </p>
+                    <div className="grid gap-2 sm:grid-cols-3">
+                      <RecoveryFact label={copy.confidence} value={`${Math.round(candidate.score * 100)}%`} />
+                      <RecoveryFact label={copy.status} value={candidate.riskLevel} />
+                      <RecoveryFact label={copy.target} value={candidate.blastRadius} />
                     </div>
-                <ul className="grid overflow-hidden border-y border-dashed">
-                  {candidateOptions.map((candidate) => {
-                    const open = resolvedOpenCandidateIds.has(candidate.id);
-                    return (
-                      <li
-                        className={cn("min-w-0 border-b border-dashed last:border-b-0", open && "bg-muted/35")}
-                        key={candidate.id}
-                      >
-                      <button
-                        aria-expanded={open}
-                        className={cn(
-                          "group grid w-full min-w-0 cursor-pointer grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 p-3 text-left transition-colors hover:bg-muted/35 motion-reduce:transition-none",
-                          open && "bg-muted/25",
-                        )}
-                        onClick={() => toggleCandidate(candidate.id)}
+                    {candidate.validationChecks.length > 0 ? (
+                      <ul className="grid gap-1 text-xs text-muted-foreground">
+                        {candidate.validationChecks.map((check, index) => (
+                          <li className="flex items-start gap-1.5 break-words" key={`${check}:${index}`}>
+                            <CircleCheck aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 text-status-healthy" />
+                            {check}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                    {candidate.rollbackPlan ? (
+                      <p className="rounded-lg border bg-card px-3 py-2 text-xs leading-relaxed text-muted-foreground">
+                        {candidate.rollbackPlan}
+                      </p>
+                    ) : null}
+                    {capability.state === "hidden" ? null : (
+                      <Button
+                        aria-describedby={capability.state === "disabled"
+                          ? `recovery-capability-${candidate.id}`
+                          : undefined}
+                        disabled={capability.state === "disabled" || selectionPendingId !== null}
+                        onClick={() => onSelect(candidate.id)}
                         type="button"
                       >
-                        <span className="flex min-w-0 items-center gap-2">
-                          <Lightbulb aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
-                          <span className="min-w-0 truncate text-sm font-semibold" title={candidate.title}>
-                            {candidate.title}
-                          </span>
-                        </span>
-                        <span className="flex shrink-0 items-center gap-2">
-                          <span className="text-xs tabular-nums text-muted-foreground">
-                            {Math.round(candidate.score * 100)}%
-                          </span>
-                        </span>
-                        <Sparkle
-                          aria-hidden="true"
-                          className={cn(
-                            "size-4 shrink-0 text-muted-foreground transition-[color,transform] duration-(--motion-instant) group-hover:text-foreground/80 motion-reduce:transition-none",
-                            open && "rotate-45 text-foreground",
-                          )}
-                          strokeWidth={1.8}
-                        />
-                      </button>
-                      {open ? (
-                        <RecoveryCandidateDetails
-                          candidate={candidate}
-                          capability={capability}
-                          className="px-3 pb-3"
-                          copy={copy}
-                          onSelect={onSelect}
-                          selectionPendingId={selectionPendingId}
-                        />
-                      ) : null}
-                      </li>
-                    );
-                  })}
-                </ul>
-                  </>
-                ) : null}
-              </section>
+                        {selectionPendingId === candidate.id ? (
+                          <>
+                            <Spinner decorative />
+                            {copy.selectionPending}
+                          </>
+                        ) : candidate.title}
+                      </Button>
+                    )}
+                    {capability.state === "disabled" ? (
+                      <p
+                        className="text-sm text-muted-foreground"
+                        id={`recovery-capability-${candidate.id}`}
+                      >
+                        {capability.reason}
+                      </p>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
             )}
           </div>
-          );
-        }}
+        )}
       </IssueSectionFrame>
-    </IssueSection>
-  );
-}
-
-function RecoveryCandidateDetails({
-  candidate,
-  capability,
-  className,
-  copy,
-  onSelect,
-  selectionPendingId,
-}: {
-  candidate: IssueRecoveryPlan["candidates"][number];
-  capability: RecoverySelectionCapability;
-  className?: string;
-  copy: IssuesSurfaceCopy;
-  onSelect: (actionId: string) => void;
-  selectionPendingId: string | null;
-}) {
-  return (
-    <div className={cn("grid min-w-0 gap-5 text-sm animate-in fade-in-0 slide-in-from-top-1 duration-(--motion-instant) ease-(--ease-soft) motion-reduce:animate-none", className)}>
-      <dl className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-        <div className="inline-flex min-w-0 items-center gap-1.5">
-          <dt className="shrink-0">{copy.actionRisk}</dt>
-          <dd className="w-fit rounded-md bg-muted/55 px-2 py-1 font-medium text-foreground/80">
-            {copy.riskLabel(candidate.riskLevel)}
-          </dd>
-        </div>
-        <span aria-hidden="true" className="text-border">|</span>
-        <div className="inline-flex min-w-0 items-center gap-1.5">
-          <dt className="shrink-0">{copy.impactScope}</dt>
-          <dd className="w-fit max-w-full truncate rounded-md bg-muted/55 px-2 py-1 font-medium text-foreground/80" title={candidate.blastRadius}>
-            {candidate.blastRadius}
-          </dd>
-        </div>
-      </dl>
-      {candidate.recommendationReason ? (
-        <section className="grid gap-2 border-t pt-5">
-          <h4 className="text-xs font-medium text-muted-foreground">{copy.recommendationReason}</h4>
-          <p className="break-words text-sm font-medium leading-relaxed text-foreground">
-            {candidate.recommendationReason}
-          </p>
-        </section>
-      ) : null}
-      {candidate.expectedOutcome ? (
-        <section className="grid gap-2 border-t pt-5">
-          <h4 className="text-xs font-medium text-muted-foreground">{copy.expectedOutcome}</h4>
-          <p className="break-words text-sm font-medium leading-relaxed text-foreground">
-            {candidate.expectedOutcome}
-          </p>
-        </section>
-      ) : null}
-      {candidate.riskExplanation ? (
-        <section className="grid gap-2 border-t pt-5">
-          <h4 className="text-xs font-medium text-muted-foreground">{copy.riskExplanation}</h4>
-          <p className="break-words text-sm font-medium leading-relaxed text-foreground">
-            {candidate.riskExplanation}
-          </p>
-        </section>
-      ) : null}
-      <section className="grid gap-2 border-t pt-5">
-        <h4 className="text-xs font-medium text-muted-foreground">{copy.actionToRun}</h4>
-        <p className="break-words text-sm font-medium leading-relaxed text-foreground">{candidate.description}</p>
-      </section>
-      {candidate.validationChecks.length > 0 ? (
-        <section className="grid gap-2 border-t pt-5">
-          <h4 className="text-xs font-medium text-muted-foreground">{copy.validationChecks}</h4>
-          <ul className="grid gap-1 text-xs text-muted-foreground">
-            {candidate.validationChecks.map((check, index) => (
-              <li className="flex items-start gap-1.5 break-words" key={`${check}:${index}`}>
-                <Check aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
-                {check}
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
-      {candidate.rollbackPlan ? (
-        <section className="grid gap-2 border-t pt-5">
-          <h4 className="text-xs font-medium text-muted-foreground">{copy.rollbackAction}</h4>
-          {candidate.rollbackReason ? (
-            <p className="break-words text-sm font-medium leading-relaxed text-foreground">
-              {candidate.rollbackReason}
-            </p>
-          ) : null}
-          <p className="border-l border-foreground/20 pl-3 text-xs leading-relaxed text-muted-foreground">
-            {candidate.rollbackPlan}
-          </p>
-        </section>
-      ) : null}
-      {capability.state === "hidden" ? null : (
-        <div className="flex justify-end pt-1">
-          <Button
-            aria-describedby={capability.state === "disabled"
-              ? `recovery-capability-${candidate.id}`
-              : undefined}
-            aria-label={candidate.title}
-            className="enabled:cursor-pointer"
-            disabled={capability.state === "disabled" || selectionPendingId !== null}
-            onClick={() => onSelect(candidate.id)}
-            type="button"
-          >
-            {selectionPendingId === candidate.id ? (
-              <>
-                <Spinner decorative />
-                {copy.selectionPending}
-              </>
-            ) : copy.selectRecoveryAction}
-          </Button>
-        </div>
-      )}
-      {capability.state === "disabled" ? (
-        <p
-          className="text-sm text-muted-foreground"
-          id={`recovery-capability-${candidate.id}`}
-        >
-          {capability.reason}
-        </p>
-      ) : null}
-    </div>
+    </SectionCard>
   );
 }
 
@@ -1246,66 +857,51 @@ function RecoveryProgress({
       : progress.phase === "submitting" && selectionAccepted
         ? copy.recoveryProgressAccepted
         : steps[progress.activeStep];
-  const progressTone = progress.phase === "failed"
-    ? "failed"
-    : progress.phase === "approval"
-      ? "approval"
-      : "active";
-  const progressToneClass = progressTone === "failed"
-    ? "[&_div[data-slot=progress-indicator]]:bg-destructive"
-    : progressTone === "approval"
-      ? "[&_div[data-slot=progress-indicator]]:bg-status-warning"
-      : "[&_div[data-slot=progress-indicator]]:bg-primary";
-  const activeMarkerClass = progressTone === "failed"
-    ? "border-destructive bg-destructive text-destructive-foreground"
-    : progressTone === "approval"
-      ? "border-status-warning bg-status-warning text-foreground"
-      : "border-primary bg-primary text-primary-foreground";
-  const markerAlignedProgress = progress.phase === "completed"
-    ? 100
-    : Math.min(100, Math.max(0, ((progress.activeStep + 0.5) / steps.length) * 100));
   return (
     <section
       aria-live="polite"
-      className="grid min-w-0 gap-4 border-y py-4"
+      className="grid min-w-0 gap-3 rounded-xl border bg-muted/15 p-3"
     >
-      <div className="flex min-w-0 items-center gap-3">
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold" title={activeLabel}>
-            {activeLabel}
-          </p>
-          <p className="mt-0.5 text-xs text-muted-foreground">{copy.recoveryProgressLabel}</p>
-        </div>
-        <span className="shrink-0 text-sm tabular-nums text-muted-foreground">
+      <div className="flex min-w-0 items-center gap-2">
+        {progress.phase === "completed" ? (
+          <CircleCheck aria-hidden="true" className="size-4 shrink-0 text-status-healthy" />
+        ) : progress.phase === "failed" ? (
+          <XCircle aria-hidden="true" className="size-4 shrink-0 text-destructive" />
+        ) : progress.phase === "approval" ? (
+          <ShieldAlert aria-hidden="true" className="size-4 shrink-0 text-status-warning" />
+        ) : (
+          <Spinner className="size-4 shrink-0" decorative />
+        )}
+        <p className="min-w-0 flex-1 truncate text-sm font-medium" title={activeLabel}>
+          {activeLabel}
+        </p>
+        <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
           {progress.phase === "failed" ? copy.recoveryProgressStopped : `${progress.progress}%`}
         </span>
       </div>
       <Progress
         aria-label={copy.recoveryProgressLabel}
-        className={cn("h-1.5", progressToneClass)}
-        value={markerAlignedProgress}
+        value={progress.progress}
         valueText={activeLabel}
       />
-      <ol className="grid min-w-0 grid-cols-5 gap-2 border-t border-dashed pt-3" aria-label={copy.recoveryProgressLabel}>
+      <ol className="grid min-w-0 grid-cols-5 gap-1" aria-label={copy.recoveryProgressLabel}>
         {steps.map((label, index) => {
           const completed = progress.phase === "completed" || index < progress.activeStep;
           const active = index === progress.activeStep;
           const failed = progress.phase === "failed" && active;
-          const completedBeforeFailure = progress.phase === "failed" && completed;
           return (
-            <li className="grid min-w-0 justify-items-center gap-1.5 text-center" key={label}>
+            <li className="grid min-w-0 justify-items-center gap-1 text-center" key={label}>
               <span className={cn(
-                "grid size-6 place-items-center rounded-md border bg-card text-[10px] font-semibold tabular-nums text-muted-foreground",
-                completed && "border-foreground/10 bg-muted/35 text-muted-foreground/70 opacity-70",
-                completedBeforeFailure && "border-destructive/15 bg-destructive/5 text-destructive/55 opacity-100",
-                active && activeMarkerClass,
+                "grid size-6 place-items-center rounded-full border bg-card text-[10px] font-semibold tabular-nums",
+                completed && "border-status-healthy/50 text-status-healthy",
+                active && !failed && "border-foreground bg-foreground text-background",
+                failed && "border-destructive bg-destructive text-destructive-foreground",
               )}
               >
-                {completed ? <Check aria-hidden="true" className="size-3.5" /> : index + 1}
+                {completed ? <CircleCheck aria-hidden="true" className="size-3.5" /> : index + 1}
               </span>
               <span className={cn(
-                "w-full truncate text-[11px] leading-4 text-muted-foreground",
-                completed && "text-muted-foreground/55",
+                "w-full truncate text-[10px] leading-4 text-muted-foreground",
                 active && "font-medium text-foreground",
                 failed && "text-destructive",
               )} title={label}
@@ -1325,19 +921,20 @@ function RecoveryProgress({
   );
 }
 
-function IssueSection({
-  children,
-  contentClassName,
-  title,
-}: {
-  children: React.ReactNode;
-  contentClassName?: string;
-  title: string;
-}) {
+function RecoveryFact({ label, value }: { label: string; value: string }) {
   return (
-    <section className="grid min-w-0 gap-4 border-t pt-6" data-slot="issue-section">
-      <h3 className="text-sm font-semibold">{title}</h3>
-      <div className={cn("grid gap-3", contentClassName)}>{children}</div>
-    </section>
+    <div className="min-w-0 rounded-lg border bg-card px-2.5 py-2">
+      <dt className="text-[11px] text-muted-foreground">{label}</dt>
+      <dd className="mt-0.5 truncate text-xs font-medium" title={value}>{value}</dd>
+    </div>
+  );
+}
+
+function SectionCard({ children, title }: { children: React.ReactNode; title: string }) {
+  return (
+    <Card>
+      <CardHeader className="border-b"><CardTitle>{title}</CardTitle></CardHeader>
+      <CardContent className="grid gap-3">{children}</CardContent>
+    </Card>
   );
 }

@@ -219,10 +219,6 @@ function issueFixture(overrides: Partial<IssueSummary> = {}): IssueSummary {
     pullRequestUrl: null,
     errorReason: null,
     updatedAt: "2026-07-13T01:30:00Z",
-    situationSummary: null,
-    recommendedActionSummary: null,
-    evidenceSummary: null,
-    evidenceBundleSummary: null,
     ...overrides,
   };
 }

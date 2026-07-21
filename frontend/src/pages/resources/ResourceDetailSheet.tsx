@@ -1,18 +1,14 @@
 import {
   Activity,
   CircleAlert,
+  Link2,
   ListTree,
-  ScrollText,
-  ShieldCheck,
   TriangleAlert,
-  type LucideIcon,
 } from "lucide-react";
 import type {
   ResourceDetail,
   ResourceIdentity,
 } from "../../features/resources/resourcesContract";
-import type { ReactNode } from "react";
-import type { ResourceMetricTimeRange } from "../../features/resources/resourceMetricsHistoryContract";
 import {
   useI18n,
   type I18nController,
@@ -34,30 +30,12 @@ import { ResourceDetailLoadingPreview } from "./ResourcesLoadingPreview";
 import type { ResourcesResourceState } from "./resourcesPageStateModel";
 import { ResourceMetricsCharts } from "./ResourceMetricsCharts";
 import type { ResourceMetricsHistoryFrame } from "./useResourceMetricsHistoryDataFrame";
-import { ProviderResourceDetailPanel } from "./ProviderResourceDetailPanel";
-import type { ResourceIssuesFrame } from "./useResourceIssuesDataFrame";
-import { ResourceIssuesSection } from "../../features/issues/ResourceIssuesSection";
-import { ResourceAccessPanel } from "./ResourceAccessPanel";
-import type { ChecksPort } from "../../features/checks/checksContract";
-import type { ResourceManifestPort } from "../../features/resources/resourceManifestContract";
-import { ResourceChecksSection } from "./ResourceChecksSection";
-import { ResourceManifestEditor } from "./ResourceManifestEditor";
-import { RelatedResourcesSection } from "./RelatedResourcesSection";
 
 export function ResourceDetailBody({
   detail,
   full,
   identity,
   metricHistory,
-  metricRange,
-  onMetricRangeChange,
-  onNavigateResource,
-  resourceIssues,
-  checksPort,
-  manifestPort,
-  onManifestUnauthorized,
-  onManifestEditingChange,
-  logContent,
   onTabChange,
   tab,
 }: {
@@ -65,15 +43,6 @@ export function ResourceDetailBody({
   full: boolean;
   identity: ResourceIdentity | null;
   metricHistory: ResourceMetricsHistoryFrame;
-  metricRange: ResourceMetricTimeRange;
-  onMetricRangeChange: (range: ResourceMetricTimeRange) => void;
-  onNavigateResource: (identity: ResourceIdentity) => void;
-  resourceIssues: ResourceIssuesFrame;
-  checksPort?: ChecksPort;
-  manifestPort?: ResourceManifestPort;
-  onManifestUnauthorized?: () => void;
-  onManifestEditingChange?: (editing: boolean) => void;
-  logContent?: ReactNode;
   onTabChange: (tab: string) => void;
   tab: string;
 }) {
@@ -112,8 +81,7 @@ export function ResourceDetailBody({
     );
   }
   const resource = detail.data.resource;
-  const allowedTabs = ["overview", "manifest", "events", "logs", "rbac"];
-  const selectedTab = allowedTabs.includes(tab)
+  const selectedTab = ["overview", "relations", "metrics", "events"].includes(tab)
     ? tab
     : "overview";
   return (
@@ -124,12 +92,13 @@ export function ResourceDetailBody({
     >
       <TabsList aria-label={t("resources.detail.tabs.aria")} className="w-full" variant="line">
         <TabsTrigger value="overview">{t("resources.detail.overview")}</TabsTrigger>
-        <TabsTrigger value="manifest">{t("resources.detail.yaml")}</TabsTrigger>
+        <TabsTrigger value="relations">
+          {t("resources.detail.relatedCount", { count: detail.data.related.length })}
+        </TabsTrigger>
+        <TabsTrigger value="metrics">{t("resources.detail.metrics")}</TabsTrigger>
         <TabsTrigger value="events">
           {t("resources.detail.eventsCount", { count: detail.data.events.length })}
         </TabsTrigger>
-        <TabsTrigger value="logs">{t("resources.detail.logs")}</TabsTrigger>
-        <TabsTrigger value="rbac">{t("resources.detail.rbac")}</TabsTrigger>
       </TabsList>
       <TabsContent className="grid gap-5 py-4" value="overview">
         {detail.refreshFailure ? (
@@ -170,41 +139,45 @@ export function ResourceDetailBody({
           ]} />
         </section>
         <ResourceFactsPanel facts={resource.facts} />
-        {detail.data.providerDetail ? (
-          <ProviderResourceDetailPanel
-            detail={detail.data.providerDetail}
-            metricHistory={metricHistory}
-            resourceId={resource.inventoryKey}
-          />
-        ) : null}
-        <ResourceIssuesSection frame={resourceIssues} />
-        {checksPort ? <ResourceChecksSection detail={detail.data} port={checksPort} /> : null}
         {hasMetricPoints(metricHistory, resource.inventoryKey) ? (
           <ResourceMetricsCharts
             frame={metricHistory}
-            onRangeChange={onMetricRangeChange}
-            range={metricRange}
             resourceId={resource.inventoryKey}
             wide={full}
           />
         ) : <PointInTimeEvidenceUnavailable />}
-        <RelatedResourcesSection
-          items={detail.data.related}
-          onNavigateResource={onNavigateResource}
-        />
       </TabsContent>
-      <TabsContent className="grid gap-3 py-4" value="manifest">
-        {manifestPort ? (
-          <ResourceManifestEditor
-            detail={detail.data}
-            inline
-            onEditingChange={onManifestEditingChange}
-            onUnauthorized={onManifestUnauthorized}
-            port={manifestPort}
-          />
-        ) : (
-          <EmptySection icon={CircleAlert} text={t("resources.detail.yamlUnavailable")} />
-        )}
+      <TabsContent className="grid gap-3 py-4" value="relations">
+        {detail.data.related.length === 0 ? (
+          <EmptySection icon={Link2} text={t("resources.detail.relatedEmpty")} />
+        ) : detail.data.related.map((group) => (
+          <section className="min-w-0 rounded-lg border p-4" key={group.name}>
+            <h3 className="mb-3 min-w-0 font-medium [overflow-wrap:anywhere]">{group.name}</h3>
+            <ul className="grid gap-2">
+              {group.items.map((item) => (
+                <li
+                  className="flex min-w-0 items-center justify-between gap-3 text-sm"
+                  key={item.id}
+                >
+                  <OverflowIdentity
+                    className="min-w-0 flex-1"
+                    render={<span data-slot="resource-related-identity" />}
+                    value={`${item.kind} · ${item.namespace ?? t("resources.detail.clusterScope")}/${item.name}`}
+                  />
+                  <StatusMark label={item.healthStatus} tone={item.health} />
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))}
+        <CompletenessNote />
+      </TabsContent>
+      <TabsContent className="grid gap-3 py-4" value="metrics">
+        <ResourceMetricsCharts
+          frame={metricHistory}
+          resourceId={resource.inventoryKey}
+          wide={full}
+        />
       </TabsContent>
       <TabsContent className="grid gap-3 py-4" value="events">
         {detail.data.events.length === 0 ? (
@@ -252,18 +225,6 @@ export function ResourceDetailBody({
         ))}
         <CompletenessNote />
       </TabsContent>
-      <TabsContent className="grid gap-3 py-4" value="logs">
-        {logContent ?? (
-          <EmptySection icon={ScrollText} text={t("resources.detail.logsOpenHint")} />
-        )}
-      </TabsContent>
-      <TabsContent className="grid gap-3 py-4" value="rbac">
-        {detail.data.access ? (
-          <ResourceAccessPanel access={detail.data.access} />
-        ) : (
-          <EmptySection icon={ShieldCheck} text={t("resources.detail.rbacEmpty")} />
-        )}
-      </TabsContent>
     </Tabs>
   );
 }
@@ -309,7 +270,7 @@ function PointInTimeEvidenceUnavailable() {
   );
 }
 
-function EmptySection({ icon: Icon, text }: { icon: LucideIcon; text: string }) {
+function EmptySection({ icon: Icon, text }: { icon: typeof Link2; text: string }) {
   return (
     <div className="grid min-h-48 place-items-center rounded-lg border border-dashed p-6 text-center">
       <div className="grid justify-items-center gap-2 text-sm text-muted-foreground">

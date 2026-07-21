@@ -215,7 +215,6 @@ describe("Cluster registration API", () => {
       cloud_provider: "eks",
       deploy_provider: "manual-manifest",
     }));
-    expect(String(init?.body)).not.toContain("prometheus_base_url");
     expect(String(init?.body)).not.toContain("workspace");
   });
 

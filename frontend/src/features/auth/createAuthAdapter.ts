@@ -4,33 +4,27 @@ import {
   type AuthFailureCode,
   type AuthPort,
   type ProductSession,
-  type ProductWorkspaceList,
 } from "./authContract";
-import type { AuthEndpointSession, AuthEndpointWorkspaceList } from "./authEndpointContract";
 
-export type { AuthEndpointSession } from "./authEndpointContract";
+export interface AuthEndpointSession {
+  authenticated: boolean;
+  display_name?: string | null;
+  email?: string | null;
+  user_id: string;
+  roles: readonly string[];
+  workspace_id: string;
+}
 
 export interface AuthEndpointDependencies {
   getSession(signal?: AbortSignal): Promise<AuthEndpointSession>;
-  listWorkspaces(signal?: AbortSignal): Promise<AuthEndpointWorkspaceList>;
   login(credentials: AuthCredentials, signal?: AbortSignal): Promise<AuthEndpointSession>;
   logout(signal?: AbortSignal): Promise<void>;
-  switchWorkspace(workspaceId: string, signal?: AbortSignal): Promise<AuthEndpointSession>;
 }
 
 export function createAuthAdapter(
   endpoints: AuthEndpointDependencies,
 ): AuthPort {
   return {
-    async listWorkspaces(signal) {
-      try {
-        return toProductWorkspaceList(await endpoints.listWorkspaces(signal));
-      } catch (error) {
-        if (isAbortError(error) || error instanceof AuthPortFailure) throw error;
-        throw toPortFailure(error);
-      }
-    },
-
     async loadSession(signal) {
       try {
         const wireSession = await endpoints.getSession(signal);
@@ -74,41 +68,6 @@ export function createAuthAdapter(
         throw toPortFailure(error);
       }
     },
-
-    async switchWorkspace(workspaceId, signal) {
-      const canonicalWorkspaceId = canonicalIdentity(workspaceId);
-      if (canonicalWorkspaceId === null) throw new AuthPortFailure("invalid-response");
-      try {
-        return toProductSession(await endpoints.switchWorkspace(canonicalWorkspaceId, signal));
-      } catch (error) {
-        if (isAbortError(error) || error instanceof AuthPortFailure) throw error;
-        throw toPortFailure(error);
-      }
-    },
-  };
-}
-
-function toProductWorkspaceList(wireList: AuthEndpointWorkspaceList): ProductWorkspaceList {
-  const currentWorkspaceId = canonicalIdentity(wireList.current_workspace_id);
-  const items = wireList.items.map((workspace) => ({
-    workspaceId: canonicalIdentity(workspace.workspace_id),
-    name: canonicalIdentity(workspace.name),
-    slug: canonicalIdentity(workspace.slug),
-  }));
-  if (
-    currentWorkspaceId === null ||
-    items.some((workspace) => Object.values(workspace).some((value) => value === null)) ||
-    new Set(items.map((workspace) => workspace.workspaceId)).size !== items.length
-  ) {
-    throw new AuthPortFailure("invalid-response");
-  }
-  return {
-    currentWorkspaceId,
-    items: items.map((workspace) => ({
-      workspaceId: workspace.workspaceId as string,
-      name: workspace.name as string,
-      slug: workspace.slug as string,
-    })),
   };
 }
 
@@ -121,27 +80,14 @@ function toProductSession(wireSession: AuthEndpointSession): ProductSession {
     throw new AuthPortFailure("invalid-response");
   }
 
-  const groups = wireSession.groups.map(canonicalIdentity);
   const roles = wireSession.roles.map(canonicalIdentity);
-  if (
-    wireSession.auth_enabled !== true
-    || !groups.every((group): group is string => group !== null)
-    || !roles.every((role): role is string => role !== null)
-  ) {
+  if (!roles.every((role): role is string => role !== null)) {
     throw new AuthPortFailure("invalid-response");
   }
 
   return {
-    authEnabled: true,
-    authMode: wireSession.auth_mode,
     ...(displayName === null ? {} : { displayName }),
     ...(email === null ? {} : { email }),
-    groups: [...new Set(groups)].sort((left, right) => left.localeCompare(right)),
-    logout: {
-      action: wireSession.logout.action,
-      supported: wireSession.logout.supported,
-      reauthenticationExpected: wireSession.logout.reauthentication_expected,
-    },
     userId,
     roles: [...new Set(roles)].sort((left, right) => left.localeCompare(right)),
     workspaceId,

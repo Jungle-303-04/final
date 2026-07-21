@@ -7,6 +7,7 @@ export type GitOpsFailureCode =
   | "not-found"
   | "rate-limited"
   | "error";
+
 export class GitOpsPortFailure extends Error {
   readonly code: GitOpsFailureCode;
   readonly retryAfter: number | null;
@@ -35,21 +36,8 @@ export interface ReleaseCluster {
   connectionStatus: string;
 }
 
-export interface GitOpsSyncTargetQuery {
-  clusters?: readonly string[];
-  namespaces?: readonly string[];
-  applications?: readonly string[];
-  providers?: readonly ("argo" | "flux" | "internal")[];
-  kinds?: readonly string[];
-  labels?: Readonly<Record<string, string>>;
-  q?: string;
-  limit?: number;
-}
-
 export interface GitOpsSyncTarget {
   id: string;
-  /** Every application identity carried by canonical overview adapters; legacy ports may omit it. */
-  applicationIds?: readonly string[];
   applicationId: string;
   applicationName: string;
   clusterId: string | null;
@@ -58,13 +46,6 @@ export interface GitOpsSyncTarget {
   syncStatus: string | null;
   revision: string | null;
   observedAt: string | null;
-  authority?: "registered" | "controller";
-  provider?: "internal" | "argo" | "flux";
-  kind?: string | null;
-  health?: string | null;
-  resourceLocator?: GitOpsResourceLocator | null;
-  freshness?: "live" | "stale" | "partial" | "disconnected";
-  partialReasonCodes?: string[];
 }
 
 export type GitOpsAvailability = "available" | "partial" | "unavailable";
@@ -146,115 +127,196 @@ export interface GitOpsApplicationDetail {
   capabilities: [GitOpsActionCapability, GitOpsActionCapability];
 }
 
-export type GitOpsResourceAction =
-  | "reconcile"
-  | "sync_with_source"
-  | "suspend"
-  | "resume"
-  | "sync"
-  | "refresh";
-
-export interface GitOpsResourceLocator {
-  clusterId: string;
-  apiVersion: string;
-  kind: string;
-  namespace: string;
+export interface ReleaseTargetInput {
   name: string;
+  repository: string;
+  branch: string;
+  manifestPath: string;
+  clusterId: string;
+  namespace: string;
+  environment: string;
+  token?: string;
 }
 
-export interface GitOpsTreeNode {
-  id: string;
-  resource: GitOpsResourceRef;
-  role: "root" | "declared" | "generated" | "source" | "dependency";
-  status: string | null;
-  health: string | null;
+export interface ReleasePlanStep {
+  step_id?: string;
+  application_id: string;
+  name: string;
+  position: number;
+  depends_on: string[];
+  config: Record<string, unknown>;
 }
 
-export interface GitOpsResourceTree {
-  scope: GitOpsClusterScope;
-  root: GitOpsResourceRef;
-  nodes: GitOpsTreeNode[];
-  edges: {
-    source: string;
-    target: string;
-    relationship: "owns" | "source" | "depends_on";
-  }[];
-  coverage: {
-    state: "complete" | "partial";
-    reasonCodes: string[];
-    observedCount: number;
-    returnedCount: number;
-  };
+export interface ReleasePlan {
+  plan_id?: string;
+  name: string;
+  description: string;
+  status: ReleasePlanStatus;
+  settings: Record<string, unknown>;
+  steps: ReleasePlanStep[];
+  updated_at?: string;
 }
 
-export interface GitOpsResourceInsights {
-  scope: GitOpsClusterScope;
-  resource: GitOpsResourceRef;
-  resourceVersion: string;
-  provider: "argo" | "flux";
-  status: string | null;
-  health: string | null;
-  revision: string | null;
-  source: GitOpsResourceRef | null;
-  conditions: {
-    type: string;
-    status: string;
-    reason: string | null;
-    message: string | null;
-    observedAt: string | null;
-  }[];
-  history: {
-    id: string | null;
-    revision: string | null;
-    deployedAt: string | null;
-    phase: string | null;
-    message: string | null;
-    initiatedBy: string | null;
-  }[];
-  capabilities: {
-    scope: GitOpsClusterScope;
-    resource: GitOpsResourceRef;
-    revision: string;
-    actions: GitOpsResourceAction[];
-  };
-}
-
-export interface GitOpsSyncOptions {
-  revision?: string;
-  prune: boolean;
-  dryRun: boolean;
-  force: boolean;
-  applyOnly: boolean;
-  syncOptions: string[];
-  resources: {
-    apiGroup: string;
-    kind: string;
-    namespace: string | null;
+export interface ReleasePreview {
+  plan_id?: string;
+  executable: boolean;
+  summary: string;
+  waves: { wave: number; step_ids: string[]; applications: string[] }[];
+  steps: {
+    step_id: string;
+    application_id: string;
     name: string;
+    position: number;
+    wave: number | null;
+    blocked_by: string[];
+    gate: string;
+    strategy: string;
+    environment: string;
+    action: string;
   }[];
+  blockers: string[];
 }
 
-export interface GitOpsResourceActionInput {
-  action: GitOpsResourceAction;
-  reason: string;
-  confirmation: true;
-  refreshMode?: "normal" | "hard";
-  options?: GitOpsSyncOptions;
-  idempotencyKey: string;
-  insights: GitOpsResourceInsights;
+export interface ReleaseReadiness {
+  ready: boolean;
+  mode: string;
+  summary: string;
+  checks: {
+    check_id: string;
+    name: string;
+    status: string;
+    message: string;
+    blockers: string[];
+  }[];
+  impact?: {
+    summary: string;
+    runtime_mode: string;
+    live_side_effects: boolean;
+    total_steps: number;
+    total_waves: number;
+    first_wave: number;
+    applications: string[];
+    environments: string[];
+    production_targets: string[];
+    production_target_count: number;
+    first_wave_steps: Record<string, unknown>[];
+  };
+  next_actions: {
+    action_id: string;
+    check_id: string;
+    label: string;
+    severity: string;
+    message: string;
+    blockers: string[];
+  }[];
+  blockers: string[];
+  warnings: string[];
 }
 
-export type {
-  ApprovalDecision,
-  GeneratedManifest,
-  ReleasePlan,
-  ReleasePlanStep,
-  ReleasePreview,
-  ReleaseReadiness,
-  ReleaseRun,
-  ReleaseRunAction,
-  ReleaseRunStep,
-  ReleaseTargetInput,
-  SafePrResult,
-} from "./releasePlanContract";
-export type { GitOpsPort } from "./gitOpsPort";
+export interface ReleaseRunStep {
+  run_step_id: string;
+  application_id: string;
+  name: string;
+  wave: number;
+  status: string;
+  workflow_run_id?: string;
+  event_id?: string;
+  correlation_id?: string;
+  approval_id?: string | null;
+  health: Record<string, unknown>;
+  rollback: Record<string, unknown>;
+  details: Record<string, unknown>;
+  workflow?: Record<string, unknown>;
+}
+
+export interface ReleaseRun {
+  run_id: string;
+  plan_id: string;
+  plan_name: string;
+  status: string;
+  derived_status?: string;
+  current_wave: number;
+  total_waves: number;
+  started_by?: string;
+  settings: Record<string, unknown>;
+  github: Record<string, unknown>;
+  rollback: Record<string, unknown>;
+  health: Record<string, unknown>;
+  attention?: Record<string, unknown>;
+  steps: ReleaseRunStep[];
+  events: {
+    audit_id: string;
+    event_type: string;
+    message: string;
+    actor?: string;
+    details: Record<string, unknown>;
+    created_at?: string;
+  }[];
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface GeneratedManifest {
+  manifest: string;
+  files: { path: string; content: string; action: string; description: string }[];
+  resources: { api_version: string; kind: string; namespace: string; name: string }[];
+  resource_count: number;
+  diagnostics: {
+    source: string;
+    severity: string;
+    message: string;
+    code: string;
+    line: number;
+    column: number;
+    end_line: number;
+    end_column: number;
+    path?: string;
+    action?: string | null;
+  }[];
+  warnings: string[];
+  summary: string;
+}
+
+export interface SafePrResult extends GeneratedManifest {
+  accepted: boolean;
+  event_id: string;
+  correlation_id: string;
+  workflow_run_id: string;
+  application_id: string;
+  repo_ref: string;
+  base_branch: string;
+  manifest_path: string;
+  commit_sha: string;
+  patch_sha256: string;
+}
+
+export type ReleaseRunAction =
+  | "advance"
+  | "pause"
+  | "resume"
+  | "retry"
+  | "rollback"
+  | "cancel"
+  | "notify";
+
+export interface GitOpsPort {
+  listApplications(signal?: AbortSignal): Promise<ReleaseApplication[]>;
+  listSyncTargets(signal?: AbortSignal): Promise<GitOpsSyncTarget[]>;
+  getApplicationDetail(applicationId: string, signal?: AbortSignal): Promise<GitOpsApplicationDetail>;
+  listClusters(signal?: AbortSignal): Promise<ReleaseCluster[]>;
+  listPlans(signal?: AbortSignal): Promise<ReleasePlan[]>;
+  listRuns(planId?: string, signal?: AbortSignal): Promise<ReleaseRun[]>;
+  connectApplication(input: ReleaseTargetInput, signal?: AbortSignal): Promise<ReleaseApplication>;
+  savePlan(plan: ReleasePlan, signal?: AbortSignal): Promise<ReleasePlan>;
+  previewPlan(plan: ReleasePlan, signal?: AbortSignal): Promise<ReleasePreview>;
+  checkReadiness(plan: ReleasePlan, signal?: AbortSignal): Promise<ReleaseReadiness>;
+  startPlan(plan: ReleasePlan, signal?: AbortSignal): Promise<ReleaseRun>;
+  renderManifest(plan: ReleasePlan, stepIndex: number, signal?: AbortSignal): Promise<GeneratedManifest>;
+  submitSafePr(plan: ReleasePlan, stepIndex: number, signal?: AbortSignal): Promise<SafePrResult>;
+  runAction(
+    runId: string,
+    action: ReleaseRunAction,
+    reason?: string,
+    signal?: AbortSignal,
+  ): Promise<ReleaseRun>;
+}

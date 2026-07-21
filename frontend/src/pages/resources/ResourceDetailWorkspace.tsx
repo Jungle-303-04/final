@@ -1,9 +1,7 @@
 import { Maximize2, Minimize2, ScrollText, X } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
-import { useClusterScope } from "../../features/cluster-scope/ClusterScopeProvider";
-import { isManagementCluster } from "../../features/clusters/clusterDisconnectPolicy";
 import type {
   ResourceDetail,
   ResourceIdentity,
@@ -20,22 +18,15 @@ import type { ResourcesResourceState } from "./resourcesPageStateModel";
 import type { ResourceMetricsHistoryFrame } from "./useResourceMetricsHistoryDataFrame";
 import { ResourceDetailBody } from "./ResourceDetailSheet";
 import { ResourceDetailActions } from "./ResourceDetailActions";
+import { ResourceManifestEditor } from "./ResourceManifestEditor";
 import type { ResourceCapabilitiesFrame } from "./useResourceCapabilitiesDataFrame";
-import type { ResourceIssuesFrame } from "./useResourceIssuesDataFrame";
 import { useBottomDock } from "../../features/bottom-dock/BottomDockProvider";
+import { logStreamTargetFromDetail } from "../../features/log-stream/logStreamTarget";
 import {
   EMPTY_POD_TERMINAL_PORT,
-  type PodTerminalCoordinates,
   type PodTerminalPort,
 } from "../../features/pod-terminal/podTerminalContract";
 import { PodTerminalDialog } from "./PodTerminalDialog";
-import type { ServiceAccessPort } from "../../features/service-access/serviceAccessContract";
-import type { PortForwardSessionPort } from "../../features/service-access/portForwardSessionContract";
-import { ServiceAccessActions } from "./ServiceAccessActions";
-import type { ChecksPort } from "../../features/checks/checksContract";
-import type { ResourceFilesPort } from "../../features/resource-files/resourceFilesContract";
-import { ResourceFilesystemBrowser } from "./ResourceFilesystemBrowser";
-import { useResourceDetailLogTab } from "./useResourceDetailLogTab";
 
 export function ResourceDetailWorkspace({
   detail,
@@ -46,20 +37,11 @@ export function ResourceDetailWorkspace({
   onFullChange,
   onTabChange,
   full,
-  forceFull = false,
   metricHistory,
-  resourceIssues,
-  checksPort,
   manifestPort,
   onUnauthorized,
-  onManifestEditingChange,
-  onNavigateResource,
-  onResourceActionInvalidation,
   tab,
   terminalPort = EMPTY_POD_TERMINAL_PORT,
-  serviceAccessPort,
-  portForwardSessions,
-  resourceFilesPort,
 }: {
   detail: ResourcesResourceState<ResourceDetail>;
   identity: ResourceIdentity | null;
@@ -69,45 +51,25 @@ export function ResourceDetailWorkspace({
   onFullChange: (full: boolean) => void;
   onTabChange: (tab: string) => void;
   full: boolean;
-  forceFull?: boolean;
   metricHistory: ResourceMetricsHistoryFrame;
-  resourceIssues: ResourceIssuesFrame;
-  checksPort?: ChecksPort;
   manifestPort?: ResourceManifestPort;
   onUnauthorized?: () => void;
-  onManifestEditingChange?: (editing: boolean) => void;
-  onNavigateResource: (identity: ResourceIdentity) => void;
-  onResourceActionInvalidation?: () => void;
   tab: string;
   terminalPort?: PodTerminalPort;
-  serviceAccessPort?: ServiceAccessPort;
-  portForwardSessions?: PortForwardSessionPort;
-  resourceFilesPort?: ResourceFilesPort;
 }) {
   const { t } = useI18n();
   const dock = useBottomDock();
   const filter = useUnifiedFilter();
-  const clusterScope = useClusterScope();
   const reducedMotion = usePrefersReducedMotion();
   const rootRef = useRef<HTMLElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const closeTimer = useRef<number | null>(null);
   const [closing, setClosing] = useState(false);
-  const [preferredTerminalTarget, setPreferredTerminalTarget] = useState<PodTerminalCoordinates | null>(null);
-  const clearPreferredTerminalTarget = useCallback(() => {
-    setPreferredTerminalTarget(null);
-  }, []);
   const title = identity
     ? t("resources.detail.title", { name: identity.name })
     : t("resources.detail.errorTitle");
   const labels = contextLabels(filter.state, t);
-  const { content: logContent, target: logTarget } = useResourceDetailLogTab(detail, dock, tab);
-  const managementReadOnly = clusterScope.selectedCluster !== null
-    && isManagementCluster(clusterScope.selectedCluster);
-  const managementReadOnlyReason = managementReadOnly
-    ? t("resources.detail.managementReadOnlyDescription")
-    : null;
-  const effectiveFull = full || forceFull;
+  const logTarget = detail.phase === "ready" ? logStreamTargetFromDetail(detail.data) : null;
 
   useEffect(() => {
     closeRef.current?.focus();
@@ -115,6 +77,7 @@ export function ResourceDetailWorkspace({
       if (closeTimer.current !== null) window.clearTimeout(closeTimer.current);
     };
   }, []);
+
   const requestClose = () => {
     if (closing) return;
     if (reducedMotion) {
@@ -130,24 +93,12 @@ export function ResourceDetailWorkspace({
       aria-labelledby="resource-detail-workspace-title"
       className="motion-detail-workspace grid h-full min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)] bg-background shadow-2xl shadow-black/5"
       data-closing={closing || undefined}
-      data-detail-size={effectiveFull ? "full" : "peek"}
-      data-force-full={forceFull || undefined}
+      data-detail-size={full ? "full" : "peek"}
       data-slot="resource-detail-workspace"
       onKeyDown={(event) => {
         if (event.key.toLowerCase() === "l" && !isEditingElement(event.target) && logTarget) {
           event.preventDefault();
           dock.openLogs(logTarget);
-          return;
-        }
-        if (
-          event.key.toLowerCase() === "y" &&
-          !isEditingElement(event.target) &&
-          detail.phase === "ready" &&
-          manifestPort &&
-          !managementReadOnly
-        ) {
-          event.preventDefault();
-          onTabChange("manifest");
           return;
         }
         if (event.key === "Escape") {
@@ -181,15 +132,14 @@ export function ResourceDetailWorkspace({
             />
           ) : null}
           <Button
-            aria-label={effectiveFull ? t("resources.detail.collapse") : t("resources.detail.expand")}
+            aria-label={full ? t("resources.detail.collapse") : t("resources.detail.expand")}
             className="relative shrink-0"
-            disabled={forceFull}
-            onClick={() => onFullChange(!effectiveFull)}
+            onClick={() => onFullChange(!full)}
             size="icon"
             type="button"
             variant="outline"
           >
-            {effectiveFull ? <Minimize2 aria-hidden="true" /> : <Maximize2 aria-hidden="true" />}
+            {full ? <Minimize2 aria-hidden="true" /> : <Maximize2 aria-hidden="true" />}
           </Button>
           <Button
             aria-label={t("resources.detail.close")}
@@ -212,14 +162,6 @@ export function ResourceDetailWorkspace({
                 <Badge key={label} variant="outline">{label}</Badge>
               ))
             : <span className="text-xs text-muted-foreground">{t("resources.detail.contextAll")}</span>}
-          {managementReadOnly ? (
-            <Badge
-              title={managementReadOnlyReason ?? undefined}
-              variant="secondary"
-            >
-              {t("resources.detail.managementReadOnly")}
-            </Badge>
-          ) : null}
         </div>
         {detail.phase === "ready" ? (
           <div className="flex min-w-0 flex-wrap items-center gap-2" data-slot="resource-detail-command-bar">
@@ -234,65 +176,32 @@ export function ResourceDetailWorkspace({
                 {t("shell.shortcut.resources.openLogs")}
               </Button>
             ) : null}
-            <fieldset
-              className="contents"
-              disabled={managementReadOnly}
-              title={managementReadOnlyReason ?? undefined}
-            >
-              <PodTerminalDialog
-                capabilities={capabilities}
-                detail={detail.data}
-                port={terminalPort}
-                preferredTarget={preferredTerminalTarget}
-                onPreferredTargetHandled={clearPreferredTerminalTarget}
-              />
-              {resourceFilesPort ? (
-                <ResourceFilesystemBrowser
-                  capabilities={capabilities}
-                  detail={detail.data}
-                  port={resourceFilesPort}
-                />
-              ) : null}
-              {serviceAccessPort ? (
-                <ServiceAccessActions
-                  detail={detail.data}
-                  port={serviceAccessPort}
-                  portForwardSessions={portForwardSessions}
-                />
-              ) : null}
-            </fieldset>
+            <PodTerminalDialog
+              capabilities={capabilities}
+              detail={detail.data}
+              port={terminalPort}
+            />
             <ResourceDetailActions
               actionsPort={actionsPort}
               capabilities={capabilities}
               detail={detail.data}
-              disabledReason={managementReadOnlyReason}
-              onInvalidate={onResourceActionInvalidation}
-              onTerminalReady={setPreferredTerminalTarget}
             />
+            {manifestPort ? (
+              <ResourceManifestEditor
+                detail={detail.data}
+                onUnauthorized={onUnauthorized}
+                port={manifestPort}
+              />
+            ) : null}
           </div>
         ) : null}
       </header>
       <div className="min-h-0 min-w-0 overflow-y-auto px-4 pb-6 sm:px-6">
         <ResourceDetailBody
           detail={detail}
-          full={effectiveFull}
+          full={full}
           identity={identity}
           metricHistory={metricHistory}
-          metricRange={filter.detail.timeRange ?? "1h"}
-          onMetricRangeChange={(range) => filter.updateDetail(
-            (current) => ({
-              ...current,
-              timeRange: range === "1h" ? undefined : range,
-            }),
-            "time-range",
-          )}
-          onNavigateResource={onNavigateResource}
-          resourceIssues={resourceIssues}
-          checksPort={checksPort}
-          manifestPort={managementReadOnly ? undefined : manifestPort}
-          onManifestEditingChange={onManifestEditingChange}
-          logContent={logContent}
-          onManifestUnauthorized={onUnauthorized}
           onTabChange={onTabChange}
           tab={tab}
         />

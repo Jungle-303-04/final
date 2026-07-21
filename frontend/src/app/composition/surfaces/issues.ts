@@ -1,7 +1,28 @@
 import type { ComponentType } from "react";
-import type { IssuesPort } from "../../../features/issues/issuesContract";
+import {
+  getAuditTimeline,
+  getIncidentRecentChanges,
+  getRcaIncident,
+  getRecoveryPlanByCorrelation,
+  listRcaIssues,
+  listEvidence,
+  listRcaReports,
+  listRcaTimeline,
+  selectRecoveryAction,
+} from "../../../api";
+import { createIssuesAdapter } from "../../../features/issues/createIssuesAdapter";
 import { createIssuesSurface } from "../../../pages/issues/createIssuesSurface";
 
-export function loadIssuesSurface(port: IssuesPort): ComponentType {
-  return createIssuesSurface(port);
+export function loadIssuesSurface(): ComponentType {
+  return createIssuesSurface(createIssuesAdapter({
+    getAuditTimeline,
+    getIncidentRecentChanges,
+    getRcaIncident,
+    getRecoveryPlanByCorrelation,
+    listRcaIssues,
+    listEvidence,
+    listRcaReports,
+    listRcaTimeline,
+    selectRecoveryAction,
+  }));
 }

@@ -5,7 +5,6 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 
-import { EMPTY_ALERT_CHANNELS_PORT } from "../../features/alerts/alertChannelsContract";
 import type {
   AlertRule,
   AlertRulesPort,
@@ -117,7 +116,7 @@ function renderPanel(
     <I18nProvider navigatorLanguage="ko-KR" storage={null}>
       <MemoryRouter initialEntries={[entry]}>
         <UnifiedFilterProvider>
-          <AlertRulesPanel channelsPort={EMPTY_ALERT_CHANNELS_PORT} focusRuleId={focusRuleId} port={port} />
+          <AlertRulesPanel focusRuleId={focusRuleId} port={port} />
         </UnifiedFilterProvider>
       </MemoryRouter>
     </I18nProvider>,

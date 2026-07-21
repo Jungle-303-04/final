@@ -9,7 +9,7 @@ import {
   type AsyncResourceState,
 } from "../../shared/data/asyncResourceState";
 import { acquireSharedRequest } from "../../shared/data/sharedRequest";
-import { useServerRefreshScheduler } from "../../shared/data/useServerRefreshScheduler";
+import { useVisibleRefreshClock } from "../../shared/data/useVisibleRefreshClock";
 import {
   ChecksPortFailure,
   type ChecksDetailResponse,
@@ -17,7 +17,8 @@ import {
   type ChecksPort,
   type ChecksRequest,
 } from "../../features/checks/checksContract";
-import type { ResourceRef } from "../../shared/parity/referenceParity";
+
+const CHECKS_SCOPE_REFRESH_INTERVAL_MS = 60_000;
 
 export function useChecksOverview(
   port: ChecksPort,
@@ -48,18 +49,11 @@ function useChecksRequest<T>(
   frame: AsyncResourceState<T, ChecksPortFailure>;
   refresh: () => void;
 } {
+  const { refresh, revision } = useVisibleRefreshClock(true, CHECKS_SCOPE_REFRESH_INTERVAL_MS);
   // Scope values, rather than caller array identity, define a network request.
   // This keeps a render-created request object from restarting the poll loop.
   const scopeKey = requestScopeKey(request);
-  const [revision, setRevision] = useState(0);
   const [frame, setFrame] = useState<AsyncResourceState<T, ChecksPortFailure>>(ASYNC_LOADING);
-  const refreshController = useServerRefreshScheduler(
-    () => setRevision((current) => current + 1),
-  );
-
-  useEffect(() => {
-    refreshController.backgroundFailure();
-  }, [checkId, port, refreshController, scopeKey]);
 
   useEffect(() => {
     let active = true;
@@ -70,25 +64,16 @@ function useChecksRequest<T>(
     const sharedRequest = acquireSharedRequest(
       port,
       `checks:${checkId === null ? "overview" : `detail:${checkId}`}:${scopeKey}:r${revision}`,
-      async (signal) => {
-        const [data, refreshPolicy] = await Promise.all([
-          (checkId === null
-            ? port.getOverview(canonicalRequest, signal)
-            : port.getDetail(checkId, canonicalRequest, signal)) as Promise<T>,
-          port.loadRefreshPolicy(signal),
-        ]);
-        return { data, refreshPolicy };
-      },
+      (signal) => (checkId === null
+        ? port.getOverview(canonicalRequest, signal)
+        : port.getDetail(checkId, canonicalRequest, signal)) as Promise<T>,
     );
     void sharedRequest.promise.then(
-      ({ data, refreshPolicy }) => {
-        if (!active) return;
-        setFrame(asyncResourceSuccess(data));
-        refreshController.acceptSuccess(refreshPolicy);
+      (data) => {
+        if (active) setFrame(asyncResourceSuccess(data));
       },
       (error: unknown) => {
         if (!active || isAbortError(error)) return;
-        refreshController.backgroundFailure();
         setFrame((current) => asyncResourceFailure(current, toPortFailure(error)));
       },
     );
@@ -96,9 +81,9 @@ function useChecksRequest<T>(
       active = false;
       sharedRequest.release();
     };
-  }, [checkId, port, refreshController, revision, scopeKey]);
+  }, [checkId, port, revision, scopeKey]);
 
-  return { frame, refresh: refreshController.requestRefresh };
+  return { frame, refresh };
 }
 
 function toPortFailure(error: unknown): ChecksPortFailure {
@@ -109,7 +94,6 @@ function requestScopeKey(request: ChecksRequest): string {
   return JSON.stringify({
     clusterIds: canonicalValues(request.clusterIds),
     namespaces: canonicalValues(request.namespaces),
-    resource: canonicalResource(request.resource),
   });
 }
 
@@ -117,24 +101,10 @@ function requestFromScopeKey(scopeKey: string): ChecksRequest {
   const value = JSON.parse(scopeKey) as {
     clusterIds: string[];
     namespaces: string[];
-    resource: ResourceRef | null;
   };
   return {
     clusterIds: value.clusterIds,
     namespaces: value.namespaces,
-    ...(value.resource === null ? {} : { resource: value.resource }),
-  };
-}
-
-function canonicalResource(resource: ResourceRef | undefined): ResourceRef | null {
-  if (resource === undefined) return null;
-  return {
-    apiGroup: resource.apiGroup ?? "",
-    version: resource.version ?? "",
-    kind: resource.kind,
-    namespace: resource.namespace,
-    name: resource.name,
-    uid: resource.uid,
   };
 }
 

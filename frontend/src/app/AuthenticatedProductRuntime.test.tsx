@@ -25,31 +25,15 @@ vi.mock("./ProductRouter", () => ({
 import { AuthenticatedProductRuntime } from "./AuthenticatedProductRuntime";
 
 const auth: AuthenticatedAuthState = {
-  listWorkspaces: async () => ({ currentWorkspaceId: "qa-workspace", items: [] }),
-  session: {
-    authEnabled: true,
-    authMode: "password",
-    groups: [],
-    logout: {
-      action: "end_session",
-      supported: true,
-      reauthenticationExpected: false,
-    },
-    userId: "qa-user",
-    roles: ["viewer"],
-    workspaceId: "qa-workspace",
-  },
+  session: { userId: "qa-user", roles: ["viewer"], workspaceId: "qa-workspace" },
   signOutIssue: null,
   signOutPending: false,
   onSignOut: () => undefined,
-  switchWorkspace: async () => { throw new Error("not used"); },
 };
 const authPort: AuthPort = {
-  listWorkspaces: auth.listWorkspaces,
   loadSession: async () => ({ status: "authenticated", session: auth.session }),
   signIn: async () => auth.session,
   signOut: async () => undefined,
-  switchWorkspace: auth.switchWorkspace,
 };
 
 afterEach(() => cleanup());

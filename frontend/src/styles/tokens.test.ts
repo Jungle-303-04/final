@@ -43,27 +43,15 @@ describe("product theme token contract", () => {
     },
   );
 
-  it("keeps the demo-freeze-v3 warning, chart, and code palette behind semantic aliases", () => {
+  it("maps the warning foreground through one semantic theme alias", () => {
     const themeTokens = declarations(block("@theme inline"));
     const lightTokens = declarations(block(":root"));
     const darkTokens = declarations(block(".dark"));
 
     expect(themeTokens.get("--color-warning-foreground")).toBe("var(--warning-foreground)");
-    expect(lightTokens.get("--warning-foreground")).toBe("var(--tint-warn-fg)");
-    expect(darkTokens.get("--warning-foreground")).toBe("var(--tint-warn-fg)");
-
-    const chartTokens = ["--chart-1", "--chart-2", "--chart-3", "--chart-4", "--chart-5"];
-    for (const token of chartTokens) {
-      expect(themeTokens.get(`--color-${token.slice(2)}`)).toBe(`var(${token})`);
-      expect(lightTokens.get(token)).toBeTruthy();
-      expect(darkTokens.get(token)).toBeTruthy();
-      expect(lightTokens.get(token)).not.toBe(darkTokens.get(token));
-    }
-
-    expect(themeTokens.get("--color-code")).toBe("var(--code-background)");
-    expect(themeTokens.get("--color-code-foreground")).toBe("var(--code-foreground)");
-    expect(lightTokens.get("--code-background")).toBeTruthy();
-    expect(lightTokens.get("--code-foreground")).toBeTruthy();
+    expect(lightTokens.get("--warning-foreground")).toMatch(/^#[\dA-F]{6}$/);
+    expect(darkTokens.get("--warning-foreground")).toMatch(/^#[\dA-F]{6}$/);
+    expect(lightTokens.get("--warning-foreground")).not.toBe(darkTokens.get("--warning-foreground"));
   });
 
   it("derives product frame clearance from the shared floating-action geometry", () => {

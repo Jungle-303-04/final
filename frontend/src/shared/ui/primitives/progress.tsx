@@ -110,7 +110,7 @@ export function Progress({
         data-slot="progress-track"
       >
         <ProgressPrimitive.Indicator
-          className="h-full rounded-full bg-primary bg-clip-padding transition-[width] duration-(--motion-value) ease-(--ease-draw) data-indeterminate:w-1/3 data-indeterminate:border data-indeterminate:border-dashed data-indeterminate:border-primary data-indeterminate:motion-safe:animate-pulse data-indeterminate:motion-reduce:animate-none motion-reduce:transition-none forced-colors:bg-[Highlight] forced-colors:data-indeterminate:animate-none forced-colors:data-indeterminate:border-[Highlight]"
+          className="h-full rounded-full bg-primary bg-clip-padding transition-[width] duration-300 ease-out data-indeterminate:w-1/3 data-indeterminate:border data-indeterminate:border-dashed data-indeterminate:border-primary data-indeterminate:motion-safe:animate-pulse data-indeterminate:motion-reduce:animate-none motion-reduce:transition-none forced-colors:bg-[Highlight] forced-colors:data-indeterminate:animate-none forced-colors:data-indeterminate:border-[Highlight]"
           data-slot="progress-indicator"
         />
       </ProgressPrimitive.Track>

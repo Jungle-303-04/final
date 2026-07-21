@@ -6,7 +6,8 @@ import type {
   AiAlertRuleAction,
   AiAlertRuleActionPayload,
 } from "../features/ai-assistant/aiAssistantContract";
-import { useI18n, type TranslationFunction } from "../shared/i18n";
+import { useUnifiedFilter } from "../features/filters/UnifiedFilterProvider";
+import { useI18n } from "../shared/i18n";
 import { Alert, AlertDescription } from "../shared/ui/primitives/alert";
 import { Badge } from "../shared/ui/primitives/badge";
 import { Button, buttonVariants } from "../shared/ui/primitives/button";
@@ -21,7 +22,6 @@ import {
 import { Input } from "../shared/ui/primitives/input";
 import { Label } from "../shared/ui/primitives/label";
 import { Spinner } from "../shared/ui/primitives/spinner";
-import { useAiAlertRuleCompletion } from "./useAiAlertRuleCompletion";
 
 export function AiAlertRuleActionCard({
   action,
@@ -31,7 +31,7 @@ export function AiAlertRuleActionCard({
   onCreate(action: AiAlertRuleAction, signal?: AbortSignal): Promise<{ ruleId: string }>;
 }) {
   const { formatNumber, t } = useI18n();
-  const completion = useAiAlertRuleCompletion();
+  const filter = useUnifiedFilter();
   const [draft, setDraft] = useState(action.payload);
   const [editing, setEditing] = useState(false);
   const [pending, setPending] = useState(false);
@@ -46,7 +46,6 @@ export function AiAlertRuleActionCard({
       const created = await onCreate({ ...action, payload: draft });
       setReceipt(created.ruleId);
       setEditing(false);
-      completion.publish(created.ruleId, draft.name);
     } catch {
       setFailure(true);
     } finally {
@@ -59,7 +58,7 @@ export function AiAlertRuleActionCard({
     return (
       <section
         aria-label={t("shell.ai.action.title")}
-        className="flex max-w-full min-w-0 animate-in items-center gap-3 overflow-hidden rounded-xl border border-status-healthy/30 bg-status-healthy/5 p-3 fade-in-0 slide-in-from-bottom-1 duration-(--motion-soft) motion-reduce:animate-none"
+        className="flex max-w-full min-w-0 animate-in items-center gap-3 overflow-hidden rounded-xl border border-status-healthy/30 bg-status-healthy/5 p-3 fade-in-0 slide-in-from-bottom-1 duration-200 motion-reduce:animate-none"
         data-action-state="completed"
         data-action-type={action.type}
       >
@@ -75,7 +74,11 @@ export function AiAlertRuleActionCard({
             size: "sm",
             variant: "outline",
           })}
-          to={completion.href}
+          to={filter.navigationHref("/alerts", {
+            ...filter.detail,
+            detail: receipt,
+            tab: "rules",
+          })}
         >
           {t("shell.ai.action.viewRules")}
         </Link>
@@ -107,11 +110,7 @@ export function AiAlertRuleActionCard({
 
       <dl className="grid min-w-0 grid-cols-2 gap-x-3 gap-y-2 rounded-lg border bg-background/70 p-3 text-xs">
         <Fact label={t("shell.ai.action.name")} value={draft.name} wide />
-        <Fact
-          label={t("shell.ai.action.scope")}
-          value={scopeLabel(draft, t("shell.ai.action.currentScope"), t)}
-          wide
-        />
+        <Fact label={t("shell.ai.action.scope")} value={scopeLabel(draft, t("shell.ai.action.currentScope"))} wide />
         <Fact label={t("shell.ai.action.condition")} value={`${metricLabel(draft.metric, t)} ${draft.comparator} ${formatNumber(draft.threshold)}%`} />
         <Fact label={t("shell.ai.action.duration")} value={t("shell.ai.action.seconds", { count: formatNumber(draft.forSeconds) })} />
         <Fact label={t("shell.ai.action.severity")} value={t(`alerts.severity.${draft.severity}`)} />
@@ -214,9 +213,7 @@ export function AiAlertRuleActionCard({
             <div className="sm:col-span-2 rounded-lg border bg-muted/30 p-3">
               <p className="text-xs font-medium text-muted-foreground">{t("shell.ai.action.scope")}</p>
               <div className="mt-2 flex flex-wrap gap-1.5">
-                {scopeValues(draft, t).map((value) => (
-                  <Badge key={value} variant="outline">{value}</Badge>
-                ))}
+                {scopeValues(draft).map((value) => <Badge key={value} variant="outline">{value}</Badge>)}
               </div>
             </div>
           </div>
@@ -321,24 +318,17 @@ function validDraft(draft: AiAlertRuleActionPayload): boolean {
     Number.isInteger(draft.forSeconds) && draft.forSeconds > 0;
 }
 
-function scopeValues(
-  payload: AiAlertRuleActionPayload,
-  t: TranslationFunction,
-): string[] {
+function scopeValues(payload: AiAlertRuleActionPayload): string[] {
   return [
-    ...payload.scope.clusters.map((value) => t("shell.ai.action.scopeCluster", { value })),
-    ...payload.scope.namespaces.map((value) => t("shell.ai.action.scopeNamespace", { value })),
-    ...payload.scope.applications.map((value) => t("shell.ai.action.scopeApplication", { value })),
-    ...payload.scope.labels.map((value) => t("shell.ai.action.scopeLabel", { value })),
+    ...payload.scope.clusters.map((value) => `클러스터: ${value}`),
+    ...payload.scope.namespaces.map((value) => `네임스페이스: ${value}`),
+    ...payload.scope.applications.map((value) => `애플리케이션: ${value}`),
+    ...payload.scope.labels.map((value) => `라벨: ${value}`),
   ];
 }
 
-function scopeLabel(
-  payload: AiAlertRuleActionPayload,
-  fallback: string,
-  t: TranslationFunction,
-): string {
-  return scopeValues(payload, t).join(" · ") || fallback;
+function scopeLabel(payload: AiAlertRuleActionPayload, fallback: string): string {
+  return scopeValues(payload).join(" · ") || fallback;
 }
 
 function metricLabel(

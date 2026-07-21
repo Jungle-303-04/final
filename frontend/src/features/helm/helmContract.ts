@@ -1,27 +1,3 @@
-import type {
-  HelmChartSource,
-  HelmChartSourceDeleteReceipt,
-  HelmChartSourceDeleteRequest,
-  HelmChartSourceListRequest,
-  HelmChartSourcePage,
-  HelmChartSourceRegisterRequest,
-  HelmRepositoryRefreshReceipt,
-} from "./helmChartSourcesContract";
-
-export type {
-  HelmChartSource,
-  HelmChartSourceAction,
-  HelmChartSourceCredential,
-  HelmChartSourceDeleteReceipt,
-  HelmChartSourceDeleteRequest,
-  HelmChartSourceListRequest,
-  HelmChartSourcePage,
-  HelmChartSourceProvider,
-  HelmChartSourceRegisterRequest,
-  HelmChartSourceStatus,
-  HelmRepositoryRefreshReceipt,
-} from "./helmChartSourcesContract";
-
 export type HelmAvailability = "available" | "partial" | "unavailable";
 export type HelmFreshness = "live" | "stale" | "partial" | "disconnected";
 
@@ -46,6 +22,37 @@ export interface HelmUnavailableFeature {
   reasonCode: string;
 }
 
+export interface HelmResourceHealthAvailability extends HelmUnavailableFeature {
+  health: null;
+}
+
+export interface HelmResourceHealthObservation {
+  availability: "available" | "partial";
+  health: string;
+  resourceCount: number;
+  observedAt: string | null;
+  reasonCodes: readonly string[];
+}
+
+export type HelmResourceHealth = HelmResourceHealthObservation | HelmResourceHealthAvailability;
+
+export interface HelmOwnedResource {
+  resource: HelmResourceRef;
+  status: string;
+  health: string;
+  observedAt: string | null;
+}
+
+export interface HelmOwnedResourceObservation {
+  availability: "available" | "partial";
+  items: readonly HelmOwnedResource[];
+  observedAt: string | null;
+  truncated: boolean;
+  reasonCodes: readonly string[];
+}
+
+export type HelmOwnedResources = HelmOwnedResourceObservation | HelmUnavailableFeature;
+
 export type HelmUpgradeValueType = "string" | "integer" | "number" | "boolean";
 export type HelmUpgradeScalar = string | number | boolean | null;
 
@@ -67,181 +74,13 @@ export interface HelmUpgradeTarget {
 
 export interface HelmReleaseCommands {
   availability: "available";
-  actions: readonly ["upgrade", "rollback", "uninstall"];
+  actions: readonly ("upgrade" | "rollback" | "uninstall")[];
   confirmationRequired: true;
   realtime: true;
   upgradeTargets: readonly HelmUpgradeTarget[];
 }
 
-export interface HelmResourceHealthAvailability extends HelmUnavailableFeature {
-  health: null;
-}
-
-export interface HelmResourceHealthObservation {
-  availability: "available" | "partial";
-  health: string;
-  resourceCount: number;
-  observedAt: string | null;
-  reasonCodes: readonly string[];
-}
-
-export type HelmResourceHealth = HelmResourceHealthAvailability | HelmResourceHealthObservation;
-
-export interface HelmOwnedResource {
-  resource: HelmResourceRef;
-  status: string;
-  health: string;
-  observedAt: string | null;
-}
-
-export interface HelmOwnedResourceObservation {
-  availability: "available" | "partial";
-  items: readonly HelmOwnedResource[];
-  observedAt: string | null;
-  truncated: boolean;
-  reasonCodes: readonly string[];
-}
-
-export type HelmOwnedResources = HelmUnavailableFeature | HelmOwnedResourceObservation;
-
-export type HelmArtifactKind =
-  | "manifest"
-  | "values"
-  | "manifest_diff"
-  | "values_diff"
-  | "notes_diff"
-  | "hooks_diff"
-  | "resources_diff";
-
-export interface HelmArtifactReadRequest extends HelmReleaseDetailRequest {
-  artifact: HelmArtifactKind;
-  revision: number;
-  comparisonRevision?: number;
-  allValues?: boolean;
-}
-
-export interface HelmArtifactReceipt {
-  accepted: true;
-  eventId: string;
-  auditEventId: string;
-  correlationId: string;
-  commandId: string;
-  status: "queued" | "leased" | "running" | "cancel_requested" | "cancelling" | "completed" | "failed" | "cancelled";
-}
-
-export type HelmReleaseUpgradeReceipt = HelmArtifactReceipt;
-
-interface HelmArtifactResultBase {
-  artifact: HelmArtifactKind;
-  namespace: string;
-  releaseName: string;
-  revision: number;
-  comparisonRevision: number | null;
-  allValues: boolean;
-  sourceBytes: number;
-  redactionApplied: true;
-  truncated: boolean;
-}
-
-export interface HelmTextArtifactResult extends HelmArtifactResultBase {
-  artifact: "manifest" | "values" | "manifest_diff" | "values_diff" | "notes_diff";
-  format: "yaml" | "unified-diff";
-  content: string;
-  contentSha256: string;
-  contentBytes: number;
-}
-
-export interface HelmHookDiffItem {
-  apiVersion: string;
-  kind: string;
-  name: string;
-  namespace: string;
-  events: readonly string[];
-  weight: number;
-  deletePolicies: readonly string[];
-  outputLogPolicies: readonly string[];
-  manifestChanged: boolean;
-}
-
-export interface HelmHooksDiff {
-  revision1: number;
-  revision2: number;
-  added: readonly HelmHookDiffItem[];
-  removed: readonly HelmHookDiffItem[];
-  modified: readonly HelmHookDiffItem[];
-  unchanged: readonly HelmHookDiffItem[];
-  parseErrorCount: number;
-}
-
-export interface HelmHooksDiffArtifactResult extends HelmArtifactResultBase {
-  artifact: "hooks_diff";
-  format: "structured";
-  projectionSha256: string;
-  projectionBytes: number;
-  hooksDiff: HelmHooksDiff;
-}
-
-export interface HelmRenderedResourceRef {
-  apiVersion: string;
-  kind: string;
-  name: string;
-  namespace: string;
-}
-
-export type HelmResourceFieldValue = string | number | boolean | null;
-
-export interface HelmResourceFieldChange {
-  path: string;
-  oldValue: HelmResourceFieldValue;
-  newValue: HelmResourceFieldValue;
-}
-
-export interface HelmRenderedResourceChange extends HelmRenderedResourceRef {
-  summary: string;
-  fieldCount: number;
-  fields: readonly HelmResourceFieldChange[];
-}
-
-export interface HelmResourcesDiff {
-  revision1: number;
-  revision2: number;
-  added: readonly HelmRenderedResourceRef[];
-  removed: readonly HelmRenderedResourceRef[];
-  modified: readonly HelmRenderedResourceChange[];
-  unchanged: readonly HelmRenderedResourceRef[];
-  parseErrorCount: number;
-}
-
-export type HelmValuesPreviewResources = Omit<HelmResourcesDiff, "revision1" | "revision2">;
-
-export interface HelmValuesPreviewResult {
-  namespace: string;
-  releaseName: string;
-  expectedRevision: number;
-  catalogItemId: string;
-  catalogVersion: string;
-  chartName: string;
-  chartVersion: string;
-  resources: HelmValuesPreviewResources;
-  projectionSha256: string;
-  projectionBytes: number;
-  sourceBytes: number;
-  redactionApplied: true;
-  truncated: boolean;
-}
-
-export interface HelmResourcesDiffArtifactResult extends HelmArtifactResultBase {
-  artifact: "resources_diff";
-  format: "structured";
-  projectionSha256: string;
-  projectionBytes: number;
-  resourcesDiff: HelmResourcesDiff;
-}
-
-export type HelmArtifactResult =
-  | HelmTextArtifactResult
-  | HelmHooksDiffArtifactResult
-  | HelmResourcesDiffArtifactResult;
+export type HelmCommands = HelmReleaseCommands | HelmUnavailableFeature;
 
 export interface HelmObservationCoverage {
   availability: HelmAvailability;
@@ -254,146 +93,12 @@ export interface HelmRelease {
   name: string;
   storageNamespace: string;
   storage: HelmResourceRef;
-  storageResourceVersion: string | null;
   chart: string | null;
-  chartVersion: string | null;
-  chartReasonCodes: readonly string[];
   appVersion: null;
   status: string | null;
   revision: number | null;
   observedAt: string | null;
   resourceHealth: HelmResourceHealth;
-}
-
-export interface HelmChartVersion {
-  version: string;
-  appVersion: string | null;
-  deprecated: boolean;
-}
-
-export interface HelmChartSummary {
-  source: HelmChartSource;
-  name: string;
-  version: string;
-  appVersion: string | null;
-  description: string | null;
-  deprecated: boolean;
-}
-
-export interface HelmChartSearchRequest {
-  query?: string;
-  sourceId?: string;
-  provider?: "repository" | "oci";
-  allVersions?: boolean;
-  limit?: number;
-}
-
-export interface HelmChartCatalogPage {
-  availability: HelmAvailability;
-  items: readonly HelmChartSummary[];
-  total: number;
-  limit: number;
-  query: string;
-  sourceId: string | null;
-  provider: "repository" | "oci" | null;
-  allVersions: boolean;
-  observedAt: string | null;
-  truncated: boolean;
-  reasonCodes: readonly string[];
-}
-
-export type HelmChartValuesSchema =
-  | { availability: "available"; schema: Readonly<Record<string, unknown>> }
-  | { availability: "unavailable"; schema: null; reasonCode: string };
-
-export type HelmChartInstall =
-  | { availability: "available"; target: HelmUpgradeTarget }
-  | { availability: "unavailable"; target: null; reasonCode: string };
-
-export interface HelmChartDetail {
-  availability: HelmAvailability;
-  chart: HelmChartSummary | null;
-  versions: readonly HelmChartVersion[];
-  valuesSchema: HelmChartValuesSchema;
-  install: HelmChartInstall;
-  observedAt: string | null;
-  truncated: boolean;
-  reasonCodes: readonly string[];
-}
-
-export interface HelmReleaseUpgradeInfo {
-  availability: HelmAvailability;
-  chartName: string | null;
-  currentVersion: string | null;
-  latestVersion: string | null;
-  updateAvailable: boolean | null;
-  source: HelmChartSource | null;
-  observedAt: string | null;
-  reasonCodes: readonly string[];
-  refreshAfterSeconds: number;
-}
-
-export interface HelmReleaseVersionList {
-  availability: HelmAvailability;
-  chartName: string | null;
-  currentVersion: string | null;
-  source: HelmChartSource | null;
-  versions: readonly HelmChartVersion[];
-  observedAt: string | null;
-  truncated: boolean;
-  reasonCodes: readonly string[];
-  refreshAfterSeconds: number;
-}
-
-export interface HelmReleaseUpgradeBatch {
-  releases: Readonly<Record<string, HelmReleaseUpgradeInfo>>;
-  coverage: HelmObservationCoverage;
-  truncated: boolean;
-  reasonCodes: readonly string[];
-  refreshAfterSeconds: number;
-}
-
-export interface ArtifactHubChart {
-  packageId: string;
-  name: string;
-  version: string;
-  appVersion: string | null;
-  description: string | null;
-  stars: number;
-  deprecated: boolean;
-  signed: boolean;
-  repository: {
-    name: string;
-    url: string;
-    official: boolean;
-    verifiedPublisher: boolean;
-  };
-}
-
-export interface ArtifactHubSearchRequest {
-  query: string;
-  offset?: number;
-  limit?: number;
-  sort?: "relevance" | "stars" | "last_updated";
-  official?: boolean;
-  verified?: boolean;
-}
-
-export interface ArtifactHubSearchPage {
-  items: readonly ArtifactHubChart[];
-  total: number;
-  offset: number;
-  limit: number;
-  hasMore: boolean;
-  observedAt: string;
-}
-
-export interface ArtifactHubChartDetail {
-  chart: ArtifactHubChart;
-  readme: string | null;
-  availableVersions: readonly { version: string; appVersion: string | null }[];
-  versionsTruncated: boolean;
-  observedAt: string;
 }
 
 export interface HelmReleaseHistoryEntry {
@@ -409,16 +114,12 @@ export interface HelmReleaseDetail {
   manifest: HelmUnavailableFeature;
   values: HelmUnavailableFeature;
   ownedResources: HelmOwnedResources;
-  commands: HelmUnavailableFeature | HelmReleaseCommands;
-  refreshAfterSeconds: number;
-  postMutationRefreshAfterSeconds: number;
+  commands: HelmCommands;
 }
 
 export interface HelmReleaseList {
   releases: readonly HelmRelease[];
   coverage: HelmObservationCoverage;
-  refreshAfterSeconds: number;
-  postMutationRefreshAfterSeconds: number;
 }
 
 export interface HelmReleaseListRequest {
@@ -430,59 +131,6 @@ export interface HelmReleaseDetailRequest {
   clusterId: string;
   namespace: string;
   releaseName: string;
-}
-
-export interface HelmReleaseUpgradeRequest extends HelmReleaseDetailRequest {
-  expectedRevision: number;
-  catalogItemId: string;
-  catalogVersion: string;
-  values: Readonly<Record<string, unknown>>;
-  confirmation: true;
-  reason?: string;
-}
-
-export type HelmReleaseValuesPreviewRequest = Omit<
-  HelmReleaseUpgradeRequest,
-  "confirmation" | "reason"
->;
-
-export interface HelmInstallTargets {
-  namespace: string;
-  targets: readonly HelmUpgradeTarget[];
-}
-
-export interface HelmReleaseInstallRequest {
-  clusterId: string;
-  namespace: string;
-  applicationName: string;
-  releaseName: string;
-  catalogItemId: string;
-  catalogVersion: string;
-  values: Readonly<Record<string, unknown>>;
-  confirmation: true;
-  idempotencyKey: string;
-}
-
-export interface HelmInstallReceipt {
-  accepted: true;
-  eventId: string;
-  auditEventId: string;
-  commandId: string;
-  correlationId: string;
-  status: string;
-}
-
-export interface HelmReleaseRollbackRequest extends HelmReleaseDetailRequest {
-  expectedRevision: number;
-  revision: number;
-  confirmation: true;
-  reason?: string;
-}
-
-export interface HelmReleaseUninstallRequest extends HelmReleaseDetailRequest {
-  expectedRevision: number;
-  confirmation: true;
-  reason?: string;
 }
 
 export type HelmFailureCode =
@@ -508,75 +156,6 @@ export class HelmPortFailure extends Error {
 }
 
 export interface HelmPort {
-  searchCharts(
-    request?: HelmChartSearchRequest,
-    signal?: AbortSignal,
-  ): Promise<HelmChartCatalogPage>;
-  getChartDetail(
-    request: { sourceId: string; chart: string; version?: string },
-    signal?: AbortSignal,
-  ): Promise<HelmChartDetail>;
-  listInstallTargets(signal?: AbortSignal): Promise<HelmInstallTargets>;
-  installRelease(
-    request: HelmReleaseInstallRequest,
-    signal?: AbortSignal,
-  ): Promise<HelmInstallReceipt>;
-  searchArtifactHub(
-    request: ArtifactHubSearchRequest,
-    signal?: AbortSignal,
-  ): Promise<ArtifactHubSearchPage>;
-  getArtifactHubChart(
-    request: { repository: string; chart: string; version?: string },
-    signal?: AbortSignal,
-  ): Promise<ArtifactHubChartDetail>;
   listReleases(request: HelmReleaseListRequest, signal?: AbortSignal): Promise<HelmReleaseList>;
   getRelease(request: HelmReleaseDetailRequest, signal?: AbortSignal): Promise<HelmReleaseDetail>;
-  getReleaseUpgradeInfo(
-    request: HelmReleaseDetailRequest,
-    signal?: AbortSignal,
-  ): Promise<HelmReleaseUpgradeInfo>;
-  listReleaseVersions(
-    request: HelmReleaseDetailRequest,
-    signal?: AbortSignal,
-  ): Promise<HelmReleaseVersionList>;
-  checkReleaseUpgrades(
-    request: HelmReleaseListRequest,
-    signal?: AbortSignal,
-  ): Promise<HelmReleaseUpgradeBatch>;
-  readArtifact(
-    request: HelmArtifactReadRequest,
-    signal?: AbortSignal,
-  ): Promise<HelmArtifactReceipt>;
-  previewReleaseValues(
-    request: HelmReleaseValuesPreviewRequest,
-    signal?: AbortSignal,
-  ): Promise<HelmArtifactReceipt>;
-  upgradeRelease(
-    request: HelmReleaseUpgradeRequest,
-    signal?: AbortSignal,
-  ): Promise<HelmReleaseUpgradeReceipt>;
-  rollbackRelease(
-    request: HelmReleaseRollbackRequest,
-    signal?: AbortSignal,
-  ): Promise<HelmReleaseUpgradeReceipt>;
-  uninstallRelease(
-    request: HelmReleaseUninstallRequest,
-    signal?: AbortSignal,
-  ): Promise<HelmReleaseUpgradeReceipt>;
-  listChartSources(
-    request?: HelmChartSourceListRequest,
-    signal?: AbortSignal,
-  ): Promise<HelmChartSourcePage>;
-  registerChartSource(
-    request: HelmChartSourceRegisterRequest,
-    signal?: AbortSignal,
-  ): Promise<HelmChartSource>;
-  deleteChartSource(
-    request: HelmChartSourceDeleteRequest,
-    signal?: AbortSignal,
-  ): Promise<HelmChartSourceDeleteReceipt>;
-  refreshChartSource(
-    name: string,
-    signal?: AbortSignal,
-  ): Promise<HelmRepositoryRefreshReceipt>;
 }

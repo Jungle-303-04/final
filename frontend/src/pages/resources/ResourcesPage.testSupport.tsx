@@ -11,12 +11,8 @@ import type { PhysicalTopologyPort } from "../../features/resources/physicalTopo
 import { EMPTY_PHYSICAL_TOPOLOGY_REALTIME_PORT, type PhysicalTopologyRealtimePort } from "../../features/resources/physicalTopologyRealtimeContract";
 import type { RelationTopologyPort } from "../../features/resources/relationTopologyContract";
 import type { ChangeTimelinePort } from "../../features/resources/changeTimelineContract";
-import type {
-  ResourceMetricsHistoryPort,
-  ResourcesRefreshPolicyKey,
-} from "../../features/resources/resourceMetricsHistoryContract";
+import type { ResourceMetricsHistoryPort } from "../../features/resources/resourceMetricsHistoryContract";
 import type { ResourceActionsPort, ResourceCapabilitiesPort } from "../../features/resources/resourceCapabilitiesContract";
-import type { ResourceManifestPort } from "../../features/resources/resourceManifestContract";
 import type { ResourcesPort } from "../../features/resources/resourcesContract";
 import type { ResourcesFilterPort, ResourcesFilterResourcePage } from "../../features/resources/resourcesFilterContract";
 import { I18nProvider, type SupportedLocale } from "../../shared/i18n";
@@ -28,10 +24,7 @@ import { BottomDockProvider } from "../../features/bottom-dock/BottomDockProvide
 import { EMPTY_LOG_STREAM_PORT, type LogStreamPort } from "../../features/log-stream/logStreamContract";
 import { ClusterScopeProbe, LocationProbe } from "./ResourcesPage.testProbes.testSupport";
 import { resourcesChangeTimelinePort } from "./ResourcesPage.timelineTestSupport";
-import type {
-  BrowserRefreshPolicy,
-  BrowserRefreshPolicyRegistry,
-} from "../../shared/data/browserRefreshPolicyRegistry";
+
 export {
   CATALOG,
   CLUSTERS,
@@ -62,9 +55,6 @@ export function renderResources(
   changeTimelinePort: ChangeTimelinePort = resourcesChangeTimelinePort(),
   physicalTopologyRealtimePort: PhysicalTopologyRealtimePort = EMPTY_PHYSICAL_TOPOLOGY_REALTIME_PORT,
   nodePodsPort: Pick<HomePort, "loadNodePods"> = resourcesNodePodsPort(),
-  refreshPolicies: BrowserRefreshPolicyRegistry<ResourcesRefreshPolicyKey> = resourcesRefreshPolicies(),
-  resourceManifestPort?: ResourceManifestPort,
-  trafficPort?: import("../../features/traffic/trafficContract").TrafficPort,
 ) {
   const router = createMemoryRouter(
     [
@@ -90,10 +80,8 @@ export function renderResources(
                       relationTopologyPort={relationTopologyPort}
                       changeTimelinePort={changeTimelinePort}
                       resourceMetricsHistoryPort={resourceMetricsHistoryPort}
-                      refreshPolicies={refreshPolicies}
                       resourceCapabilitiesPort={resourceCapabilitiesPort}
                       resourceActionsPort={resourceActionsPort}
-                      resourceManifestPort={resourceManifestPort} trafficPort={trafficPort}
                       port={port}
                     />
                   </BottomDockProvider>
@@ -114,34 +102,6 @@ export function renderResources(
     clusterPort,
     reportUnauthorized,
     router,
-  };
-}
-
-export function resourcesRefreshPolicies(
-  overrides: Partial<Record<ResourcesRefreshPolicyKey, BrowserRefreshPolicy>> = {},
-): BrowserRefreshPolicyRegistry<ResourcesRefreshPolicyKey> {
-  const base = (refreshAfterSeconds: number): BrowserRefreshPolicy => ({
-    staleAfterSeconds: null,
-    refreshAfterSeconds,
-    keepLastSuccess: true,
-    pauseWhenHidden: true,
-    eventInvalidation: false,
-    retryAfterSeconds: null,
-    retryLimit: null,
-    postMutationRefreshAfterSeconds: null,
-  });
-  const policies: Record<ResourcesRefreshPolicyKey, BrowserRefreshPolicy> = {
-    changes: base(15),
-    resource_list: { ...base(60), eventInvalidation: true },
-    resource_list_slow: { ...base(120), eventInvalidation: true },
-    metrics_kubernetes: { ...base(30), retryAfterSeconds: 5, retryLimit: 2 },
-    metrics_prometheus: base(60),
-    metrics_pvc: base(120),
-    metrics_rightsizing: base(600),
-    ...overrides,
-  };
-  return {
-    getPolicy: vi.fn((key: ResourcesRefreshPolicyKey) => Promise.resolve(policies[key])),
   };
 }
 
@@ -286,9 +246,9 @@ export function resourcesRelationTopologyPort(
       graphRevision: "graph-test-support",
       refreshAfterSeconds: 60,
       nodes: [
-        relationNode("deployment:shop/checkout-api", "workload", "Deployment", "checkout-api", "Ready"),
-        relationNode("pod:shop/checkout-api-0", "pod", "Pod", "checkout-api-0", "CrashLoopBackOff"),
-        relationNode("service:shop/checkout-api", "service", "Service", "checkout-api", "Ready"),
+        { id: "deployment:shop/checkout-api", kind: "Deployment", name: "checkout-api", status: "Ready" },
+        { id: "pod:shop/checkout-api-0", kind: "Pod", name: "checkout-api-0", status: "CrashLoopBackOff" },
+        { id: "service:shop/checkout-api", kind: "Service", name: "checkout-api", status: "Ready" },
       ],
       edges: [
         { from: "deployment:shop/checkout-api", to: "pod:shop/checkout-api-0", type: "owns" },
@@ -318,33 +278,11 @@ export function resourcesRelationTopologyPort(
   };
 }
 
-function relationNode(
-  id: string,
-  resourceType: string,
-  kind: string,
-  name: string,
-  status: string,
-) {
-  return {
-    id,
-    identity: {
-      resourceType,
-      kind,
-      namespace: "shop",
-      name,
-    },
-    kind,
-    name,
-    status,
-  };
-}
-
 export function resourcesMetricHistoryPort(
   overrides: Partial<ResourceMetricsHistoryPort> = {},
 ): ResourceMetricsHistoryPort {
   return {
     loadResourceMetricsHistory: vi.fn().mockResolvedValue({
-      refreshPolicyKey: "metrics_kubernetes",
       series: [],
       completeness: "unavailable",
       partialReasonCodes: ["metrics_history_unavailable"],

@@ -28,10 +28,6 @@ export function acquireSharedRequest<T>(
   }
 
   let request = ownerRequests.get(key) as SharedRequest<T> | undefined;
-  if (request?.settled && request.consumers === 0) {
-    ownerRequests.delete(key);
-    request = undefined;
-  }
   if (!request) {
     const controller = new AbortController();
     request = {
@@ -55,15 +51,12 @@ export function acquireSharedRequest<T>(
       if (released) return;
       released = true;
       request!.consumers -= 1;
-      // React StrictMode can schedule the replacement passive effect after the
-      // current microtask checkpoint. Keep the request alive through one task
-      // so that the replacement consumer can acquire it before cancellation.
-      setTimeout(() => {
+      queueMicrotask(() => {
         if (request!.consumers !== 0) return;
         if (!request!.settled) request!.controller.abort();
         if (ownerRequests!.get(key) === request) ownerRequests!.delete(key);
         if (ownerRequests!.size === 0) requestRegistry.delete(owner);
-      }, 0);
+      });
     },
   };
 }

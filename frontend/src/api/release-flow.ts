@@ -1,14 +1,6 @@
 import { apiRequest, type ApiPath } from "./client";
-import { grantApproval, rejectApproval } from "./approvals";
 import { connectApplication, listApplications } from "./applications";
 import { listClusters } from "./clusters";
-import {
-  getRepositoryConnectionStatus,
-  listRepositoryBranches,
-  listRepositoryManifests,
-  probeRepository,
-  validateRepositoryManifest,
-} from "./repository-discovery";
 import {
   releaseGeneratedManifestSchema,
   releasePlanListSchema,
@@ -35,11 +27,6 @@ export function createReleaseFlowClient() {
   return {
     listApplications: (signal?: AbortSignal) => listApplications({ signal }),
     listClusters: (signal?: AbortSignal) => listClusters({}, signal),
-    probeRepository,
-    listRepositoryBranches,
-    listRepositoryManifests,
-    validateRepositoryManifest,
-    getRepositoryConnectionStatus,
     connectApplication,
     listPlans: (signal?: AbortSignal) =>
       apiRequest("/api/release-plans", releasePlanListSchema, { signal }),
@@ -80,14 +67,6 @@ export function createReleaseFlowClient() {
       );
       return response.run;
     },
-    decideApproval: (
-      approvalId: string,
-      decision: "grant" | "reject",
-      reason?: string,
-      signal?: AbortSignal,
-    ) => decision === "grant"
-      ? grantApproval(approvalId, { reason, signal })
-      : rejectApproval(approvalId, { reason, signal }),
     renderManifest: (plan: ReleasePlanApi, stepIndex: number, signal?: AbortSignal) =>
       apiRequest(
         "/api/release-plans/render-manifest",
@@ -128,7 +107,6 @@ function jsonRequest(method: string, body: unknown, signal?: AbortSignal): Reque
 
 function releasePlanPayload(plan: ReleasePlanApi) {
   return {
-    plan_id: plan.plan_id,
     name: plan.name,
     description: plan.description,
     status: plan.status,

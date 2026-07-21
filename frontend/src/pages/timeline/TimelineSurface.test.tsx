@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 
-import { StrictMode } from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider, useLocation } from "react-router-dom";
@@ -51,46 +50,6 @@ afterEach(() => {
 });
 
 describe("TimelineSurface", () => {
-  it("shares initial overview, snapshot, and pins reads in StrictMode without waiting for the SSE session to finish", async () => {
-    const overviewRequest = deferred<ReturnType<typeof timelineOverview>>();
-    const snapshotRequest = deferred<TimelineSnapshot>();
-    const pinsRequest = deferred<TimelinePinSet>(); let snapshotSignal: AbortSignal | undefined;
-    const readTimelineOverview = vi.fn(() => overviewRequest.promise);
-    const readTimeline = vi.fn((...args: Parameters<TimelinePort["readTimeline"]>) => { snapshotSignal = args[1]; return snapshotRequest.promise; });
-    const readTimelinePins = vi.fn(() => pinsRequest.promise);
-    const subscribeTimeline = vi.fn(idleStream);
-    const port = timelinePort({
-      readTimeline,
-      readTimelineOverview,
-      readTimelinePins,
-      subscribeTimeline,
-    });
-
-    renderTimeline(port, "/timeline", "en-US", true);
-
-    await waitFor(() => {
-      expect(readTimelineOverview).toHaveBeenCalledTimes(1);
-      expect(readTimeline).toHaveBeenCalledTimes(1);
-      expect(readTimelinePins).toHaveBeenCalledTimes(1);
-    }); expect(snapshotSignal?.aborted).toBe(false);
-    await act(async () => {
-      overviewRequest.resolve(timelineOverview());
-      snapshotRequest.resolve(snapshot({ events: [event()] }));
-      pinsRequest.resolve(timelinePinSet());
-      await Promise.all([
-        overviewRequest.promise,
-        snapshotRequest.promise,
-        pinsRequest.promise,
-      ]);
-    });
-
-    expect(await screen.findByText("Deployment checkout changed")).toBeTruthy();
-    expect(subscribeTimeline).toHaveBeenCalledTimes(1);
-    expect(readTimelineOverview).toHaveBeenCalledTimes(1);
-    expect(readTimeline).toHaveBeenCalledTimes(1);
-    expect(readTimelinePins).toHaveBeenCalledTimes(1);
-  });
-
   it("rehydrates URL state and renders an actual retained event list", async () => {
     const user = userEvent.setup();
     const port = timelinePort();
@@ -1198,8 +1157,6 @@ function snapshot(overrides: Partial<Omit<TimelineSnapshot, "session">> = {}): T
     events: [event()],
     coverage: [],
     ...overrides,
-    truncated: overrides.truncated ?? false,
-    eventLimit: overrides.eventLimit ?? null,
     pinSetRevision: overrides.pinSetRevision ?? null,
   };
 }
@@ -1394,7 +1351,6 @@ function renderTimeline(
   port: TimelinePort,
   initialEntry = "/timeline",
   navigatorLanguage = "en-US",
-  strictMode = false,
 ) {
   const router = createMemoryRouter([{
     path: "/timeline",
@@ -1408,8 +1364,7 @@ function renderTimeline(
     ),
   }], { initialEntries: [initialEntry] });
 
-  const view = <RouterProvider router={router} />;
-  return { ...render(strictMode ? <StrictMode>{view}</StrictMode> : view), router };
+  return { ...render(<RouterProvider router={router} />), router };
 }
 
 function LocationProbe() {

@@ -15,12 +15,6 @@ describe("relation topology adapter", () => {
 
     expect(result.clusterId).toBe("cluster-1");
     expect(result.nodes[0]?.kind).toBe("Pod");
-    expect(result.nodes[0]?.identity).toEqual({
-      resourceType: "pod",
-      kind: "Pod",
-      namespace: "shop",
-      name: "one",
-    });
     expect(result.relationCompleteness).toBe("exact");
     expect(getRelationTopology).toHaveBeenCalledWith(expect.objectContaining({
       clusters: ["cluster-1"],

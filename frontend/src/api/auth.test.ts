@@ -1,24 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import {
-  getSession,
-  listAuthWorkspaces,
-  login,
-  logout,
-  switchAuthWorkspace,
-} from "./auth";
+import { getSession, login, logout } from "./auth";
 import { ApiError } from "./client";
 
 const SESSION = {
   authenticated: true,
-  auth_enabled: true,
-  auth_mode: "password",
-  groups: ["group-platform"],
-  logout: {
-    action: "end_session",
-    supported: true,
-    reauthentication_expected: false,
-  },
   user_id: "user-123",
   roles: ["service_admin"],
   workspace_id: "default",
@@ -53,31 +39,6 @@ describe("auth API", () => {
     expect(fetchMock.mock.calls[0]?.[1]).not.toHaveProperty("body");
   });
 
-  it("loads the typed workspace catalog and switches with the shared CSRF client", async () => {
-    const catalog = {
-      current_workspace_id: "default",
-      items: [{ workspace_id: "workspace-b", name: "Workspace B", slug: "workspace-b" }],
-    };
-    const fetchMock = vi.spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce(jsonResponse(catalog))
-      .mockResolvedValueOnce(jsonResponse({ ...SESSION, workspace_id: "workspace-b" }));
-
-    await expect(listAuthWorkspaces()).resolves.toEqual(catalog);
-    await expect(switchAuthWorkspace("workspace-b")).resolves.toMatchObject({
-      workspace_id: "workspace-b",
-    });
-
-    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/auth/workspaces");
-    const [switchPath, switchInit] = fetchMock.mock.calls[1] ?? [];
-    expect(switchPath).toBe("/api/auth/workspaces/switch");
-    expect(switchInit).toMatchObject({
-      body: JSON.stringify({ workspace_id: "workspace-b" }),
-      credentials: "include",
-      method: "POST",
-    });
-    expect(new Headers(switchInit?.headers).get("x-service-csrf")).toBe("same-origin");
-  });
-
   it("preserves a 401 session response as an unauthorized API error", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       jsonResponse({ detail: "Not authenticated" }, 401),
@@ -93,24 +54,6 @@ describe("auth API", () => {
   it("rejects a session response that does not match the wire contract", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       jsonResponse({ ...SESSION, roles: "service_admin" }),
-    );
-
-    await expect(getSession()).rejects.toMatchObject({
-      kind: "invalid-payload",
-      status: 200,
-    } satisfies Partial<ApiError>);
-  });
-
-  it("rejects source-only cloud roles and raw proxy logout URLs", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      jsonResponse({
-        ...SESSION,
-        cloud_role: "owner",
-        logout: {
-          ...SESSION.logout,
-          redirect_url: "https://identity.example.test/logout",
-        },
-      }),
     );
 
     await expect(getSession()).rejects.toMatchObject({

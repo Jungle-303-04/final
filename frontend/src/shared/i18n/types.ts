@@ -8,17 +8,7 @@ import type { ShellMessageKey } from "./keys/shell";
 import type { AlertsMessageKey } from "./keys/alerts";
 import type { TimelineMessageKey } from "./keys/timeline";
 import type { DesktopMessageKey } from "./keys/desktop";
-import type { CostMessageKey } from "./keys/cost";
-import type { RightsizingMessageKey } from "./keys/rightsizing";
-import type { ApplicationsMessageKey } from "./keys/applications";
-import type { ChecksMessageKey } from "./keys/checks";
-import type { TrafficMessageKey } from "./keys/traffic";
-import type { CompareMessageKey } from "./keys/compare";
-import type { HelmMessageKey } from "./keys/helm";
-import type { WorkloadDetailMessageKey } from "./keys/workloadDetail";
-import type { DiagnoseMessageKey } from "./keys/diagnose";
-import type { ConnectionsMessageKey } from "./keys/connections";
-import type { ResourcePanelsMessageKey } from "./keys/resourcePanels";
+
 export type SupportedLocale = "en" | "ko";
 
 /**
@@ -43,21 +33,6 @@ type CoreMessageKey =
   | "common.action.save"
   | "common.action.search"
   | "common.action.select"
-  | "common.freshness.paused"
-  | "common.freshness.pausedDescription"
-  | "common.freshness.polling"
-  | "common.freshness.pollingDescription"
-  | "common.freshness.reconnecting"
-  | "common.freshness.reconnectingDescription"
-  | "common.freshness.refreshCancelled"
-  | "common.freshness.refreshFailed"
-  | "common.freshness.refreshNow"
-  | "common.freshness.refreshPending"
-  | "common.freshness.refreshSucceeded"
-  | "common.freshness.updatedAt"
-  | "common.freshness.updatedHours"
-  | "common.freshness.updatedMinutes"
-  | "common.freshness.updatedSeconds"
   | "common.progress.indeterminate"
   | "common.state.connected"
   | "common.state.disconnected"
@@ -100,11 +75,6 @@ type CoreMessageKey =
   | "clusterScope.unavailable"
   | "settings.title"
   | "settings.description"
-  | "settings.navigation"
-  | "settings.section.overview"
-  | "settings.section.access"
-  | "settings.section.preferences"
-  | "settings.section.administration"
   | "settings.section.workspace"
   | "settings.section.clusters"
   | "settings.section.repositories"
@@ -126,66 +96,6 @@ type CoreMessageKey =
   | "settings.policy.unavailable"
   | "settings.policy.immediate"
   | "settings.policy.approval"
-  | "settings.preferences.description"
-  | "settings.preferences.persisted"
-  | "settings.preferences.theme.title"
-  | "settings.preferences.theme.description"
-  | "settings.preferences.locale.title"
-  | "settings.preferences.locale.description"
-  | "settings.preferences.locale.ko"
-  | "settings.preferences.locale.en"
-  | "settings.preferences.autoSave"
-  | "settings.access.clusterRequired.title"
-  | "settings.access.clusterRequired.description"
-  | "settings.access.loading"
-  | "settings.access.failed.title"
-  | "settings.access.failed.description"
-  | "settings.access.forbidden.title"
-  | "settings.access.forbidden.description"
-  | "settings.access.identity.title"
-  | "settings.access.identity.description"
-  | "settings.access.identity"
-  | "settings.access.cluster"
-  | "settings.access.roles"
-  | "settings.access.namespace"
-  | "settings.access.namespaceUnavailable"
-  | "settings.access.namespaceEmpty"
-  | "settings.access.namespacePartial"
-  | "settings.access.allowed.title"
-  | "settings.access.allowed.description"
-  | "settings.access.denied.title"
-  | "settings.access.denied.description"
-  | "settings.access.kubernetes.title"
-  | "settings.access.kubernetes.agentDescription"
-  | "settings.access.restricted.title"
-  | "settings.access.restricted.agentDescription"
-  | "settings.hostConfiguration.title"
-  | "settings.hostConfiguration.unavailable"
-  | "settings.integrations.title"
-  | "settings.integrations.unavailable"
-  | "settings.integrations.prometheus.title"
-  | "settings.integrations.prometheus.description"
-  | "settings.integrations.prometheus.clusterRequired"
-  | "settings.integrations.prometheus.loading"
-  | "settings.integrations.prometheus.loadFailed"
-  | "settings.integrations.prometheus.url"
-  | "settings.integrations.prometheus.urlPlaceholder"
-  | "settings.integrations.prometheus.headers"
-  | "settings.integrations.prometheus.secretHint"
-  | "settings.integrations.prometheus.headerName"
-  | "settings.integrations.prometheus.headerValue"
-  | "settings.integrations.prometheus.headerValueFor"
-  | "settings.integrations.prometheus.addHeader"
-  | "settings.integrations.prometheus.removeHeader"
-  | "settings.integrations.prometheus.noHeaders"
-  | "settings.integrations.prometheus.duplicateHeader"
-  | "settings.integrations.prometheus.originChanged"
-  | "settings.integrations.prometheus.save"
-  | "settings.integrations.prometheus.saveFailed"
-  | "settings.integrations.prometheus.state.unconfigured"
-  | "settings.integrations.prometheus.state.pending"
-  | "settings.integrations.prometheus.state.connected"
-  | "settings.integrations.prometheus.state.failed"
   | "state.empty.body"
   | "state.empty.title"
   | "state.notFound.body"
@@ -234,7 +144,6 @@ type CoreMessageKey =
   | "auth.logout.error.message"
   | "auth.logout.error.title"
   | "auth.logout.pending"
-  | "auth.logout.upstreamManaged"
   | "auth.password.label"
   | "auth.password.error.required"
   | "auth.session.retry"
@@ -259,6 +168,20 @@ type CoreMessageKey =
   | "home.connection.stale"
   | "home.connection.unknown"
   | "home.empty.clusters"
+  | "home.failure.forbidden.description"
+  | "home.failure.forbidden.title"
+  | "home.failure.generic.description"
+  | "home.failure.generic.title"
+  | "home.failure.invalidResponse.description"
+  | "home.failure.invalidResponse.title"
+  | "home.failure.notFound.description"
+  | "home.failure.notFound.title"
+  | "home.failure.offline.description"
+  | "home.failure.offline.title"
+  | "home.failure.rateLimited.description"
+  | "home.failure.rateLimited.retryAfter"
+  | "home.failure.rateLimited.retryLater"
+  | "home.failure.rateLimited.title"
   | "home.issue.analyzing"
   | "home.issue.counts"
   | "home.issue.empty"
@@ -266,65 +189,12 @@ type CoreMessageKey =
   | "home.issue.noDetail"
   | "home.issue.resourceUnknown"
   | "home.issue.timeUnknown"
-  | "home.insights.coverage.available"
-  | "home.insights.coverage.partial"
-  | "home.insights.coverage.unavailable"
-  | "home.insights.certificateList"
-  | "home.insights.certificates"
-  | "home.insights.certificatesDescription"
-  | "home.insights.certificatesUnavailable"
-  | "home.insights.certificateStatus.expired"
-  | "home.insights.certificateStatus.expiring"
-  | "home.insights.certificateStatus.valid"
-  | "home.insights.clusterScoped"
-  | "home.insights.customResources"
-  | "home.insights.customResourcesDescription"
-  | "home.insights.customResourcesEmpty"
-  | "home.insights.expired"
-  | "home.insights.expiring"
-  | "home.insights.expiryObserved"
-  | "home.insights.helm"
-  | "home.insights.helmDescription"
-  | "home.insights.helmEmpty"
-  | "home.insights.kinds"
-  | "home.insights.moreAvailable"
-  | "home.insights.moreCertificates"
-  | "home.insights.objects"
-  | "home.insights.openHelm"
-  | "home.insights.openResources"
-  | "home.insights.releases"
-  | "home.insights.statusCount"
-  | "home.insights.statuses"
-  | "home.insights.tlsSecrets"
-  | "home.insights.unavailable"
-  | "home.source.audit"
-  | "home.source.checks"
-  | "home.source.controllers"
-  | "home.source.cost"
-  | "home.source.coverageValue"
-  | "home.source.coveredWorkloads"
-  | "home.source.findings"
-  | "home.source.gitops"
-  | "home.source.networkPolicy"
-  | "home.source.openChecks"
-  | "home.source.openCost"
-  | "home.source.openGitOps"
-  | "home.source.openTimeline"
-  | "home.source.openTopology"
-  | "home.source.openTraffic"
-  | "home.source.timeline"
-  | "home.source.timelineEmpty"
-  | "home.source.topology"
-  | "home.source.topologySummary"
-  | "home.source.traffic"
   | "home.lastObserved"
   | "home.metric.activeIncidents"
   | "home.metric.cpu"
   | "home.metric.cpuUsage"
   | "home.metric.displayedWarnings"
   | "home.metric.incidents"
-  | "home.metric.kubernetesVersions"
-  | "home.metric.kubernetesVersionsUnavailable"
   | "home.metric.memory"
   | "home.metric.memoryUsage"
   | "home.metric.nodes"
@@ -355,37 +225,25 @@ type CoreMessageKey =
   | "home.section.clusterStatus"
   | "home.section.clusterSummary"
   | "home.section.clusterSummaryError"
-  | "home.section.insights"
-  | "home.section.explore"
-  | "home.section.liveObservation"
+  | "home.section.loading"
   | "home.section.nodeAndPod"
-  | "home.section.posture"
   | "home.section.statusChecking"
   | "home.action.reconnect"
   | "home.action.reload"
+  | "home.refresh.lastSuccess"
   | "home.status.connected";
 
 export type MessageKey =
   | CoreMessageKey
-  | ApplicationsMessageKey
   | AlertsMessageKey
-  | ChecksMessageKey
   | DockMessageKey
   | DesktopMessageKey
-  | CostMessageKey
-  | RightsizingMessageKey
   | ShellMessageKey
   | ClustersMessageKey
   | IssuesMessageKey
   | MetricsMessageKey
-  | ResourcesMessageKey | ResourcePanelsMessageKey
+  | ResourcesMessageKey
   | TimelineMessageKey
-  | TrafficMessageKey
-  | CompareMessageKey
-  | HelmMessageKey
-  | WorkloadDetailMessageKey
-  | DiagnoseMessageKey
-  | ConnectionsMessageKey
   | WorkflowsMessageKey;
 
 export type TranslationParameter = string | number | bigint;

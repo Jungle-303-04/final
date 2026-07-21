@@ -206,34 +206,6 @@ export function AuthBarrier({ children, port }: AuthBarrierProps) {
     void signOut();
   }, [signOut]);
 
-  const switchWorkspace = useCallback(async (workspaceId: string, signal?: AbortSignal) => {
-    if (mutationPendingRef.current) throw new Error("authentication mutation already in progress");
-    mutationPendingRef.current = true;
-    const controller = new AbortController();
-    const abort = () => controller.abort();
-    signal?.addEventListener("abort", abort, { once: true });
-    if (signal?.aborted) controller.abort();
-    mutationControllerRef.current = controller;
-    try {
-      const session = await port.switchWorkspace(workspaceId, controller.signal);
-      if (mountedRef.current) {
-        setState({
-          kind: "authenticated",
-          session,
-          signOutIssue: null,
-          signOutPending: false,
-        });
-      }
-      return session;
-    } finally {
-      signal?.removeEventListener("abort", abort);
-      if (mutationControllerRef.current === controller) {
-        mutationControllerRef.current = null;
-        mutationPendingRef.current = false;
-      }
-    }
-  }, [port]);
-
   if (state.kind === "checking") return <ProductStateScreen kind="loading" />;
   if (state.kind === "unauthenticated") {
     return (
@@ -250,14 +222,12 @@ export function AuthBarrier({ children, port }: AuthBarrierProps) {
 
   return (
     <AuthenticatedSessionRender
-      listWorkspaces={port.listWorkspaces}
       onSignOut={signOutHandler}
       reportUnauthorized={requestSessionCheck}
       render={children}
       session={state.session}
       signOutIssue={state.signOutIssue}
       signOutPending={state.signOutPending}
-      switchWorkspace={switchWorkspace}
     />
   );
 }

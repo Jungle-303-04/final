@@ -66,18 +66,10 @@ export function connectionState(value: string): HomeConnectionState {
   const normalized = value.trim().toLowerCase().replace(/-/g, "_");
   if (["online", "connected"].includes(normalized)) return "online";
   if (normalized === "stale") return "stale";
-  if (
-    ["pending", "pending_install", "install_applied", "installing", "never_connected"].includes(
-      normalized,
-    )
-  ) {
+  if (["pending", "pending_install", "installing", "never_connected"].includes(normalized)) {
     return "pending";
   }
-  if (
-    ["offline", "disconnected", "install_expired", "install_failed", "expired"].includes(
-      normalized,
-    )
-  ) {
+  if (["offline", "disconnected", "install_expired", "expired"].includes(normalized)) {
     return "offline";
   }
   return "unknown";
@@ -86,10 +78,8 @@ export function connectionState(value: string): HomeConnectionState {
 export function registrationState(value: string): HomeRegistrationState {
   const normalized = value.trim().toLowerCase().replace(/-/g, "_");
   if (["active", "connected", "registered", "ready"].includes(normalized)) return "active";
-  if (["pending", "pending_install", "install_applied", "installing"].includes(normalized)) {
-    return "pending";
-  }
-  if (["expired", "install_expired", "install_failed"].includes(normalized)) return "expired";
+  if (["pending", "pending_install", "installing"].includes(normalized)) return "pending";
+  if (["expired", "install_expired"].includes(normalized)) return "expired";
   return "unknown";
 }
 

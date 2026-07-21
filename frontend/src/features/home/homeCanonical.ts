@@ -1,10 +1,8 @@
 import type {
   HomeClusterChoice,
-  HomeClusterDataCoverage,
   HomeClusterChoices,
   HomeClusterOverview,
   HomeDataQualityWarning,
-  HomeFleetSummary,
   HomeNodeCollection,
   HomeNodeSummary,
   HomePodCollection,
@@ -15,16 +13,13 @@ import type {
 } from "./homeContract";
 import type {
   HomeEndpointClusterList,
-  HomeEndpointClusterDataCoverage,
   HomeEndpointClusterOverview,
   HomeEndpointClusterSummary,
-  HomeEndpointFleetSummary,
   HomeEndpointNode,
   HomeEndpointNodeCollection,
   HomeEndpointPod,
   HomeEndpointPodCollection,
 } from "./homeEndpointContract";
-import { nullableNonNegativeInteger } from "./homeInsightsCanonicalSupport";
 import {
   toIncident,
   toUsage,
@@ -49,38 +44,10 @@ import {
   registrationState,
 } from "./homeValidation";
 
-export { toHomeInsights } from "./homeInsightsCanonical";
-
 export function toClusterChoices(wire: HomeEndpointClusterList): HomeClusterChoices {
   const clusters = wire.clusters.map(toClusterChoice);
   assertUnique(clusters.map(({ id }) => id));
-  return { completeness: "exact", clusters };
-}
-
-export function toFleetSummary(wire: HomeEndpointFleetSummary): HomeFleetSummary {
-  const clusters = wire.clusters.map((cluster) => ({
-    clusterId: canonicalIdentity(cluster.cluster_id),
-    name: canonicalDisplayLabel(cluster.name, cluster.cluster_id),
-    health: healthTone(cluster.health),
-    podsRunning: nonNegativeInteger(cluster.pods_running),
-    podsTotal: nonNegativeInteger(cluster.pods_total),
-    nodesReady: nonNegativeInteger(cluster.nodes_ready),
-    nodesTotal: nonNegativeInteger(cluster.nodes_total),
-    openIncidents: nonNegativeInteger(cluster.open_incidents),
-    restartCount: nonNegativeInteger(cluster.restarts_recent),
-    cpuPercent: cluster.cpu_pct === null ? null : percentage(cluster.cpu_pct),
-    memoryPercent: cluster.mem_pct === null ? null : percentage(cluster.mem_pct),
-    observedAt: canonicalTimestamp(cluster.last_seen_at),
-    ...(cluster.coverage ? { coverage: toClusterDataCoverage(cluster.coverage) } : {}),
-  }));
-  assertUnique(clusters.map(({ clusterId }) => clusterId));
-  for (const cluster of clusters) {
-    if (
-      cluster.nodesReady > cluster.nodesTotal ||
-      cluster.podsRunning > cluster.podsTotal
-    ) invalidResponse();
-  }
-  return { clusters };
+  return { completeness: "unknown", clusters };
 }
 
 function toClusterChoice(wire: HomeEndpointClusterSummary): HomeClusterChoice {
@@ -90,7 +57,6 @@ function toClusterChoice(wire: HomeEndpointClusterSummary): HomeClusterChoice {
   const id = canonicalIdentity(wire.cluster_id);
   const nodeCount = nullableNonNegativeInteger(wire.node_count);
   const podCount = nullableNonNegativeInteger(wire.pod_count);
-  const namespaceCount = nullableNonNegativeInteger(wire.namespace_count);
   const incidentCount = nullableNonNegativeInteger(wire.incident_count);
   const serverCount = nullableNonNegativeInteger(wire.server_count);
   const appCount = nullableNonNegativeInteger(wire.app_count);
@@ -105,18 +71,18 @@ function toClusterChoice(wire: HomeEndpointClusterSummary): HomeClusterChoice {
     connectionStage: wire.connection_stage ?? null,
     registrationState: registrationState(canonicalIdentity(wire.status)),
     connectionState: connectionState(canonicalIdentity(wire.connection_status)),
-    observationMode: wire.observation_mode ?? "agent",
     lastObservedAt: canonicalTimestamp(wire.last_seen_at ?? wire.last_agent_seen_at),
     nodeCount,
     podCount,
-    namespaceCount,
-    kubernetesVersion: canonicalOptionalIdentity(wire.kubernetes_version ?? null),
-    crdDiscoveryStatus: wire.crd_discovery_status ?? null,
     incidentCount,
     serverCount,
     appCount,
     openIncidentCount,
   };
+}
+
+function nullableNonNegativeInteger(value: number | null | undefined): number | null {
+  return value === null || value === undefined ? null : nonNegativeInteger(value);
 }
 
 export function toClusterOverview(
@@ -171,36 +137,7 @@ export function toNodeCollection(
   assertSameIdentity(wire.cluster_id, clusterId);
   const nodes = wire.nodes.map((node) => toNode(clusterId, node));
   assertUnique(nodes.map(({ id }) => id));
-  return {
-    clusterId,
-    completeness: wire.coverage?.inventory.availability === "available" ? "exact" : "unknown",
-    nodes,
-    ...(wire.coverage ? { coverage: toClusterDataCoverage(wire.coverage) } : {}),
-  };
-}
-
-function toClusterDataCoverage(
-  coverage: HomeEndpointClusterDataCoverage,
-): HomeClusterDataCoverage {
-  return {
-    inventory: toClusterObservationCoverage(coverage.inventory),
-    cpu: toClusterObservationCoverage(coverage.cpu),
-    memory: toClusterObservationCoverage(coverage.memory),
-  };
-}
-
-function toClusterObservationCoverage(
-  coverage: HomeEndpointClusterDataCoverage["inventory"],
-) {
-  const reasonCodes = coverage.reason_codes.map(canonicalIdentity);
-  assertUnique(reasonCodes);
-  if (coverage.availability === "available" && reasonCodes.length > 0) invalidResponse();
-  if (coverage.availability !== "available" && reasonCodes.length === 0) invalidResponse();
-  return {
-    availability: coverage.availability,
-    observedAt: canonicalTimestamp(coverage.observed_at),
-    reasonCodes: [...reasonCodes].sort((left, right) => left.localeCompare(right)),
-  };
+  return { clusterId, completeness: "unknown", nodes };
 }
 
 function toNode(clusterId: string, wire: HomeEndpointNode): HomeNodeSummary {
@@ -213,7 +150,6 @@ function toNode(clusterId: string, wire: HomeEndpointNode): HomeNodeSummary {
     id: ephemeralId("node", clusterId, name),
     identityStability: "ephemeral",
     name,
-    kubernetesVersion: canonicalOptionalIdentity(wire.kubernetes_version),
     ready: wire.ready,
     health: healthTone(wire.health),
     podsRunning,

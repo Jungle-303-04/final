@@ -12,7 +12,6 @@ describe("Home request coordinator", () => {
 
     const first = acquireHomeRequest(port, "clusters", load);
     first.release();
-    await Promise.resolve();
     const second = acquireHomeRequest(port, "clusters", load);
 
     expect(load).toHaveBeenCalledOnce();

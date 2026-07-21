@@ -46,11 +46,7 @@ describe("BottomDockProvider", () => {
     expect(screen.getByTestId("dock-connection-announcer").textContent)
       .toBe("checkout: connecting");
     act(() => {
-      handlers?.onEvent({
-        type: "connected",
-        streamId: "stream-1",
-        containers: ["app"],
-      });
+      handlers?.onEvent({ type: "connected", streamId: "stream-1" });
       handlers?.onEvent(line("line-1"));
       handlers?.onEvent(line("line-2"));
     });
@@ -91,26 +87,6 @@ describe("BottomDockProvider", () => {
     expect(screen.getByTestId("received").textContent).toBe("1");
   });
 
-  it("closes an incompatible stream after an authoritative namespace rescope", () => {
-    const close = vi.fn();
-    const port: LogStreamPort = {
-      open: vi.fn(() => close),
-    };
-    render(
-      <AuthSessionGateProvider reportUnauthorized={vi.fn()}>
-        <BottomDockProvider port={port}>
-          <DockProbe onRender={() => undefined} />
-        </BottomDockProvider>
-      </AuthSessionGateProvider>,
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: "open" }));
-    fireEvent.click(screen.getByRole("button", { name: "rescope" }));
-
-    expect(close).toHaveBeenCalledTimes(1);
-    expect(screen.getByTestId("status").textContent).toBe("closed");
-  });
-
   it("keeps the stream coalescer active after StrictMode resets its effects", () => {
     let handlers: LogStreamHandlers | null = null;
     const port: LogStreamPort = {
@@ -132,11 +108,7 @@ describe("BottomDockProvider", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "open" }));
     act(() => {
-      handlers?.onEvent({
-        type: "connected",
-        streamId: "stream-1",
-        containers: ["app"],
-      });
+      handlers?.onEvent({ type: "connected", streamId: "stream-1" });
       handlers?.onEvent(line("line-1"));
     });
     act(() => scheduledFrame?.(16));
@@ -173,11 +145,7 @@ describe("BottomDockProvider", () => {
     expect(globalThis.cancelAnimationFrame).toHaveBeenCalledWith(17);
 
     expect(() => act(() => {
-      handlers?.onEvent({
-        type: "connected",
-        streamId: "late-stream",
-        containers: ["app"],
-      });
+      handlers?.onEvent({ type: "connected", streamId: "late-stream" });
       pendingFrame?.(16);
     })).not.toThrow();
     expect(rendered).toEqual(rendersBeforeUnmount);
@@ -208,12 +176,6 @@ function DockProbe({ onRender }: { onRender: (received: number) => void }) {
         type="button"
       >
         close
-      </button>
-      <button
-        onClick={() => dock.invalidateNamespaceScope("cluster-1", ["other"])}
-        type="button"
-      >
-        rescope
       </button>
       <span data-testid="received">{tab?.received ?? 0}</span>
       <span data-testid="status">{tab?.status ?? "closed"}</span>

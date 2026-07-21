@@ -60,12 +60,12 @@ describe("product-owned primitive accessibility", () => {
     const dialog = screen.getByRole("dialog", { name: "클러스터 정보" });
     const overlay = document.querySelector<HTMLElement>('[data-slot="dialog-overlay"]');
     expect(dialog.getAttribute("aria-describedby")).toBeTruthy();
-    expect(dialog.className).toContain("duration-(--motion-instant)");
     expect(dialog.className).toContain("motion-reduce:data-open:animate-none");
     expect(dialog.className).toContain("motion-reduce:data-closed:animate-none");
-    expect(overlay?.className).toContain("duration-(--motion-instant)");
+    expect(dialog.className).toContain("motion-reduce:duration-0");
     expect(overlay?.className).toContain("motion-reduce:data-open:animate-none");
     expect(overlay?.className).toContain("motion-reduce:data-closed:animate-none");
+    expect(overlay?.className).toContain("motion-reduce:duration-0");
     expect(screen.getByText("현재 선택한 클러스터의 상태입니다.")).toBeTruthy();
     expect(screen.getAllByRole("button", { name: "닫기" })).toHaveLength(2);
     await waitFor(() => {

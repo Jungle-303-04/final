@@ -62,7 +62,7 @@ describe("alert event API", () => {
       .toBe("same-origin");
   });
 
-  it("rejects Kyro occurrences without observed threshold evidence", async () => {
+  it("rejects Opsia occurrences without observed threshold evidence", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(json([{ ...EVENT, observed_value: null }]));
 
     await expect(listAlertEvents()).rejects.toMatchObject({ kind: "invalid-payload" });

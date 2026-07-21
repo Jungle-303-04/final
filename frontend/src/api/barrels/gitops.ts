@@ -3,21 +3,6 @@ export {
   GITOPS_APPLICATION_DETAIL_PATH,
 } from "../gitops-application-detail";
 export {
-  executeGitOpsResourceAction,
-  getGitOpsResourceInsights,
-  getGitOpsResourceTree,
-} from "../gitops-resource-detail";
-export {
-  GITOPS_OVERVIEW_PATH,
-  listGitOpsOverview,
-  type GitOpsOverviewQuery,
-} from "../gitops-overview";
-export {
-  gitOpsOverviewRowSchema,
-  gitOpsOverviewSchema,
-  type GitOpsOverviewEndpoint,
-} from "../gitops-overview-schemas";
-export {
   gitOpsActionCapabilitySchema,
   gitOpsApplicationDetailResponseSchema,
   gitOpsApplicationDetailSchema,
@@ -101,13 +86,6 @@ export {
   createReleaseFlowClient,
   type ReleaseRunAction,
 } from "../release-flow";
-export {
-  getRepositoryConnectionStatus,
-  listRepositoryBranches,
-  listRepositoryManifests,
-  probeRepository,
-  validateRepositoryManifest,
-} from "../repository-discovery";
 export {
   releaseGeneratedManifestSchema,
   releasePlanListSchema,

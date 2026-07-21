@@ -13,8 +13,6 @@ import { I18nProvider } from "../../shared/i18n";
 import type { AiAssistantPort } from "../../features/ai-assistant/aiAssistantContract";
 import type { LogStreamPort } from "../../features/log-stream/logStreamContract";
 import type { AlertEventsPort } from "../../features/alerts/alertEventsContract";
-import type { GlobalFilterPort } from "../../features/global-filter/globalFilterContract";
-import type { PortForwardSessionPort } from "../../features/service-access/portForwardSessionContract";
 import type { ProductSurfaceId } from "../productRoutes";
 import { useBottomDock } from "../../features/bottom-dock/BottomDockProvider";
 import {
@@ -23,24 +21,10 @@ import {
 } from "../shortcutRegistry";
 
 export const testAuth: AuthenticatedAuthState = {
-  listWorkspaces: async () => ({ currentWorkspaceId: "test-workspace", items: [] }),
-  session: {
-    authEnabled: true,
-    authMode: "password",
-    groups: [],
-    logout: {
-      action: "end_session",
-      supported: true,
-      reauthenticationExpected: false,
-    },
-    userId: "test-user",
-    roles: ["viewer"],
-    workspaceId: "test-workspace",
-  },
+  session: { userId: "test-user", roles: ["viewer"], workspaceId: "test-workspace" },
   signOutIssue: null,
   signOutPending: false,
   onSignOut: () => undefined,
-  switchWorkspace: async () => { throw new Error("not used"); },
 };
 
 export const testClusterScope: ClusterScopePort = {
@@ -79,17 +63,13 @@ export function installMatchMedia(matches: boolean) {
 export function renderShell({
   alertEventsPort,
   aiAssistantPort,
-  globalFilterPort,
   initialEntry = "/home?clusters=cluster-1",
   logStreamPort,
-  portForwardSessions,
   releasedSurfaceIds = new Set(["home", "issues"]),
 }: {
   alertEventsPort?: AlertEventsPort;
   aiAssistantPort?: AiAssistantPort;
-  globalFilterPort?: GlobalFilterPort;
   logStreamPort?: LogStreamPort;
-  portForwardSessions?: PortForwardSessionPort;
   initialEntry?: string;
   releasedSurfaceIds?: ReadonlySet<ProductSurfaceId>;
 } = {}) {
@@ -112,10 +92,7 @@ export function renderShell({
                         alertEventsPort={alertEventsPort}
                         aiAssistantPort={aiAssistantPort}
                         auth={testAuth}
-                        defaultSidebarCollapsed={false}
-                        globalFilterPort={globalFilterPort}
                         logStreamPort={logStreamPort}
-                        portForwardSessions={portForwardSessions}
                         releasedSurfaceIds={releasedSurfaceIds}
                       />
                     )}>

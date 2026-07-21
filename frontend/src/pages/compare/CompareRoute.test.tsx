@@ -7,7 +7,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AuthSessionGateProvider } from "../../features/auth/AuthSessionGate";
 import type { CompareCandidates, ComparePort, CompareResult } from "../../features/compare/compareContract";
-import { I18nProvider } from "../../shared/i18n";
 import { CompareRoute } from "./CompareRoute";
 
 afterEach(cleanup);
@@ -85,32 +84,18 @@ describe("CompareRoute", () => {
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Choose side B resource" })).toBeNull());
     expect(screen.getByTestId("location").textContent).toContain("a=shop%2Fapi-a");
   });
-
-  it("renders product-owned comparison copy in Korean", async () => {
-    const port: ComparePort = {
-      getComparison: vi.fn(async () => result()),
-      getCandidates: vi.fn(async () => candidates()),
-    };
-    renderRoute(port, "ko-KR");
-
-    expect(await screen.findByRole("heading", { name: "비교" })).toBeTruthy();
-    expect(await screen.findByRole("button", { name: "차이만 보기" })).toBeTruthy();
-    expect(await screen.findByLabelText("비교 설정")).toBeTruthy();
-  });
 });
 
-function renderRoute(port: ComparePort, navigatorLanguage = "en-US") {
+function renderRoute(port: ComparePort) {
   return render(
-    <I18nProvider navigatorLanguage={navigatorLanguage} storage={null}>
-      <MemoryRouter initialEntries={["/compare?cluster=cluster-a&kind=deployments&apiGroup=apps&a=shop%2Fapi-a&b=shop%2Fapi-b"]}>
-        <AuthSessionGateProvider reportUnauthorized={vi.fn()}>
-          <Routes>
-            <Route element={<CompareRoute port={port} />} path="/compare" />
-          </Routes>
-          <LocationProbe />
-        </AuthSessionGateProvider>
-      </MemoryRouter>
-    </I18nProvider>,
+    <MemoryRouter initialEntries={["/compare?cluster=cluster-a&kind=deployments&apiGroup=apps&a=shop%2Fapi-a&b=shop%2Fapi-b"]}>
+      <AuthSessionGateProvider reportUnauthorized={vi.fn()}>
+        <Routes>
+          <Route element={<CompareRoute port={port} />} path="/compare" />
+        </Routes>
+        <LocationProbe />
+      </AuthSessionGateProvider>
+    </MemoryRouter>,
   );
 }
 

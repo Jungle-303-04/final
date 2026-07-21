@@ -12,8 +12,8 @@ export function ApplicationsRefreshControl<T>({
   onRefresh: () => void;
   resource: Extract<ApplicationsResource<T>, { phase: "ready" }>;
 }) {
-  const { t } = useI18n();
-  const copy = applicationsCopy(t);
+  const { locale } = useI18n();
+  const copy = applicationsCopy(locale);
   return (
     <div className="flex min-w-0 items-center gap-2">
       <RefreshAction

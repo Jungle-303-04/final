@@ -1,5 +1,5 @@
 export type LogStreamEndpointEvent =
-  | { type: "connected"; stream_id: string; containers: string[] }
+  | { type: "connected"; stream_id: string }
   | {
       type: "log";
       id: string;
@@ -11,13 +11,7 @@ export type LogStreamEndpointEvent =
     }
   | { type: "pod_added"; pod: string }
   | { type: "pod_removed"; pod: string }
-  | {
-      type: "end";
-      reason: string;
-      diagnostic: {
-        code: "no_matching_pods" | "no_log_lines";
-      } | null;
-    }
+  | { type: "end"; reason: string }
   | { type: "error"; code: string; retryable: boolean };
 
 export type WorkloadLogStreamKind = "deployments" | "statefulsets" | "daemonsets";
@@ -40,14 +34,6 @@ export interface LogStreamEndpointDependencies {
     kind: WorkloadLogStreamKind,
     namespace: string,
     name: string,
-    handlers: LogStreamEndpointHandlers,
-  ): () => void;
-  openScheduledWorkloadRunLogStream(
-    clusterId: string,
-    kind: string,
-    namespace: string,
-    name: string,
-    runKey: string,
     handlers: LogStreamEndpointHandlers,
   ): () => void;
 }

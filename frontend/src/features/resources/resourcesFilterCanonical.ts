@@ -8,13 +8,12 @@ import type {
   ResourcesFilterResourcePage,
   ResourcesFilterSnapshot,
 } from "./resourcesFilterContract";
-import type { ResourceSummary, ResourceTableMetrics } from "./resourcesContract";
 import type {
   ResourcesFilterEndpointFacetPage,
   ResourcesFilterEndpointLabelPage,
   ResourcesFilterEndpointResourcePage,
 } from "./resourcesFilterEndpointContract";
-import { invalidResponse, responseTimestamp } from "./resourcesValidation";
+import { responseTimestamp } from "./resourcesValidation";
 
 export function toResourcesFacetPage(
   wire: ResourcesFilterEndpointFacetPage,
@@ -100,15 +99,8 @@ export function toResourcesResourcePage(
     seenIds.add(projected.item.id);
     seenInventoryKeys.add(projected.item.inventoryKey);
     dataQualityWarnings.push(...projected.warnings);
-    const tableMetrics = toResourceTableMetrics(
-      row.metrics,
-      projected.item,
-      row.resource.snapshot_id,
-    );
     items.push({
-      resource: tableMetrics === undefined
-        ? projected.item
-        : { ...projected.item, tableMetrics },
+      resource: projected.item,
       cluster: {
         clusterId: row.cluster.cluster_id,
         name: row.cluster.name,
@@ -132,49 +124,6 @@ export function toResourcesResourcePage(
     snapshot: toSnapshot(wire.snapshot),
     excludedCount,
     dataQualityWarnings,
-  };
-}
-
-function toResourceTableMetrics(
-  wire: ResourcesFilterEndpointResourcePage["items"][number]["metrics"],
-  resource: ResourceSummary,
-  sourceSnapshotId: string,
-): ResourceTableMetrics | undefined {
-  if (wire === null || wire === undefined) return undefined;
-  if (
-    wire.kind !== resource.resourceType ||
-    wire.resource_uid !== resource.uid ||
-    wire.source_snapshot_id !== sourceSnapshotId
-  ) {
-    invalidResponse();
-  }
-  const common = {
-    resourceUid: wire.resource_uid,
-    sourceSnapshotId: wire.source_snapshot_id,
-    observedAt: responseTimestamp(wire.observed_at),
-    measurementWindow: wire.measurement_window,
-    cpuMillicores: wire.cpu_mcores,
-    memoryMebibytes: wire.memory_mib,
-    completeness: wire.completeness,
-    reasonCodes: [...wire.reason_codes],
-  };
-  if (wire.kind === "pod") {
-    return {
-      ...common,
-      kind: wire.kind,
-      cpuRequestMillicores: wire.cpu_request_mcores,
-      cpuLimitMillicores: wire.cpu_limit_mcores,
-      memoryRequestMebibytes: wire.memory_request_mib,
-      memoryLimitMebibytes: wire.memory_limit_mib,
-    };
-  }
-  return {
-    ...common,
-    kind: wire.kind,
-    cpuAllocatableMillicores: wire.cpu_allocatable_mcores,
-    memoryAllocatableMebibytes: wire.memory_allocatable_mib,
-    podCount: wire.pod_count,
-    podAllocatable: wire.pod_allocatable,
   };
 }
 

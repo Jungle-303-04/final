@@ -12,10 +12,10 @@ describe("relation topology graph model", () => {
   it("separates truly disconnected resources and preserves typed directed edges", () => {
     const model = buildRelationTopologyGraphModel({
       nodes: [
-        relationNode("workload-1", "workload", "Deployment", "api", "Ready"),
-        relationNode("pod-1", "pod", "Pod", "api-abc", "CrashLoopBackOff"),
-        relationNode("service-1", "service", "Service", "api", "Ready"),
-        relationNode("config-1", "configmap", "ConfigMap", "api-config", "Active"),
+        { id: "workload-1", kind: "Deployment", name: "api", status: "Ready" },
+        { id: "pod-1", kind: "Pod", name: "api-abc", status: "CrashLoopBackOff" },
+        { id: "service-1", kind: "Service", name: "api", status: "Ready" },
+        { id: "config-1", kind: "ConfigMap", name: "api-config", status: "Active" },
       ],
       edges: [
         { from: "workload-1", to: "pod-1", type: "owns" },
@@ -39,8 +39,8 @@ describe("relation topology graph model", () => {
   it("does not mislabel a resource as disconnected when its peer kind is hidden", () => {
     const model = buildRelationTopologyGraphModel({
       nodes: [
-        relationNode("workload-1", "workload", "Deployment", "api", "Ready"),
-        relationNode("pod-1", "pod", "Pod", "api-abc", "Running"),
+        { id: "workload-1", kind: "Deployment", name: "api", status: "Ready" },
+        { id: "pod-1", kind: "Pod", name: "api-abc", status: "Running" },
       ],
       edges: [{ from: "workload-1", to: "pod-1", type: "owns" }],
     }, new Set(["Pod"]));
@@ -80,27 +80,6 @@ describe("relation topology graph model", () => {
     }, resources)).toBe("real-inventory-key");
   });
 });
-
-function relationNode(
-  id: string,
-  resourceType: string,
-  kind: string,
-  name: string,
-  status: string,
-) {
-  return {
-    id,
-    identity: {
-      resourceType,
-      kind,
-      namespace: "shop",
-      name,
-    },
-    kind,
-    name,
-    status,
-  };
-}
 
 function resource(inventoryKey: string): ResourceSummary {
   return {

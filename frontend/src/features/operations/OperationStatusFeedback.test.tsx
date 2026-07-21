@@ -17,51 +17,6 @@ afterEach(() => {
 });
 
 describe("operation status feedback", () => {
-  it("renders a completed drain with partial Pod failures as a warning with bounded details", async () => {
-    const port: OperationEventsPort = {
-      async *subscribeOperationEvents(commandId) {
-        yield {
-          commandId,
-          sequence: 1,
-          kind: "completed" as const,
-          payload: {
-            result: {
-              evicted: 1,
-              failed: 1,
-              skipped: 1,
-              partial_failure: true,
-              resources: [
-                { namespace: "shop", name: "checkout-1", status: "evicted" },
-                { namespace: "shop", name: "checkout-2", status: "failed", error: "PdbDenied" },
-                { namespace: "system", name: "agent-1", reason: "daemonset" },
-              ],
-            },
-          },
-          occurredAt: "2026-07-17T00:00:00Z",
-        };
-      },
-    };
-    const store = createOperationStatusStore(port);
-    store.start("command-drain");
-
-    render(
-      <I18nProvider navigatorLanguage="en-US" storage={null}>
-        <OperationStatusStoreProvider store={store}>
-          <OperationStatusFeedback commandId="command-drain" correlationId="correlation-drain" />
-        </OperationStatusStoreProvider>
-      </I18nProvider>,
-    );
-
-    await waitFor(() => {
-      expect(screen.getByRole("status").getAttribute("data-status")).toBe("completed-with-warnings");
-    });
-    expect(screen.getByText("Completed with warnings")).toBeTruthy();
-    expect(screen.getByText("Evicted 1 · Failed 1 · Skipped 1")).toBeTruthy();
-    expect(screen.getByText(/checkout-2.*PdbDenied/u)).toBeTruthy();
-    expect(screen.getByText(/agent-1.*daemonset/u)).toBeTruthy();
-    store.dispose();
-  });
-
   it("announces the observation state without motion when the user prefers reduced motion", () => {
     vi.stubGlobal("matchMedia", vi.fn(() => ({
       addEventListener: vi.fn(),

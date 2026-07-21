@@ -5,7 +5,6 @@ import { ApiError } from "./client";
 import {
   getClusterNodesSummary,
   getClusterSummary,
-  getHomeInsights,
   getNodePodsSummary,
 } from "./cluster-summary";
 
@@ -70,6 +69,11 @@ function clusterSummaryWithoutPodsTotal() {
   };
 }
 
+function clusterSummaryWithPodsTotal() {
+  const base = clusterSummaryWithoutPodsTotal();
+  return { ...base, usage: { ...base.usage, pods_total: 6 } };
+}
+
 describe("cluster summary API", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -114,169 +118,31 @@ describe("cluster summary API", () => {
     );
   });
 
-  it("preserves a missing pods_total through getClusterSummary for Home usage isolation", async () => {
-    const payload = clusterSummaryWithoutPodsTotal();
+  it("flows a required pods_total through getClusterSummary into the Home usage snapshot", async () => {
+    const payload = clusterSummaryWithPodsTotal();
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse(payload));
     const adapter = createHomeAdapter({
       listClusters: async () => ({ clusters: [] }),
       getClusterSummary,
-      getHomeInsights,
       getClusterNodesSummary,
       getNodePodsSummary,
-      subscribeHomeDashboardEvents: () => ({
-        async *[Symbol.asyncIterator]() {
-          yield* [];
-        },
-      }),
     });
 
     await expect(adapter.loadClusterOverview("cluster-1")).resolves.toMatchObject({
       health: "critical",
-      usage: null,
+      usage: {
+        podsRunning: 5,
+        podsTotal: 6,
+        nodesReady: 2,
+        nodesTotal: 2,
+      },
       workloads: [{ name: "checkout-api" }],
       warnings: [{ name: "checkout-warning" }],
       incidents: [{ incidentId: "incident-1" }],
-      dataQualityWarnings: [
-        { code: "usage-unavailable", section: "usage", entityId: null },
-      ],
+      dataQualityWarnings: [],
     });
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/clusters/cluster-1/summary",
-      expect.objectContaining({ method: "GET", credentials: "include" }),
-    );
-  });
-
-  it("loads strict bounded Home insights for one encoded cluster", async () => {
-    const payload = {
-      cluster_id: "cluster/one",
-      topology: {
-        coverage: {
-          availability: "available",
-          observed_at: "2026-07-16T09:00:00Z",
-          reason_codes: [],
-        },
-        node_count: 12,
-        edge_count: 9,
-        omitted_node_count: 0,
-        omitted_edge_count: 0,
-        relation_completeness: "exact",
-      },
-      explore: {
-        traffic: {
-          coverage: {
-            availability: "unavailable",
-            observed_at: null,
-            reason_codes: ["traffic_observation_not_integrated"],
-          },
-        },
-        cost: {
-          coverage: {
-            availability: "unavailable",
-            observed_at: null,
-            reason_codes: ["cost_observation_not_integrated"],
-          },
-        },
-      },
-      posture: {
-        network_policy: {
-          coverage: {
-            availability: "unavailable",
-            observed_at: null,
-            reason_codes: ["network_policy_coverage_not_reported"],
-          },
-          total_policies: null,
-          covered_workloads: null,
-          total_workloads: null,
-        },
-        gitops: {
-          coverage: {
-            availability: "available",
-            observed_at: "2026-07-16T09:00:00Z",
-            reason_codes: [],
-          },
-          controller_count: 2,
-          provider_counts: { argo: 1, flux: 1 },
-          health_counts: { healthy: 1, degraded: 1 },
-        },
-        audit: {
-          coverage: {
-            availability: "available",
-            observed_at: "2026-07-16T09:00:00Z",
-            reason_codes: [],
-          },
-          total_check_count: 6,
-          total_finding_count: 3,
-          severity_counts: { warning: 2, danger: 1 },
-        },
-      },
-      custom_resources: {
-        coverage: {
-          availability: "available",
-          observed_at: "2026-07-16T09:00:00Z",
-          reason_codes: [],
-        },
-        items: [{
-          api_group: "argoproj.io",
-          version: "v1alpha1",
-          kind: "Application",
-          count: 7,
-        }],
-        total_kinds: 1,
-        total_resources: 7,
-        has_more: false,
-      },
-      helm: {
-        coverage: {
-          availability: "available",
-          observed_at: "2026-07-16T09:00:00Z",
-          reason_codes: [],
-        },
-        release_count: 2,
-        status_counts: { deployed: 2 },
-      },
-      certificate_expiry: {
-        coverage: {
-          availability: "available",
-          observed_at: "2026-07-16T09:00:00Z",
-          reason_codes: [],
-        },
-        items: [{
-          secret: {
-            api_group: "",
-            version: "v1",
-            kind: "Secret",
-            namespace: "shop",
-            name: "api-tls",
-            uid: "secret-api-tls",
-          },
-          source_certificate: {
-            api_group: "cert-manager.io",
-            version: "v1",
-            kind: "Certificate",
-            namespace: "shop",
-            name: "api-certificate",
-            uid: "certificate-api",
-          },
-          not_after: "2026-07-20T10:00:00Z",
-          status: "expiring",
-          seconds_remaining: 345_600,
-          observed_at: "2026-07-16T09:00:00Z",
-        }],
-        tls_secret_count: 1,
-        observed_expiry_count: 1,
-        expiring_count: 1,
-        expired_count: 0,
-        earliest_expiry: "2026-07-20T10:00:00Z",
-        warning_before_seconds: 2_592_000,
-        has_more: false,
-      },
-      refresh_after_seconds: 30,
-    };
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse(payload));
-
-    await expect(getHomeInsights("cluster/one")).resolves.toEqual(payload);
-    expect(fetchMock).toHaveBeenCalledWith(
-      "/api/clusters/cluster%2Fone/home/insights",
       expect.objectContaining({ method: "GET", credentials: "include" }),
     );
   });
@@ -326,19 +192,18 @@ describe("cluster summary API", () => {
   it("loads node summaries and preserves unavailable metrics as null", async () => {
     const payload = {
       cluster_id: "cluster-1",
-      coverage: { inventory: { availability: "available", observed_at: "2026-07-12T00:00:00Z", reason_codes: [] }, cpu: { availability: "unavailable", observed_at: null, reason_codes: ["cpu_observation_unavailable"] }, memory: { availability: "unavailable", observed_at: null, reason_codes: ["memory_observation_unavailable"] } },
       nodes: [
         {
           name: "worker-1",
           ready: true,
           health: "healthy",
+          kubernetes_version: null,
           pods_running: 12,
           pods_capacity: 30,
           cpu_pct: null,
           mem_pct: null,
           restarts_recent: 0,
           conditions: [],
-          kubernetes_version: "v1.30.7",
         },
       ],
     };
@@ -350,6 +215,7 @@ describe("cluster summary API", () => {
       expect.objectContaining({ method: "GET" }),
     );
   });
+
   it("loads pods for an encoded node name", async () => {
     const payload = {
       cluster_id: "cluster-1",

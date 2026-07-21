@@ -9,6 +9,7 @@ import {
 } from "react";
 import {
   browserLocaleStorage,
+  browserNavigatorLanguage,
   persistLocale,
   resolveInitialLocale,
   type LocaleStorage,
@@ -45,7 +46,9 @@ export function I18nProvider({
   navigatorLanguage,
 }: I18nProviderProps) {
   const resolvedStorage = storage === undefined ? browserLocaleStorage() : storage;
-  const resolvedNavigatorLanguage = navigatorLanguage ?? null;
+  const resolvedNavigatorLanguage = navigatorLanguage === undefined
+    ? browserNavigatorLanguage()
+    : navigatorLanguage;
   const [locale, setLocaleState] = useState<SupportedLocale>(() =>
     resolveInitialLocale({
       storage: resolvedStorage,
@@ -53,11 +56,8 @@ export function I18nProvider({
     }));
 
   const setLocale = useCallback((nextLocale: SupportedLocale) => {
+    setLocaleState(nextLocale);
     persistLocale(nextLocale, resolvedStorage);
-    if (typeof document !== "undefined") document.documentElement.lang = nextLocale;
-    setLocaleState((currentLocale) => (
-      currentLocale === nextLocale ? currentLocale : nextLocale
-    ));
   }, [resolvedStorage]);
   const t = useCallback<TranslationFunction>(
     (key, params) => translate(locale, key, params),

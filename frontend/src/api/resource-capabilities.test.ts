@@ -46,8 +46,8 @@ const RESPONSE = {
           prefill_result_key: null,
         },
         {
-          key: "dry_run",
-          label: "Dry run",
+          key: "surge",
+          label: "Allow surge",
           type: "boolean",
           required: true,
           minimum: null,
@@ -58,8 +58,8 @@ const RESPONSE = {
       ],
       method: "POST",
       path: "/clusters/cluster-a/namespaces/shop/deployments/checkout-api/scale",
-      request_context: "simple",
-      result_intent: "refresh-resource",
+      request_context: "exact-resource",
+      result_intent: "resource-summary",
     },
   ],
 } as const;

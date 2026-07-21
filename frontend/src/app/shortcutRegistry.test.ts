@@ -19,34 +19,22 @@ describe("shell shortcut registry", () => {
       .toEqual(expect.arrayContaining([
         ["route:home", "g h", true],
         ["route:resources", "g r", false],
-        ["route:deploy", "g d", false],
         ["route:issues", "g i", true],
+        ["route:topology", "g t", false],
+        ["route:applications", "g a", false],
         ["route:timeline", "g l", false],
+        ["route:traffic", "g f", false],
+        ["route:helm", "g m", false],
+        ["route:gitops", "g o", false],
         ["route:checks", "g u", false],
         ["route:cost", "g c", false],
-        ["route:alerts", "g b", false],
-        ["route:ai", "g a", false],
-        ["route:settings", "g s", false],
       ]));
-    expect(definitions.filter((definition) => definition.id.startsWith("route:"))).toHaveLength(10);
     expect(definitions.find((definition) => definition.id === "command"))
       .toMatchObject({
         allowInInputs: true,
         modifier: "meta-or-control",
         sequence: ["k"],
       });
-    expect(definitions.find((definition) => definition.id === "diagnostics"))
-      .toMatchObject({
-        allowInInputs: true,
-        modifier: "meta-or-control",
-        sequence: ["shift+d"],
-      });
-    expect(definitions.find((definition) => definition.id === "namespace"))
-      .toMatchObject({ sequence: ["n"] });
-    expect(definitions.find((definition) => definition.id === "context"))
-      .toMatchObject({ sequence: ["c"] });
-    expect(definitions.find((definition) => definition.id === "search"))
-      .toMatchObject({ sequence: ["/"] });
   });
 
   it("matches an unavailable route chord so the shell can give honest feedback", () => {
@@ -57,16 +45,11 @@ describe("shell shortcut registry", () => {
     expect(prefix.preventDefault).toHaveBeenCalledOnce();
     expect(matcher.handle(keyEvent("i"))?.id).toBe("route:issues");
     matcher.handle(keyEvent("g"));
-    expect(matcher.handle(keyEvent("t"))).toBeNull();
+    expect(matcher.handle(keyEvent("t"))?.id).toBe("route:topology");
     expect(matcher.handle(keyEvent("t"))?.id).toBe("theme");
     expect(matcher.handle(keyEvent("?", { shiftKey: true }))?.id).toBe("help");
     expect(matcher.handle(keyEvent("k", { metaKey: true }))?.id).toBe("command");
     expect(matcher.handle(keyEvent("k", { ctrlKey: true }))?.id).toBe("command");
-    expect(matcher.handle(keyEvent("D", { ctrlKey: true, shiftKey: true }))?.id)
-      .toBe("diagnostics");
-    expect(matcher.handle(keyEvent("n"))?.id).toBe("namespace");
-    expect(matcher.handle(keyEvent("c"))?.id).toBe("context");
-    expect(matcher.handle(keyEvent("/"))?.id).toBe("search");
   });
 
   it("owns route and Resources collection chords in one active-surface registry", () => {
@@ -76,6 +59,7 @@ describe("shell shortcut registry", () => {
     expect(resources.map((definition) => definition.id)).toEqual(expect.arrayContaining([
       "route:home",
       "route:resources",
+      "route:topology",
       "route:timeline",
       "route:cost",
       "resources:next-row",
@@ -83,10 +67,7 @@ describe("shell shortcut registry", () => {
       "resources:first-row",
       "resources:last-row",
       "resources:open-row",
-      "resources:open-yaml",
       "resources:open-logs",
-      "resources:previous-kind",
-      "resources:next-kind",
       "command",
       "theme",
       "help",
@@ -94,6 +75,7 @@ describe("shell shortcut registry", () => {
     expect(resources.map((definition) => definition.sequence.join(" "))).toEqual(expect.arrayContaining([
       "g h",
       "g r",
+      "g t",
       "g l",
       "g c",
       "j",
@@ -101,9 +83,6 @@ describe("shell shortcut registry", () => {
       "g g",
       "shift+g",
       "d",
-      "y",
-      "[",
-      "]",
       "t",
       "?",
     ]));
@@ -115,8 +94,6 @@ describe("shell shortcut registry", () => {
     expect(matcher.handle(keyEvent("G"))?.id).toBe("resources:last-row");
     expect(matcher.handle(keyEvent("g", { shiftKey: true }))?.id)
       .toBe("resources:last-row");
-    expect(matcher.handle(keyEvent("["))?.id).toBe("resources:previous-kind");
-    expect(matcher.handle(keyEvent("]"))?.id).toBe("resources:next-kind");
   });
 
   it("does not publish Resources context actions outside the active Resources surface", () => {
@@ -138,13 +115,6 @@ describe("shell shortcut registry", () => {
     expect(matcher.handle(keyEvent("t", { target: input }))).toBeNull();
     expect(matcher.handle(keyEvent("k", { metaKey: true, target: input }))?.id).toBe("command");
     expect(matcher.handle(keyEvent("k", { ctrlKey: true, target: input }))?.id).toBe("command");
-    expect(matcher.handle(keyEvent("D", {
-      ctrlKey: true,
-      shiftKey: true,
-      target: input,
-    }))?.id).toBe("diagnostics");
-    expect(matcher.handle(keyEvent("n", { target: input }))).toBeNull();
-    expect(matcher.handle(keyEvent("c", { target: input }))).toBeNull();
     expect(matcher.handle(keyEvent("?", {
       shiftKey: true,
       target: { tagName: "DIV", isContentEditable: true },

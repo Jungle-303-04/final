@@ -100,7 +100,9 @@ function podProblemPriority(pod: PhysicalTopologyPod): number {
   if (badge === "pending") return 1;
   if (badge === "restarting") return 2;
   if (!["healthy", "ready", "ok"].includes(pod.health.toLocaleLowerCase())) return 3;
-  return 4;
+  if ((pod.usagePercent ?? 0) >= 80) return 4;
+  if ((pod.usagePercent ?? 0) >= 60) return 5;
+  return 6;
 }
 
 export function podUsageTone(usagePercent: number | null): PodUsageTone {

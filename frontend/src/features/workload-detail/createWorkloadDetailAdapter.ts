@@ -5,9 +5,7 @@ import {
   type WorkloadDetailPort,
   type WorkloadDetailResourceRef,
   type WorkloadDetailRequest,
-  type ScheduledRunCatalog,
 } from "./workloadDetailContract";
-import { toRightsizingEvidence } from "../rightsizing/rightsizingAdapter";
 import type { WorkloadDetailEndpointDependencies } from "./workloadDetailEndpointContract";
 import type { WorkloadDetailEndpoint } from "./workloadDetailWireContract";
 
@@ -23,93 +21,12 @@ export function createWorkloadDetailAdapter(
         throw toFailure(error);
       }
     },
-    async getScheduledRuns(request, signal) {
-      if (request.namespace === null) throw new WorkloadDetailPortFailure("invalid-request");
-      try {
-        const wire = await endpoints.getScheduledWorkloadRuns(
-          request.clusterId,
-          request.kind,
-          request.namespace,
-          request.name,
-          signal,
-        );
-        return toScheduledRuns(request, wire);
-      } catch (error) {
-        if (isAbortError(error) || error instanceof WorkloadDetailPortFailure) throw error;
-        throw toFailure(error);
-      }
-    },
-  };
-}
-
-function toScheduledRuns(
-  request: WorkloadDetailRequest,
-  wire: import("./workloadDetailWireContract").ScheduledRunCatalogEndpoint,
-): ScheduledRunCatalog {
-  if (
-    wire.scope.cluster_id !== request.clusterId ||
-    wire.owner.kind.toLocaleLowerCase() !== request.kind.toLocaleLowerCase() ||
-    wire.owner.namespace !== request.namespace ||
-    wire.owner.name !== request.name
-  ) throw new WorkloadDetailPortFailure("invalid-response");
-  const runsByKey = new Map(wire.runs.map((run) => [run.run_key, run]));
-  if (wire.lifecycle.some((event) => {
-    const run = runsByKey.get(event.run_key);
-    return run === undefined || run.resource.uid !== event.resource.uid;
-  })) {
-    throw new WorkloadDetailPortFailure("invalid-response");
-  }
-  return {
-    scope: {
-      workspaceId: wire.scope.workspace_id,
-      clusterId: wire.scope.cluster_id,
-      namespaces: wire.scope.namespaces,
-      freshness: wire.scope.freshness,
-    },
-    owner: toResourceRef(wire.owner),
-    runs: wire.runs.map((run) => ({
-      runKey: run.run_key,
-      resource: toResourceRef(run.resource),
-      phase: run.phase,
-      active: run.active,
-      scheduledAt: run.scheduled_at,
-      startedAt: run.started_at,
-      finishedAt: run.finished_at,
-      desired: run.desired,
-      succeeded: run.succeeded,
-      failed: run.failed,
-      podTotal: run.pod_total,
-      podSucceeded: run.pod_succeeded,
-      podFailed: run.pod_failed,
-      podRunning: run.pod_running,
-      nextStep: run.next_step,
-      observedAt: run.observed_at,
-    })),
-    lifecycle: wire.lifecycle.map((event) => ({
-      eventId: event.event_id,
-      runKey: event.run_key,
-      resource: toResourceRef(event.resource),
-      stage: event.stage,
-      occurredAt: event.occurred_at,
-      eventType: event.event_type,
-      reason: event.reason,
-    })),
-    defaultRunKey: wire.default_run_key,
-    complete: wire.complete,
-    reasonCodes: wire.reason_codes,
   };
 }
 
 function toDetail(request: WorkloadDetailRequest, wire: WorkloadDetailEndpoint): WorkloadDetail {
   const detail = wire.detail;
   assertRequestIdentity(request, detail);
-  const rightsizing = toRightsizingEvidence(detail.rightsizing);
-  if (
-    rightsizing.availability !== "unavailable" &&
-    rightsizing.resource.uid !== detail.observation.resource.uid
-  ) {
-    throw new WorkloadDetailPortFailure("invalid-response");
-  }
   return {
     scope: {
       workspaceId: detail.scope.workspace_id,
@@ -158,7 +75,6 @@ function toDetail(request: WorkloadDetailRequest, wire: WorkloadDetailEndpoint):
       streamKind: detail.log_stream.stream_kind,
       reasonCodes: detail.log_stream.reason_codes,
     },
-    rightsizing,
     capabilities: {
       revision: detail.capabilities.revision,
       actions: detail.capabilities.actions,
@@ -189,7 +105,7 @@ function assertRequestIdentity(
   }
 }
 
-function toResourceRef(value: import("./workloadDetailWireContract").WorkloadDetailWireResourceRef): WorkloadDetailResourceRef {
+function toResourceRef(value: WorkloadDetailEndpoint["detail"]["observation"]["resource"]): WorkloadDetailResourceRef {
   return {
     apiGroup: value.api_group,
     version: value.version,

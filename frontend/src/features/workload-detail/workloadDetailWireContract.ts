@@ -1,5 +1,3 @@
-import type { RightsizingWorkloadEvidenceEndpoint } from "../rightsizing/rightsizingEndpointContract";
-
 /**
  * API-validated transport shape for the Workload Detail feature. The API
  * layer owns Zod validation; the feature owns this narrow mapping contract.
@@ -21,41 +19,6 @@ export interface WorkloadDetailWireScope {
   cluster_id: string;
   namespaces: string[];
   freshness: WorkloadDetailWireFreshness;
-}
-
-export interface ScheduledRunCatalogEndpoint {
-  scope: WorkloadDetailWireScope;
-  owner: WorkloadDetailWireResourceRef;
-  runs: {
-    run_key: string;
-    resource: WorkloadDetailWireResourceRef;
-    phase: "pending" | "running" | "succeeded" | "failed" | "unknown";
-    active: boolean;
-    scheduled_at: string | null;
-    started_at: string | null;
-    finished_at: string | null;
-    desired: number | null;
-    succeeded: number | null;
-    failed: number | null;
-    pod_total: number;
-    pod_succeeded: number;
-    pod_failed: number;
-    pod_running: number;
-    next_step: "logs" | "timeline" | null;
-    observed_at: string | null;
-  }[];
-  lifecycle: {
-    event_id: string;
-    run_key: string;
-    resource: WorkloadDetailWireResourceRef;
-    stage: "scheduled" | "started" | "finished";
-    occurred_at: string;
-    event_type: "normal" | "warning";
-    reason: string;
-  }[];
-  default_run_key: string | null;
-  complete: boolean;
-  reason_codes: string[];
 }
 
 interface WorkloadDetailWireObservedResource {
@@ -109,7 +72,6 @@ export interface WorkloadDetailEndpoint {
       stream_kind: "deployments" | "statefulsets" | "daemonsets" | null;
       reason_codes: string[];
     };
-    rightsizing: RightsizingWorkloadEvidenceEndpoint;
     capabilities: {
       scope: WorkloadDetailWireScope;
       resource: WorkloadDetailWireResourceRef;

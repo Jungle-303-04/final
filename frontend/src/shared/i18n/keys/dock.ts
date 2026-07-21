@@ -23,7 +23,6 @@ export type DockMessageKey =
   | "shell.dock.newLines"
   | "shell.dock.endReason"
   | "shell.dock.pods"
-  | "shell.dock.containers"
   | "shell.dock.truncated"
   | "shell.dock.search"
   | "shell.dock.searchPlaceholder"
@@ -47,6 +46,4 @@ export type DockMessageKey =
   | "shell.dock.copyLine"
   | "shell.dock.copied"
   | "shell.dock.download"
-  | "shell.dock.follow"
-  | "shell.dock.diagnostic.noPods"
-  | "shell.dock.diagnostic.noLines";
+  | "shell.dock.follow";

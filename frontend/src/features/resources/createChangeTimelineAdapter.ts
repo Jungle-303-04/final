@@ -3,24 +3,18 @@ import type { ChangeTimelinePort } from "./changeTimelineContract";
 import { createChangeTimelineRequest } from "./resourcesFilterRequest";
 import { ResourcesPortFailure } from "./resourcesContract";
 import { isResourcesAbortError, toResourcesPortFailure } from "./createResourcesAdapter";
-import type { BrowserRefreshPolicyRegistry } from "../../shared/data/browserRefreshPolicyRegistry";
 
 export function createChangeTimelineAdapter(
-  endpoints: ChangeTimelineEndpointDependencies & {
-    refreshPolicies: BrowserRefreshPolicyRegistry<"changes">;
-  },
+  endpoints: ChangeTimelineEndpointDependencies,
 ): ChangeTimelinePort {
   return {
     async loadChangeTimeline(state, options, signal) {
       try {
-        const [value, freshnessPolicy] = await Promise.all([
-          endpoints.getChangeTimeline(
-            createChangeTimelineRequest(state, options),
-            signal,
-          ),
-          endpoints.refreshPolicies.getPolicy("changes", signal),
-        ]);
-        return { ...options, ...value, freshnessPolicy };
+        const value = await endpoints.getChangeTimeline(
+          createChangeTimelineRequest(state, options),
+          signal,
+        );
+        return { ...options, ...value };
       } catch (error) {
         if (isResourcesAbortError(error) || error instanceof ResourcesPortFailure) throw error;
         if (error instanceof TypeError || error instanceof RangeError) {

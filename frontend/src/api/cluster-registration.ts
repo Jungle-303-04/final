@@ -37,6 +37,7 @@ export interface TargetRegisterInput extends TargetProviderSelectionInput {
   clusterId: string | null;
   name: string;
   environment: string;
+  prometheusBaseUrl?: string;
   lokiBaseUrl?: string;
   tempoBaseUrl?: string;
   otelTracesEndpoint?: string;
@@ -100,6 +101,7 @@ export function registerTarget(
       cluster_id: input.clusterId,
       name: input.name,
       environment: input.environment,
+      prometheus_base_url: input.prometheusBaseUrl,
       loki_base_url: input.lokiBaseUrl,
       tempo_base_url: input.tempoBaseUrl,
       otel_traces_endpoint: input.otelTracesEndpoint,

@@ -1,6 +1,5 @@
-import { apiRequest, type ApiPath } from "./client";
+import { apiRequest, apiRequestNoContent, type ApiPath } from "./client";
 import {
-  MAX_AI_CONVERSATION_PAGE_LIMIT,
   aiConversationAcceptedSchema,
   aiConversationDetailSchema,
   aiConversationListSchema,
@@ -29,11 +28,6 @@ export interface AiMessageInput {
   context?: AiConversationContext;
 }
 
-export interface AiConversationPageInput {
-  limit?: number;
-  cursor?: string;
-}
-
 /** Lists the signed-in user's AI conversations without message bodies. */
 export function listAiConversations(
   signal?: AbortSignal,
@@ -47,29 +41,22 @@ export function listAiConversations(
 export function getAiConversation(
   conversationId: string,
   signal?: AbortSignal,
-  page: AiConversationPageInput = {},
 ): Promise<AiConversationDetail> {
-  const basePath = `/api/ai/conversations/${encodePathSegment(assertConversationId(conversationId))}`;
-  const query = new URLSearchParams();
-  if (page.limit !== undefined) {
-    if (
-      !Number.isInteger(page.limit)
-      || page.limit < 1
-      || page.limit > MAX_AI_CONVERSATION_PAGE_LIMIT
-    ) {
-      throw new RangeError(
-        `AI conversation page limit must be between 1 and ${MAX_AI_CONVERSATION_PAGE_LIMIT}`,
-      );
-    }
-    query.set("limit", String(page.limit));
-  }
-  if (page.cursor !== undefined) {
-    const cursor = page.cursor.trim();
-    if (!cursor) throw new TypeError("AI conversation cursor must not be empty");
-    query.set("cursor", cursor);
-  }
-  const path = `${basePath}${query.size > 0 ? `?${query.toString()}` : ""}` as ApiPath;
+  const path =
+    `/api/ai/conversations/${encodePathSegment(assertConversationId(conversationId))}` as ApiPath;
   return apiRequest(path, aiConversationDetailSchema, { signal });
+}
+
+/** Deletes one conversation and its stored messages for the signed-in user. */
+export function deleteAiConversation(
+  conversationId: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  if (!conversationId.trim()) {
+    throw new TypeError("conversationId must not be empty");
+  }
+  const path = `/api/ai/conversations/${encodePathSegment(conversationId)}` as ApiPath;
+  return apiRequestNoContent(path, { method: "DELETE", signal });
 }
 
 /** Creates a conversation and queues its first user message. */

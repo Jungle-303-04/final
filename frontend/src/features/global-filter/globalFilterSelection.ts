@@ -108,9 +108,6 @@ export function removeChip(
       common: {
         ...state.common,
         clusters: state.common.clusters.filter((id) => id !== chip.id),
-        namespaces: state.common.namespaces.filter(
-          (item) => item.clusterId !== chip.id,
-        ),
       },
     };
   }

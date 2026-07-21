@@ -7,8 +7,6 @@ import { UnifiedFilterProvider } from "../../features/filters/UnifiedFilterProvi
 import type {
   HomeClusterChoices,
   HomeClusterOverview,
-  HomeDashboardInvalidation,
-  HomeInsights,
   HomeNodeCollection,
   HomePodCollection,
   HomePort,
@@ -31,8 +29,7 @@ export function renderHomeState(port: HomePort, entry: string) {
   });
 }
 
-export function homeApi(refreshAfterSeconds = 30) {
-  const dashboardStreams: DashboardInvalidationStream[] = [];
+export function homeApi() {
   const list = vi.fn<(...args: [AbortSignal?]) => Promise<HomeClusterChoices>>()
     .mockResolvedValue(clusterChoices());
   const overviewMock = vi.fn<(...args: [string, AbortSignal?]) => Promise<HomeClusterOverview>>()
@@ -41,90 +38,17 @@ export function homeApi(refreshAfterSeconds = 30) {
     .mockImplementation((clusterId) => Promise.resolve(nodes(clusterId, ["worker-a"])));
   const podsMock = vi.fn<(...args: [string, string, AbortSignal?]) => Promise<HomePodCollection>>()
     .mockImplementation((clusterId, nodeName) => Promise.resolve(pods(clusterId, nodeName)));
-  const insightsMock = vi.fn<(...args: [string, AbortSignal?]) => Promise<HomeInsights>>()
-    .mockImplementation((clusterId) => Promise.resolve(insights(clusterId)));
   return {
-    insights: insightsMock,
     list,
     overview: overviewMock,
     nodes: nodesMock,
     pods: podsMock,
-    dashboardStreams,
     port: {
-      loadDashboardRefreshPolicy: vi.fn().mockResolvedValue({
-        staleAfterSeconds: 15,
-        refreshAfterSeconds,
-        keepLastSuccess: true,
-        pauseWhenHidden: true,
-        eventInvalidation: true,
-        retryAfterSeconds: null,
-        retryLimit: null,
-        postMutationRefreshAfterSeconds: null,
-      }),
       listClusterChoices: list,
       loadClusterOverview: overviewMock,
-      loadInsights: insightsMock,
       loadNodes: nodesMock,
       loadNodePods: podsMock,
-      subscribeDashboardInvalidations: vi.fn((scope, options) => {
-        const stream = dashboardInvalidationStream(scope.clusterId, options?.signal);
-        dashboardStreams.push(stream);
-        return stream.events;
-      }),
     } satisfies HomePort,
-  };
-}
-
-export interface DashboardInvalidationStream {
-  readonly clusterId: string;
-  readonly events: AsyncIterable<HomeDashboardInvalidation>;
-  readonly signal: AbortSignal | undefined;
-  close(): void;
-  emit(snapshotId?: string): void;
-}
-
-function dashboardInvalidationStream(
-  clusterId: string,
-  signal: AbortSignal | undefined,
-): DashboardInvalidationStream {
-  const pending: HomeDashboardInvalidation[] = [];
-  const readers: Array<(value: IteratorResult<HomeDashboardInvalidation>) => void> = [];
-  let closed = false;
-  const finish = () => {
-    if (closed) return;
-    closed = true;
-    readers.splice(0).forEach((resolve) => resolve({ done: true, value: undefined }));
-  };
-  signal?.addEventListener("abort", finish, { once: true });
-  return {
-    clusterId,
-    signal,
-    close: finish,
-    emit(snapshotId = `snapshot-${pending.length + 1}`) {
-      if (closed) return;
-      const event: HomeDashboardInvalidation = { snapshotId };
-      const reader = readers.shift();
-      if (reader) reader({ done: false, value: event });
-      else pending.push(event);
-    },
-    events: {
-      [Symbol.asyncIterator]() {
-        return {
-          next(): Promise<IteratorResult<HomeDashboardInvalidation>> {
-            const event = pending.shift();
-            if (event) return Promise.resolve({ done: false, value: event });
-            if (closed || signal?.aborted) {
-              return Promise.resolve({ done: true, value: undefined });
-            }
-            return new Promise((resolve) => readers.push(resolve));
-          },
-          return(): Promise<IteratorResult<HomeDashboardInvalidation>> {
-            finish();
-            return Promise.resolve({ done: true, value: undefined });
-          },
-        };
-      },
-    },
   };
 }
 
@@ -169,7 +93,6 @@ export function nodes(clusterId: string, names: string[]): HomeNodeCollection {
       id: `node:${clusterId}/${name}`,
       identityStability: "ephemeral",
       name,
-      kubernetesVersion: "v1.30.7",
       ready: true,
       health: "healthy",
       podsRunning: 1,
@@ -179,96 +102,6 @@ export function nodes(clusterId: string, names: string[]): HomeNodeCollection {
       restartCount: 0,
       conditions: [],
     })),
-  };
-}
-
-export function insights(clusterId: string): HomeInsights {
-  return {
-    clusterId,
-    topology: {
-      coverage: { availability: "available", observedAt: null, reasonCodes: [] },
-      nodeCount: 0,
-      edgeCount: 0,
-      omittedNodeCount: 0,
-      omittedEdgeCount: 0,
-      relationCompleteness: "exact",
-    },
-    explore: {
-      traffic: {
-        coverage: {
-          availability: "unavailable",
-          observedAt: null,
-          reasonCodes: ["traffic_observation_not_integrated"],
-        },
-      },
-      cost: {
-        coverage: {
-          availability: "unavailable",
-          observedAt: null,
-          reasonCodes: ["cost_observation_not_integrated"],
-        },
-      },
-    },
-    posture: {
-      networkPolicy: {
-        coverage: {
-          availability: "unavailable",
-          observedAt: null,
-          reasonCodes: ["network_policy_coverage_not_reported"],
-        },
-        totalPolicies: null,
-        coveredWorkloads: null,
-        totalWorkloads: null,
-      },
-      gitops: {
-        coverage: {
-          availability: "unavailable",
-          observedAt: null,
-          reasonCodes: ["gitops_inventory_unavailable"],
-        },
-        controllerCount: null,
-        providerCounts: {},
-        healthCounts: {},
-      },
-      audit: {
-        coverage: {
-          availability: "unavailable",
-          observedAt: null,
-          reasonCodes: ["checks_observation_unavailable"],
-        },
-        totalCheckCount: null,
-        totalFindingCount: null,
-        severityCounts: {},
-      },
-    },
-    customResources: {
-      coverage: { availability: "available", observedAt: null, reasonCodes: [] },
-      items: [],
-      totalKinds: 0,
-      totalResources: 0,
-      hasMore: false,
-    },
-    helm: {
-      coverage: { availability: "available", observedAt: null, reasonCodes: [] },
-      releaseCount: 0,
-      statusCounts: {},
-    },
-    certificateExpiry: {
-      coverage: {
-        availability: "unavailable",
-        observedAt: null,
-        reasonCodes: ["tls_secret_observation_unavailable"],
-      },
-      items: [],
-      tlsSecretCount: null,
-      observedExpiryCount: null,
-      expiringCount: null,
-      expiredCount: null,
-      earliestExpiry: null,
-      warningBeforeSeconds: 2_592_000,
-      hasMore: false,
-    },
-    refreshAfterSeconds: 30,
   };
 }
 

@@ -83,13 +83,11 @@ describe("physical topology realtime overlay", () => {
     }));
     vi.stubGlobal("cancelAnimationFrame", vi.fn());
     const harness = realtimeHarness();
-    const onResourceDelta = vi.fn();
     const rendered = renderHook(() => usePhysicalTopologyRealtime({
       active: true,
       clusterId: "cluster-1",
       frame: readyFrame(),
       port: harness.port,
-      onResourceDelta,
       workspaceId: "default",
     }));
     await waitFor(() => expect(harness.port.connect).toHaveBeenCalledOnce());
@@ -117,7 +115,6 @@ describe("physical topology realtime overlay", () => {
     expect(livePod(rendered.result.current).usagePercent).toBe(12);
     act(() => animationFrames.shift()?.(0));
     await waitFor(() => expect(livePod(rendered.result.current).usagePercent).toBe(85));
-    expect(onResourceDelta).toHaveBeenCalledOnce();
     expect(animationFrames).toHaveLength(0);
 
     rendered.unmount();

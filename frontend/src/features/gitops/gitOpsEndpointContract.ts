@@ -1,5 +1,4 @@
 import type {
-  ApprovalDecision,
   GeneratedManifest,
   ReleasePlan,
   ReleasePreview,
@@ -9,121 +8,7 @@ import type {
   ReleaseTargetInput,
   SafePrResult,
   GitOpsReasonCode,
-  GitOpsSyncTargetQuery,
 } from "./gitOpsContract";
-import type {
-  RepositoryBranchListEndpoint,
-  RepositoryConnectionStatusEndpoint,
-  RepositoryManifestCatalogEndpoint,
-  RepositoryManifestValidationEndpoint,
-  RepositoryProbeEndpoint,
-} from "./repositoryConnectionEndpointContract";
-
-type EndpointResourceRef = GitOpsApplicationDetailEndpoint["application"]["resource"];
-type EndpointClusterScope = NonNullable<GitOpsApplicationDetailEndpoint["application"]["scope"]["scope"]>;
-
-export interface GitOpsOverviewItemEndpoint {
-  id: string;
-  authority: "registered" | "controller";
-  provider: "internal" | "argo" | "flux";
-  display_name: string;
-  application_ids: string[];
-  binding_id: string | null;
-  scope: EndpointClusterScope;
-  resource: EndpointResourceRef | null;
-  environment: string | null;
-  status: string | null;
-  health: string | null;
-  revision: string | null;
-  observed_at: string | null;
-  partial_reason_codes: string[];
-}
-
-export interface GitOpsOverviewEndpoint {
-  items: GitOpsOverviewItemEndpoint[];
-}
-
-export interface GitOpsResourceTreeEndpoint {
-  scope: EndpointClusterScope;
-  root: EndpointResourceRef;
-  nodes: {
-    id: string;
-    resource: EndpointResourceRef;
-    role: "root" | "declared" | "generated" | "source" | "dependency";
-    status: string | null;
-    health: string | null;
-  }[];
-  edges: { source: string; target: string; relationship: "owns" | "source" | "depends_on" }[];
-  coverage: {
-    state: "complete" | "partial";
-    reason_codes: string[];
-    observed_count: number;
-    returned_count: number;
-  };
-}
-
-export interface GitOpsResourceInsightsEndpoint {
-  insights: {
-    scope: EndpointClusterScope;
-    resource: EndpointResourceRef;
-    resource_version: string;
-    provider: "argo" | "flux";
-    status: string | null;
-    health: string | null;
-    revision: string | null;
-    source: EndpointResourceRef | null;
-    conditions: {
-      type: string;
-      status: string;
-      reason: string | null;
-      message: string | null;
-      observed_at: string | null;
-    }[];
-    history: {
-      id: string | null;
-      revision: string | null;
-      deployed_at: string | null;
-      phase: string | null;
-      message: string | null;
-      initiated_by: string | null;
-    }[];
-    capabilities: {
-      scope: EndpointClusterScope;
-      resource: EndpointResourceRef;
-      revision: string;
-      actions: ("reconcile" | "sync_with_source" | "suspend" | "resume" | "sync" | "refresh")[];
-    };
-  };
-}
-
-export interface GitOpsResourceActionEndpointRequest {
-  cluster_id: string;
-  resource: EndpointResourceRef;
-  resource_version: string;
-  capability_revision: string;
-  action: "reconcile" | "sync_with_source" | "suspend" | "resume" | "sync" | "refresh";
-  confirmation: true;
-  reason: string;
-  refresh_mode?: "normal" | "hard";
-  options?: {
-    revision?: string;
-    prune: boolean;
-    dry_run: boolean;
-    force: boolean;
-    apply_only: boolean;
-    sync_options: string[];
-    resources: { api_group: string; kind: string; namespace: string | null; name: string }[];
-  };
-}
-
-export interface GitOpsCommandAcceptedEndpoint {
-  accepted: true;
-  event_id: string;
-  audit_event_id: string;
-  correlation_id: string;
-  command_id: string;
-  status: "queued" | "leased" | "running" | "cancel_requested" | "cancelling" | "completed" | "failed" | "cancelled";
-}
 
 export interface GitOpsApplicationDetailEndpoint {
   application: {
@@ -196,51 +81,14 @@ export interface GitOpsEndpointDependencies {
     applicationId: string,
     signal?: AbortSignal,
   ): Promise<GitOpsApplicationDetailEndpoint>;
-  getResourceTree?(
-    locator: { clusterId: string; apiVersion: string; kind: string; namespace: string; name: string },
-    signal?: AbortSignal,
-  ): Promise<GitOpsResourceTreeEndpoint>;
-  getResourceInsights?(
-    locator: { clusterId: string; apiVersion: string; kind: string; namespace: string; name: string },
-    signal?: AbortSignal,
-  ): Promise<GitOpsResourceInsightsEndpoint>;
-  executeResourceAction?(
-    locator: { clusterId: string; apiVersion: string; kind: string; namespace: string; name: string },
-    request: GitOpsResourceActionEndpointRequest,
-    idempotencyKey: string,
-    signal?: AbortSignal,
-  ): Promise<GitOpsCommandAcceptedEndpoint>;
-  listOverview(
-    query?: GitOpsSyncTargetQuery,
-    signal?: AbortSignal,
-  ): Promise<GitOpsOverviewEndpoint>;
   listApplications(signal?: AbortSignal): Promise<{
     applications: Record<string, unknown>[];
   }>;
+  listApplicationDeployments(
+    applicationId: string,
+    options?: { signal?: AbortSignal },
+  ): Promise<{ deployments: Record<string, unknown>[] }>;
   listClusters(signal?: AbortSignal): Promise<{ clusters: ReleaseClusterEndpoint[] }>;
-  probeRepository(repoRef: string, signal?: AbortSignal): Promise<RepositoryProbeEndpoint>;
-  listRepositoryBranches(
-    repoRef: string,
-    signal?: AbortSignal,
-  ): Promise<RepositoryBranchListEndpoint>;
-  listRepositoryManifests(
-    repoRef: string,
-    branch: string,
-    signal?: AbortSignal,
-  ): Promise<RepositoryManifestCatalogEndpoint>;
-  validateRepositoryManifest(
-    input: {
-      repoRef: string;
-      branch: string;
-      manifestPath: string;
-      sourceType: string;
-    },
-    signal?: AbortSignal,
-  ): Promise<RepositoryManifestValidationEndpoint>;
-  getRepositoryConnectionStatus(
-    repoRef: string,
-    signal?: AbortSignal,
-  ): Promise<RepositoryConnectionStatusEndpoint>;
   listPlans(signal?: AbortSignal): Promise<{ plans: ReleasePlan[] }>;
   listRuns(planId?: string, signal?: AbortSignal): Promise<{ runs: ReleaseRun[] }>;
   connectApplication(
@@ -251,12 +99,6 @@ export interface GitOpsEndpointDependencies {
   previewPlan(plan: ReleasePlan, signal?: AbortSignal): Promise<ReleasePreview>;
   checkReadiness(plan: ReleasePlan, signal?: AbortSignal): Promise<ReleaseReadiness>;
   startPlan(plan: ReleasePlan, signal?: AbortSignal): Promise<ReleaseRun>;
-  decideApproval(
-    approvalId: string,
-    decision: ApprovalDecision,
-    reason?: string,
-    signal?: AbortSignal,
-  ): Promise<unknown>;
   renderManifest(plan: ReleasePlan, stepIndex: number, signal?: AbortSignal): Promise<GeneratedManifest>;
   submitSafePr(plan: ReleasePlan, stepIndex: number, signal?: AbortSignal): Promise<SafePrResult>;
   runAction(

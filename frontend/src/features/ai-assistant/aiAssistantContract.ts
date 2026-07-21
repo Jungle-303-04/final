@@ -46,6 +46,8 @@ export interface AiAlertRuleAction {
   rationale: string;
 }
 
+export type AiChatActionProposal = AiAlertRuleAction;
+
 export interface AiAssistantAnswer {
   answer: string;
   evidence: AiEvidenceLink[];

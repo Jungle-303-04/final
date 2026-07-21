@@ -1,7 +1,6 @@
 import {
   useCallback,
   useEffect,
-  useEffectEvent,
   useRef,
   useState,
   type Dispatch,
@@ -29,10 +28,12 @@ import {
 
 const RESOURCE_LIST_LIMIT = 200;
 
-interface ScopedState<T> { scope: string | null; state: ResourcesResourceState<T> }
+interface ScopedState<T> {
+  scope: string | null;
+  state: ResourcesResourceState<T>;
+}
 
 interface ResourcesDataFrameInput {
-  catalogNamespaces: readonly string[];
   catalogQuerySupported: boolean;
   detailClusterId: string | null;
   detailIdentity: ResourceIdentity | null;
@@ -43,8 +44,7 @@ interface ResourcesDataFrameInput {
   onRequestSuccess: (target: ResourcesRequestTarget) => void;
   port: ResourcesPort;
   reportUnauthorized: () => void;
-  catalogRevision: number;
-  listRevision: number;
+  revision: number;
   selectedClusterExists: boolean;
   selectedClusterId: string | null;
   selectedResourceType: string | null;
@@ -52,7 +52,6 @@ interface ResourcesDataFrameInput {
 
 export function useResourcesDataFrame(input: ResourcesDataFrameInput) {
   const {
-    catalogNamespaces,
     catalogQuerySupported,
     detailClusterId,
     detailIdentity,
@@ -63,8 +62,7 @@ export function useResourcesDataFrame(input: ResourcesDataFrameInput) {
     onRequestSuccess,
     port,
     reportUnauthorized,
-    catalogRevision,
-    listRevision,
+    revision,
     selectedClusterExists,
     selectedClusterId,
     selectedResourceType,
@@ -84,9 +82,6 @@ export function useResourcesDataFrame(input: ResourcesDataFrameInput) {
   const [denied, setDenied] = useState<DeniedState | null>(null);
   const [updatedAt, setUpdatedAt] = useState(0);
   const deniedRef = useRef<DeniedState | null>(null);
-  const onRequestFailureEvent = useEffectEvent(onRequestFailure);
-  const onRequestSuccessEvent = useEffectEvent(onRequestSuccess);
-  const reportUnauthorizedEvent = useEffectEvent(reportUnauthorized);
 
   const denyTarget = useCallback((
     clusterId: string,
@@ -110,7 +105,7 @@ export function useResourcesDataFrame(input: ResourcesDataFrameInput) {
     setDenied(next);
   }, []);
 
-  const handleFailure = useEffectEvent((
+  const handleFailure = useCallback((
     error: unknown,
     clusterId: string,
     scope: string,
@@ -118,10 +113,10 @@ export function useResourcesDataFrame(input: ResourcesDataFrameInput) {
   ) => {
     const failure = toResourcesFailure(error);
     if (failure.code === "unauthorized") {
-      reportUnauthorizedEvent();
+      reportUnauthorized();
       return;
     }
-    onRequestFailureEvent(target, failure);
+    onRequestFailure(target, failure);
     if (failure.code === "forbidden" && target !== "detail") {
       denyTarget(clusterId, target);
     }
@@ -131,12 +126,9 @@ export function useResourcesDataFrame(input: ResourcesDataFrameInput) {
     if (target === "catalog") setCatalogRecord(fail);
     if (target === "list") setListRecord(fail);
     if (target === "detail") setDetailRecord(fail);
-  });
+  }, [denyTarget, onRequestFailure, reportUnauthorized]);
 
-  const catalogNamespaceKey = catalogNamespaces.join(",");
-  const catalogScope = catalogQuerySupported && selectedClusterExists && selectedClusterId
-    ? `${selectedClusterId}:${catalogNamespaceKey}`
-    : null;
+  const catalogScope = catalogQuerySupported && selectedClusterExists ? selectedClusterId : null;
   const catalog = scopedValue(catalogRecord, catalogScope);
   useEffect(() => {
     if (!catalogScope || !selectedClusterId) return;
@@ -154,19 +146,15 @@ export function useResourcesDataFrame(input: ResourcesDataFrameInput) {
     );
     const request = acquireSharedRequest(
       port,
-      `resources:catalog:${catalogScope}:r${catalogRevision}`,
-      (signal) => port.loadCatalog(
-        selectedClusterId,
-        catalogNamespaceKey === "" ? [] : catalogNamespaceKey.split(","),
-        signal,
-      ),
+      `resources:catalog:${catalogScope}:r${revision}`,
+      (signal) => port.loadCatalog(selectedClusterId, signal),
     );
     void request.promise.then(
       (data) => {
         if (!active) return;
         setCatalogRecord({ scope: catalogScope, state: resourcesSuccess(data) });
         setUpdatedAt(Date.now());
-        onRequestSuccessEvent("catalog");
+        onRequestSuccess("catalog");
         recoverDeniedTarget(selectedClusterId, "catalog");
       },
       (error: unknown) => {
@@ -175,8 +163,8 @@ export function useResourcesDataFrame(input: ResourcesDataFrameInput) {
     );
     return () => { active = false; request.release(); };
   }, [
-    catalogNamespaceKey, catalogQuerySupported, catalogScope, port,
-    recoverDeniedTarget, catalogRevision, selectedClusterId,
+    catalogQuerySupported, catalogScope, handleFailure, onRequestSuccess, port, recoverDeniedTarget,
+    revision, selectedClusterId,
   ]);
 
   const selectedTypeExists = catalog.phase === "ready" && selectedResourceType !== null &&
@@ -196,7 +184,7 @@ export function useResourcesDataFrame(input: ResourcesDataFrameInput) {
     );
     const request = acquireSharedRequest(
       port,
-      `resources:list:${listScope}:r${listRevision}`,
+      `resources:list:${listScope}:r${revision}`,
       (signal) => port.listResources(selectedClusterId, {
         includeDeleted,
         limit: RESOURCE_LIST_LIMIT,
@@ -209,7 +197,7 @@ export function useResourcesDataFrame(input: ResourcesDataFrameInput) {
         if (!active) return;
         setListRecord({ scope: listScope, state: resourcesSuccess(data) });
         setUpdatedAt(Date.now());
-        onRequestSuccessEvent("list");
+        onRequestSuccess("list");
         recoverDeniedTarget(selectedClusterId, "list");
       },
       (error: unknown) => {
@@ -218,8 +206,8 @@ export function useResourcesDataFrame(input: ResourcesDataFrameInput) {
     );
     return () => { active = false; request.release(); };
   }, [
-    includeDeleted, listScope, namespace, port,
-    recoverDeniedTarget, listRevision, selectedClusterId, selectedResourceType,
+    handleFailure, includeDeleted, listScope, namespace, onRequestSuccess, port,
+    recoverDeniedTarget, revision, selectedClusterId, selectedResourceType,
   ]);
 
   const detailScope = detailIdentity && detailClusterId
@@ -237,7 +225,7 @@ export function useResourcesDataFrame(input: ResourcesDataFrameInput) {
     );
     const request = acquireSharedRequest(
       port,
-      `resources:detail:${detailScope}:r${listRevision}`,
+      `resources:detail:${detailScope}:r${revision}`,
       (signal) => port.loadResourceDetail(detailClusterId, detailIdentity, signal),
     );
     void request.promise.then(
@@ -245,7 +233,7 @@ export function useResourcesDataFrame(input: ResourcesDataFrameInput) {
         if (!active) return;
         setDetailRecord({ scope: detailScope, state: resourcesSuccess(data) });
         setUpdatedAt(Date.now());
-        onRequestSuccessEvent("detail");
+        onRequestSuccess("detail");
         recoverDeniedTarget(detailClusterId, "detail");
       },
       (error: unknown) => {
@@ -254,8 +242,8 @@ export function useResourcesDataFrame(input: ResourcesDataFrameInput) {
     );
     return () => { active = false; request.release(); };
   }, [
-    detailClusterId, detailIdentity, detailScope, port,
-    recoverDeniedTarget, listRevision,
+    detailClusterId, detailIdentity, detailScope, handleFailure, onRequestSuccess, port,
+    recoverDeniedTarget, revision,
   ]);
 
   return {
@@ -293,7 +281,10 @@ function queueStart<T>(
   });
 }
 
-interface DeniedState { clusterId: string; targets: ResourcesRequestTarget[] }
+interface DeniedState {
+  clusterId: string;
+  targets: ResourcesRequestTarget[];
+}
 
 function isAbort(error: unknown): boolean {
   return typeof error === "object" && error !== null && "name" in error && error.name === "AbortError";

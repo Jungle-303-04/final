@@ -1,30 +1,3 @@
-import type { BrowserRefreshPolicy } from "../../shared/data/browserRefreshPolicyRegistry";
-import type {
-  ClusterScope,
-  ScopeTransitionOperationEvent,
-} from "../../shared/parity/referenceParity";
-import type { HomeInsights } from "./homeInsightsContract";
-
-export type {
-  HomeAuditFindingSummary,
-  HomeCertificateExpiryItem,
-  HomeCertificateExpiryStatus,
-  HomeCertificateExpirySummary,
-  HomeCertificateResourceRef,
-  HomeCustomResourceCount,
-  HomeCustomResourceSummary,
-  HomeExploreSummary,
-  HomeGitOpsControllerSummary,
-  HomeHelmSummary,
-  HomeInsightAvailability,
-  HomeInsightCoverage,
-  HomeInsights,
-  HomeNetworkPolicyCoverageSummary,
-  HomePostureSummary,
-  HomeProviderAvailabilitySummary,
-  HomeTopologyPreviewSummary,
-} from "./homeInsightsContract";
-
 export type HomeHealthTone =
   | "healthy"
   | "warning"
@@ -43,7 +16,7 @@ export type HomeConnectionStage =
   | "ready"
   | "expired"
   | "error";
-export type HomeCollectionCompleteness = "exact" | "unknown";
+export type HomeCollectionCompleteness = "unknown";
 export type HomeIdentityStability = "ephemeral";
 
 export interface HomeClusterChoice {
@@ -55,14 +28,9 @@ export interface HomeClusterChoice {
   connectionStage: HomeConnectionStage | null;
   registrationState: HomeRegistrationState;
   connectionState: HomeConnectionState;
-  health?: HomeHealthTone | null;
-  observationMode?: "agent" | "simulation";
   lastObservedAt: string | null;
   nodeCount: number | null;
   podCount: number | null;
-  namespaceCount?: number | null;
-  kubernetesVersion?: string | null;
-  crdDiscoveryStatus?: "exact" | "partial" | "unavailable" | null;
   incidentCount: number | null;
   serverCount?: number | null;
   appCount?: number | null;
@@ -83,39 +51,6 @@ export interface HomeUsageSnapshot {
   restartCount: number;
   cpuPercent: number | null;
   memoryPercent: number | null;
-}
-
-export interface HomeClusterObservationCoverage {
-  availability: "available" | "partial" | "unavailable";
-  observedAt: string | null;
-  reasonCodes: readonly string[];
-}
-
-export interface HomeClusterDataCoverage {
-  inventory: HomeClusterObservationCoverage;
-  cpu: HomeClusterObservationCoverage;
-  memory: HomeClusterObservationCoverage;
-}
-
-/** Canonical projection of the fleet summary used by the home cluster cards. */
-export interface HomeFleetClusterSummary {
-  clusterId: string;
-  name: string;
-  health: HomeHealthTone;
-  podsRunning: number;
-  podsTotal: number;
-  nodesReady: number;
-  nodesTotal: number;
-  openIncidents: number;
-  restartCount: number;
-  cpuPercent: number | null;
-  memoryPercent: number | null;
-  observedAt: string | null;
-  coverage?: HomeClusterDataCoverage;
-}
-
-export interface HomeFleetSummary {
-  clusters: readonly HomeFleetClusterSummary[];
 }
 
 export interface HomeWorkloadSummary {
@@ -183,7 +118,6 @@ export interface HomeNodeSummary {
   id: string;
   identityStability: HomeIdentityStability;
   name: string;
-  kubernetesVersion: string | null;
   ready: boolean;
   health: HomeHealthTone;
   podsRunning: number;
@@ -198,7 +132,6 @@ export interface HomeNodeCollection {
   clusterId: string;
   completeness: HomeCollectionCompleteness;
   nodes: HomeNodeSummary[];
-  coverage?: HomeClusterDataCoverage;
 }
 
 export interface HomePodReadiness {
@@ -233,15 +166,6 @@ export interface HomePodCollection {
   pods: HomePodSummary[];
 }
 
-export interface HomeDashboardInvalidation {
-  snapshotId: string;
-}
-
-export interface HomeDashboardInvalidationSubscription {
-  onScopeOperation?: (event: ScopeTransitionOperationEvent) => void;
-  signal?: AbortSignal;
-}
-
 export type HomeFailureCode =
   | "unauthorized"
   | "forbidden"
@@ -264,19 +188,12 @@ export class HomePortFailure extends Error {
 }
 
 export interface HomePort {
-  loadDashboardRefreshPolicy(signal?: AbortSignal): Promise<BrowserRefreshPolicy>;
   listClusterChoices(signal?: AbortSignal): Promise<HomeClusterChoices>;
   loadClusterOverview(clusterId: string, signal?: AbortSignal): Promise<HomeClusterOverview>;
-  loadFleetSummary?(signal?: AbortSignal): Promise<HomeFleetSummary>;
-  loadInsights(clusterId: string, signal?: AbortSignal): Promise<HomeInsights>;
   loadNodes(clusterId: string, signal?: AbortSignal): Promise<HomeNodeCollection>;
   loadNodePods(
     clusterId: string,
     nodeName: string,
     signal?: AbortSignal,
   ): Promise<HomePodCollection>;
-  subscribeDashboardInvalidations(
-    scope: ClusterScope,
-    subscription?: HomeDashboardInvalidationSubscription,
-  ): AsyncIterable<HomeDashboardInvalidation>;
 }

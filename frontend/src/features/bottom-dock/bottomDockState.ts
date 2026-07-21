@@ -1,7 +1,6 @@
 import type {
   LogStreamEvent,
   LogStreamFailureCode,
-  LogStreamDiagnostic,
   LogStreamTarget,
 } from "../log-stream/logStreamContract";
 
@@ -32,9 +31,7 @@ export interface BottomDockTab {
   dropped: number;
   unseen: number;
   pods: string[];
-  containers: string[];
   endReason: string | null;
-  diagnostic: LogStreamDiagnostic | null;
   failureCode: LogStreamFailureCode | string | null;
   retryable: boolean;
 }
@@ -96,7 +93,6 @@ export function bottomDockReducer(
         status: "connecting",
         streamId: null,
         endReason: null,
-        diagnostic: null,
         failureCode: null,
         retryable: false,
       } : tab),
@@ -139,11 +135,9 @@ function applyEvents(
   const knownLineIds = new Set(tab.recentLineIds);
   const appendedLines: BottomDockLine[] = [];
   let pods: Set<string> | null = null;
-  let containers: string[] | null = null;
   let status = tab.status;
   let streamId = tab.streamId;
   let endReason = tab.endReason;
-  let diagnostic = tab.diagnostic;
   let failureCode = tab.failureCode;
   let retryable = tab.retryable;
   let metadataChanged = false;
@@ -166,7 +160,6 @@ function applyEvents(
     if (event.type === "connected") {
       status = "streaming";
       streamId = event.streamId;
-      containers = [...new Set(event.containers)].sort();
     } else if (event.type === "pod-added" || event.type === "pod-removed") {
       pods ??= new Set(tab.pods);
       if (event.type === "pod-added") pods.add(event.pod);
@@ -174,7 +167,6 @@ function applyEvents(
     } else if (event.type === "end") {
       status = "ended";
       endReason = event.reason;
-      diagnostic = event.diagnostic;
       retryable = false;
     } else {
       status = "failed";
@@ -211,9 +203,7 @@ function applyEvents(
     dropped: tab.dropped + overflow,
     unseen: appendedLines.length === 0 ? tab.unseen : active ? 0 : tab.unseen + appendedLines.length,
     pods: pods === null ? tab.pods : [...pods].sort(),
-    containers: containers ?? tab.containers,
     endReason,
-    diagnostic,
     failureCode,
     retryable,
   };
@@ -231,9 +221,7 @@ function newTab(id: string, target: LogStreamTarget): BottomDockTab {
     dropped: 0,
     unseen: 0,
     pods: [],
-    containers: [],
     endReason: null,
-    diagnostic: null,
     failureCode: null,
     retryable: false,
   };

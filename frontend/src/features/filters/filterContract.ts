@@ -11,21 +11,7 @@ export interface KubernetesLabelFilter {
 }
 
 export type ResourceView = "graph" | "table";
-export type ResourceSurfaceView = "map" | "list" | "flow";
 export type TimelineRange = "15m" | "1h" | "6h" | "24h";
-export type CostRange = "6h" | "24h" | "7d";
-export type TrafficSince = "1m" | "5m" | "15m" | "1h";
-export type HomePeriod = "today" | "7d" | "30d";
-export type TrafficProtocol = "tcp" | "udp" | "http" | "grpc" | "dns" | "unknown";
-export type TrafficVerdict = "forwarded" | "dropped" | "error" | "unknown";
-export type TrafficSort = "connections" | "last_seen" | "source" | "destination";
-export type TrafficSortOrder = "asc" | "desc";
-export type RightsizingClassFilter =
-  | "increase"
-  | "reduction"
-  | "review"
-  | "in_range"
-  | "need_data";
 
 export interface UnifiedFilterState {
   common: {
@@ -43,7 +29,6 @@ export interface UnifiedFilterState {
   };
   issues: {
     severity: readonly string[];
-    category: readonly string[];
     status: readonly string[];
     environment: readonly string[];
     query: string;
@@ -84,28 +69,13 @@ export interface ProductDetailQuery {
   tab: string | null;
   full: boolean;
   node: string | null;
-  resourceSurfaceView?: ResourceSurfaceView | null;
   resourceTopologyView?: "physical" | "relations" | null;
   workflowPlan?: string | null;
   workflowView?: "overview" | "edit" | "runs" | "yaml" | null;
   workflowMode?: "new" | null;
   timeRange?: TimelineRange;
-  costRange?: CostRange;
-  rightsizingClass?: RightsizingClassFilter | null;
-  rightsizingKind?: string | null;
-  rightsizingNamespace?: string | null;
-  rightsizingQuery?: string | null;
   timeAt?: number;
   graphCollapsed?: true;
-  homePeriod?: HomePeriod;
-  surfaceTab?: "applications" | "repositories" | "workflows" | "helm";
-  trafficSince?: TrafficSince;
-  trafficProtocols?: readonly TrafficProtocol[];
-  trafficVerdicts?: readonly TrafficVerdict[];
-  trafficSort?: TrafficSort;
-  trafficOrder?: TrafficSortOrder;
-  trafficFlow?: string | null;
-  trafficCursor?: string | null;
 }
 
 export interface InvalidFilterValues {
@@ -118,7 +88,6 @@ export interface InvalidFilterValues {
   resourcesIncludeDeleted: readonly string[];
   resourcesView: readonly string[];
   issuesSeverity: readonly string[];
-  issuesCategory: readonly string[];
   issuesStatus: readonly string[];
   issuesEnvironment: readonly string[];
   applicationsEnvironment: readonly string[];
@@ -131,10 +100,8 @@ export interface InvalidFilterValues {
   checksCategory: readonly string[];
   detailFull: readonly string[];
   timeRange: readonly string[];
-  costRange: readonly string[];
   timeAt: readonly string[];
   graph: readonly string[];
-  homePeriod: readonly string[];
 }
 
 export interface FilterUrlParseResult {
@@ -166,18 +133,11 @@ export type DetailMutationIntent =
   | "detail-workload-default"
   | "detail-workload-recovery"
   | "detail-expand"
-  | "resource-surface-view"
   | "topology-view"
   | "topology-view-reset"
   | "time-range"
   | "time-at"
   | "graph-visibility"
-  | "home-period"
-  | "surface-tab"
-  | "traffic-filter"
-  | "traffic-sort"
-  | "traffic-flow"
-  | "traffic-page"
   | "drill-in";
 
 export type UnifiedFilterUpdater =
@@ -212,7 +172,6 @@ export function createEmptyUnifiedFilterState(): UnifiedFilterState {
     },
     issues: {
       severity: [],
-      category: [],
       status: [],
       environment: [],
       query: "",

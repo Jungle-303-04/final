@@ -15,21 +15,23 @@ const INVENTORY_SUMMARY = {
     { resource_type: "pod", health: "warning", count: 3 },
     { resource_type: "node", health: "healthy", count: 3 },
   ],
+  namespaces: [
+    {
+      namespace: "storefront",
+      total: 45,
+      counts: [
+        { resource_type: "pod", health: "healthy", count: 42 },
+        { resource_type: "pod", health: "warning", count: 3 },
+      ],
+    },
+  ],
   counts_evidence: {
     completeness: "observed",
     observed_at: "2026-07-12T10:30:00Z",
-    namespace_scope: ["ops", "shop"],
+    namespace_scope: [],
     reason_codes: [],
     forbidden: [],
   },
-  namespaces: [{
-    namespace: "shop",
-    total: 45,
-    counts: [
-      { resource_type: "pod", health: "healthy", count: 42 },
-      { resource_type: "pod", health: "warning", count: 3 },
-    ],
-  }],
 };
 
 function jsonResponse(payload: unknown, status = 200): Response {
@@ -50,45 +52,32 @@ describe("inventory summary API", () => {
     );
 
     await expect(
-      getInventorySummary("prod/seoul-01", ["shop", "ops"]),
+      getInventorySummary("prod/seoul-01"),
     ).resolves.toEqual(INVENTORY_SUMMARY);
     expect(fetchMock).toHaveBeenCalledOnce();
     expect(fetchMock).toHaveBeenCalledWith(
-      "/api/clusters/prod%2Fseoul-01/inventory/summary?namespaces=ops%2Cshop",
+      "/api/clusters/prod%2Fseoul-01/inventory/summary",
       expect.objectContaining({ credentials: "include", method: "GET" }),
     );
   });
 
   it("allows a cluster with no collected snapshot yet", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      jsonResponse({
-        cluster_id: "new-cluster",
-        latest_snapshot: null,
-        counts: [],
-        counts_evidence: {
-          completeness: "unavailable",
-          observed_at: null,
-          namespace_scope: [],
-          reason_codes: ["inventory_snapshot_evidence_unavailable"],
-          forbidden: [],
-        },
-        namespaces: [],
-      }),
-    );
-
-    await expect(getInventorySummary("new-cluster")).resolves.toEqual({
+    const emptySummary = {
       cluster_id: "new-cluster",
       latest_snapshot: null,
       counts: [],
+      namespaces: [],
       counts_evidence: {
         completeness: "unavailable",
         observed_at: null,
         namespace_scope: [],
-        reason_codes: ["inventory_snapshot_evidence_unavailable"],
+        reason_codes: [],
         forbidden: [],
       },
-      namespaces: [],
-    });
+    };
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse(emptySummary));
+
+    await expect(getInventorySummary("new-cluster")).resolves.toEqual(emptySummary);
   });
 
   it("rejects a response with an invalid counts collection", async () => {

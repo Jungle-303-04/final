@@ -19,8 +19,6 @@ import { cn } from "../../shared/lib/cn";
 import { compareHref, parseCompareRoute, replaceCompareSide } from "./compareNavigation";
 import { useCompare } from "./useCompare";
 import { useCompareCandidates } from "./useCompareCandidates";
-import { useI18n } from "../../shared/i18n/I18nProvider";
-import type { TranslationFunction } from "../../shared/i18n/types";
 
 type CompareSide = "a" | "b";
 
@@ -111,12 +109,11 @@ function ComparePage({
   onPickCandidate: (side: CompareSide, target: CompareTarget) => void;
   onRetryCandidates: () => void;
 }) {
-  const { t } = useI18n();
   return (
     <ProductPageFrame className="gap-4">
       <header className="flex min-w-0 flex-col gap-3 border-b pb-4 xl:flex-row xl:items-start xl:justify-between">
         <div className="min-w-0">
-          <h1 className="truncate text-2xl font-semibold tracking-tight">{t("compare.title")}</h1>
+          <h1 className="truncate text-2xl font-semibold tracking-tight">Compare</h1>
           <p className="truncate text-sm text-muted-foreground">
             {data.descriptor.kubernetesKind} · {data.scope.clusterId} · {data.descriptor.apiGroup || "core"}/{data.descriptor.apiVersion}
           </p>
@@ -125,19 +122,19 @@ function ComparePage({
           <Badge variant="outline">{data.scope.freshness}</Badge>
           <Badge variant="outline">{data.coverage.availability}</Badge>
           <Button disabled={refreshing} onClick={onRefresh} size="sm" type="button" variant="outline">
-            <RefreshCw aria-hidden="true" className={cn(refreshing && "motion-safe:animate-spin motion-reduce:animate-none")} />{t("common.action.refresh")}
+            <RefreshCw aria-hidden="true" className={cn(refreshing && "motion-safe:animate-spin motion-reduce:animate-none")} />Refresh
           </Button>
         </div>
       </header>
 
       {data.coverage.availability !== "available" ? (
         <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-foreground" role="status">
-          {t("compare.partialWarning")}
+          This comparison is based on a partial, older, or differently observed inventory cut.
         </p>
       ) : null}
 
-      <section aria-label={t("compare.controls")} className="flex min-w-0 flex-wrap items-center gap-2">
-        <div className="flex rounded-lg border p-1" role="group" aria-label={t("compare.presentationMode")}>
+      <section aria-label="Comparison controls" className="flex min-w-0 flex-wrap items-center gap-2">
+        <div className="flex rounded-lg border p-1" role="group" aria-label="Presentation mode">
           {data.presentation.modes.map((candidate) => (
             <Button
               aria-pressed={mode === candidate}
@@ -148,7 +145,7 @@ function ComparePage({
               type="button"
               variant={mode === candidate ? "secondary" : "ghost"}
             >
-              {candidate === "side-by-side" ? t("compare.mode.sideBySide") : t("compare.mode.unified")}
+              {candidate === "side-by-side" ? "Side by side" : "Unified"}
             </Button>
           ))}
         </div>
@@ -159,14 +156,14 @@ function ComparePage({
           type="button"
           variant={diffOnly ? "secondary" : "outline"}
         >
-          {t("compare.differencesOnly")}
+          Differences only
         </Button>
         <Button onClick={onSwap} size="sm" type="button" variant="outline">
-          <ArrowLeftRight aria-hidden="true" />{t("compare.swapSides")}
+          <ArrowLeftRight aria-hidden="true" />Swap sides
         </Button>
       </section>
 
-      <section className="grid min-w-0 gap-3 xl:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]" aria-label={t("compare.resources")}>
+      <section className="grid min-w-0 gap-3 xl:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]" aria-label="Comparison resources">
         <ResourceHeading manifest={data.a} side="a" onChange={onChangeSide} />
         <div className="hidden place-items-center xl:grid"><ArrowLeftRight aria-hidden="true" className="text-muted-foreground" /></div>
         <ResourceHeading manifest={data.b} side="b" onChange={onChangeSide} />
@@ -197,15 +194,14 @@ function ResourceHeading({
   side: CompareSide;
   onChange: (side: CompareSide) => void;
 }) {
-  const { t } = useI18n();
   return (
     <section className="flex min-w-0 items-start justify-between gap-3 rounded-xl border bg-card p-4" aria-labelledby={`compare-${side}-title`}>
       <div className="min-w-0">
-        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{t("compare.side", { side: side.toUpperCase() })}</p>
+        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Side {side.toUpperCase()}</p>
         <h2 className="truncate text-lg font-semibold" id={`compare-${side}-title`}>{manifest.metadata.name}</h2>
-        <p className="truncate text-sm text-muted-foreground">{manifest.metadata.namespace ?? t("compare.clusterScope")}</p>
+        <p className="truncate text-sm text-muted-foreground">{manifest.metadata.namespace ?? "cluster scope"}</p>
       </div>
-      <Button className="shrink-0" onClick={() => onChange(side)} size="sm" type="button" variant="outline">{t("compare.changeResource")}</Button>
+      <Button className="shrink-0" onClick={() => onChange(side)} size="sm" type="button" variant="outline">Change</Button>
     </section>
   );
 }
@@ -221,22 +217,21 @@ function ComparisonTable({
   mode: ComparePresentationMode;
   diffOnly: boolean;
 }) {
-  const { t } = useI18n();
-  const rows = rowsFor(a, b, t).filter((row) => !diffOnly || row.a !== row.b);
+  const rows = rowsFor(a, b).filter((row) => !diffOnly || row.a !== row.b);
   if (rows.length === 0) {
-    return <p className="rounded-xl border border-dashed p-6 text-sm text-muted-foreground">{t("compare.noDifferences")}</p>;
+    return <p className="rounded-xl border border-dashed p-6 text-sm text-muted-foreground">No safe fields differ between these resources.</p>;
   }
   return mode === "side-by-side" ? (
-    <section className="overflow-hidden rounded-xl border" aria-label={t("compare.sideBySide")}>
+    <section className="overflow-hidden rounded-xl border" aria-label="Side by side comparison">
       <div className="grid grid-cols-[minmax(9rem,1fr)_minmax(0,1fr)_minmax(0,1fr)] border-b bg-muted/30 text-xs font-medium text-muted-foreground">
-        <span className="p-3">{t("compare.field")}</span><span className="truncate p-3">{a.metadata.name}</span><span className="truncate p-3">{b.metadata.name}</span>
+        <span className="p-3">Field</span><span className="truncate p-3">{a.metadata.name}</span><span className="truncate p-3">{b.metadata.name}</span>
       </div>
       <dl>
         {rows.map((row) => <ComparisonRow key={row.path} row={row} />)}
       </dl>
     </section>
   ) : (
-    <section className="overflow-hidden rounded-xl border" aria-label={t("compare.unified")}>
+    <section className="overflow-hidden rounded-xl border" aria-label="Unified comparison">
       <dl>
         {rows.map((row) => (
           <div className={cn("grid min-w-0 gap-2 border-b p-3 last:border-b-0 sm:grid-cols-[minmax(10rem,1fr)_minmax(0,2fr)]", row.a !== row.b && "bg-amber-500/5")} key={row.path}>
@@ -263,39 +258,39 @@ function Value({ value }: { value: string }) {
   return <span className="block break-words font-mono text-sm">{value}</span>;
 }
 
-function rowsFor(a: ComparableManifest, b: ComparableManifest, t: TranslationFunction): readonly { path: string; a: string; b: string }[] {
-  const left = fieldsFor(a, t);
-  const right = fieldsFor(b, t);
+function rowsFor(a: ComparableManifest, b: ComparableManifest): readonly { path: string; a: string; b: string }[] {
+  const left = fieldsFor(a);
+  const right = fieldsFor(b);
   const paths = new Set([...left.keys(), ...right.keys()]);
   return [...paths].sort().map((path) => ({
     path,
-    a: left.get(path) ?? t("compare.notObserved"),
-    b: right.get(path) ?? t("compare.notObserved"),
+    a: left.get(path) ?? "not observed",
+    b: right.get(path) ?? "not observed",
   }));
 }
 
-function fieldsFor(manifest: ComparableManifest, t: TranslationFunction): Map<string, string> {
+function fieldsFor(manifest: ComparableManifest): Map<string, string> {
   const fields = new Map<string, string>();
   fields.set("metadata.name", manifest.metadata.name);
-  fields.set("metadata.namespace", manifest.metadata.namespace ?? t("compare.clusterScope"));
+  fields.set("metadata.namespace", manifest.metadata.namespace ?? "cluster scope");
   if (manifest.projection.projectionKind === "workload_replicas") {
-    fields.set("spec.replicas", nullableNumber(manifest.projection.replicas, t));
+    fields.set("spec.replicas", nullableNumber(manifest.projection.replicas));
     return fields;
   }
-  fields.set("spec.type", manifest.projection.serviceType ?? t("compare.notObserved"));
+  fields.set("spec.type", manifest.projection.serviceType ?? "not observed");
   manifest.projection.ports.forEach((port, index) => {
     const base = `spec.ports[${index}]`;
     fields.set(`${base}.port`, String(port.port));
-    fields.set(`${base}.protocol`, port.protocol ?? t("compare.notObserved"));
-    fields.set(`${base}.name`, port.name ?? t("compare.notObserved"));
-    fields.set(`${base}.targetPort`, port.targetPortName ?? nullableNumber(port.targetPortNumber, t));
-    fields.set(`${base}.nodePort`, nullableNumber(port.nodePort, t));
+    fields.set(`${base}.protocol`, port.protocol ?? "not observed");
+    fields.set(`${base}.name`, port.name ?? "not observed");
+    fields.set(`${base}.targetPort`, port.targetPortName ?? nullableNumber(port.targetPortNumber));
+    fields.set(`${base}.nodePort`, nullableNumber(port.nodePort));
   });
   return fields;
 }
 
-function nullableNumber(value: number | null, t: TranslationFunction): string {
-  return value === null ? t("compare.notObserved") : String(value);
+function nullableNumber(value: number | null): string {
+  return value === null ? "not observed" : String(value);
 }
 
 function CandidatePicker({
@@ -313,7 +308,6 @@ function CandidatePicker({
   onRetry: () => void;
   source: CompareResult["a"]["resource"];
 }) {
-  const { t } = useI18n();
   const listboxId = useId();
   const optionRefs = useRef(new Map<string, HTMLButtonElement>());
   const [query, setQuery] = useState("");
@@ -369,19 +363,19 @@ function CandidatePicker({
   };
 
   return (
-    <section aria-label={t("compare.picker.label", { side: side.toUpperCase() })} className="grid gap-3 rounded-xl border bg-card p-4 shadow-sm" role="dialog">
-      <div className="flex items-center justify-between gap-3"><div><h2 className="text-base font-semibold">{t("compare.picker.title", { side: side.toUpperCase() })}</h2><p className="text-sm text-muted-foreground">{t("compare.picker.description")}</p></div><Button aria-label={t("compare.picker.close")} onClick={onClose} size="icon" type="button" variant="ghost"><X aria-hidden="true" /></Button></div>
-      {frame.phase === "loading" || frame.phase === "idle" ? <p className="text-sm text-muted-foreground">{t("compare.picker.loading")}</p> : null}
-      {frame.phase === "failed" ? <div className="flex flex-wrap items-center gap-2"><p className="text-sm text-muted-foreground">{t("compare.picker.unavailable")}</p><Button onClick={onRetry} size="sm" type="button" variant="outline">{t("common.action.retry")}</Button></div> : null}
+    <section aria-label={`Choose side ${side.toUpperCase()} resource`} className="grid gap-3 rounded-xl border bg-card p-4 shadow-sm" role="dialog">
+      <div className="flex items-center justify-between gap-3"><div><h2 className="text-base font-semibold">Choose side {side.toUpperCase()} resource</h2><p className="text-sm text-muted-foreground">Only resources accepted by this safe descriptor are listed.</p></div><Button aria-label="Close resource picker" onClick={onClose} size="icon" type="button" variant="ghost"><X aria-hidden="true" /></Button></div>
+      {frame.phase === "loading" || frame.phase === "idle" ? <p className="text-sm text-muted-foreground">Loading resources…</p> : null}
+      {frame.phase === "failed" ? <div className="flex flex-wrap items-center gap-2"><p className="text-sm text-muted-foreground">Resources are unavailable.</p><Button onClick={onRetry} size="sm" type="button" variant="outline">Retry</Button></div> : null}
       {frame.phase === "ready" ? (
         <>
-          {frame.data.coverage.availability === "available" ? null : <p className="text-sm text-muted-foreground" role="status">{t("compare.picker.partial")}</p>}
-          {candidates.length === 0 ? <p className="text-sm text-muted-foreground">{t("compare.picker.empty")}</p> : <>
+          {frame.data.coverage.availability === "available" ? null : <p className="text-sm text-muted-foreground" role="status">Candidate inventory is partial.</p>}
+          {candidates.length === 0 ? <p className="text-sm text-muted-foreground">No compatible resources are currently observed.</p> : <>
             <Input
               aria-activedescendant={activeDescendant}
               aria-controls={listboxId}
               aria-expanded="true"
-              aria-label={t("compare.picker.filterLabel")}
+              aria-label="Filter comparison candidates"
               autoFocus
               className="font-mono"
               onChange={(event) => {
@@ -389,12 +383,12 @@ function CandidatePicker({
                 setHighlightedIndex(0);
               }}
               onKeyDown={handleKeyDown}
-              placeholder={t("compare.picker.filterPlaceholder")}
+              placeholder="Filter by namespace or name"
               role="combobox"
               value={query}
             />
-            {filteredCandidates.length === 0 ? <p className="text-sm text-muted-foreground">{t("compare.picker.noMatches")}</p> : (
-              <ul aria-label={t("compare.picker.candidates")} className="grid max-h-72 gap-2 overflow-y-auto pr-1" id={listboxId} role="listbox">
+            {filteredCandidates.length === 0 ? <p className="text-sm text-muted-foreground">No compatible resources match this filter.</p> : (
+              <ul aria-label="Compatible comparison candidates" className="grid max-h-72 gap-2 overflow-y-auto pr-1" id={listboxId} role="listbox">
                 {filteredCandidates.map((candidate, index) => {
                   const key = resourceKey(candidate.resource);
                   const optionId = candidateOptionId(listboxId, candidate.resource);

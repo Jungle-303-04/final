@@ -1,122 +1,56 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { ChevronDown, GitBranch, RefreshCw } from "lucide-react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 
 import type {
   GitOpsPort,
   GitOpsSyncTarget,
-  GitOpsSyncTargetQuery,
   ReleaseApplication,
   ReleaseCluster,
+  ReleaseTargetInput,
 } from "../../features/gitops/gitOpsContract";
-import type {
-  RepositoryConnectionInput,
-  RepositoryConnectionStage,
-} from "../../features/gitops/repositoryConnectionContract";
-import type {
-  BrowserRefreshPolicy,
-  BrowserRefreshPolicyRegistry,
-} from "../../shared/data/browserRefreshPolicyRegistry";
-import { useServerRefreshScheduler } from "../../shared/data/useServerRefreshScheduler";
-import { useI18n } from "../../shared/i18n";
-import { EMPTY_RCA_CONTEXT_PORT, type RcaContextPort } from "../../features/issues/rcaContextContract";
+import { useI18n, type TranslationFunction } from "../../shared/i18n";
+import { StatusMark, type StatusTone } from "../../shared/ui/StatusMark";
+import { Surface } from "../../shared/ui/Surface";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
-import { GitOpsRepositoryWorkspace } from "./GitOpsRepositoryTable";
-import { RepoConnectDialog } from "./RepoConnectDialog";
-import { repositoryGroups } from "./gitOpsRepositoryModel";
+import { Button } from "../../shared/ui/primitives/button";
+import { OverflowIdentity } from "../../shared/ui/OverflowIdentity";
+import { DeploymentTargetDialog } from "./DeploymentTargetDialog";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "../../shared/ui/primitives/table";
 
-type GitOpsRefreshPolicyKey = "gitops_rows" | "gitops_counts";
-
-export function GitOpsSyncTableView({
-  initialApplications,
-  initialRows,
-  port,
-  rcaContextPort = EMPTY_RCA_CONTEXT_PORT,
-  scopeQuery,
-  refreshPolicies,
-}: {
-  initialApplications?: ReleaseApplication[];
-  initialRows?: GitOpsSyncTarget[];
-  port: GitOpsPort;
-  rcaContextPort?: RcaContextPort;
-  scopeQuery?: GitOpsSyncTargetQuery;
-  refreshPolicies: BrowserRefreshPolicyRegistry<GitOpsRefreshPolicyKey>;
-}) {
-  const { t } = useI18n();
-  const seeded = initialApplications !== undefined && initialRows !== undefined;
+export function GitOpsSyncTableView({ port }: { port: GitOpsPort }) {
+  const { formatDate, t } = useI18n();
   const [request, setRequest] = useState(0);
-  const [applications, setApplications] = useState<ReleaseApplication[]>(initialApplications ?? []);
-  const [rows, setRows] = useState<GitOpsSyncTarget[]>(initialRows ?? []);
+  const [rows, setRows] = useState<GitOpsSyncTarget[]>([]);
   const [clusters, setClusters] = useState<ReleaseCluster[]>([]);
-  const [selectedKey, setSelectedKey] = useState<string | null>(null);
-  const [loading, setLoading] = useState(!seeded);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const [targetPending, setTargetPending] = useState(false);
   const [error, setError] = useState(false);
-  const [policies, setPolicies] = useState<{
-    rows: BrowserRefreshPolicy;
-    counts: BrowserRefreshPolicy;
-  } | null>(null);
-  const [successfulRead, setSuccessfulRead] = useState<{ sequence: number; empty: boolean } | null>(
-    seeded ? { sequence: 1, empty: initialRows.length === 0 } : null,
-  );
-  const requestSharedRefresh = useCallback(() => setRequest((value) => value + 1), []);
-  const rowsRefresh = useServerRefreshScheduler(requestSharedRefresh);
-  const countsRefresh = useServerRefreshScheduler(requestSharedRefresh);
-  const groups = useMemo(() => repositoryGroups(applications, rows), [applications, rows]);
   const refresh = useCallback(() => {
     setLoading(true);
     setError(false);
-    rowsRefresh.backgroundFailure();
-    countsRefresh.requestRefresh();
-  }, [countsRefresh, rowsRefresh]);
+    setRequest((value) => value + 1);
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
-    void Promise.all([
-      refreshPolicies.getPolicy("gitops_rows", controller.signal),
-      refreshPolicies.getPolicy("gitops_counts", controller.signal),
-    ]).then(([rowsPolicy, countsPolicy]) => {
-      if (!controller.signal.aborted) setPolicies({ rows: rowsPolicy, counts: countsPolicy });
-    }).catch((reason: unknown) => {
-      if (!isAbortError(reason)) {
-        rowsRefresh.backgroundFailure();
-        countsRefresh.backgroundFailure();
-      }
-    });
-    return () => controller.abort();
-  }, [countsRefresh, refreshPolicies, rowsRefresh]);
-
-  useEffect(() => {
-    if (policies === null || successfulRead === null) return;
-    rowsRefresh.acceptSuccess(policies.rows, { coldEmpty: successfulRead.empty });
-    countsRefresh.acceptSuccess(policies.counts);
-  }, [countsRefresh, policies, rowsRefresh, successfulRead]);
-
-  useEffect(() => {
-    if (request === 0 && seeded) return;
-    const controller = new AbortController();
-    rowsRefresh.backgroundFailure();
-    countsRefresh.backgroundFailure();
-    void Promise.all([
-      port.listApplications(controller.signal),
-      port.listSyncTargets(controller.signal, scopeQuery),
-    ]).then(([nextApplications, nextRows]) => {
-      if (controller.signal.aborted) return;
-      setApplications(nextApplications);
+    void port.listSyncTargets(controller.signal).then((nextRows) => {
       setRows(nextRows);
-      setSuccessfulRead((current) => ({
-        sequence: (current?.sequence ?? 0) + 1,
-        empty: nextRows.length === 0,
-      }));
-      setError(false);
       setLoading(false);
     }).catch((reason: unknown) => {
       if (isAbortError(reason)) return;
-      rowsRefresh.backgroundFailure();
-      countsRefresh.backgroundFailure();
       setError(true);
       setLoading(false);
     });
     return () => controller.abort();
-  }, [countsRefresh, port, request, rowsRefresh, scopeQuery, seeded]);
+  }, [port, request]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -126,136 +60,227 @@ export function GitOpsSyncTableView({
     return () => controller.abort();
   }, [port, request]);
 
-  const createRepositoryTarget = async (
-    input: RepositoryConnectionInput,
-    onStage: (stage: RepositoryConnectionStage) => void,
-  ): Promise<ReleaseApplication | null> => {
+  const createTarget = async (input: ReleaseTargetInput): Promise<ReleaseApplication | null> => {
     if (targetPending) return null;
     setTargetPending(true);
-    setError(false);
     try {
-      onStage("probe");
-      const probe = await port.probeRepository(input.repository);
-      if (!probe.valid || !probe.reachable) return null;
-
-      onStage("branches");
-      const branches = await port.listRepositoryBranches(probe.normalizedRepoRef);
-      const branch = branches.branches.find((candidate) => candidate.default)
-        ?? branches.branches.find((candidate) => candidate.name === branches.defaultBranch)
-        ?? branches.branches[0];
-      if (!branch) return null;
-
-      onStage("manifests");
-      const manifests = await port.listRepositoryManifests(probe.normalizedRepoRef, branch.name);
-      const manifest = manifests.candidates[0];
-      if (!manifest) return null;
-
-      onStage("validate");
-      const validation = await port.validateRepositoryManifest({
-        repoRef: probe.normalizedRepoRef,
-        branch: branch.name,
-        manifestPath: manifest.path,
-        sourceType: manifest.sourceType,
-      });
-      if (!validation.valid) return null;
-
-      onStage("connect");
-      const created = await port.connectApplication({
-        ...input,
-        repository: validation.repoRef,
-        branch: validation.branch,
-        manifestPath: validation.manifestPath,
-        sourceType: validation.sourceType,
-      });
-
-      onStage("status");
-      const status = await waitForRepositoryReady(port, validation.repoRef);
-      if (status !== "ready") return null;
-      const [nextApplications, nextRows] = await Promise.all([
-        port.listApplications(),
-        port.listSyncTargets(undefined, scopeQuery),
-      ]);
-      if (!nextApplications.some((application) => application.id === created.id) ||
-          !nextRows.some((row) => row.applicationId === created.id || row.applicationIds?.includes(created.id))) {
-        return null;
-      }
-      setApplications(nextApplications);
-      setRows(nextRows);
-      setSuccessfulRead((current) => ({
-        sequence: (current?.sequence ?? 0) + 1,
-        empty: nextRows.length === 0,
-      }));
+      const created = await port.connectApplication(input);
+      refresh();
       return created;
     } catch {
-      rowsRefresh.backgroundFailure();
-      countsRefresh.backgroundFailure();
       return null;
     } finally {
       setTargetPending(false);
     }
   };
 
+  if (loading && rows.length === 0) {
+    return <ProductStateScreen kind="loading" placement="content" />;
+  }
+  if (error && rows.length === 0) {
+    return (
+      <ProductStateScreen
+        issue={{ code: "server", safeDetail: t("workflows.sync.failure") }}
+        kind="error"
+        placement="content"
+        retry={{ onRetry: refresh, pending: false }}
+      />
+    );
+  }
+
   return (
-    <section aria-labelledby="gitops-repositories-title" className="grid min-w-0 gap-3">
-      <h2 className="sr-only" id="gitops-repositories-title">{t("workflows.target.repository")}</h2>
-      <div className="absolute top-(--product-page-block-start) right-(--product-page-inline) z-10">
-        <RepoConnectDialog
-          clusters={clusters}
-          onCreate={createRepositoryTarget}
-          pending={targetPending}
-        />
-      </div>
-      {loading && groups.length === 0 ? (
-        <ProductStateScreen kind="loading" placement="content" />
-      ) : error && groups.length === 0 ? (
-        <ProductStateScreen
-          issue={{ code: "server", safeDetail: t("workflows.sync.failure") }}
-          kind="error"
-          placement="content"
-          retry={{ onRetry: refresh, pending: false }}
-        />
-      ) : (
-        <>
-          {error ? (
-            <p className="rounded-lg border border-tint-warn-border bg-tint-warn-bg px-3 py-2 text-label text-tint-warn-fg">
-              {t("workflows.sync.stale")}
-            </p>
-          ) : null}
-          <GitOpsRepositoryWorkspace
-            groups={groups}
-            onSelect={setSelectedKey}
-            port={port}
-            rcaContextPort={rcaContextPort}
-            selectedKey={selectedKey}
+    <div className="grid min-w-0 gap-4">
+      <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="text-lg font-semibold">{t("workflows.sync.title")}</h2>
+          <p className="mt-1 text-sm text-muted-foreground">{t("workflows.sync.description")}</p>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <DeploymentTargetDialog
+            clusters={clusters}
+            onCreate={createTarget}
+            pending={targetPending}
           />
-        </>
-      )}
-    </section>
+          <Button
+            aria-label={t("common.action.refresh")}
+            disabled={loading}
+            onClick={refresh}
+            size="icon"
+            type="button"
+            variant="outline"
+          >
+            <RefreshCw aria-hidden="true" className={loading ? "motion-safe:animate-spin" : undefined} />
+          </Button>
+        </div>
+      </div>
+      {error ? (
+        <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm">
+          {t("workflows.sync.stale")}
+        </p>
+      ) : null}
+      <Surface aria-labelledby="gitops-sync-table-title" className="min-w-0 overflow-hidden">
+        <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
+          <h3 className="font-medium" id="gitops-sync-table-title">{t("workflows.sync.table.title")}</h3>
+          <span className="text-xs tabular-nums text-muted-foreground">
+            {t("workflows.sync.table.count", { count: rows.length })}
+          </span>
+        </div>
+        {rows.length === 0 ? (
+          <div className="grid min-h-52 place-items-center p-8 text-center">
+            <div className="grid max-w-md justify-items-center gap-2 rounded-xl border border-dashed p-6">
+              <span className="grid size-10 place-items-center rounded-full bg-muted text-muted-foreground">
+                <GitBranch aria-hidden="true" className="size-5" />
+              </span>
+              <p className="font-medium">{t("workflows.sync.empty.title")}</p>
+              <p className="text-sm text-muted-foreground">{t("workflows.sync.empty.description")}</p>
+            </div>
+          </div>
+        ) : (
+          <Table scrollAreaLabel={t("workflows.sync.table.aria")}>
+            <TableHeader className="sticky top-0 z-10 bg-card">
+              <TableRow>
+                <TableHead>{t("workflows.sync.table.application")}</TableHead>
+                <TableHead>{t("workflows.sync.table.target")}</TableHead>
+                <TableHead>{t("workflows.sync.table.environment")}</TableHead>
+                <TableHead>{t("workflows.sync.table.status")}</TableHead>
+                <TableHead>{t("workflows.sync.table.revision")}</TableHead>
+                <TableHead>{t("workflows.sync.table.observed")}</TableHead>
+                <TableHead className="w-16 text-right">
+                  <span className="sr-only">{t("common.action.details")}</span>
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map((row) => {
+                const status = syncStatus(row.syncStatus, t);
+                const selected = row.id === selectedId;
+                return (
+                  <Fragment key={row.id}>
+                    <TableRow data-state={selected ? "selected" : undefined}>
+                      <TableCell>
+                        <span className="grid min-w-40 gap-0.5">
+                          <span className="font-medium">{row.applicationName}</span>
+                          <OverflowIdentity className="font-mono text-xs text-muted-foreground" value={row.applicationId} />
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <span className="grid min-w-36 gap-0.5">
+                          <span>{row.clusterId ?? t("common.value.unavailable")}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {row.namespace ?? t("common.value.unavailable")}
+                          </span>
+                        </span>
+                      </TableCell>
+                      <TableCell>{row.environment ?? t("common.value.unavailable")}</TableCell>
+                      <TableCell title={status.raw ?? undefined}>
+                        <StatusMark label={status.label} tone={status.tone} />
+                      </TableCell>
+                      <TableCell className="max-w-48 font-mono text-xs">
+                        {row.revision ? (
+                          <OverflowIdentity value={row.revision} />
+                        ) : t("common.value.unavailable")}
+                      </TableCell>
+                      <TableCell>
+                        {formatObserved(row.observedAt, formatDate, t("common.value.unavailable"))}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          aria-expanded={selected}
+                          aria-label={`${selected ? t("common.action.close") : t("common.action.details")}: ${row.applicationName}`}
+                          onClick={() => setSelectedId(selected ? null : row.id)}
+                          size="icon-sm"
+                          type="button"
+                          variant="ghost"
+                        >
+                          <ChevronDown
+                            aria-hidden="true"
+                            className={selected ? "rotate-180 transition-transform motion-reduce:transition-none" : "transition-transform motion-reduce:transition-none"}
+                          />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                    {selected ? (
+                      <TableRow className="bg-muted/30 hover:bg-muted/30">
+                        <TableCell className="p-0" colSpan={7}>
+                          <SyncTargetDetails row={row} status={status} />
+                        </TableCell>
+                      </TableRow>
+                    ) : null}
+                  </Fragment>
+                );
+              })}
+            </TableBody>
+          </Table>
+        )}
+      </Surface>
+    </div>
   );
+}
+
+function SyncTargetDetails({
+  row,
+  status,
+}: {
+  row: GitOpsSyncTarget;
+  status: ReturnType<typeof syncStatus>;
+}) {
+  const { formatDate, t } = useI18n();
+  const unavailable = t("common.value.unavailable");
+  const items = [
+    [t("workflows.sync.table.application"), row.applicationId],
+    [t("workflows.sync.table.target"), [row.clusterId, row.namespace].filter(Boolean).join(" / ") || unavailable],
+    [t("workflows.sync.table.environment"), row.environment ?? unavailable],
+    [t("workflows.sync.table.status"), status.raw ?? status.label],
+    [t("workflows.sync.table.revision"), row.revision ?? unavailable],
+    [t("workflows.sync.table.observed"), formatObserved(row.observedAt, formatDate, unavailable)],
+  ] as const;
+
+  return (
+    <dl
+      aria-label={`${row.applicationName} ${t("common.action.details")}`}
+      className="grid gap-x-6 gap-y-3 px-4 py-4 sm:grid-cols-2 xl:grid-cols-3"
+    >
+      {items.map(([label, value]) => (
+        <div className="min-w-0" key={label}>
+          <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
+          <dd className="mt-1 break-all text-sm">{value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+function syncStatus(
+  value: string | null,
+  t: TranslationFunction,
+): { label: string; tone: StatusTone; raw: string | null } {
+  const normalized = value?.trim().toLowerCase().replace(/[\s-]+/g, "_") ?? "";
+  if (["synced", "synchronized", "success", "succeeded"].includes(normalized)) {
+    return { label: t("workflows.sync.status.synced"), tone: "healthy", raw: value };
+  }
+  if (["out_of_sync", "outofsync", "drifted", "diverged"].includes(normalized)) {
+    return { label: t("workflows.sync.status.outOfSync"), tone: "warning", raw: value };
+  }
+  if (["pending", "running", "polling", "progressing"].includes(normalized)) {
+    return { label: t("workflows.sync.status.checking"), tone: "warning", raw: value };
+  }
+  if (["failed", "error", "degraded"].includes(normalized)) {
+    return { label: t("workflows.sync.status.failed"), tone: "critical", raw: value };
+  }
+  return { label: t("workflows.sync.status.unknown"), tone: "unknown", raw: value };
+}
+
+function formatObserved(
+  value: string | null,
+  formatDate: (value: Date | number, options?: Intl.DateTimeFormatOptions) => string,
+  unavailable: string,
+): string {
+  if (value === null) return unavailable;
+  const timestamp = Date.parse(value);
+  if (Number.isNaN(timestamp)) return unavailable;
+  return formatDate(timestamp, { dateStyle: "medium", timeStyle: "short" });
 }
 
 function isAbortError(error: unknown): boolean {
   return typeof error === "object" && error !== null && "name" in error && error.name === "AbortError";
-}
-
-async function waitForRepositoryReady(
-  port: GitOpsPort,
-  repoRef: string,
-): Promise<"ready" | "error"> {
-  while (true) {
-    const status = await port.getRepositoryConnectionStatus(repoRef);
-    if (status.connectionStage === "ready") {
-      return status.repositoryStatus === "active" &&
-        status.terminal &&
-        status.refreshAfterSeconds === null &&
-        status.repositoryId !== null
-        ? "ready"
-        : "error";
-    }
-    if (status.connectionStage === "error" || status.terminal) return "error";
-    if (status.refreshAfterSeconds === null) return "error";
-    await new Promise<void>((resolve) => {
-      window.setTimeout(resolve, status.refreshAfterSeconds! * 1_000);
-    });
-  }
 }

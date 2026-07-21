@@ -1,33 +1,46 @@
 import { apiRequest } from "./client";
-import type { TrafficOverviewQuery } from "../features/traffic/trafficEndpointContract";
 import { canonicalFacetSelections } from "./resource-filter-query";
-import { trafficOverviewSchema, type TrafficOverviewEndpoint } from "./traffic-overview-schemas";
+import {
+  trafficOverviewSchema,
+  type TrafficOverviewEndpoint,
+  type TrafficProtocol,
+  type TrafficSince,
+  type TrafficSort,
+  type TrafficSortOrder,
+  type TrafficVerdict,
+} from "./traffic-overview-schemas";
 import { withQuery } from "./url";
 
-export const TRAFFIC_FLOWS_PATH = "/api/traffic/flows" as const;
+// Dev backend serves the traffic surface at `GET /traffic/flows` (front prefix `/api/traffic/flows`).
+export const TRAFFIC_OVERVIEW_PATH = "/api/traffic/flows" as const;
 
-export type { TrafficOverviewQuery } from "../features/traffic/trafficEndpointContract";
+export interface TrafficOverviewQuery {
+  clusterIds?: readonly string[];
+  namespaces?: readonly string[];
+  since?: TrafficSince;
+  protocols?: readonly TrafficProtocol[];
+  verdicts?: readonly TrafficVerdict[];
+  sort?: TrafficSort;
+  order?: TrafficSortOrder;
+  cursor?: string;
+  limit?: number;
+}
 
 export function getTrafficOverview(
   query: TrafficOverviewQuery = {},
   signal?: AbortSignal,
 ): Promise<TrafficOverviewEndpoint> {
-  return apiRequest(withQuery(TRAFFIC_FLOWS_PATH, [
+  return apiRequest(withQuery(TRAFFIC_OVERVIEW_PATH, [
     ["clusters", joined("clusters", query.clusterIds)],
     ["namespaces", joined("namespaces", query.namespaces)],
-    ["since", query.since === undefined || query.since === "5m" ? undefined : query.since],
-    ["protocols", enumValues(query.protocols)],
-    ["verdicts", enumValues(query.verdicts)],
-    ["sort", query.sort === undefined || query.sort === "connections" ? undefined : query.sort],
-    ["order", query.order === undefined || query.order === "desc" ? undefined : query.order],
+    ["since", query.since],
+    ["protocols", csv(query.protocols)],
+    ["verdicts", csv(query.verdicts)],
+    ["sort", query.sort],
+    ["order", query.order],
     ["cursor", query.cursor],
-    ["limit", query.limit === undefined || query.limit === 50 ? undefined : String(query.limit)],
+    ["limit", query.limit === undefined ? undefined : String(query.limit)],
   ]), trafficOverviewSchema, { signal });
-}
-
-function enumValues(values: readonly string[] | undefined): string | undefined {
-  const normalized = [...new Set(values ?? [])].sort();
-  return normalized.length === 0 ? undefined : normalized.join(",");
 }
 
 function joined(
@@ -36,4 +49,10 @@ function joined(
 ): string | undefined {
   const canonical = canonicalFacetSelections(axis, values);
   return canonical.length === 0 ? undefined : canonical.join(",");
+}
+
+function csv(values: readonly string[] | undefined): string | undefined {
+  if (values === undefined) return undefined;
+  const cleaned = values.map((value) => value.trim()).filter((value) => value.length > 0);
+  return cleaned.length === 0 ? undefined : cleaned.join(",");
 }

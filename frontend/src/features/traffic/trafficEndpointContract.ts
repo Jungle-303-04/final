@@ -1,74 +1,50 @@
-import type {
-  TrafficAvailability,
-  TrafficFreshness,
-  TrafficProtocol,
-  TrafficSince,
-  TrafficSort,
-  TrafficSortOrder,
-  TrafficVerdict,
-} from "./trafficContract";
+// Hand-written wire-shape contract for the traffic overview endpoint.
+//
+// This file must NOT import from `../../api` (enforced by apiBoundary.test.ts): feature
+// modules are decoupled from the api client and its zod schemas. The interfaces below are
+// hand-maintained to be STRUCTURALLY IDENTICAL to the inferred output of
+// `trafficOverviewSchema` in src/api/traffic-overview-schemas.ts (snake_case wire fields,
+// observed + unavailable unions) and to the `TrafficOverviewQuery` accepted by
+// `getTrafficOverview` in src/api/traffic-overview.ts. Keep them in sync with that schema.
 
-export interface TrafficOverviewQuery {
-  clusterIds?: readonly string[];
-  namespaces?: readonly string[];
-  since?: TrafficSince;
-  protocols?: readonly TrafficProtocol[];
-  verdicts?: readonly TrafficVerdict[];
-  sort?: TrafficSort;
-  order?: TrafficSortOrder;
-  cursor?: string;
-  limit?: number;
-}
+// --- Literal aliases (mirror packages.contracts.traffic.observations) ---
+type WireTrafficAvailability = "available" | "partial" | "unavailable";
+type WireTrafficFreshness = "live" | "stale" | "partial" | "disconnected";
+type WireTrafficSince = "1m" | "5m" | "15m" | "1h";
+type WireTrafficSort = "connections" | "last_seen" | "source" | "destination";
+type WireTrafficSortOrder = "asc" | "desc";
+type WireTrafficProtocol = "tcp" | "udp" | "http" | "grpc" | "dns" | "unknown";
+type WireTrafficVerdict = "forwarded" | "dropped" | "error" | "unknown";
 
-export interface TrafficSourcesQuery {
-  clusterIds?: readonly string[];
-}
-
-export interface TrafficSourceCommandPayload {
-  scope: Omit<TrafficClusterScopeEndpoint, "namespaces"> & { namespaces: readonly string[] };
-  source_key: string;
-  capability_revision: string;
-  confirmation: true;
-  reason: string;
-}
-
-export interface TrafficClusterScopeEndpoint {
+interface WireTrafficClusterScope {
   workspace_id: string;
   cluster_id: string;
   namespaces: string[];
-  freshness: TrafficFreshness;
+  freshness: WireTrafficFreshness;
 }
 
-export interface TrafficScopeCoverageEndpoint {
-  availability: TrafficAvailability;
-  scopes: TrafficClusterScopeEndpoint[];
+interface WireTrafficScopeCoverage {
+  availability: WireTrafficAvailability;
+  scopes: WireTrafficClusterScope[];
   observed_at: string | null;
   reason_codes: string[];
 }
 
-interface TrafficUnavailableObservationEndpoint {
+interface WireTrafficObservedObservationStatus {
+  availability: "available" | "partial";
+  observed_at: string;
+  since: WireTrafficSince;
+  source_keys: string[];
+  reason_codes: string[];
+}
+
+interface WireTrafficObservationStatus {
   availability: "unavailable";
   observed_at: null;
   reason_codes: string[];
 }
 
-interface TrafficObservedObservationEndpoint {
-  availability: "available" | "partial";
-  observed_at: string;
-  since: TrafficSince;
-  source_keys: string[];
-  reason_codes: string[];
-}
-
-interface TrafficUnavailableSummaryEndpoint {
-  availability: "unavailable";
-  total_flow_count: null;
-  denied_flow_count: null;
-  external_flow_count: null;
-  reason_codes: string[];
-}
-
-interface TrafficObservedSummaryEndpoint {
+interface WireTrafficObservedObservationSummary {
   availability: "available" | "partial";
   total_flow_count: number;
   denied_flow_count: number;
@@ -76,7 +52,15 @@ interface TrafficObservedSummaryEndpoint {
   reason_codes: string[];
 }
 
-export interface TrafficEndpointEndpoint {
+interface WireTrafficObservationSummary {
+  availability: "unavailable";
+  total_flow_count: null;
+  denied_flow_count: null;
+  external_flow_count: null;
+  reason_codes: string[];
+}
+
+interface WireTrafficEndpoint {
   cluster_id: string;
   name: string;
   namespace: string | null;
@@ -87,127 +71,74 @@ export interface TrafficEndpointEndpoint {
   identity_stability: "provider_observed";
 }
 
-export interface TrafficRelationshipEndpoint {
+interface WireTrafficRelationship {
   flow_id: string;
   source_key: string;
-  source: TrafficEndpointEndpoint;
-  target: TrafficEndpointEndpoint;
-  protocol: TrafficProtocol;
+  source: WireTrafficEndpoint;
+  target: WireTrafficEndpoint;
+  protocol: WireTrafficProtocol;
   port: number | null;
-  verdict: TrafficVerdict;
+  verdict: WireTrafficVerdict;
   connections: number;
   bytes_sent: number | null;
   bytes_received: number | null;
   observed_at: string;
 }
 
-export interface TrafficServiceMetricEndpoint {
-  availability: TrafficAvailability;
-  cluster_id: string;
-  namespace: string | null;
-  service: string;
-  rate_per_second: number | null;
-  rate_unit: "requests" | "flows" | null;
-  error_rate_pct: number | null;
-  observed_at: string;
-  source_keys: string[];
+interface WireTrafficProtocolFacet {
+  value: WireTrafficProtocol;
+  count: number;
+}
+
+interface WireTrafficVerdictFacet {
+  value: WireTrafficVerdict;
+  count: number;
+}
+
+interface WireTrafficFlowFacets {
+  protocols: WireTrafficProtocolFacet[];
+  verdicts: WireTrafficVerdictFacet[];
+}
+
+interface WireTrafficObservedRelationships {
+  availability: "available" | "partial";
+  edges: WireTrafficRelationship[];
+  total_count: number;
+  has_more: boolean;
+  next_cursor: string | null;
+  facets: WireTrafficFlowFacets;
   reason_codes: string[];
 }
 
-interface TrafficUnavailableRelationshipsEndpoint {
+interface WireTrafficRelationships {
   availability: "unavailable";
   edges: null;
   reason_codes: string[];
 }
 
-interface TrafficObservedRelationshipsEndpoint {
-  availability: "available" | "partial";
-  edges: TrafficRelationshipEndpoint[];
-  total_count: number;
-  has_more: boolean;
-  next_cursor: string | null;
-  facets: {
-    protocols: Array<{ value: TrafficProtocol; count: number }>;
-    verdicts: Array<{ value: TrafficVerdict; count: number }>;
-  };
-  reason_codes: string[];
-}
-
 export interface TrafficOverviewEndpoint {
-  scope_coverage: TrafficScopeCoverageEndpoint;
-  observation: TrafficObservedObservationEndpoint | TrafficUnavailableObservationEndpoint;
-  summary: TrafficObservedSummaryEndpoint | TrafficUnavailableSummaryEndpoint;
-  relationships: TrafficObservedRelationshipsEndpoint | TrafficUnavailableRelationshipsEndpoint;
-  service_metrics: TrafficServiceMetricEndpoint[];
+  scope_coverage: WireTrafficScopeCoverage;
+  observation: WireTrafficObservedObservationStatus | WireTrafficObservationStatus;
+  summary: WireTrafficObservedObservationSummary | WireTrafficObservationSummary;
+  relationships: WireTrafficObservedRelationships | WireTrafficRelationships;
   refresh_after_seconds: number;
 }
 
-export interface TrafficSourceActionEndpoint {
-  id: string;
-  kind: "select" | "connect";
-  label: string;
-  enabled: boolean;
-  confirmation_required: boolean;
-  reason_code: string | null;
-}
-
-export interface TrafficSourceEndpoint {
-  key: string;
-  label: string;
-  status: "available" | "not_detected" | "error";
-  version: string | null;
-  native: boolean;
-  message: string;
-  actions: TrafficSourceActionEndpoint[];
-}
-
-export interface TrafficSourcesEndpoint {
-  availability: TrafficAvailability;
-  coverage: TrafficScopeCoverageEndpoint;
-  clusters: Array<{
-    scope: TrafficClusterScopeEndpoint;
-    freshness: TrafficFreshness;
-    observed_at: string | null;
-    active_source: string | null;
-    capability_revision: string;
-    cluster: {
-      platform: string;
-      cni: string;
-      dataplane_v2: boolean;
-      kubernetes_version: string | null;
-    } | null;
-    sources: TrafficSourceEndpoint[];
-    reason_codes: string[];
-  }>;
-  reason_codes: string[];
-}
-
-export interface TrafficCommandReceiptEndpoint {
-  accepted: true;
-  event_id: string;
-  audit_event_id: string;
-  command_id: string;
-  correlation_id: string;
-  status: "queued" | "leased" | "running" | "cancel_requested" | "cancelling" | "completed" | "failed" | "cancelled";
+export interface TrafficOverviewEndpointQuery {
+  clusterIds?: readonly string[];
+  namespaces?: readonly string[];
+  since?: WireTrafficSince;
+  protocols?: readonly WireTrafficProtocol[];
+  verdicts?: readonly WireTrafficVerdict[];
+  sort?: WireTrafficSort;
+  order?: WireTrafficSortOrder;
+  cursor?: string;
+  limit?: number;
 }
 
 export interface TrafficEndpointDependencies {
   getTrafficOverview(
-    query: TrafficOverviewQuery,
+    query: TrafficOverviewEndpointQuery,
     signal?: AbortSignal,
   ): Promise<TrafficOverviewEndpoint>;
-  getTrafficSources(
-    query: TrafficSourcesQuery,
-    signal?: AbortSignal,
-  ): Promise<TrafficSourcesEndpoint>;
-  setTrafficSource(
-    payload: TrafficSourceCommandPayload,
-    idempotencyKey: string,
-    signal?: AbortSignal,
-  ): Promise<TrafficCommandReceiptEndpoint>;
-  connectTrafficSource(
-    payload: TrafficSourceCommandPayload,
-    idempotencyKey: string,
-    signal?: AbortSignal,
-  ): Promise<TrafficCommandReceiptEndpoint>;
 }

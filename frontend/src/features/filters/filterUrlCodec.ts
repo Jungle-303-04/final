@@ -71,11 +71,6 @@ export function parseProductFilterUrl(search: string): FilterUrlParseResult {
     "issues.severity",
     invalid.issuesSeverity,
   );
-  state.issues.category = parseStableList(
-    params,
-    "issues.category",
-    invalid.issuesCategory,
-  );
   state.issues.status = parseStableList(params, "issues.status", invalid.issuesStatus);
   state.issues.environment = parseStableList(
     params,
@@ -134,19 +129,9 @@ export function parseProductFilterUrl(search: string): FilterUrlParseResult {
     params,
     invalid.detailFull,
     invalid.timeRange,
-    invalid.costRange,
     invalid.timeAt,
     invalid.graph,
-    invalid.homePeriod,
   );
-  if (
-    detail.resourceSurfaceView === undefined &&
-    hasQueryKey(params, "resources.view") &&
-    invalid.resourcesView.length === 0
-  ) {
-    detail.resourceSurfaceView = state.resources.view === "graph" ? "map" : "list";
-    state.resources.view = "table";
-  }
   return {
     state,
     detail,
@@ -167,12 +152,7 @@ export function serializeProductFilterUrl(
   appendApplicationFilters(pairs, state);
   appendGitOpsFilters(pairs, state);
   appendCheckFilters(pairs, state);
-  appendProductDetail(
-    pairs,
-    detail.resourceSurfaceView === undefined && state.resources.view === "graph"
-      ? { ...detail, resourceSurfaceView: "map" }
-      : detail,
-  );
+  appendProductDetail(pairs, detail);
   return pairs.length > 0 ? `?${pairs.join("&")}` : "";
 }
 
@@ -192,11 +172,11 @@ function appendResourceFilters(pairs: string[], state: UnifiedFilterState) {
   appendList(pairs, "resources.health", normalizeStableList(state.resources.health));
   appendBoolean(pairs, "resources.includeDeleted", state.resources.includeDeleted);
   appendText(pairs, "resources.q", state.resources.query);
+  if (state.resources.view === "graph") appendText(pairs, "resources.view", "graph");
 }
 
 function appendIssueFilters(pairs: string[], state: UnifiedFilterState) {
   appendList(pairs, "issues.severity", normalizeStableList(state.issues.severity));
-  appendList(pairs, "issues.category", normalizeStableList(state.issues.category));
   appendList(pairs, "issues.status", normalizeStableList(state.issues.status));
   appendList(pairs, "issues.environment", normalizeStableList(state.issues.environment));
   appendText(pairs, "issues.q", state.issues.query);
@@ -290,11 +270,10 @@ function createInvalidFilterValues(): MutableInvalidFilterValues {
   return {
     clusters: [], namespaces: [], applications: [], labels: [],
     resourcesTypes: [], resourcesHealth: [], resourcesIncludeDeleted: [], resourcesView: [],
-    issuesSeverity: [], issuesCategory: [], issuesStatus: [],
+    issuesSeverity: [], issuesStatus: [],
     issuesEnvironment: [], applicationsEnvironment: [], applicationsStatus: [],
     applicationsPendingPromotion: [],
     gitopsEnvironment: [], gitopsApproval: [], gitopsChangeType: [],
-    checksSeverity: [], checksCategory: [], detailFull: [], timeRange: [], costRange: [], timeAt: [], graph: [],
-    homePeriod: [],
+    checksSeverity: [], checksCategory: [], detailFull: [], timeRange: [], timeAt: [], graph: [],
   };
 }

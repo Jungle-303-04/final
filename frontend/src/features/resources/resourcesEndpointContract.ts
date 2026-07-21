@@ -1,62 +1,9 @@
-import type { ProviderResourceDetailEndpoint } from "./providerResourceEndpointContract";
-import type { ResourceAccessDetailEndpoint } from "./resourceAccessContract";
-
 export type ResourcesEndpointJsonMap = Record<string, unknown>;
-
-export interface ApiResourceDescriptorEndpoint {
-  group: string;
-  version: string;
-  api_version: string;
-  name: string;
-  singular_name: string;
-  kind: string;
-  namespaced: boolean;
-  is_crd: boolean | null;
-  verbs: string[];
-}
-
-export interface ApiResourceDiscoveryObservationEndpoint {
-  observed_at: string;
-  completeness: "exact" | "partial" | "unavailable";
-  reason_codes: string[];
-  resources: ApiResourceDescriptorEndpoint[];
-}
-
-export interface KubernetesApiResourcesEndpoint {
-  cluster_id: string;
-  snapshot_id: string | null;
-  discovery: ApiResourceDiscoveryObservationEndpoint | null;
-  unavailable_reason: string | null;
-}
 
 export interface ResourcesEndpointInventorySummary {
   cluster_id: string;
   latest_snapshot: ResourcesEndpointJsonMap | null;
   counts: ResourcesEndpointJsonMap[];
-  counts_evidence: {
-    completeness: "observed" | "partial" | "unavailable";
-    observed_at: string | null;
-    namespace_scope: string[];
-    reason_codes: string[];
-    forbidden: Array<{
-      namespace: string | null;
-      api_group: string;
-      version: string;
-      resource: string;
-      kind: string;
-      namespaced: boolean;
-      reason_code: "list_permission_not_observed";
-    }>;
-  };
-  namespaces: Array<{
-    namespace: string;
-    total: number;
-    counts: Array<{
-      resource_type: string;
-      health: string;
-      count: number;
-    }>;
-  }>;
 }
 
 export interface ResourcesEndpointResource {
@@ -94,8 +41,6 @@ export interface ResourcesEndpointResourceDetail {
   cluster_id: string;
   identity: ResourcesEndpointJsonMap;
   resource: ResourcesEndpointResource;
-  provider_detail?: ProviderResourceDetailEndpoint | null;
-  access?: ResourceAccessDetailEndpoint | null;
   related: Record<string, ResourcesEndpointResource[]>;
   events: ResourcesEndpointResource[];
 }
@@ -120,13 +65,8 @@ export interface ResourcesEndpointDetailOptions {
 }
 
 export interface ResourcesEndpointDependencies {
-  getKubernetesApiResources(
-    clusterId: string,
-    signal?: AbortSignal,
-  ): Promise<KubernetesApiResourcesEndpoint>;
   getInventorySummary(
     clusterId: string,
-    namespaces: readonly string[],
     signal?: AbortSignal,
   ): Promise<ResourcesEndpointInventorySummary>;
   listInventoryResourcesByType(

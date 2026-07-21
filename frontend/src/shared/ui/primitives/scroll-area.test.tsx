@@ -129,7 +129,7 @@ describe("product ScrollArea primitive", () => {
     );
     const thumb = container.querySelector<HTMLElement>('[data-slot="scroll-area-thumb"]');
 
-    expect(scrollbar?.className).toContain("bg-transparent");
+    expect(scrollbar?.className).toContain("bg-muted");
     expect(scrollbar?.className).toContain("data-[has-overflow-y]:flex");
     expect(scrollbar?.className).toContain("motion-reduce:transition-none");
     expect(scrollbar?.className).toContain("forced-colors:border-current");

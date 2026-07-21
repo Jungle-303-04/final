@@ -19,8 +19,6 @@ const REPORT: IssuesEndpointRcaReport = {
   evidence_ref: "evidence-1",
   supporting_evidence: ["OOMKilled"],
   missing_evidence: [],
-  evidence_summary: "확인된 근거 1개를 기준으로 판단했습니다.",
-  evidence_bundle_summary: null,
   created_at: "2026-07-13T01:30:00Z",
   resource_kind: "Deployment",
   resource_name: "checkout-api",

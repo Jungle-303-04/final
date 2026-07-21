@@ -6,7 +6,6 @@ import { getClusterConnectionStatus } from "./cluster-connection";
 const CONNECTION_STATUS = {
   cluster_id: "cluster-1",
   connection_status: "online",
-  refresh_after_seconds: 0.5,
   last_agent_id: "agent-cluster-1",
   last_seen_at: "2026-07-12T00:00:00Z",
   agents: [
@@ -89,17 +88,6 @@ describe("cluster connection API", () => {
   it("rejects an invalid connection status payload", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       jsonResponse({ ...CONNECTION_STATUS, connect_timeout_seconds: "300" }),
-    );
-
-    await expect(getClusterConnectionStatus("cluster-1")).rejects.toMatchObject({
-      kind: "invalid-payload",
-      status: 200,
-    } satisfies Partial<ApiError>);
-  });
-
-  it("rejects a browser-invented connection refresh interval", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      jsonResponse({ ...CONNECTION_STATUS, refresh_after_seconds: 0 }),
     );
 
     await expect(getClusterConnectionStatus("cluster-1")).rejects.toMatchObject({

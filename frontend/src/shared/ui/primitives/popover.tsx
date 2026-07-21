@@ -9,24 +9,19 @@ export function PopoverTrigger(props: PopoverPrimitive.Trigger.Props) {
 
 export function PopoverContent({
   align = "center",
-  anchor,
   children,
   className,
-  keepMounted = false,
   side = "bottom",
   sideOffset = 6,
   ...props
 }: PopoverPrimitive.Popup.Props & Pick<
   PopoverPrimitive.Positioner.Props,
-  "align" | "anchor" | "side" | "sideOffset"
-> & {
-  keepMounted?: boolean;
-}) {
+  "align" | "side" | "sideOffset"
+>) {
   return (
-    <PopoverPrimitive.Portal keepMounted={keepMounted}>
+    <PopoverPrimitive.Portal>
       <PopoverPrimitive.Positioner
         align={align}
-        anchor={anchor}
         className="isolate z-50"
         side={side}
         sideOffset={sideOffset}
@@ -34,7 +29,7 @@ export function PopoverContent({
         <PopoverPrimitive.Popup
           {...props}
           className={cn(
-            "z-50 w-(--anchor-width) origin-(--transform-origin) rounded-lg bg-popover text-popover-foreground shadow-md ring-1 ring-foreground/10 duration-(--motion-instant) outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 motion-reduce:data-open:animate-none motion-reduce:data-closed:animate-none",
+            "z-50 w-(--anchor-width) origin-(--transform-origin) rounded-lg bg-popover text-popover-foreground shadow-md ring-1 ring-foreground/10 duration-100 outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 motion-reduce:duration-0 motion-reduce:data-open:animate-none motion-reduce:data-closed:animate-none",
             className,
           )}
           data-slot="popover-content"

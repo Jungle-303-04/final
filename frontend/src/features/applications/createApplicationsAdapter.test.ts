@@ -140,25 +140,6 @@ function api(overrides: Partial<ApplicationsApiDependencies> = {}): Applications
 }
 
 describe("Applications product adapter", () => {
-  it("loads only the composition-injected applications refresh policy", async () => {
-    const policy = {
-      staleAfterSeconds: 30,
-      refreshAfterSeconds: 47,
-      keepLastSuccess: true as const,
-      pauseWhenHidden: true as const,
-      eventInvalidation: false,
-      retryAfterSeconds: null,
-      retryLimit: null,
-      postMutationRefreshAfterSeconds: null,
-    };
-    const getPolicy = vi.fn().mockResolvedValue(policy);
-
-    await expect(
-      createApplicationsAdapter(api(), { getPolicy }).loadApplicationsRefreshPolicy(),
-    ).resolves.toBe(policy);
-    expect(getPolicy).toHaveBeenCalledWith("applications", undefined);
-  });
-
   it("maps only the strict product projection and sorts incidents, drift, degraded, healthy", async () => {
     const dependencies = api({
       listApplicationCatalog: vi.fn().mockResolvedValue({ applications: [

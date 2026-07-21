@@ -57,11 +57,6 @@ describe("ResourcesPage unified-filter cutover", () => {
       view: "table",
     });
     expect(port.listResources).not.toHaveBeenCalled();
-    expect(port.loadCatalog).toHaveBeenCalledWith(
-      "cluster-1",
-      ["shop"],
-      expect.any(AbortSignal),
-    );
 
     const dialog = await screen.findByRole("dialog", {
       name: "checkout-api-0 details",

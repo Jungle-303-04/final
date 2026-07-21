@@ -7,10 +7,6 @@ import { MemoryRouter } from "react-router-dom";
 
 import type { AiAlertRuleAction } from "../features/ai-assistant/aiAssistantContract";
 import { UnifiedFilterProvider } from "../features/filters/UnifiedFilterProvider";
-import {
-  ProductNotificationsProvider,
-  useProductNotifications,
-} from "../features/notifications/ProductNotificationsProvider";
 import { I18nProvider } from "../shared/i18n";
 import { AiAlertRuleActionCard } from "./AiAlertRuleActionCard";
 
@@ -38,10 +34,7 @@ describe("AI alert action card", () => {
     const onCreate = vi.fn().mockResolvedValue({ ruleId: "rule-42" });
     render(
       <I18nProvider navigatorLanguage="ko-KR" storage={null}>
-        <MemoryRouter><UnifiedFilterProvider><ProductNotificationsProvider>
-          <AiAlertRuleActionCard action={ACTION} onCreate={onCreate} />
-          <NotificationProbe />
-        </ProductNotificationsProvider></UnifiedFilterProvider></MemoryRouter>
+        <MemoryRouter><UnifiedFilterProvider><AiAlertRuleActionCard action={ACTION} onCreate={onCreate} /></UnifiedFilterProvider></MemoryRouter>
       </I18nProvider>,
     );
 
@@ -56,9 +49,8 @@ describe("AI alert action card", () => {
     expect(completed?.className).toContain("max-w-full");
     expect(completed?.className).toContain("overflow-hidden");
     const rulesLink = screen.getByRole("link", { name: "알림 규칙 보기" });
-    expect(rulesLink.getAttribute("href")).toBe("/alerts?tab=rules");
-    expect(screen.getByTestId("notification-probe").textContent)
-      .toBe("alert-rule-created:rule-42|/alerts?tab=rules");
+    expect(rulesLink.getAttribute("href")).toContain("tab=rules");
+    expect(rulesLink.getAttribute("href")).toContain("detail=rule-42");
     expect(rulesLink.className).toContain("whitespace-nowrap");
     expect(screen.queryByText("등록 완료")).toBeNull();
   });
@@ -83,29 +75,4 @@ describe("AI alert action card", () => {
       payload: expect.objectContaining({ threshold: 75 }),
     }));
   });
-
-  it("renders action scope labels from the English catalog", () => {
-    render(
-      <I18nProvider navigatorLanguage="en-US" storage={null}>
-        <MemoryRouter>
-          <UnifiedFilterProvider>
-            <AiAlertRuleActionCard action={ACTION} onCreate={vi.fn()} />
-          </UnifiedFilterProvider>
-        </MemoryRouter>
-      </I18nProvider>,
-    );
-
-    expect(screen.getByText("Cluster: cluster-2")).toBeTruthy();
-    expect(screen.queryByText("클러스터: cluster-2")).toBeNull();
-  });
 });
-
-function NotificationProbe() {
-  const { notifications } = useProductNotifications();
-  const first = notifications[0];
-  return (
-    <output data-testid="notification-probe">
-      {first ? `${first.id}|${first.href}` : ""}
-    </output>
-  );
-}

@@ -1,16 +1,8 @@
 import type { MessageKey, TranslationParameters } from "../../shared/i18n";
 
 export interface ProductSession {
-  authEnabled: true;
-  authMode: "password" | "trusted_proxy";
   displayName?: string | null;
   email?: string | null;
-  groups: readonly string[];
-  logout: {
-    action: "end_session" | "upstream_identity_required";
-    supported: boolean;
-    reauthenticationExpected: boolean;
-  };
   userId: string;
   roles: readonly string[];
   workspaceId: string;
@@ -19,17 +11,6 @@ export interface ProductSession {
 export interface AuthCredentials {
   email: string;
   password: string;
-}
-
-export interface ProductWorkspace {
-  workspaceId: string;
-  name: string;
-  slug: string;
-}
-
-export interface ProductWorkspaceList {
-  currentWorkspaceId: string;
-  items: readonly ProductWorkspace[];
 }
 
 export type AuthSessionResult =
@@ -65,11 +46,9 @@ export class AuthPortFailure extends Error {
 }
 
 export interface AuthPort {
-  listWorkspaces(signal?: AbortSignal): Promise<ProductWorkspaceList>;
   loadSession(signal?: AbortSignal): Promise<AuthSessionResult>;
   signIn(credentials: AuthCredentials, signal?: AbortSignal): Promise<ProductSession>;
   signOut(signal?: AbortSignal): Promise<void>;
-  switchWorkspace(workspaceId: string, signal?: AbortSignal): Promise<ProductSession>;
 }
 
 export interface AuthActionIssue {
@@ -81,10 +60,8 @@ export interface AuthActionIssue {
 }
 
 export interface AuthenticatedAuthState {
-  listWorkspaces: AuthPort["listWorkspaces"];
   session: ProductSession;
   signOutIssue: AuthActionIssue | null;
   signOutPending: boolean;
   onSignOut: () => void;
-  switchWorkspace: AuthPort["switchWorkspace"];
 }

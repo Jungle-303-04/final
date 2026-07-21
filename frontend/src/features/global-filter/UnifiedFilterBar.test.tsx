@@ -17,9 +17,6 @@ import {
   vi,
 } from "vitest";
 import { I18nProvider } from "../../shared/i18n";
-import { AuthSessionGateProvider } from "../auth/AuthSessionGate";
-import { ClusterScopeProvider } from "../cluster-scope/ClusterScopeProvider";
-import type { ClusterScopePort } from "../cluster-scope/clusterScopeContract";
 import { UnifiedFilterProvider } from "../filters/UnifiedFilterProvider";
 import type {
   GlobalFilterPort,
@@ -150,26 +147,6 @@ describe("UnifiedFilterBar", () => {
     );
   });
 
-  it("opens the exact searched resource and replaces cluster/namespace scope", async () => {
-    const user = userEvent.setup();
-    renderFilter({ search: vi.fn(async (query) =>
-      query ? searchableSuggestions : structuralSuggestions) });
-
-    await user.click(screen.getByRole("button", { name: filterPlaceholder }));
-    await user.type(screen.getByRole("textbox", { name: filterPlaceholder }), "checkout");
-    await user.click(await screen.findByText("checkout-api"));
-
-    await waitFor(() => {
-      const location = screen.getByTestId("filter-location").textContent ?? "";
-      const url = new URL(location, "https://console.example");
-      expect(url.pathname).toBe("/resources");
-      expect(url.searchParams.get("clusters")).toBe("cluster-a");
-      expect(url.searchParams.get("namespaces")).toBe("cluster-a/shop");
-      expect(url.searchParams.get("resources.types")).toBe("workload");
-      expect(url.searchParams.get("detail")).toBe("Deployment/shop/checkout-api");
-    });
-  });
-
   it("keeps chips inside one fixed search border and removes the last chip with backspace", async () => {
     const user = userEvent.setup();
     renderFilter(
@@ -178,7 +155,7 @@ describe("UnifiedFilterBar", () => {
     );
 
     const control = document.querySelector<HTMLElement>('[data-slot="search-pill-input"]');
-    expect(control?.className).toContain("h-(--product-global-search-height)");
+    expect(control?.className).toContain("h-9");
     expect(control?.className).toContain("border");
     expect(control?.className).toContain("overflow-x-auto");
     expect(control?.className).not.toContain("flex-wrap");
@@ -196,45 +173,6 @@ describe("UnifiedFilterBar", () => {
     );
     expect((input as HTMLInputElement).value).toBe("");
     expect(within(control!).queryByText("Pod")).toBeNull();
-  });
-
-  it("keeps cluster and namespace scope in one fixed-height row with agent-derived status", async () => {
-    renderFilter(
-      { search: vi.fn(async () => structuralSuggestions) },
-      "/resources?clusters=cluster-a&namespaces=cluster-a%2Fshop,cluster-a%2Fpayments",
-    );
-
-    const control = document.querySelector<HTMLElement>('[data-slot="search-pill-input"]');
-    expect(control?.className).toContain("h-(--product-global-search-height)");
-    expect(control?.className).toContain("overflow-x-auto");
-    expect(control?.className).not.toContain("flex-wrap");
-    expect(await screen.findByText("prod-cluster · Production · cluster-a")).toBeTruthy();
-    expect(within(control!).getByText("shop")).toBeTruthy();
-    expect(within(control!).getByText("payments")).toBeTruthy();
-    expect(control?.querySelector('[data-slot="status-mark"]')?.getAttribute("data-status"))
-      .toBe("healthy");
-  });
-
-  it("refreshes only the existing cluster observation when an offline scope dot is activated", async () => {
-    const user = userEvent.setup();
-    const listClusterChoices = vi.fn(testClusterScope.listClusterChoices);
-    renderFilter(
-      { search: vi.fn(async () => structuralSuggestions) },
-      "/resources?clusters=cluster-b",
-      { listClusterChoices },
-    );
-
-    const refresh = await screen.findByRole("button", {
-      name: "Refresh connection status for edge-cluster · Edge · cluster-b",
-    });
-    expect(refresh.className).toContain("motion-reduce:animate-none");
-    expect(refresh.querySelector('[data-slot="status-mark"]')?.getAttribute("data-status"))
-      .toBe("critical");
-    await waitFor(() => expect(listClusterChoices).toHaveBeenCalledTimes(1));
-
-    await user.click(refresh);
-    await waitFor(() => expect(listClusterChoices).toHaveBeenCalledTimes(2));
-    expect(screen.getByText("edge-cluster · Edge · cluster-b")).toBeTruthy();
   });
 
   it("clears every canonical chip from the same search control", async () => {
@@ -301,17 +239,7 @@ describe("UnifiedFilterBar", () => {
         type: "resource",
         id: "stale",
         label: "stale-result",
-        clusterId: "cluster-a",
-        resourceType: "pod",
-        resource: {
-          apiGroup: "",
-          version: "v1",
-          kind: "Pod",
-          namespace: "default",
-          name: "stale-result",
-          uid: "uid-stale",
-        },
-        matchedFields: ["name"],
+        kind: "Pod",
         count: 1,
         count_completeness: "exact",
       },
@@ -336,7 +264,6 @@ const structuralSuggestions = [
     id: "cluster-a/shop",
     label: "shop",
     clusterId: "cluster-a",
-    resourceType: "workload",
     count: 4,
     count_completeness: "partial",
   }),
@@ -363,17 +290,7 @@ const searchableSuggestions = [
     type: "resource",
     id: "deployment:checkout",
     label: "checkout-api",
-    clusterId: "cluster-a",
-    resourceType: "workload",
-    resource: {
-      apiGroup: "apps",
-      version: "v1",
-      kind: "Deployment",
-      namespace: "shop",
-      name: "checkout-api",
-      uid: "uid-checkout",
-    },
-    matchedFields: ["name"],
+    kind: "Deployment",
     count: 1,
   }),
 ] satisfies GlobalFilterSuggestion[];
@@ -386,26 +303,18 @@ function counted<T extends Omit<GlobalFilterSuggestion, "count_completeness">>(
   return { count_completeness: "exact", ...item } as GlobalFilterSuggestion;
 }
 
-function renderFilter(
-  port: GlobalFilterPort,
-  initialEntry = "/resources",
-  clusterScopePort: ClusterScopePort = testClusterScope,
-) {
+function renderFilter(port: GlobalFilterPort, initialEntry = "/resources") {
   const router = createMemoryRouter(
     [
       {
         path: "/resources",
         element: (
           <I18nProvider navigatorLanguage="en-US" storage={null}>
-            <AuthSessionGateProvider reportUnauthorized={vi.fn()}>
-              <UnifiedFilterProvider>
-                <ClusterScopeProvider authorityKey="workspace-a:user-a" port={clusterScopePort}>
-                  <UnifiedFilterBar port={port} />
-                  <LocationProbe />
-                  <button type="button">Next content</button>
-                </ClusterScopeProvider>
-              </UnifiedFilterProvider>
-            </AuthSessionGateProvider>
+            <UnifiedFilterProvider>
+              <UnifiedFilterBar port={port} />
+              <LocationProbe />
+              <button type="button">Next content</button>
+            </UnifiedFilterProvider>
           </I18nProvider>
         ),
       },
@@ -414,42 +323,6 @@ function renderFilter(
   );
   return render(<RouterProvider router={router} />);
 }
-
-const testClusterScope: ClusterScopePort = {
-  listClusterChoices: async () => ({
-    completeness: "unknown",
-    clusters: [
-      {
-        id: "cluster-a",
-        workspaceId: "workspace-a",
-        name: "prod-cluster",
-        environment: "Production",
-        provider: "eks",
-        connectionStage: "ready",
-        registrationState: "active",
-        connectionState: "online",
-        lastObservedAt: "2026-07-17T00:00:00Z",
-        nodeCount: 4,
-        podCount: 24,
-        incidentCount: 0,
-      },
-      {
-        id: "cluster-b",
-        workspaceId: "workspace-a",
-        name: "edge-cluster",
-        environment: "Edge",
-        provider: "onprem",
-        connectionStage: "error",
-        registrationState: "active",
-        connectionState: "offline",
-        lastObservedAt: "2026-07-16T23:00:00Z",
-        nodeCount: 2,
-        podCount: 8,
-        incidentCount: 1,
-      },
-    ],
-  }),
-};
 
 function LocationProbe() {
   const location = useLocation();

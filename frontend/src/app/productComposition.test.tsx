@@ -10,11 +10,9 @@ import type { AlertEventsPort } from "../features/alerts/alertEventsContract";
 
 const EmptySurface: ComponentType = () => null;
 const testAuthPort: AuthPort = {
-  listWorkspaces: async () => ({ currentWorkspaceId: "test", items: [] }),
   loadSession: async () => ({ status: "unauthenticated" }),
   signIn: async () => { throw new Error("not used"); },
   signOut: async () => undefined,
-  switchWorkspace: async () => { throw new Error("not used"); },
 };
 const testClusterScopePort: ClusterScopePort = {
   listClusterChoices: async () => ({ completeness: "unknown", clusters: [] }),

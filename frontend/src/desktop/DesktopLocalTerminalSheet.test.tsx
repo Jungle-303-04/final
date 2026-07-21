@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { StrictMode, useEffect } from "react";
+import { StrictMode } from "react";
 
 const bridge = vi.hoisted(() => ({
   isDesktop: true,
@@ -32,7 +32,6 @@ const xterm = vi.hoisted(() => ({
 const resizeObserver = vi.hoisted(() => ({
   notify: undefined as (() => void) | undefined,
 }));
-let switchTestLocale: (() => void) | null = null;
 
 vi.mock("./desktopBridge", () => ({ desktopBridge: bridge }));
 
@@ -69,7 +68,7 @@ vi.mock("@xterm/addon-web-links", () => ({
 }));
 
 import { DesktopLocalTerminalSheet } from "./DesktopLocalTerminalSheet";
-import { I18nProvider, useI18n } from "../shared/i18n";
+import { I18nProvider } from "../shared/i18n";
 
 class ResizeObserverStub {
   constructor(callback: ResizeObserverCallback) {
@@ -104,7 +103,6 @@ beforeEach(() => {
   xterm.write.mockImplementation((_data: string, callback?: () => void) => callback?.());
   xterm.focus.mockReset();
   resizeObserver.notify = undefined;
-  switchTestLocale = null;
   vi.stubGlobal("ResizeObserver", ResizeObserverStub);
   vi.stubGlobal("requestAnimationFrame", vi.fn((callback: FrameRequestCallback) => {
     queueMicrotask(() => callback(0));
@@ -152,19 +150,6 @@ describe("DesktopLocalTerminalSheet", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(bridge.startLocalTerminal).toHaveBeenCalledTimes(1);
-  });
-
-  it("keeps the native PTY alive when the user changes locale", async () => {
-    renderTerminal({ localeProbe: true });
-    await openTerminal();
-
-    act(() => switchTestLocale?.());
-    await waitFor(() => expect(
-      screen.getByRole("heading", { name: "로컬 터미널" }),
-    ).toBeTruthy());
-
-    expect(bridge.startLocalTerminal).toHaveBeenCalledTimes(1);
-    expect(bridge.closeLocalTerminal).not.toHaveBeenCalled();
   });
 
   it("installs the native event listener before starting the PTY", async () => {
@@ -372,29 +357,11 @@ async function openTerminal(): Promise<HTMLButtonElement> {
   return opener as HTMLButtonElement;
 }
 
-function renderTerminal({
-  localeProbe = false,
-  strictMode = false,
-}: {
-  localeProbe?: boolean;
-  strictMode?: boolean;
-} = {}) {
+function renderTerminal({ strictMode = false }: { strictMode?: boolean } = {}) {
   const tree = (
     <I18nProvider navigatorLanguage="en-US" storage={null}>
-      {localeProbe ? <LocaleProbe /> : null}
       <DesktopLocalTerminalSheet />
     </I18nProvider>
   );
   return render(strictMode ? <StrictMode>{tree}</StrictMode> : tree);
-}
-
-function LocaleProbe() {
-  const { setLocale } = useI18n();
-  useEffect(() => {
-    switchTestLocale = () => setLocale("ko");
-    return () => {
-      switchTestLocale = null;
-    };
-  }, [setLocale]);
-  return null;
 }

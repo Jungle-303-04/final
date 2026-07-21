@@ -4,20 +4,7 @@ export type GlobalFilterSuggestion =
   | ({ type: "application" } & CountedSuggestion)
   | ({ type: "resourceType" } & CountedSuggestion)
   | ({ type: "label"; key: string; value: string } & CountedSuggestion)
-  | ({
-      type: "resource";
-      clusterId: string;
-      resourceType: string;
-      resource: {
-        apiGroup: string;
-        version: string;
-        kind: string;
-        namespace: string | null;
-        name: string;
-        uid: string;
-      };
-      matchedFields: readonly string[];
-    } & CountedSuggestion);
+  | ({ type: "resource"; kind: string } & CountedSuggestion);
 
 interface CountedSuggestion {
   id: string;

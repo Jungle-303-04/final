@@ -1,48 +1,270 @@
 // @vitest-environment jsdom
 
-import { cleanup, screen, within } from "@testing-library/react";
+import { cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it } from "vitest";
-import { renderGitOps } from "./GitOpsPage.testSupport";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  blockedManifest,
+  blockedReadiness,
+  gitOpsPort,
+  installWorkflowGraphDomStubs,
+  plan,
+  renderGitOps,
+} from "./GitOpsPage.testSupport";
 
-afterEach(cleanup);
+beforeEach(() => {
+  installWorkflowGraphDomStubs();
+  vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+    return window.setTimeout(() => callback(0), 0);
+  });
+  vi.stubGlobal("cancelAnimationFrame", (handle: number) => window.clearTimeout(handle));
+  Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+    configurable: true,
+    value: vi.fn(),
+  });
+});
 
-describe("deploy GitOps surface", () => {
-  it("derives the compact summary from actual applications and sync observations", async () => {
-    renderGitOps("/deploy");
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
-    expect(await screen.findByText("Applications")).toBeTruthy();
+describe("GitOpsPage workspace navigation", () => {
+  it("separates incoming changes from real deployment sync observations", async () => {
+    const user = userEvent.setup();
+    const port = gitOpsPort();
+    renderGitOps("/gitops", port);
+
+    const sections = screen.getByRole("navigation", { name: "GitOps views" });
+    expect(within(sections).getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
+      "Changes",
+      "Sync status",
+    ]);
+    expect(await screen.findByRole("heading", { name: "Select plan" })).toBeTruthy();
+
+    await user.click(within(sections).getByRole("tab", { name: "Sync status" }));
+
+    expect(await screen.findByRole("heading", { name: "Deployment sync status" })).toBeTruthy();
+    expect(await screen.findByText("Checkout API")).toBeTruthy();
+    expect(screen.getByText("production-cluster")).toBeTruthy();
     expect(screen.getByText("Synced")).toBeTruthy();
-    expect(screen.getByText("OutOfSync")).toBeTruthy();
-    expect(screen.getByText("Repository")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Connect repository" })).toBeNull();
+    expect(screen.getByText("81de44f")).toBeTruthy();
+    expect(port.listSyncTargets).toHaveBeenCalledTimes(1);
   });
 
-  it("uses the repository section as the single connection and sync-status path", async () => {
+  it("starts with plan blocks and opens the selected plan overview", async () => {
     const user = userEvent.setup();
-    renderGitOps("/deploy?section=repositories");
+    renderGitOps("/gitops");
 
-    expect(await screen.findByText("team/checkout-api")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Connect repository" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "New deployment target" })).toBeNull();
+    expect(await screen.findByRole("heading", { name: "Select plan" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Open Alpha release" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Open Bravo release" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "New plan" })).toBeTruthy();
+    expect(screen.queryByRole("navigation", { name: "Workflow workspace" })).toBeNull();
 
-    await user.click(screen.getByRole("button", { name: "Details: team/checkout-api" }));
-    const application = (await screen.findByText("Checkout API")).closest("li");
-    expect(application).not.toBeNull();
-    expect(within(application as HTMLLIElement).getByText("81de44f")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Open Bravo release" }));
+
+    await waitFor(() => expect(screen.getByTestId("gitops-location").textContent)
+      .toBe("/gitops?plan=plan-b&view=overview"));
+    expect(await screen.findByRole("navigation", { name: "Workflow workspace" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Overview" })).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Plan list" }));
+    await waitFor(() => expect(screen.getByTestId("gitops-location").textContent).toBe("/gitops"));
+    expect(await screen.findByRole("button", { name: "Open Alpha release" })).toBeTruthy();
   });
 
-  it("keeps the observed branch visible and gives run evidence its own workspace", async () => {
+  it("keeps the new-plan block as the empty list entry point", async () => {
     const user = userEvent.setup();
-    renderGitOps("/deploy?section=workflows");
+    const port = gitOpsPort();
+    vi.mocked(port.listPlans).mockResolvedValue([]);
+    renderGitOps("/gitops", port);
 
-    expect(await screen.findByText("Branch · main")).toBeTruthy();
-    await user.click(screen.getAllByRole("button", { name: "Edit this plan" })[0]);
-    expect(await screen.findByLabelText("Plan name")).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Select plan" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "New plan" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Open / })).toBeNull();
 
-    await user.click(screen.getByRole("button", { name: "Runs" }));
+    await user.click(screen.getByRole("button", { name: "New plan" }));
 
-    expect(await screen.findByText("Release runs")).toBeTruthy();
-    expect(screen.queryByLabelText("Plan name")).toBeNull();
+    expect(await screen.findByRole("heading", { name: "Create release plan" })).toBeTruthy();
+  });
+
+  it("keeps one canonical tab row and changes the selected plan in place", async () => {
+    const user = userEvent.setup();
+    renderGitOps("/gitops?plan=plan-a&view=edit");
+
+    const navigation = await screen.findByRole("navigation", { name: "Workflow workspace" });
+    expect((screen.getByLabelText("Plan name") as HTMLInputElement).value).toBe("Alpha release");
+    expect(within(navigation).getAllByRole("tab")).toHaveLength(4);
+    expect(within(navigation).getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
+      "Overview",
+      "Edit plan",
+      "Runs",
+      "YAML / PR",
+    ]);
+    expect(within(navigation).queryByRole("button")).toBeNull();
+    expect(screen.getAllByRole("navigation", { name: "Workflow workspace" })).toHaveLength(1);
+    const workspaceHeader = screen.getByTestId("workflow-workspace-header");
+    expect(within(workspaceHeader).getByRole("heading", { name: "Edit plan" })).toBeTruthy();
+    expect(within(workspaceHeader).getByRole("button", { name: "Save changes" })).toBeTruthy();
+
+    await user.selectOptions(screen.getByLabelText("Select plan"), "plan-b");
+
+    await waitFor(() => expect((screen.getByLabelText("Plan name") as HTMLInputElement).value)
+      .toBe("Bravo release"));
+    await waitFor(() => expect(screen.getByTestId("gitops-location").textContent)
+      .toBe("/gitops?plan=plan-b&view=edit"));
+  });
+
+  it("uses the same URL-backed tabs and removes them from the creation flow", async () => {
+    const user = userEvent.setup();
+    renderGitOps("/gitops?plan=plan-a&view=edit");
+    await screen.findByRole("navigation", { name: "Workflow workspace" });
+    expect(screen.queryByRole("button", { name: "New plan" })).toBeNull();
+
+    await user.click(screen.getByRole("tab", { name: "YAML / PR" }));
+    await waitFor(() => expect(screen.getByTestId("gitops-location").textContent)
+      .toBe("/gitops?plan=plan-a&view=yaml"));
+    const workspaceHeader = screen.getByTestId("workflow-workspace-header");
+    expect(within(workspaceHeader).getByRole("heading", { name: "YAML / PR" })).toBeTruthy();
+    expect(within(workspaceHeader).getByRole("button", { name: "Generate YAML" })).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Plan list" }));
+    await user.click(screen.getByRole("button", { name: "New plan" }));
+
+    expect(await screen.findByRole("heading", { name: "Create release plan" })).toBeTruthy();
+    expect(screen.queryByRole("navigation", { name: "Workflow workspace" })).toBeNull();
+    expect(screen.getByRole("list", { name: "Plan creation progress" })).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    expect(await screen.findByText("Enter a plan name.")).toBeTruthy();
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText("Plan name")));
+  });
+
+  it("keeps checkbox selection and registers a new deployment target from the wizard", async () => {
+    const user = userEvent.setup();
+    const port = gitOpsPort();
+    renderGitOps("/gitops", port);
+
+    await user.click(await screen.findByRole("button", { name: "New plan" }));
+    await user.type(screen.getByLabelText("Plan name"), "Target registration plan");
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+
+    expect(await screen.findByRole("heading", { name: "Choose release targets" })).toBeTruthy();
+    expect(screen.getAllByRole("checkbox")).toHaveLength(2);
+    expect(screen.queryByRole("combobox", { name: "Application" })).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "New deployment target" }));
+    expect(await screen.findByRole("dialog", { name: "New deployment target" })).toBeTruthy();
+    const preview = screen.getByRole("complementary", { name: "Deployment target preview" });
+    expect(within(preview).getAllByText("Not set").length).toBeGreaterThan(0);
+    await user.type(screen.getByLabelText("Target name"), "Inventory API");
+    await user.type(screen.getByLabelText("Git repository"), "team/inventory-api");
+    await user.type(screen.getByLabelText("GitHub token (optional)"), "production-secret-value");
+    expect(within(preview).getByText("Inventory API")).toBeTruthy();
+    expect(within(preview).getByText("team/inventory-api")).toBeTruthy();
+    expect(within(preview).getByText("Ready to register")).toBeTruthy();
+    expect(preview.textContent).not.toContain("production-secret-value");
+    await user.click(screen.getByRole("button", { name: "Register target" }));
+
+    await waitFor(() => expect(port.connectApplication).toHaveBeenCalledWith({
+      name: "Inventory API",
+      repository: "team/inventory-api",
+      branch: "main",
+      manifestPath: "deploy.yaml",
+      clusterId: "production-cluster",
+      namespace: "default",
+      environment: "development",
+      token: "production-secret-value",
+    }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "New deployment target" })).toBeNull());
+    expect((screen.getByRole("checkbox", { name: /Inventory API/ }) as HTMLInputElement).checked).toBe(true);
+  });
+
+  it("uses the shared reduced-motion-safe spinner while registering a deployment target", async () => {
+    const user = userEvent.setup();
+    const port = gitOpsPort();
+    vi.mocked(port.connectApplication).mockImplementation(() => new Promise<never>(() => {}));
+    renderGitOps("/gitops", port);
+
+    await user.click(await screen.findByRole("button", { name: "New plan" }));
+    await user.type(screen.getByLabelText("Plan name"), "Target registration plan");
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    await user.click(screen.getByRole("button", { name: "New deployment target" }));
+    await user.type(screen.getByLabelText("Target name"), "Inventory API");
+    await user.type(screen.getByLabelText("Git repository"), "team/inventory-api");
+    await user.click(screen.getByRole("button", { name: "Register target" }));
+
+    const register = screen.getByRole("button", { name: "Registering target" });
+    const spinner = register.querySelector<HTMLElement>('[data-slot="spinner"]');
+    expect(register.getAttribute("aria-busy")).toBe("true");
+    expect(spinner?.classList.contains("motion-safe:animate-spin")).toBe(true);
+    expect(spinner?.getAttribute("aria-hidden")).toBe("true");
+  });
+
+  it("keeps the overview next action in the workspace header", async () => {
+    const user = userEvent.setup();
+    renderGitOps("/gitops?plan=plan-a&view=overview");
+
+    const workspaceHeader = await screen.findByTestId("workflow-workspace-header");
+    expect(within(workspaceHeader).getByRole("heading", { name: "Overview" })).toBeTruthy();
+    expect(screen.getByLabelText("Release workflow graph").classList.contains("hidden")).toBe(false);
+    expect(screen.queryByRole("heading", { name: "Release order" })).toBeNull();
+    const requiredFields = within(workspaceHeader).getByRole("button", { name: "2 required fields" });
+
+    await user.click(requiredFields);
+    await waitFor(() => expect(screen.getByTestId("gitops-location").textContent)
+      .toBe("/gitops?plan=plan-a&view=edit"));
+  });
+
+  it("turns readiness blockers into one direct field-fix path", async () => {
+    const user = userEvent.setup();
+    const port = gitOpsPort();
+    vi.mocked(port.checkReadiness).mockResolvedValue(blockedReadiness());
+    renderGitOps("/gitops?plan=plan-a&view=runs", port);
+
+    await user.click(await screen.findByRole("button", { name: "Run pre-check" }));
+
+    expect(await screen.findByText("Checkout API")).toBeTruthy();
+    expect(screen.getByText("Commit SHA")).toBeTruthy();
+    expect(screen.getByText("Container image")).toBeTruthy();
+    expect(screen.queryByText("checkout-api is missing commit_sha")).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Fix fields" }));
+
+    await waitFor(() => expect(screen.getByTestId("gitops-location").textContent)
+      .toBe("/gitops?plan=plan-a&view=edit"));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText("Commit SHA")));
+  });
+
+  it("keeps Safe PR blocked and discards generated state when the target changes", async () => {
+    const user = userEvent.setup();
+    const port = gitOpsPort();
+    const release = plan("plan-a", "Alpha release", "checkout-api");
+    release.steps.push({
+      ...plan("plan-b", "Bravo release", "payments-worker").steps[0],
+      step_id: "plan-a-step-2",
+      position: 1,
+    });
+    vi.mocked(port.listPlans).mockResolvedValue([release]);
+    vi.mocked(port.renderManifest).mockResolvedValue(blockedManifest());
+    renderGitOps("/gitops?plan=plan-a&view=yaml", port);
+
+    expect(await screen.findByRole("button", { name: "Generate YAML" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Submit Safe PR" })).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Generate YAML" }));
+
+    expect(await screen.findByText("Enter the container image for this release step.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Fix fields" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Submit Safe PR" })).toBeNull();
+    expect(screen.queryByText("image is required")).toBeNull();
+
+    await user.selectOptions(screen.getByLabelText("Render target"), "1");
+
+    await waitFor(() => expect(screen.queryByText("Enter the container image for this release step.")).toBeNull());
+    expect(screen.queryByRole("button", { name: "Fix fields" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Submit Safe PR" })).toBeNull();
+    expect(screen.queryByText(/apiVersion: apps\/v1/)).toBeNull();
   });
 });

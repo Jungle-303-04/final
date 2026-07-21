@@ -1,6 +1,5 @@
 import { vi } from "vitest";
 import type {
-  KubernetesApiResourcesEndpoint,
   ResourcesEndpointDependencies,
   ResourcesEndpointInventorySummary,
   ResourcesEndpointResource,
@@ -21,51 +20,6 @@ export const INVENTORY_SUMMARY: ResourcesEndpointInventorySummary = {
     { resource_type: "service", health: "healthy", count: 1 },
     { resource_type: "service", health: "future-state", count: 2 },
   ],
-  counts_evidence: {
-    completeness: "observed",
-    observed_at: "2026-07-12T10:00:00Z",
-    namespace_scope: ["shop"],
-    reason_codes: [],
-    forbidden: [{
-      namespace: "shop",
-      api_group: "apps",
-      version: "v1",
-      resource: "deployments",
-      kind: "Deployment",
-      namespaced: true,
-      reason_code: "list_permission_not_observed",
-    }],
-  },
-  namespaces: [{
-    namespace: "shop",
-    total: 3,
-    counts: [
-      { resource_type: "pod", health: "healthy", count: 2 },
-      { resource_type: "pod", health: "degraded", count: 1 },
-    ],
-  }],
-};
-
-export const API_RESOURCES: KubernetesApiResourcesEndpoint = {
-  cluster_id: "cluster-1",
-  snapshot_id: "snapshot-1",
-  discovery: {
-    observed_at: "2026-07-12T10:00:00Z",
-    completeness: "exact",
-    reason_codes: [],
-    resources: [{
-      group: "",
-      version: "v1",
-      api_version: "v1",
-      name: "pods",
-      singular_name: "pod",
-      kind: "Pod",
-      namespaced: true,
-      is_crd: false,
-      verbs: ["get", "list", "watch"],
-    }],
-  },
-  unavailable_reason: null,
 };
 
 export function endpointResource(
@@ -204,9 +158,6 @@ export const RESOURCE_DETAIL: ResourcesEndpointResourceDetail = {
 
 export function endpoints(overrides: Partial<ResourcesEndpointDependencies> = {}) {
   return {
-    getKubernetesApiResources: vi.fn(
-      overrides.getKubernetesApiResources ?? (() => Promise.resolve(API_RESOURCES)),
-    ),
     getInventorySummary: vi.fn(
       overrides.getInventorySummary ?? (() => Promise.resolve(INVENTORY_SUMMARY)),
     ),

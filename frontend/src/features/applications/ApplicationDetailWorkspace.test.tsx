@@ -83,52 +83,6 @@ const WORKLOAD_DETAIL = {
 afterEach(cleanup);
 
 describe("ApplicationDetailWorkspace workload scope", () => {
-  it("renders a server-observed workload allocation without browser projections", async () => {
-    const user = userEvent.setup();
-    const observed = {
-      ...WORKLOAD_DETAIL,
-      workload: {
-        ...WORKLOAD_DETAIL.workload!,
-        cost: {
-          availability: "partial",
-          observedAt: "2026-07-16T09:00:00Z",
-          currency: "USD",
-          current: {
-            replicas: 2,
-            hourlyRateMicros: 300_000,
-            projectedDailyMicros: 7_200_000,
-            projectedMonthlyMicros: 219_000_000,
-            cpuRateMicros: 180_000,
-            memoryRateMicros: 120_000,
-            cpuAllocationUseBasisPoints: 2_500,
-            memoryAllocationUseBasisPoints: 4_000,
-            cpuUsageWindowSeconds: 3_600,
-            memoryUsageWindowSeconds: 60,
-          },
-          trend: {
-            availability: "unavailable",
-            timeRange: "24h",
-            currency: null,
-            series: [],
-            reasonCodes: ["workload_history_not_observed"],
-          },
-          reasonCodes: ["workload_history_not_observed"],
-        },
-      },
-    } satisfies ApplicationDetailModel;
-    renderWorkspace(
-      applicationsPort({ getApplication: vi.fn().mockResolvedValue(observed) }),
-      "/applications?app=app-checkout&workload=workload-a&tab=overview",
-    );
-
-    await user.click(await screen.findByRole("tab", { name: "Cost" }));
-
-    expect(await screen.findByTestId("workload-current-allocation")).toBeTruthy();
-    expect(screen.getByText("$219.00")).toBeTruthy();
-    expect(screen.getByRole("progressbar", { name: "CPU allocation use" }).getAttribute("aria-valuenow")).toBe("25");
-    expect(screen.getByTestId("location").textContent).toContain("tab=cost");
-  });
-
   it("switches between application and opaque workload scopes without mixing their tabs or data", async () => {
     const user = userEvent.setup();
     const getApplication = vi.fn().mockImplementation((
@@ -159,7 +113,7 @@ describe("ApplicationDetailWorkspace workload scope", () => {
       "workload-a",
     );
     const workloadTabs = screen.getByRole("tablist", { name: "View details" });
-    expect(within(workloadTabs).getAllByRole("tab")).toHaveLength(4);
+    expect(within(workloadTabs).getAllByRole("tab")).toHaveLength(3);
     expect(within(workloadTabs).queryByRole("tab", { name: "Deployments" })).toBeNull();
     expect(screen.queryByText("v2.4.1 deployed")).toBeNull();
 

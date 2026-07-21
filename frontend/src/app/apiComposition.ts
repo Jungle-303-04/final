@@ -1,61 +1,46 @@
 import {
-  acknowledgeAlertEvent, addDiagnoseTurn, clearDiagnoseHistory,
-  createAlertRule, createDiagnoseRun, createReleaseFlowClient,
-  deleteAlertRule, executeGitOpsResourceAction, getActivityOverview,
-  getAiSuggestions, getAuditTimeline, getClusterNodesSummary,
-  getClusterSummary, getCompareCandidates, getCompareResourcePair,
-  getCostNodes, getCostOverview, getDiagnoseCapabilities, getFleetSummary,
-  getGitOpsApplicationDetail, getGitOpsResourceInsights, getGitOpsResourceTree,
-  getHomeInsights, getIncidentRecentChanges, getInventorySummary,
-  getNamespaceScope, getNodePodsSummary, getPrometheusIntegration,
-  getRcaIncident, getRecoveryPlanByCorrelation, getResourceIssues,
-  getRuntimeDiagnostics, getScheduledWorkloadRuns, getSettingsAccessProfile,
-  getUiPreferences, getVersionCheck, getWorkloadDetail, getAiConversation,
-  grantDiagnoseConsent, deleteAlertChannel, listAlertChannels, listAlertEvents, listAlertRules,
-  listAiConversations,
-  listClusters, listDiagnoseRuns, listEvidence,
-  listFilteredResources, listGitOpsOverview, listGlobalFilterFacets,
-  listRcaIssues, listRcaReports, listRcaTimeline,
-  listResourceFilterFacets, listResourceLabelFacets, openPodLogStream,
-  openScheduledWorkloadRunLogStream, openWorkloadLogStream, parseResourceFileResult,
-  postAiChat, promoteAlertEvent, saveAlertChannel, searchResourceIdentities,
-  appendAiMessage, createAiConversation,
-  selectRecoveryAction, startResourceFileCommand, stopDiagnoseRun,
-  subscribeCommandOperationEvents, subscribeDiagnoseEvents, subscribeHomeDashboardEvents,
-  testAlertChannel, updateAlertRule, updateNamespaceScope, updatePrometheusIntegration,
-  updateUiPreferences,
+  acknowledgeAlertEvent,
+  createAlertRule,
+  deleteAlertRule,
+  getAiSuggestions,
+  getClusterNodesSummary,
+  getClusterSummary,
+  getCompareCandidates,
+  getCompareResourcePair,
+  getWorkloadDetail,
+  getNodePodsSummary,
+  listAlertEvents,
+  listAlertRules,
+  listClusters,
+  listGlobalFilterFacets,
+  openPodLogStream,
+  openWorkloadLogStream,
+  postAiChat,
+  promoteAlertEvent,
+  subscribeCommandOperationEvents,
+  updateAlertRule,
 } from "../api";
 import { createAiAssistantAdapter } from "../features/ai-assistant/createAiAssistantAdapter";
 import { createAlertEventsAdapter } from "../features/alerts/createAlertEventsAdapter";
 import { createAlertRulesAdapter } from "../features/alerts/createAlertRulesAdapter";
-import { createAlertChannelsAdapter } from "../features/alerts/createAlertChannelsAdapter";
-import { createAiConversationHistoryAdapter } from "../features/ai-assistant/createAiConversationHistoryAdapter";
 import type { AuthPort } from "../features/auth/authContract";
 import { createGlobalFilterAdapter } from "../features/global-filter/createGlobalFilterAdapter";
-import { createDiagnoseAdapter } from "../features/diagnose/createDiagnoseAdapter";
 import { createHomeAdapter } from "../features/home/createHomeAdapter";
 import { createLogStreamAdapter } from "../features/log-stream/createLogStreamAdapter";
 import { createWorkloadDetailAdapter } from "../features/workload-detail/createWorkloadDetailAdapter";
 import { createCompareAdapter } from "../features/compare/createCompareAdapter";
 import { createOperationEventsAdapter } from "../features/operations/createOperationEventsAdapter";
 import { createOperationStatusStore } from "../features/operations/OperationStatusStore";
-import { createResourceFilesAdapter } from "../features/resource-files/createResourceFilesAdapter";
-import { createShellStateAdapter } from "../features/shell-state/createShellStateAdapter";
-import { createSettingsAdapter } from "../features/settings/createSettingsAdapter";
-import { createRuntimeStatusAdapter } from "../features/runtime-status/createRuntimeStatusAdapter";
 import { createPortRegistry } from "./composition/PortRegistry";
 import { createProductComposition, type ProductComposition } from "./productComposition";
-import { createApiBrowserRefreshPolicyRegistry } from "./composition/browserRefreshPolicyRegistry";
-import { createApiTimelinePort } from "./composition/timelinePort";
-import { createPortForwardSessionAdapter } from "../features/service-access/createPortForwardSessionAdapter";
-import { desktopBridge } from "../desktop/desktopBridge";
-import { createIssuesAdapter } from "../features/issues/createIssuesAdapter";
-import { createResourceIssuesAdapter } from "../features/issues/createResourceIssuesAdapter";
-import { createRcaContextAdapter } from "../features/issues/createRcaContextAdapter";
-import { createGitOpsAdapter } from "../features/gitops/createGitOpsAdapter";
-import { createHomeActivityAdapter } from "../features/home-activity/createHomeActivityAdapter";
-import { createCostAdapter } from "../features/cost/createCostAdapter";
-import { createResourcesFilterAdapter } from "../features/resources/createResourcesFilterAdapter";
+
+/**
+ * Gives the unified shell the same authenticated cluster wire contract as the
+ * product composition without letting the shell bypass the API boundary.
+ */
+export function listDevpreviewClusters(signal?: AbortSignal) {
+  return listClusters({}, signal);
+}
 
 /**
  * The authenticated composition is intentionally small: global providers and
@@ -63,41 +48,23 @@ import { createResourcesFilterAdapter } from "../features/resources/createResour
  * only through its registered route module.
  */
 export function createApiComposition(auth: AuthPort): ProductComposition {
-  const refreshPolicies = createApiBrowserRefreshPolicyRegistry();
-  const timelinePort = createApiTimelinePort();
-  const portForwardSessions = createPortForwardSessionAdapter(desktopBridge, refreshPolicies);
   const homePort = createHomeAdapter({
     getClusterNodesSummary,
     getClusterSummary,
-    getFleetSummary,
-    getHomeInsights,
     getNodePodsSummary,
     listClusters,
-    subscribeHomeDashboardEvents,
-  }, refreshPolicies);
+  });
   const operationStatusStore = createOperationStatusStore(
     createOperationEventsAdapter({ subscribeCommandOperationEvents }),
   );
-  const resourceFilesPort = createResourceFilesAdapter({
-    parseResourceFileResult,
-    startResourceFileCommand,
-    subscribeCommandOperationEvents,
-  });
   const registry = createPortRegistry({ homePort, operationStatusStore });
-  const globalFilterPort = createGlobalFilterAdapter({
-    listGlobalFilterFacets,
-    searchResourceIdentities,
-  });
+  const globalFilterPort = createGlobalFilterAdapter({ listGlobalFilterFacets });
   const aiAssistantPort = createAiAssistantAdapter({
     createAlertRule,
     getAiSuggestions,
     postAiChat,
   });
-  const logStreamPort = createLogStreamAdapter({
-    openPodLogStream,
-    openScheduledWorkloadRunLogStream,
-    openWorkloadLogStream,
-  });
+  const logStreamPort = createLogStreamAdapter({ openPodLogStream, openWorkloadLogStream });
   const alertEventsPort = createAlertEventsAdapter({
     acknowledgeAlertEvent,
     listAlertEvents,
@@ -109,180 +76,95 @@ export function createApiComposition(auth: AuthPort): ProductComposition {
     listAlertRules,
     updateAlertRule,
   });
-  const alertChannelsPort = createAlertChannelsAdapter({
-    deleteAlertChannel,
-    listAlertChannels,
-    saveAlertChannel,
-    testAlertChannel,
-  });
-  const aiConversationHistoryPort = createAiConversationHistoryAdapter({
-    append: appendAiMessage,
-    create: createAiConversation,
-    get: getAiConversation,
-    list: listAiConversations,
-  });
-  const workloadDetailPort = createWorkloadDetailAdapter({
-    getScheduledWorkloadRuns,
-    getWorkloadDetail,
-  });
+  const workloadDetailPort = createWorkloadDetailAdapter({ getWorkloadDetail });
   const comparePort = createCompareAdapter({ getCompareCandidates, getCompareResourcePair });
-  const shellStatePort = createShellStateAdapter({
-    getNamespaceScope,
-    getUiPreferences,
-    updateNamespaceScope,
-    updateUiPreferences,
-  });
-  const settingsPort = createSettingsAdapter({
-    getPrometheusIntegration,
-    getSettingsAccessProfile,
-    updatePrometheusIntegration,
-  });
-  const diagnosePort = createDiagnoseAdapter({
-    addDiagnoseTurn,
-    clearDiagnoseHistory,
-    createDiagnoseRun,
-    getDiagnoseCapabilities,
-    grantDiagnoseConsent,
-    listDiagnoseRuns,
-    stopDiagnoseRun,
-    subscribeDiagnoseEvents,
-  });
-  const runtimeStatusPort = createRuntimeStatusAdapter({
-    getRuntimeDiagnostics,
-    getVersionCheck,
-  });
-  const issuesPort = createIssuesAdapter({
-    getAuditTimeline,
-    getIncidentRecentChanges,
-    getRcaIncident,
-    getRecoveryPlanByCorrelation,
-    listRcaIssues,
-    listEvidence,
-    listRcaReports,
-    listRcaTimeline,
-    selectRecoveryAction,
-  }, refreshPolicies);
-  const gitOpsPort = createGitOpsAdapter({
-    ...createReleaseFlowClient(),
-    executeResourceAction: executeGitOpsResourceAction,
-    getApplicationDetail: getGitOpsApplicationDetail,
-    getResourceInsights: getGitOpsResourceInsights,
-    getResourceTree: getGitOpsResourceTree,
-    listOverview: listGitOpsOverview,
-  });
-  const homeActivityPort = createHomeActivityAdapter({ getActivityOverview });
-  const costPort = createCostAdapter({ getCostOverview, getCostNodes }, refreshPolicies);
-  const resourcesFilterPort = createResourcesFilterAdapter({
-    listFilteredResources,
-    listResourceFilterFacets,
-    listResourceLabelFacets,
-  });
-  const resourceIssuesPort = createResourceIssuesAdapter({ getResourceIssues });
-  const rcaContextPort = createRcaContextAdapter({
-    issues: issuesPort,
-    resourceIssues: resourceIssuesPort,
-  });
 
   return createProductComposition([
     {
+      id: "clusters",
+      loader: registry.createSurfaceLoader(async () => ({
+        default: (await import("./composition/surfaces/clusters")).loadClustersSurface(),
+      })),
+    },
+    {
       id: "home",
       loader: registry.createSurfaceLoader(async () => ({
-        default: (await import("./composition/surfaces/home")).loadHomeSurface(
-          registry.homePort,
-          {
-            activity: homeActivityPort,
-            cost: costPort,
-            gitops: gitOpsPort,
-            inventory: getInventorySummary,
-            issues: issuesPort,
-            resources: resourcesFilterPort,
-            timeline: timelinePort,
-          },
-        ),
+        default: (await import("./composition/surfaces/home")).loadHomeSurface(registry.homePort),
       })),
     },
     {
       id: "resources",
       loader: registry.createSurfaceLoader(async () => ({
-        default: (await import("./composition/surfaces/resources")).loadResourcesSurface(
-          registry.homePort,
-          refreshPolicies,
-          timelinePort,
-          portForwardSessions,
-          resourceFilesPort,
-          resourceIssuesPort,
-          resourcesFilterPort,
-          getInventorySummary,
-          gitOpsPort,
-        ),
+        default: (await import("./composition/surfaces/resources")).loadResourcesSurface(registry.homePort),
       })),
     },
     {
-      id: "deploy",
+      id: "topology",
       loader: registry.createSurfaceLoader(async () => ({
-        default: (await import("./composition/surfaces/deploy")).loadDeploySurface(
-          refreshPolicies,
-          rcaContextPort,
-          gitOpsPort,
-        ),
+        default: (await import("./composition/surfaces/topology")).loadTopologySurface(registry.homePort),
       })),
     },
     {
       id: "issues",
       loader: registry.createSurfaceLoader(async () => ({
-        default: (await import("./composition/surfaces/issues")).loadIssuesSurface(
-          issuesPort,
-        ),
-      })),
-    },
-    {
-      id: "alerts",
-      loader: registry.createSurfaceLoader(async () => ({
-        default: (await import("./composition/surfaces/alerts")).loadAlertsSurface(
-          alertRulesPort,
-          alertChannelsPort,
-        ),
-      })),
-    },
-    {
-      id: "ai",
-      loader: registry.createSurfaceLoader(async () => ({
-        default: (await import("./composition/surfaces/ai")).loadAiHistorySurface(
-          aiConversationHistoryPort,
-        ),
+        default: (await import("./composition/surfaces/issues")).loadIssuesSurface(),
       })),
     },
     {
       id: "timeline",
       loader: registry.createSurfaceLoader(async () => ({
-        default: (await import("./composition/surfaces/timeline")).loadTimelineSurface(
-          timelinePort,
-          rcaContextPort,
-        ),
+        default: (await import("./composition/surfaces/timeline")).loadTimelineSurface(),
+      })),
+    },
+    {
+      id: "alerts",
+      loader: registry.createSurfaceLoader(async () => ({
+        default: (await import("./composition/surfaces/alerts")).loadAlertsSurface(alertRulesPort),
+      })),
+    },
+    {
+      id: "applications",
+      loader: registry.createSurfaceLoader(async () => ({
+        default: (await import("./composition/surfaces/applications")).loadApplicationsSurface(),
+      })),
+    },
+    {
+      id: "gitops",
+      loader: registry.createSurfaceLoader(async () => ({
+        default: (await import("./composition/surfaces/gitops")).loadGitOpsSurface(),
+      })),
+    },
+    {
+      id: "helm",
+      loader: registry.createSurfaceLoader(async () => ({
+        default: (await import("./composition/surfaces/helm")).loadHelmSurface(),
+      })),
+    },
+    {
+      id: "traffic",
+      loader: registry.createSurfaceLoader(async () => ({
+        default: (await import("./composition/surfaces/traffic")).loadTrafficSurface(),
       })),
     },
     {
       id: "cost",
       loader: registry.createSurfaceLoader(async () => ({
-        default: (await import("./composition/surfaces/cost")).loadCostSurface(costPort),
+        default: (await import("./composition/surfaces/cost")).loadCostSurface(),
       })),
     },
     {
       id: "checks",
       loader: registry.createSurfaceLoader(async () => ({
-        default: (await import("./composition/surfaces/checks")).loadChecksSurface(refreshPolicies),
+        default: (await import("./composition/surfaces/checks")).loadChecksSurface(),
       })),
     },
     {
       id: "settings",
       loader: registry.createSurfaceLoader(async () => ({
-        default: (await import("./composition/surfaces/settings")).loadSettingsSurface(
-          settingsPort,
-          shellStatePort,
-        ),
+        default: (await import("./composition/surfaces/settings")).loadSettingsSurface(),
       })),
     },
   ], auth, homePort, globalFilterPort, aiAssistantPort, logStreamPort, alertEventsPort, operationStatusStore, () => {
     registry.dispose();
-  }, workloadDetailPort, comparePort, diagnosePort, shellStatePort, runtimeStatusPort, portForwardSessions, rcaContextPort, aiConversationHistoryPort);
+  }, workloadDetailPort, comparePort);
 }

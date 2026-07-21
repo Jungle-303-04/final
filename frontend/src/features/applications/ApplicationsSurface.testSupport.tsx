@@ -1,7 +1,7 @@
 import { render } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider, useLocation } from "react-router-dom";
 import { vi } from "vitest";
-import { I18nProvider, type SupportedLocale } from "../../shared/i18n";
+import { I18nProvider } from "../../shared/i18n";
 import { UnifiedFilterProvider } from "../filters/UnifiedFilterProvider";
 import { ApplicationsSurface } from "./ApplicationsSurface";
 import type {
@@ -177,16 +177,6 @@ export const APPLICATION_DETAIL: ApplicationDetailModel = {
 
 export function applicationsPort(overrides: Partial<ApplicationsPort> = {}): ApplicationsPort {
   return {
-    loadApplicationsRefreshPolicy: vi.fn().mockResolvedValue({
-      staleAfterSeconds: 30,
-      refreshAfterSeconds: 60,
-      keepLastSuccess: true,
-      pauseWhenHidden: true,
-      eventInvalidation: false,
-      retryAfterSeconds: null,
-      retryLimit: null,
-      postMutationRefreshAfterSeconds: null,
-    }),
     listApplications: vi.fn().mockResolvedValue([APPLICATION_CARD]),
     getApplication: vi.fn().mockResolvedValue(APPLICATION_DETAIL),
     listDeployments: vi.fn().mockResolvedValue([{
@@ -221,13 +211,12 @@ export function applicationsPort(overrides: Partial<ApplicationsPort> = {}): App
 export function renderApplications(
   port: ApplicationsPort,
   initialEntry = "/applications",
-  locale: SupportedLocale = "en",
 ) {
   const router = createMemoryRouter([
     {
       path: "/applications/*",
       element: (
-        <I18nProvider navigatorLanguage={locale} storage={null}>
+        <I18nProvider navigatorLanguage="en-US" storage={null}>
           <UnifiedFilterProvider>
             <ApplicationsSurface port={port} />
             <LocationProbe />
@@ -235,7 +224,7 @@ export function renderApplications(
         </I18nProvider>
       ),
     },
-    { path: "/deploy", element: <LocationProbe /> },
+    { path: "/gitops", element: <LocationProbe /> },
   ], { initialEntries: [initialEntry] });
   return { ...render(<RouterProvider router={router} />), router };
 }

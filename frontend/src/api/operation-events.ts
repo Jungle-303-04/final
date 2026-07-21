@@ -195,6 +195,8 @@ function reconnectDelayMs(error: unknown, attempt: number): number {
   const retryAfter = error instanceof ApiError ? error.retryAfter : null;
   const cappedAttempt = Math.min(attempt, 8);
   const cap = Math.min(RECONNECT_MAX_DELAY_MS, RECONNECT_BASE_DELAY_MS * 2 ** cappedAttempt);
+  // reconnect backoff jitter, not domain data — randomizes retry spacing to
+  // prevent synchronized reconnect storms; never rendered as an observed value.
   return retryAfter === null
     ? Math.floor(cap * (0.5 + Math.random() * 0.5))
     : retryAfter * 1_000;

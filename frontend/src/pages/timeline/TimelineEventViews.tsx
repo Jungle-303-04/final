@@ -72,7 +72,7 @@ export function TimelineEventList({
   const isFlat = groups.length === 1 && groups[0]?.label === null;
   if (isFlat) {
     return (
-      <ol aria-label={t("timeline.list.label")} className="min-w-0 overflow-hidden rounded-card border bg-card">
+      <ol aria-label={t("timeline.list.label")} className="grid min-w-0 gap-2">
         {groups[0]?.events.map((event) => (
           <TimelineEventListItem
             event={event}
@@ -86,13 +86,13 @@ export function TimelineEventList({
     );
   }
   return (
-    <div aria-label={t("timeline.list.label")} className="grid min-w-0 gap-3" role="list">
+    <div aria-label={t("timeline.list.label")} className="grid min-w-0 gap-4" role="list">
       {groups.map((group) => (
-        <section className="min-w-0 overflow-hidden rounded-card border bg-card" data-timeline-group={group.id} key={group.id}>
-          <h3 className="min-w-0 truncate border-b bg-muted/35 px-3.5 py-2 text-label font-semibold text-muted-foreground" title={group.label ?? undefined}>
+        <section className="grid min-w-0 gap-2" data-timeline-group={group.id} key={group.id}>
+          <h3 className="min-w-0 truncate text-sm font-medium text-muted-foreground" title={group.label ?? undefined}>
             {group.label}
           </h3>
-          <ol className="min-w-0">
+          <ol className="grid min-w-0 gap-2">
             {group.events.map((event) => (
               <TimelineEventListItem
                 event={event}
@@ -315,19 +315,21 @@ function TimelineEventListItem({
   return (
     <li className="min-w-0">
       <EventControl
-        className="grid w-full min-w-0 animate-in grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 border-b border-border-subtle bg-card px-3.5 py-2.5 text-left fade-in-0 slide-in-from-bottom-1 duration-(--motion-soft) ease-(--ease-soft) last:border-b-0 hover:bg-muted/35 focus-visible:z-10 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/40 data-[selected=true]:bg-tint-blue-bg/60 motion-reduce:animate-none motion-reduce:transition-none"
+        className="grid w-full min-w-0 gap-2 rounded-xl border bg-card p-4 text-left shadow-sm transition-[border-color,box-shadow,transform] hover:border-ring/50 hover:shadow-md focus-visible:ring-3 focus-visible:ring-ring/40 motion-reduce:transition-none"
         event={event}
         interaction={interaction}
       >
-        <span className="min-w-0 truncate text-label-2 font-semibold" title={event.title}>{event.title}</span>
-        <time className="row-span-2 shrink-0 whitespace-nowrap font-mono text-caption text-muted-foreground" dateTime={event.occurredAt}>
-          {formatDate(new Date(event.occurredAt), { dateStyle: "medium", timeStyle: "short" })}
-        </time>
-        <span className="flex min-w-0 items-center gap-1.5 overflow-hidden text-caption text-muted-foreground">
-          <span className="shrink-0 rounded-md border px-2 py-0.5">{t(TIMELINE_SOURCE_LABEL[event.source])}</span>
-          <span className="shrink-0 rounded-md border px-2 py-0.5">{t(TYPE_LABEL[event.type])}</span>
+        <div className="flex min-w-0 flex-wrap items-start justify-between gap-x-3 gap-y-1">
+          <span className="min-w-0 break-words font-medium">{event.title}</span>
+          <time className="shrink-0 text-xs text-muted-foreground" dateTime={event.occurredAt}>
+            {formatDate(new Date(event.occurredAt), { dateStyle: "medium", timeStyle: "medium" })}
+          </time>
+        </div>
+        <span className="flex min-w-0 flex-wrap gap-1.5 text-xs text-muted-foreground">
+          <span className="rounded-md border px-2 py-0.5">{t(TIMELINE_SOURCE_LABEL[event.source])}</span>
+          <span className="rounded-md border px-2 py-0.5">{t(TYPE_LABEL[event.type])}</span>
           <span className={severityClass(event.severity)}>{t(SEVERITY_LABEL[event.severity])}</span>
-          <span className="min-w-0 truncate py-0.5" title={event.scope.clusterId}>{event.scope.clusterId}</span>
+          <span className="min-w-0 break-words py-0.5">{event.scope.clusterId}</span>
         </span>
       </EventControl>
     </li>

@@ -24,7 +24,7 @@ describe("ResourcesPage S11 timeline strip", () => {
     const timelinePort = resourcesChangeTimelinePort();
     renderResources(
       resourcesPort(),
-      "/resources?clusters=cluster-1&view=map",
+      "/resources?clusters=cluster-1",
       resourcesClusterPort(),
       vi.fn(),
       "ko",
@@ -70,16 +70,6 @@ describe("ResourcesPage S11 timeline strip", () => {
             from: occurredMs - options.bucketMs,
             to: occurredMs,
           }],
-          freshnessPolicy: {
-            staleAfterSeconds: 5,
-            refreshAfterSeconds: 15,
-            keepLastSuccess: true,
-            pauseWhenHidden: true,
-            eventInvalidation: true,
-            retryAfterSeconds: null,
-            retryLimit: null,
-            postMutationRefreshAfterSeconds: null,
-          },
         });
       }),
     });
@@ -120,7 +110,7 @@ describe("ResourcesPage S11 timeline strip", () => {
 function renderTimelineResources(timelinePort: ReturnType<typeof resourcesChangeTimelinePort>) {
   return renderResources(
     resourcesPort(),
-    "/resources?clusters=cluster-1&resources.types=pod&view=map",
+    "/resources?clusters=cluster-1&resources.types=pod",
     resourcesClusterPort(),
     vi.fn(),
     "en",

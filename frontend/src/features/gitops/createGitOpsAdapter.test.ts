@@ -1,11 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { GitOpsPortFailure } from "./gitOpsContract";
+import type { GitOpsEndpointDependencies } from "./gitOpsEndpointContract";
 import { createGitOpsAdapter } from "./createGitOpsAdapter";
-import {
-  detailFixture,
-  endpointFixture,
-  mappedDetailFixture,
-} from "./createGitOpsAdapter.testSupport";
 
 describe("createGitOpsAdapter", () => {
   it("maps provider-neutral detail availability without manufacturing a diff", async () => {
@@ -13,8 +9,62 @@ describe("createGitOpsAdapter", () => {
       getApplicationDetail: vi.fn().mockResolvedValue({ application: detailFixture() }),
     });
 
-    await expect(createGitOpsAdapter(endpoints).getApplicationDetail("app-storefront"))
-      .resolves.toEqual(mappedDetailFixture());
+    await expect(createGitOpsAdapter(endpoints).getApplicationDetail("app-storefront")).resolves.toEqual({
+      applicationId: "app-storefront",
+      name: "storefront",
+      resource: {
+        apiGroup: "opsia.io",
+        version: "v1",
+        kind: "GitOpsApplication",
+        namespace: "storefront",
+        name: "storefront",
+        uid: "app-storefront",
+      },
+      scope: {
+        availability: "available",
+        scope: {
+          workspaceId: "workspace-a",
+          clusterId: "cluster-a",
+          namespaces: ["storefront"],
+          freshness: "partial",
+        },
+        reasonCode: null,
+      },
+      source: {
+        repositoryRef: "opsia/storefront",
+        defaultBranch: "main",
+        manifestPath: "deploy/production",
+      },
+      desiredLiveDiff: {
+        availability: "unavailable",
+        sourceRevision: "abc123",
+        liveObservationRevision: null,
+        reasonCode: "live_observation_not_integrated",
+      },
+      operation: {
+        availability: "partial",
+        inProgress: true,
+        workflowRunId: "run-1",
+        status: "applying",
+        observedAt: "2026-07-16T09:00:00Z",
+        reasonCode: "provider_operation_not_integrated",
+      },
+      capabilities: [{
+        action: "refresh",
+        authorization: "allowed",
+        availability: "unavailable",
+        enabled: false,
+        operationBlocked: false,
+        reasonCode: "provider_refresh_not_integrated",
+      }, {
+        action: "sync",
+        authorization: "allowed",
+        availability: "unavailable",
+        enabled: false,
+        operationBlocked: true,
+        reasonCode: "operation_in_progress",
+      }],
+    });
     expect(endpoints.getApplicationDetail).toHaveBeenCalledWith("app-storefront", undefined);
   });
 
@@ -106,116 +156,66 @@ describe("createGitOpsAdapter", () => {
     });
   });
 
-  it("maps the canonical overview in one call without deployment N+1", async () => {
+  it("maps real deployment poll observations into the GitOps sync table", async () => {
     const endpoints = endpointFixture({
-      listOverview: vi.fn().mockResolvedValue({
-        workspace_id: "workspace-a",
-        scopes: [],
-        items: [{
-          id: "controller:prod-east:application-uid",
-          authority: "controller",
-          provider: "argo",
-          role: "controller",
-          display_name: "Checkout API",
-          application_ids: ["app-checkout", "app-storefront"],
-          binding_id: null,
-          scope: {
-            workspace_id: "workspace-a",
-            cluster_id: "prod-east",
-            namespaces: ["checkout"],
-            freshness: "live",
-          },
-          resource: {
-            api_group: "argoproj.io",
-            version: "v1alpha1",
-            kind: "Application",
-            namespace: "checkout",
-            name: "checkout-api",
-            uid: "application-uid",
-          },
-          environment: null,
-          status: "Synced",
-          health: "Healthy",
-          revision: "81de44f",
-          observed_at: "2026-07-15T01:02:03Z",
-          labels: { team: "checkout" },
-          capabilities: {
-            scope: {
-              workspace_id: "workspace-a",
-              cluster_id: "prod-east",
-              namespaces: ["checkout"],
-              freshness: "live",
-            },
-            resource: {
-              api_group: "argoproj.io",
-              version: "v1alpha1",
-              kind: "Application",
-              namespace: "checkout",
-              name: "checkout-api",
-              uid: "application-uid",
-            },
-            revision: "17",
-            actions: [],
-          },
-          partial_reason_codes: [],
-        }],
-        kind_counts: [],
-        coverage: {
-          state: "complete",
-          registered_count: 0,
-          controller_count: 1,
-          returned_count: 1,
-          reason_codes: [],
+      listApplications: vi.fn().mockResolvedValue({ applications: [{
+        application_id: "checkout-api",
+        name: "Checkout API",
+      }] }),
+      listApplicationDeployments: vi.fn().mockResolvedValue({ deployments: [{
+        binding_id: "binding-production",
+        cluster_id: "prod-east",
+        namespace: "checkout",
+        environment: "production",
+        gitops_poll: {
+          status: "synced",
+          last_seen_commit_sha: "81de44f",
+          last_polled_at: "2026-07-15T01:02:03Z",
         },
-        observed_at: "2026-07-15T01:02:03Z",
-      }),
+      }, {
+        binding_id: "binding-staging",
+        cluster_id: "staging-east",
+        namespace: "checkout",
+        environment: "staging",
+      }] }),
     });
 
     await expect(createGitOpsAdapter(endpoints).listSyncTargets()).resolves.toEqual([{
-      id: "controller:prod-east:application-uid",
-      applicationIds: ["app-checkout", "app-storefront"],
-      applicationId: "app-checkout",
+      id: "checkout-api:binding-production",
+      applicationId: "checkout-api",
       applicationName: "Checkout API",
       clusterId: "prod-east",
       namespace: "checkout",
-      environment: null,
-      syncStatus: "Synced",
+      environment: "production",
+      syncStatus: "synced",
       revision: "81de44f",
       observedAt: "2026-07-15T01:02:03Z",
-      authority: "controller",
-      provider: "argo",
-      kind: "Application",
-      health: "Healthy",
-      resourceLocator: {
-        clusterId: "prod-east",
-        apiVersion: "argoproj.io/v1alpha1",
-        kind: "Application",
-        namespace: "checkout",
-        name: "checkout-api",
-      },
-      freshness: "live",
-      partialReasonCodes: [],
+    }, {
+      id: "checkout-api:binding-staging",
+      applicationId: "checkout-api",
+      applicationName: "Checkout API",
+      clusterId: "staging-east",
+      namespace: "checkout",
+      environment: "staging",
+      syncStatus: null,
+      revision: null,
+      observedAt: null,
     }]);
-    expect(endpoints.listOverview).toHaveBeenCalledTimes(1);
-    expect(endpoints.listApplications).not.toHaveBeenCalled();
+    expect(endpoints.listApplicationDeployments).toHaveBeenCalledWith(
+      "checkout-api",
+      { signal: undefined },
+    );
   });
 
-  it("rejects overview rows without a stable identity", async () => {
+  it("rejects deployment rows without a stable binding identity", async () => {
     const endpoints = endpointFixture({
-      listOverview: vi.fn().mockResolvedValue({
-        workspace_id: "workspace-a",
-        scopes: [],
-        items: [{ id: "" }],
-        kind_counts: [],
-        coverage: {
-          state: "complete",
-          registered_count: 0,
-          controller_count: 1,
-          returned_count: 1,
-          reason_codes: [],
-        },
-        observed_at: null,
-      }),
+      listApplications: vi.fn().mockResolvedValue({ applications: [{
+        application_id: "checkout-api",
+        name: "Checkout API",
+      }] }),
+      listApplicationDeployments: vi.fn().mockResolvedValue({ deployments: [{
+        cluster_id: "prod-east",
+      }] }),
     });
 
     await expect(createGitOpsAdapter(endpoints).listSyncTargets()).rejects.toMatchObject({
@@ -233,20 +233,86 @@ describe("createGitOpsAdapter", () => {
     await expect(request).rejects.toBeInstanceOf(GitOpsPortFailure);
     await expect(request).rejects.toMatchObject({ code: "invalid-response" });
   });
-
-  it("forwards the exact workflow approval identity and decision", async () => {
-    const decideApproval = vi.fn().mockResolvedValue({ accepted: true });
-    const port = createGitOpsAdapter(endpointFixture({ decideApproval }));
-
-    await expect(port.decideApproval("approval-a", "grant", "reviewed"))
-      .resolves.toBeUndefined();
-
-    expect(decideApproval).toHaveBeenCalledWith(
-      "approval-a",
-      "grant",
-      "reviewed",
-      undefined,
-    );
-  });
-
 });
+
+function endpointFixture(
+  overrides: Partial<GitOpsEndpointDependencies> = {},
+): GitOpsEndpointDependencies {
+  const unsupported = vi.fn().mockRejectedValue(new Error("not implemented"));
+  return {
+    getApplicationDetail: vi.fn().mockResolvedValue({ application: detailFixture() }),
+    listApplications: vi.fn().mockResolvedValue({ applications: [] }),
+    listApplicationDeployments: vi.fn().mockResolvedValue({ deployments: [] }),
+    listClusters: vi.fn().mockResolvedValue({ clusters: [] }),
+    connectApplication: unsupported,
+    listPlans: vi.fn().mockResolvedValue({ plans: [] }),
+    listRuns: vi.fn().mockResolvedValue({ runs: [] }),
+    savePlan: unsupported,
+    previewPlan: unsupported,
+    checkReadiness: unsupported,
+    startPlan: unsupported,
+    renderManifest: unsupported,
+    submitSafePr: unsupported,
+    runAction: unsupported,
+    ...overrides,
+  };
+}
+
+function detailFixture() {
+  return {
+    application_id: "app-storefront",
+    name: "storefront",
+    resource: {
+      api_group: "opsia.io",
+      version: "v1",
+      kind: "GitOpsApplication",
+      namespace: "storefront",
+      name: "storefront",
+      uid: "app-storefront",
+    },
+    scope: {
+      availability: "available" as const,
+      scope: {
+        workspace_id: "workspace-a",
+        cluster_id: "cluster-a",
+        namespaces: ["storefront"],
+        freshness: "partial" as const,
+      },
+      reason_code: null,
+    },
+    source: {
+      repository_ref: "opsia/storefront",
+      default_branch: "main",
+      manifest_path: "deploy/production",
+    },
+    desired_live_diff: {
+      availability: "unavailable" as const,
+      source_revision: "abc123",
+      live_observation_revision: null,
+      reason_code: "live_observation_not_integrated",
+    },
+    operation: {
+      availability: "partial" as const,
+      in_progress: true,
+      workflow_run_id: "run-1",
+      status: "applying",
+      observed_at: "2026-07-16T09:00:00Z",
+      reason_code: "provider_operation_not_integrated",
+    },
+    capabilities: [{
+      action: "refresh" as const,
+      authorization: "allowed" as const,
+      availability: "unavailable" as const,
+      enabled: false,
+      operation_blocked: false,
+      reason_code: "provider_refresh_not_integrated",
+    }, {
+      action: "sync" as const,
+      authorization: "allowed" as const,
+      availability: "unavailable" as const,
+      enabled: false,
+      operation_blocked: true,
+      reason_code: "operation_in_progress",
+    }],
+  };
+}

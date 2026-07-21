@@ -18,12 +18,8 @@ import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
 import type { ScopeFreshness } from "../../shared/parity/referenceParity";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
 import { TimelineSurface } from "./TimelineSurface";
-import { EMPTY_RCA_CONTEXT_PORT, type RcaContextPort } from "../../features/issues/rcaContextContract";
 
-export function createTimelineSurface(
-  port: TimelinePort,
-  rcaContextPort: RcaContextPort = EMPTY_RCA_CONTEXT_PORT,
-): ComponentType {
+export function createTimelineSurface(port: TimelinePort): ComponentType {
   function TimelineSurfaceRoute() {
     const clusterScope = useClusterScope();
     const filter = useUnifiedFilter();
@@ -52,7 +48,7 @@ export function createTimelineSurface(
         scopeContent={scopeContent}
         workspaceCacheKey={workspaceCacheKey}
       >
-        <TimelineSurface port={port} rcaContextPort={rcaContextPort} scopes={scopes} />
+        <TimelineSurface port={port} scopes={scopes} />
       </TimelineCapabilityGate>
     );
   }

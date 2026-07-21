@@ -1,8 +1,4 @@
-import type { ProviderResourceDetail } from "./providerResourceContract";
-import type { ResourceAccessDetail } from "./resourceAccessContract";
-
 export type ResourcesCollectionCompleteness = "unknown";
-export type ResourceCatalogCompleteness = "observed" | "partial" | "unavailable";
 
 export type ResourceHealthTone =
   | "healthy"
@@ -12,35 +8,6 @@ export type ResourceHealthTone =
   | "unknown";
 
 export type ResourceIdentityStability = "uid" | "fallback";
-
-export interface ResourceTableMetricEvidence {
-  resourceUid: string | null;
-  sourceSnapshotId: string;
-  observedAt: string | null;
-  measurementWindow: string | null;
-  cpuMillicores: number | null;
-  memoryMebibytes: number | null;
-  completeness: "exact" | "partial" | "unavailable";
-  reasonCodes: string[];
-}
-
-export interface ResourceTablePodMetrics extends ResourceTableMetricEvidence {
-  kind: "pod";
-  cpuRequestMillicores: number | null;
-  cpuLimitMillicores: number | null;
-  memoryRequestMebibytes: number | null;
-  memoryLimitMebibytes: number | null;
-}
-
-export interface ResourceTableNodeMetrics extends ResourceTableMetricEvidence {
-  kind: "node";
-  cpuAllocatableMillicores: number | null;
-  memoryAllocatableMebibytes: number | null;
-  podCount: number | null;
-  podAllocatable: number | null;
-}
-
-export type ResourceTableMetrics = ResourceTablePodMetrics | ResourceTableNodeMetrics;
 
 export type ResourceDataQualityWarningCode =
   | "optional-fact-unavailable"
@@ -75,44 +42,11 @@ export interface ResourceCatalogItem {
   healthCounts: ResourceHealthCounts;
 }
 
-export interface ResourceCatalogForbiddenType {
-  namespace: string | null;
-  apiGroup: string;
-  version: string;
-  resource: string;
-  kind: string;
-  namespaced: boolean;
-  reasonCode: "list_permission_not_observed";
-}
-
-export interface DiscoveredApiResource {
-  apiVersion: string;
-  group: string;
-  version: string;
-  pluralName: string;
-  singularName: string;
-  kind: string;
-  namespaced: boolean;
-  isCrd: boolean | null;
-  verbs: string[];
-}
-
-export interface ResourceApiDiscovery {
-  completeness: "exact" | "partial" | "unavailable";
-  observedAt: string | null;
-  reasonCodes: string[];
-  resources: DiscoveredApiResource[];
-}
-
 export interface ResourceCatalog {
   clusterId: string;
-  completeness: ResourceCatalogCompleteness;
+  completeness: ResourcesCollectionCompleteness;
   observedAt: string | null;
-  namespaceScope: string[];
-  reasonCodes: string[];
-  forbidden: ResourceCatalogForbiddenType[];
   items: ResourceCatalogItem[];
-  apiDiscovery: ResourceApiDiscovery;
 }
 
 export interface ResourceMetadataEntry {
@@ -200,11 +134,6 @@ export type ResourceFacts =
       reportingComponent: string | null;
       involvedResource: ResourceInvolvedFact | null;
     }
-  | {
-      type: "resource-quota";
-      hard: ResourceMetadataEntry[];
-      used: ResourceMetadataEntry[];
-    }
   | { type: "generic" };
 
 export interface ResourceSummary {
@@ -222,7 +151,6 @@ export interface ResourceSummary {
   health: ResourceHealthTone;
   healthStatus: string;
   facts: ResourceFacts;
-  tableMetrics?: ResourceTableMetrics;
   observedAt: string | null;
   firstSeenAt: string | null;
   lastSeenAt: string | null;
@@ -269,9 +197,6 @@ export interface ResourceDetail {
   clusterId: string;
   identity: ResourceIdentity;
   resource: ResourceSummary;
-  /** Canonical gateway adapters populate the redacted provider projection when available. */
-  providerDetail?: ProviderResourceDetail | null;
-  access?: ResourceAccessDetail | null;
   relatedCompleteness: ResourcesCollectionCompleteness;
   related: ResourceRelatedGroup[];
   relatedExcludedCount?: number;
@@ -305,11 +230,7 @@ export class ResourcesPortFailure extends Error {
 }
 
 export interface ResourcesPort {
-  loadCatalog(
-    clusterId: string,
-    namespaces?: readonly string[],
-    signal?: AbortSignal,
-  ): Promise<ResourceCatalog>;
+  loadCatalog(clusterId: string, signal?: AbortSignal): Promise<ResourceCatalog>;
   listResources(
     clusterId: string,
     query: ResourceListQuery,

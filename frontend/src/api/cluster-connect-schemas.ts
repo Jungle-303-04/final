@@ -1,11 +1,6 @@
 import { z } from "zod";
 
 export const clusterConnectProviderSchema = z.enum(["aws", "gcp", "azure", "onprem"]);
-export const clusterConnectEnvironmentSchema = z.enum([
-  "development",
-  "staging",
-  "production",
-]);
 
 export const clusterConnectResponseSchema = z.strictObject({
   cluster_id: z.string(),
@@ -20,6 +15,5 @@ export const clusterConnectStatusResponseSchema = z.strictObject({
 });
 
 export type ClusterConnectProvider = z.infer<typeof clusterConnectProviderSchema>;
-export type ClusterConnectEnvironment = z.infer<typeof clusterConnectEnvironmentSchema>;
 export type ClusterConnectResponse = z.infer<typeof clusterConnectResponseSchema>;
 export type ClusterConnectStatusResponse = z.infer<typeof clusterConnectStatusResponseSchema>;

@@ -22,7 +22,7 @@ export function ResourceSparkline({
     return (
       <span
         aria-label={t("resources.table.trendUnavailable")}
-        className="block h-7 w-24"
+        className="block h-6 w-24"
         data-slot="resource-trend-unavailable"
         role="img"
       />
@@ -31,7 +31,7 @@ export function ResourceSparkline({
   return (
     <Button
       aria-label={`${t("resources.table.openDetail", { name })}: ${t("resources.table.trend")}`}
-      className="flex h-7 w-24 px-0"
+      className="h-7 w-24 px-0"
       onClick={() => onOpen(identity)}
       title={series.completeness === "exact" ? undefined : t("common.state.partial")}
       type="button"

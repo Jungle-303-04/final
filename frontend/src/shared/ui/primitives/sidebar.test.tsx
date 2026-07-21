@@ -43,7 +43,7 @@ describe("product Sidebar primitive", () => {
     expect(sidebar?.tagName).toBe("ASIDE");
     expect(sidebar?.getAttribute("data-state")).toBe("expanded");
     expect(container.querySelector('[data-slot="sidebar-inset"]')?.tagName).toBe("DIV");
-    expect(screen.getByText("Kyro").className).not.toContain("sr-only");
+    expect(screen.getByText("Opsia").className).not.toContain("sr-only");
   });
 
   it("supports uncontrolled desktop state and keeps trigger focus", async () => {
@@ -56,7 +56,7 @@ describe("product Sidebar primitive", () => {
     await user.click(trigger);
     expect(screen.getByRole("button", { name: "사이드바 접기" }).getAttribute("aria-expanded")).toBe("true");
     expect(document.activeElement).toBe(trigger);
-    expect(screen.getByText("Kyro").className).not.toContain("sr-only");
+    expect(screen.getByText("Opsia").className).not.toContain("sr-only");
   });
 
   it("supports controlled desktop and mobile state without optimistic mutation", async () => {
@@ -113,9 +113,7 @@ describe("product Sidebar primitive", () => {
     const dialog = screen.getByRole("dialog", { name: "제품 탐색" });
     expect(dialog.getAttribute("data-slot")).toBe("dialog-content");
     expect(dialog.className).toContain("left-0");
-    expect(dialog.className).toContain("duration-(--motion-dock)");
-    expect(dialog.className).toContain("motion-reduce:data-open:animate-none");
-    expect(dialog.className).toContain("motion-reduce:data-closed:animate-none");
+    expect(dialog.className).toContain("motion-reduce:duration-0");
     await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true));
     const close = screen.getByRole("button", { name: "모바일 사이드바 닫기" });
     close.focus();
@@ -218,7 +216,7 @@ function SidebarFixtureBody({ duplicateName, expandLabel = "사이드바 펼치�
   const nameProps = omitName ? {} : duplicateName ? { "aria-label": "제품 메뉴", "aria-labelledby": "menu-title" } : { "aria-label": "제품 메뉴" };
   return <>
     <Sidebar {...(nameProps as unknown as SidebarProps)} id="product-navigation" mobileCloseLabel="모바일 사이드바 닫기" mobileDescription="모바일 제품 메뉴입니다." mobileTitle={mobileTitle}>
-      <SidebarHeader><SidebarText>Kyro</SidebarText></SidebarHeader>
+      <SidebarHeader><SidebarText>Opsia</SidebarText></SidebarHeader>
       <SidebarContent><button type="button">메뉴 동작</button></SidebarContent>
       <SidebarFooter>바닥글</SidebarFooter>
     </Sidebar>

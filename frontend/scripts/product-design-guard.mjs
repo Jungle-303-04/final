@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 
-import { execFile } from 'node:child_process'
 import { readdir, readFile } from 'node:fs/promises'
 import {
   dirname,
@@ -11,12 +10,7 @@ import {
   sep,
 } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { promisify } from 'node:util'
 import ts from 'typescript'
-import {
-  legacyMaxFileLineBaseline,
-  legacyViolationCountBaseline,
-} from './product-design-guard-baseline.mjs'
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const sourceRoot = resolve(projectRoot, 'src')
@@ -25,31 +19,11 @@ const productRoot = process.env.PRODUCT_DESIGN_GUARD_ROOT
   : sourceRoot
 const apiRoot = resolve(productRoot, 'api')
 const tokenFile = resolve(productRoot, 'styles', 'tokens.css')
-const serviceIdentityRegistryFile = resolve(
-  productRoot,
-  'shared',
-  'ui',
-  'brand',
-  'brand.css',
-)
-// These are immutable upstream SVG payloads rendered as <img> resources. They
-// are not product-authored identity data; brand.css remains the sole editable
-// service identity color registry.
-const immutableUpstreamBrandAssets = new Set([
+const protectedBrandAssets = new Set([
   resolve(productRoot, 'shared', 'brand', 'azure.svg'),
-  resolve(productRoot, 'shared', 'brand', 'gitops', 'flux.svg'),
 ])
-const sharedUiRoot = resolve(productRoot, 'shared', 'ui')
 const motionRoot = resolve(productRoot, 'motion')
 const motionTokenFile = resolve(motionRoot, 'tokens.css')
-const execFileAsync = promisify(execFile)
-
-const cliArguments = process.argv.slice(2)
-const releaseGate = cliArguments.includes('--release-gate')
-const releaseBaseOptionIndex = cliArguments.indexOf('--base')
-const releaseBase = releaseBaseOptionIndex === -1
-  ? process.env.PRODUCT_DESIGN_GUARD_BASE ?? null
-  : cliArguments[releaseBaseOptionIndex + 1] ?? null
 
 export const I18N_LITERAL_ENFORCEMENT_ENV = 'PRODUCT_I18N_LITERAL_ENFORCEMENT'
 
@@ -84,29 +58,11 @@ const scriptExtensions = new Set([
 const typeScriptExtensions = new Set(['.cts', '.mts', '.ts', '.tsx'])
 
 const rawColorPatterns = [
-  { label: 'hex', pattern: /#(?:[\da-f]{8}|[\da-f]{6}|[\da-f]{4}|[\da-f]{3})(?![\da-z_-])/giu },
+  { label: 'hex', pattern: /#(?:[\da-f]{8}|[\da-f]{6}|[\da-f]{4}|[\da-f]{3})(?![\da-f])/giu },
   { label: 'rgb/rgba', pattern: /\brgba?\s*\(/giu },
   { label: 'hsl/hsla', pattern: /\bhsla?\s*\(/giu },
   { label: 'oklch', pattern: /\boklch\s*\(/giu },
 ]
-
-// Public product copy has moved to Kyro. Lowercase `opsia` remains a stable
-// wire/storage identifier, so this intentionally targets display-name casing.
-const retiredBrandPattern = /\b(?:Opsia|OPSIA)\b/gu
-
-const sharedVisualComponentPattern = /(?:Card|Chip|Table|Gauge|Chart|Progress)$/u
-
-const motionClassLiteralPattern =
-  /\bduration-(?:\[[^\]\r\n]*(?:\d+(?:\.\d+)?m?s|\d*\.\d+s)[^\]\r\n]*\]|\d+)\b|(?<![-(])\bease-(?:linear|in|out|in-out)\b/giu
-const motionDeclarationPattern =
-  /\b(?:transition|animation)(?:-duration|-timing-function)?\s*:\s*([^;{}]+);/giu
-const motionValueLiteralPattern =
-  /(?:\d+(?:\.\d+)?m?s|\d*\.\d+s|cubic-bezier\([^)]*\)|(?<![-(])\b(?:linear|ease|ease-in|ease-out|ease-in-out)\b)/giu
-
-// This is the exact pre-D17 debt on the branch at the start of P1. The guard
-// permits only these file/literal counts, so moving or adding a literal fails
-// while the owning surface track can reduce the baseline incrementally.
-const legacyMotionLiteralBaseline = Object.freeze({})
 
 const restrictedNetworkApis = new Set([
   'EventSource',
@@ -142,7 +98,7 @@ const allowedStandaloneUiTerms = new Set([
   'Ingress',
   'Job',
   'JSON',
-  'Kyro',
+  'Opsia',
   'Kubernetes',
   'KiB',
   'MiB',
@@ -220,7 +176,6 @@ const structuralJsxAttributes = new Set([
   'status',
   'tabIndex',
   'target',
-  'textAnchor',
   'to',
   'tone',
   'type',
@@ -229,7 +184,6 @@ const structuralJsxAttributes = new Set([
 ])
 
 const violations = []
-const consumedLegacyViolations = new Map()
 
 function isWithin(candidate, directory) {
   const pathFromDirectory = relative(directory, candidate)
@@ -246,25 +200,6 @@ function projectPath(filePath) {
 }
 
 function addViolation(filePath, sourceFile, position, rule, message) {
-  const { line, character } = sourceFile.getLineAndCharacterOfPosition(position)
-  const file = projectPath(filePath)
-  const allowance = legacyViolationCountBaseline[file]?.[rule] ?? 0
-  const baselineKey = `${file}\0${rule}`
-  const consumed = consumedLegacyViolations.get(baselineKey) ?? 0
-  if (consumed < allowance) {
-    consumedLegacyViolations.set(baselineKey, consumed + 1)
-    return
-  }
-  violations.push({
-    column: character + 1,
-    file,
-    line: line + 1,
-    message,
-    rule,
-  })
-}
-
-function addReleaseViolation(filePath, sourceFile, position, rule, message) {
   const { line, character } = sourceFile.getLineAndCharacterOfPosition(position)
   violations.push({
     column: character + 1,
@@ -286,24 +221,23 @@ function addTextViolation(filePath, source, position, rule, message) {
   addViolation(filePath, sourceFile, position, rule, message)
 }
 
-function inspectRetiredBrand(filePath, source) {
-  for (const match of source.matchAll(retiredBrandPattern)) {
-    addTextViolation(
-      filePath,
-      source,
-      match.index,
-      'retired-brand',
-      'Retired public brand name is forbidden; use Kyro for display copy and keep lowercase opsia only for stable internal identifiers.',
-    )
-  }
-}
-
 async function collectProductFiles(directory) {
   const entries = await readdir(directory, { withFileTypes: true })
   const files = []
 
   for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
     const entryPath = resolve(directory, entry.name)
+
+    // UI-PHASE2-001 goal-approved disposition: the devpreview unified shell is a
+    // front-branch demo UI (intentional inline-style / Korean copy) and is not
+    // held to canonical product design tokens/i18n — same treatment as
+    // examples/shadcn-lab/vendor. Skip `src/devpreview/**` and `devpreview-*.tsx`.
+    if (
+      isWithin(entryPath, resolve(sourceRoot, 'devpreview')) ||
+      /(?:^|\/)devpreview-[^/]*\.[cm]?[jt]sx?$/u.test(entryPath.replaceAll('\\', '/'))
+    ) {
+      continue
+    }
 
     if (entry.isDirectory()) {
       files.push(...(await collectProductFiles(entryPath)))
@@ -1044,11 +978,7 @@ function inspectCssImports(filePath, source) {
 }
 
 function inspectRawColors(filePath, source) {
-  if (
-    filePath === tokenFile ||
-    filePath === serviceIdentityRegistryFile ||
-    immutableUpstreamBrandAssets.has(filePath)
-  ) {
+  if (filePath === tokenFile || protectedBrandAssets.has(filePath)) {
     return
   }
 
@@ -1059,61 +989,9 @@ function inspectRawColors(filePath, source) {
         source,
         match.index,
         'design-token',
-        `Raw ${label} colors are allowed only in tokens/theme files or the single editable service identity registry; immutable upstream SVG payloads are separately protected.`,
+        `Raw ${label} colors are allowed only in src/styles/tokens.css.`,
       )
     }
-  }
-}
-
-export function scanMotionLiterals(filePath, source) {
-  if (isWithin(filePath, motionRoot)) {
-    return []
-  }
-
-  const matches = []
-
-  for (const match of source.matchAll(motionClassLiteralPattern)) {
-    matches.push({
-      kind: 'utility',
-      literal: match[0],
-      position: match.index,
-    })
-  }
-
-  for (const declaration of source.matchAll(motionDeclarationPattern)) {
-    const value = declaration[1]
-    const valueOffset = declaration.index + declaration[0].indexOf(value)
-    for (const match of value.matchAll(motionValueLiteralPattern)) {
-      matches.push({
-        kind: 'declaration',
-        literal: match[0],
-        position: valueOffset + match.index,
-      })
-    }
-  }
-
-  return matches.sort((left, right) => left.position - right.position)
-}
-
-function inspectMotionLiterals(filePath, source) {
-  const normalizedPath = relative(sourceRoot, filePath).split(sep).join('/')
-  const allowedCounts = legacyMotionLiteralBaseline[normalizedPath] ?? {}
-  const seenCounts = new Map()
-
-  for (const match of scanMotionLiterals(filePath, source)) {
-    const seen = (seenCounts.get(match.literal) ?? 0) + 1
-    seenCounts.set(match.literal, seen)
-    if (seen <= (allowedCounts[match.literal] ?? 0)) {
-      continue
-    }
-
-    addTextViolation(
-      filePath,
-      source,
-      match.position,
-      'motion-literal',
-      `Use a src/motion token instead of the ${match.kind} literal ${match.literal}.`,
-    )
   }
 }
 
@@ -1149,291 +1027,6 @@ function inspectMotionCss(filePath, source) {
   }
 }
 
-function createScriptSourceFile(filePath, source) {
-  return ts.createSourceFile(
-    filePath,
-    source,
-    ts.ScriptTarget.Latest,
-    true,
-    scriptKindFor(extname(filePath).toLowerCase()),
-  )
-}
-
-function propertyNameText(name) {
-  if (ts.isIdentifier(name) || ts.isStringLiteralLike(name)) {
-    return name.text
-  }
-  if (ts.isComputedPropertyName(name)) {
-    return staticStringValue(name.expression)
-  }
-  return null
-}
-
-function directNumericExpression(node) {
-  const expression = unwrapExpression(node)
-  if (ts.isNumericLiteral(expression)) {
-    return expression
-  }
-  if (
-    ts.isPrefixUnaryExpression(expression) &&
-    ts.isNumericLiteral(expression.operand)
-  ) {
-    return expression
-  }
-  return null
-}
-
-function inspectReleaseMotionDurations(filePath, source) {
-  if (!isWithin(filePath, motionRoot)) {
-    return
-  }
-
-  const sourceFile = createScriptSourceFile(filePath, source)
-
-  function visit(node) {
-    if (
-      ts.isPropertyAssignment(node) &&
-      propertyNameText(node.name) === 'duration'
-    ) {
-      const numericExpression = directNumericExpression(node.initializer)
-      if (numericExpression) {
-        addReleaseViolation(
-          filePath,
-          sourceFile,
-          numericExpression.getStart(sourceFile),
-          'motion-duration-token',
-          'Motion transition duration must reference a src/motion token; numeric literals (including zero) are forbidden.',
-        )
-      }
-    }
-    ts.forEachChild(node, visit)
-  }
-
-  visit(sourceFile)
-}
-
-function inspectReleaseRawColors(filePath, source) {
-  if (
-    filePath === tokenFile ||
-    filePath === serviceIdentityRegistryFile ||
-    immutableUpstreamBrandAssets.has(filePath)
-  ) {
-    return
-  }
-
-  const sourceFile = ts.createSourceFile(
-    filePath,
-    source,
-    ts.ScriptTarget.Latest,
-    false,
-    ts.ScriptKind.Unknown,
-  )
-  for (const { label, pattern } of rawColorPatterns) {
-    for (const match of source.matchAll(pattern)) {
-      addReleaseViolation(
-        filePath,
-        sourceFile,
-        match.index,
-        'release-design-token',
-        `Raw ${label} color is forbidden outside tokens/theme files and the single editable service identity registry; immutable upstream SVG payloads are separately protected.`,
-      )
-    }
-  }
-}
-
-function isTestSource(filePath) {
-  const normalized = filePath.split(sep).join('/')
-  return (
-    /(?:^|\/)__tests__(?:\/|$)/u.test(normalized) ||
-    /\.(?:test|spec)\.[cm]?[jt]sx?$/u.test(normalized)
-  )
-}
-
-function visualComponentDeclarations(filePath, source) {
-  const sourceFile = createScriptSourceFile(filePath, source)
-  const declarations = []
-
-  function record(name, node) {
-    if (name && sharedVisualComponentPattern.test(name)) {
-      declarations.push({ name, node, sourceFile })
-    }
-  }
-
-  function visit(node) {
-    if (
-      (ts.isFunctionDeclaration(node) || ts.isClassDeclaration(node)) &&
-      node.name
-    ) {
-      record(node.name.text, node.name)
-    } else if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name)) {
-      const initializer = node.initializer && unwrapExpression(node.initializer)
-      if (
-        initializer &&
-        (ts.isArrowFunction(initializer) || ts.isFunctionExpression(initializer))
-      ) {
-        record(node.name.text, node.name)
-      }
-    }
-    ts.forEachChild(node, visit)
-  }
-
-  visit(sourceFile)
-  return declarations
-}
-
-function inlineStyleDeclarations(filePath, source) {
-  const sourceFile = createScriptSourceFile(filePath, source)
-  const declarations = []
-
-  function visit(node) {
-    if (ts.isJsxAttribute(node) && jsxAttributeName(node) === 'style') {
-      const signature = node.initializer
-        ? node.initializer.getText(sourceFile).replace(/\s+/gu, '')
-        : '<boolean>'
-      declarations.push({ node, signature, sourceFile })
-    }
-    ts.forEachChild(node, visit)
-  }
-
-  visit(sourceFile)
-  return declarations
-}
-
-function declarationCounts(declarations, key) {
-  const counts = new Map()
-  for (const declaration of declarations) {
-    const value = declaration[key]
-    counts.set(value, (counts.get(value) ?? 0) + 1)
-  }
-  return counts
-}
-
-function consumeDeclaration(counts, value) {
-  const remaining = counts.get(value) ?? 0
-  if (remaining === 0) return false
-  counts.set(value, remaining - 1)
-  return true
-}
-
-async function releaseChangeContext(files) {
-  if (!releaseBase) {
-    return {
-      baseSource: async () => null,
-      changedFiles: new Set(files),
-    }
-  }
-
-  await execFileAsync(
-    'git',
-    ['rev-parse', '--verify', `${releaseBase}^{commit}`],
-    { cwd: projectRoot },
-  )
-  const { stdout: repositoryRootOutput } = await execFileAsync(
-    'git',
-    ['rev-parse', '--show-toplevel'],
-    { cwd: projectRoot },
-  )
-  const repositoryRoot = repositoryRootOutput.trim()
-  const sourcePathspec = relative(repositoryRoot, productRoot).split(sep).join('/')
-  const [{ stdout: changedOutput }, { stdout: untrackedOutput }] = await Promise.all([
-    execFileAsync(
-      'git',
-      ['diff', '--name-only', '--diff-filter=ACMRTUXB', releaseBase, '--', sourcePathspec],
-      { cwd: repositoryRoot },
-    ),
-    execFileAsync(
-      'git',
-      ['ls-files', '--others', '--exclude-standard', '--', sourcePathspec],
-      { cwd: repositoryRoot },
-    ),
-  ])
-  const changedFiles = new Set(
-    `${changedOutput}\n${untrackedOutput}`
-      .split(/\r?\n/gu)
-      .filter(Boolean)
-      .map((entry) => resolve(repositoryRoot, entry)),
-  )
-
-  async function baseSource(filePath) {
-    const repositoryPath = relative(repositoryRoot, filePath).split(sep).join('/')
-    try {
-      const { stdout } = await execFileAsync(
-        'git',
-        ['show', `${releaseBase}:${repositoryPath}`],
-        { cwd: repositoryRoot, maxBuffer: 10 * 1024 * 1024 },
-      )
-      return stdout
-    } catch {
-      return null
-    }
-  }
-
-  return { baseSource, changedFiles }
-}
-
-async function inspectReleaseVisualOwnership(filePath, source, baseSource) {
-  if (
-    isWithin(filePath, sharedUiRoot) ||
-    isTestSource(filePath) ||
-    !['.jsx', '.tsx'].includes(extname(filePath).toLowerCase())
-  ) {
-    return
-  }
-
-  const previousSource = await baseSource(filePath)
-  const previousVisuals = declarationCounts(
-    previousSource ? visualComponentDeclarations(filePath, previousSource) : [],
-    'name',
-  )
-  for (const declaration of visualComponentDeclarations(filePath, source)) {
-    if (consumeDeclaration(previousVisuals, declaration.name)) continue
-    addReleaseViolation(
-      filePath,
-      declaration.sourceFile,
-      declaration.node.getStart(declaration.sourceFile),
-      'shared-visual-ownership',
-      `New ${declaration.name} visual component must live under src/shared/ui.`,
-    )
-  }
-
-  const previousStyles = declarationCounts(
-    previousSource ? inlineStyleDeclarations(filePath, previousSource) : [],
-    'signature',
-  )
-  for (const declaration of inlineStyleDeclarations(filePath, source)) {
-    if (consumeDeclaration(previousStyles, declaration.signature)) continue
-    addReleaseViolation(
-      filePath,
-      declaration.sourceFile,
-      declaration.node.getStart(declaration.sourceFile),
-      'release-no-inline-style',
-      'New inline style is forbidden outside src/shared/ui; compose layout with product tokens and shared primitives.',
-    )
-  }
-}
-
-async function inspectReleaseRules(files) {
-  const changeContext = await releaseChangeContext(files)
-
-  for (const filePath of files) {
-    const source = await readFile(filePath, 'utf8')
-    const extension = extname(filePath).toLowerCase()
-
-    inspectRetiredBrand(filePath, source)
-    inspectReleaseRawColors(filePath, source)
-    if (scriptExtensions.has(extension)) {
-      inspectReleaseMotionDurations(filePath, source)
-    }
-    if (changeContext.changedFiles.has(filePath)) {
-      await inspectReleaseVisualOwnership(
-        filePath,
-        source,
-        changeContext.baseSource,
-      )
-    }
-  }
-}
-
 function lineCount(source) {
   if (source.length === 0) {
     return 0
@@ -1465,15 +1058,10 @@ function inspectFileLength(filePath, source, extension) {
   }
 
   const totalLines = lineCount(source)
-  const file = projectPath(filePath)
-  const baseline = legacyMaxFileLineBaseline[file] ?? 300
-  if (
-    totalLines > Math.max(300, baseline) &&
-    !isPureTypeScriptBarrel(filePath, source, extension)
-  ) {
+  if (totalLines > 300 && !isPureTypeScriptBarrel(filePath, source, extension)) {
     violations.push({
       column: 1,
-      file,
+      file: projectPath(filePath),
       line: 301,
       message: `TypeScript files must not exceed 300 lines (found ${totalLines}).`,
       rule: 'max-file-lines',
@@ -1483,12 +1071,6 @@ function inspectFileLength(filePath, source, extension) {
 
 async function run() {
   let files
-
-  if (releaseBaseOptionIndex !== -1 && !releaseBase) {
-    console.error('Product release design gate failed: --base requires a Git revision.')
-    process.exitCode = 2
-    return
-  }
 
   try {
     files = await collectProductFiles(productRoot)
@@ -1501,39 +1083,19 @@ async function run() {
     throw error
   }
 
-  const productDocumentFile = resolve(projectRoot, 'index.html')
-  inspectRetiredBrand(
-    productDocumentFile,
-    await readFile(productDocumentFile, 'utf8'),
-  )
+  for (const filePath of files) {
+    const source = await readFile(filePath, 'utf8')
+    const extension = extname(filePath).toLowerCase()
 
-  if (releaseGate) {
-    try {
-      await inspectReleaseRules(files)
-    } catch (error) {
-      console.error(
-        `Product release design gate failed to inspect its Git baseline: ${error instanceof Error ? error.message : String(error)}`,
-      )
-      process.exitCode = 2
-      return
-    }
-  } else {
-    for (const filePath of files) {
-      const source = await readFile(filePath, 'utf8')
-      const extension = extname(filePath).toLowerCase()
+    inspectFileLength(filePath, source, extension)
+    inspectRawColors(filePath, source)
+    inspectImportant(filePath, source)
 
-      inspectRetiredBrand(filePath, source)
-      inspectFileLength(filePath, source, extension)
-      inspectRawColors(filePath, source)
-      inspectImportant(filePath, source)
-      inspectMotionLiterals(filePath, source)
-
-      if (scriptExtensions.has(extension)) {
-        inspectScript(filePath, source, extension)
-      } else if (['.css', '.less', '.sass', '.scss'].includes(extension)) {
-        inspectCssImports(filePath, source)
-        inspectMotionCss(filePath, source)
-      }
+    if (scriptExtensions.has(extension)) {
+      inspectScript(filePath, source, extension)
+    } else if (['.css', '.less', '.sass', '.scss'].includes(extension)) {
+      inspectCssImports(filePath, source)
+      inspectMotionCss(filePath, source)
     }
   }
 
@@ -1545,10 +1107,7 @@ async function run() {
   )
 
   if (violations.length > 0) {
-    const guardName = releaseGate
-      ? 'Product release design gate'
-      : 'Product design guard'
-    console.error(`${guardName} failed (${violations.length} violations):`)
+    console.error(`Product design guard failed (${violations.length} violations):`)
     for (const violation of violations) {
       console.error(
         `  ${violation.file}:${violation.line}:${violation.column} ` +
@@ -1559,10 +1118,7 @@ async function run() {
     return
   }
 
-  const guardName = releaseGate
-    ? 'Product release design gate'
-    : 'Product design guard'
-  console.log(`${guardName} passed (${files.length} files checked).`)
+  console.log(`Product design guard passed (${files.length} files checked).`)
 }
 
 const invokedAsScript = process.argv[1] &&

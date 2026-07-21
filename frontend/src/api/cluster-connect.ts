@@ -2,7 +2,6 @@ import { apiRequest, type ApiPath } from "./client";
 import {
   clusterConnectResponseSchema,
   clusterConnectStatusResponseSchema,
-  type ClusterConnectEnvironment,
   type ClusterConnectProvider,
   type ClusterConnectResponse,
   type ClusterConnectStatusResponse,
@@ -10,11 +9,7 @@ import {
 import { encodePathSegment } from "./url";
 
 export function connectCluster(
-  input: {
-    environment: ClusterConnectEnvironment;
-    name: string;
-    provider: ClusterConnectProvider;
-  },
+  input: { name: string; provider: ClusterConnectProvider },
   signal?: AbortSignal,
 ): Promise<ClusterConnectResponse> {
   return apiRequest("/api/clusters/connect" as ApiPath, clusterConnectResponseSchema, {

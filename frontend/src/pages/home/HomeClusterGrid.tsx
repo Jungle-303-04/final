@@ -1,68 +1,40 @@
 import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
-import type {
-  HomeClusterChoice,
-  HomeClusterOverview,
-  HomeUsageSnapshot,
-} from "../../features/home/homeContract";
+import type { HomeClusterChoice } from "../../features/home/homeContract";
 import { useI18n } from "../../shared/i18n";
-import type { DisconnectPhase } from "../clusters/ClusterDisconnectDialog";
+import { Surface } from "../../shared/ui/Surface";
 import { ClusterCard } from "../clusters/ClusterCard";
 import { clusterResourcesHref } from "../clusters/clusterNavigation";
-import type { HomeResourceState } from "./homePageStateModel";
 
-export function HomeClusterGrid({
-  clusters,
-  disconnectClusterId,
-  disconnectPhase,
-  onDisconnect,
-  onRefresh,
-  overviews = {},
-}: {
-  clusters: HomeClusterChoice[];
-  disconnectClusterId?: string | null;
-  disconnectPhase?: DisconnectPhase;
-  onDisconnect?: (cluster: HomeClusterChoice) => void;
-  onRefresh?: () => void;
-  overviews?: Readonly<Record<string, HomeResourceState<HomeClusterOverview>>>;
-}) {
+export function HomeClusterGrid({ clusters }: { clusters: HomeClusterChoice[] }) {
   const filter = useUnifiedFilter();
   const { t } = useI18n();
   return (
-    <section
+    <Surface
       aria-label={t("home.cluster.grid.aria")}
-      className="min-w-0"
+      className="min-w-0 overflow-hidden"
     >
+      <div className="border-b px-4 py-3">
+        <h2 className="text-base font-semibold">{t("home.cluster.grid.title")}</h2>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {t("home.cluster.grid.description")}
+        </p>
+      </div>
       <div
-        className="grid gap-3.5 md:grid-cols-2"
+        className="grid gap-4 p-4 md:grid-cols-2 2xl:grid-cols-3"
         data-slot="home-cluster-grid"
       >
         {clusters.map((cluster, index) => (
-          <div
-            className="min-w-0"
-            data-slot="home-cluster-cell"
+          <ClusterCard
+            cluster={{
+              ...cluster,
+              openIncidentCount: cluster.openIncidentCount ?? cluster.incidentCount,
+            }}
+            href={clusterResourcesHref(filter.state, cluster.id)}
+            index={index}
             key={cluster.id}
-          >
-            <ClusterCard
-              cluster={{
-                ...cluster,
-                openIncidentCount: cluster.openIncidentCount ?? cluster.incidentCount,
-              }}
-              href={clusterResourcesHref(filter.state, cluster.id)}
-              index={index}
-              disconnectPhase={disconnectClusterId === cluster.id ? disconnectPhase : undefined}
-              onDisconnect={onDisconnect ? () => onDisconnect(cluster) : undefined}
-              onRefresh={onRefresh}
-              usage={overviewUsage(overviews[cluster.id])}
-            />
-          </div>
+          />
         ))}
       </div>
-    </section>
+    </Surface>
   );
-}
-
-function overviewUsage(
-  overview: HomeResourceState<HomeClusterOverview> | undefined,
-): HomeUsageSnapshot | null {
-  return overview?.phase === "ready" ? overview.data.usage : null;
 }

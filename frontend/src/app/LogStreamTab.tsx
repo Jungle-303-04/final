@@ -37,29 +37,9 @@ export function LogStreamTab({
           {t("shell.dock.endReason", { reason: tab.endReason })}
         </p>
       ) : null}
-      {tab.status === "ended" && tab.lines.length === 0 && tab.diagnostic ? (
-        <Alert className="m-3">
-          <AlertDescription className="grid gap-2">
-            <span>{t(tab.diagnostic.code === "no_matching_pods"
-              ? "shell.dock.diagnostic.noPods"
-              : "shell.dock.diagnostic.noLines")}</span>
-            <div>
-              <Button onClick={onRetry} size="sm" type="button" variant="outline">
-                {t("shell.dock.retry")}
-              </Button>
-            </div>
-          </AlertDescription>
-        </Alert>
-      ) : null}
       {tab.pods.length > 0 ? (
         <p className="truncate border-b px-3 py-1 text-xs text-muted-foreground">
           {t("shell.dock.pods", { count: tab.pods.length })}: {tab.pods.join(", ")}
-        </p>
-      ) : null}
-      {tab.containers.length > 0 ? (
-        <p className="truncate border-b px-3 py-1 text-xs text-muted-foreground">
-          {t("shell.dock.containers", { count: tab.containers.length })}:{" "}
-          {tab.containers.join(", ")}
         </p>
       ) : null}
       <LogViewer lines={tab.lines} received={tab.received} targetName={tab.target.name} />

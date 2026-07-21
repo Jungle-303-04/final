@@ -4,12 +4,10 @@ import {
   useMemo,
   useRef,
 } from "react";
-import { Clock } from "lucide-react";
 import { useI18n, type I18nController } from "../../shared/i18n";
 import type { MessageKey } from "../../shared/i18n/types";
 import { ProductFloatingActionAvoidance } from "../../shared/ui/ProductFloatingActionAvoidance";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
-import { ProductSurfaceTitle } from "../../shared/ui/ProductSurfaceTitle";
 import { LiveStatusDot, type LiveStatusDotTone } from "../../shared/ui/LiveStatusDot";
 import { Button } from "../../shared/ui/primitives/button";
 import {
@@ -47,15 +45,12 @@ import { useTimelineOverviewFrame } from "./useTimelineOverviewFrame";
 import { useTimelinePins, type TimelinePinsController } from "./useTimelinePins";
 import { filterTimelineEventsForLens, resolveTimelineLens } from "./timelineStripModel";
 import type { TimelineLens } from "../../features/filters/timelineUrlState";
-import { EMPTY_RCA_CONTEXT_PORT, type RcaContextPort } from "../../features/issues/rcaContextContract";
 
 export function TimelineSurface({
   port,
-  rcaContextPort = EMPTY_RCA_CONTEXT_PORT,
   scopes,
 }: {
   port: TimelinePort;
-  rcaContextPort?: RcaContextPort;
   scopes: readonly ClusterScope[];
 }) {
   const { formatDate, formatNumber, t } = useI18n();
@@ -123,10 +118,12 @@ export function TimelineSurface({
   const timeline = useTimelineDataFrame(port, query);
 
   return (
-    <ProductPageFrame className="gap-4">
-      <header className="flex min-w-0 items-center gap-2.5">
-        <ProductSurfaceTitle icon={Clock} title={t("timeline.title")} />
-        <p className="sr-only">{t("timeline.description")}</p>
+    <ProductPageFrame>
+      <header className="grid min-w-0 gap-1">
+        <h2 className="text-2xl font-semibold tracking-tight">{t("timeline.title")}</h2>
+        <p className="max-w-2xl text-sm text-muted-foreground">
+          {t("timeline.description")}
+        </p>
       </header>
       <TimelineToolbar
         capabilities={capabilities}
@@ -168,7 +165,6 @@ export function TimelineSurface({
           lens={normalizedState.lens}
           coverageSources={overview.frame.phase === "ready" ? overview.frame.overview.coverageSources : []}
           pins={pinsSupported ? pins : null}
-          rcaContextPort={rcaContextPort}
           onRetry={timeline.retry}
           onSelectedEventKeyChange={url.setSelectedEventKey}
           selectedEventKey={normalizedState.selectedEventKey}
@@ -236,7 +232,6 @@ function TimelineDataBoundary({
   lens,
   coverageSources,
   pins,
-  rcaContextPort,
   onRetry,
   onSelectedEventKeyChange,
   selectedEventKey,
@@ -251,7 +246,6 @@ function TimelineDataBoundary({
   lens: TimelineLens;
   coverageSources: readonly import("../../features/timeline/timelineContract").TimelineCoverageSourceAvailability[];
   pins: TimelinePinsController | null;
-  rcaContextPort: RcaContextPort;
   onRetry: () => void;
   onSelectedEventKeyChange: (sourceKey: string | null) => void;
   selectedEventKey: string | null;
@@ -260,11 +254,11 @@ function TimelineDataBoundary({
   viewMode: TimelineViewMode;
 }) {
   if (frame.phase === "loading") {
-    return <p aria-live="polite" className="grid min-h-64 place-items-center rounded-card border bg-card p-6 text-sm text-muted-foreground" role="status">{t("timeline.loading")}</p>;
+    return <p aria-live="polite" className="rounded-xl border bg-card p-6 text-sm text-muted-foreground" role="status">{t("timeline.loading")}</p>;
   }
   if (frame.phase === "failed") {
     return (
-      <section className="grid min-h-64 content-center gap-3 rounded-card border border-destructive/40 bg-destructive/5 p-6" role="alert">
+      <section className="grid gap-3 rounded-xl border border-destructive/40 bg-destructive/5 p-6" role="alert">
         <div>
           <h3 className="font-semibold">{t("timeline.error.title")}</h3>
           <p className="mt-1 text-sm text-muted-foreground">{t("timeline.error.description")}</p>
@@ -282,7 +276,6 @@ function TimelineDataBoundary({
       lens={lens}
       coverageSources={coverageSources}
       pins={pins}
-      rcaContextPort={rcaContextPort}
       onRetry={onRetry}
       onSelectedEventKeyChange={onSelectedEventKeyChange}
       selectedEventKey={selectedEventKey}
@@ -301,7 +294,6 @@ function TimelineReadyData({
   lens,
   coverageSources,
   pins,
-  rcaContextPort,
   onRetry,
   onSelectedEventKeyChange,
   selectedEventKey,
@@ -316,7 +308,6 @@ function TimelineReadyData({
   lens: TimelineLens;
   coverageSources: readonly import("../../features/timeline/timelineContract").TimelineCoverageSourceAvailability[];
   pins: TimelinePinsController | null;
-  rcaContextPort: RcaContextPort;
   onRetry: () => void;
   onSelectedEventKeyChange: (sourceKey: string | null) => void;
   selectedEventKey: string | null;
@@ -410,13 +401,6 @@ function TimelineReadyData({
             <TimelineRetryableFailure onRetry={onRetry} t={t} />
           )
         ) : <TimelineStreamStatus onRetry={onRetry} stream={frame.stream} t={t} />}
-        {snapshot.truncated ? (
-          <p aria-live="polite" className="text-sm text-muted-foreground" role="status">
-            {t("timeline.truncated", {
-              count: formatNumber(snapshot.events.length),
-            })}
-          </p>
-        ) : null}
         <TimelineCoverageNotice coverage={lensCoverage} formatDate={formatDate} t={t} />
         {lensEvents.length === 0 ? (
           <TimelineEmptyState
@@ -451,7 +435,6 @@ function TimelineReadyData({
         onClose={closeEvent}
         onNavigate={(direction) => { if (selectedEvent !== null) navigateEvent(selectedEvent, direction); }}
         pins={pins}
-        rcaContextPort={rcaContextPort}
         t={t}
       />
     </>
@@ -480,7 +463,7 @@ function TimelineEmptyState({
     : hasAppliedFilters(filters)
       ? "timeline.empty.filtered"
       : "timeline.empty.quiet";
-  return <p className="grid min-h-64 place-items-center rounded-card border bg-card p-6 text-center text-sm text-muted-foreground">{t(key)}</p>;
+  return <p className="rounded-xl border bg-card p-6 text-sm text-muted-foreground">{t(key)}</p>;
 }
 
 function hasAppliedFilters(filters: TimelineQuery["filters"]): boolean {

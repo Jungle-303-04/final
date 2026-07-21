@@ -37,7 +37,7 @@ describe("ResourcesPage S9 relationship topology", () => {
     const user = userEvent.setup();
     const relationPort = resourcesRelationTopologyPort();
     renderEnglishResources(
-      "/resources?clusters=cluster-1&applications=checkout&view=map",
+      "/resources?clusters=cluster-1&applications=checkout",
       relationPort,
     );
 
@@ -48,7 +48,7 @@ describe("ResourcesPage S9 relationship topology", () => {
     )).toBeTruthy();
     expect(document.querySelector('[data-slot="resources-graph-shell"]')
       ?.getAttribute("data-view")).toBe("relations");
-    expect(readResourcesQuery().get("view")).toBe("map");
+    expect(readResourcesQuery().has("view")).toBe(false);
     expect(relationPort.loadRelationTopology).toHaveBeenCalledWith(
       expect.objectContaining({
         common: expect.objectContaining({ applications: ["checkout"] }),
@@ -62,9 +62,6 @@ describe("ResourcesPage S9 relationship topology", () => {
     expect(screen.getByText(
       "The current filters work better as a relationship graph.",
     )).toBeTruthy();
-    expect(document.querySelector('[data-slot="topology-overlay-bar"]')).toBeTruthy();
-    expect(document.querySelector('[data-slot="resources-graph-auto-hint"]')?.className)
-      .toContain("motion-topology-overlay");
     await waitFor(() => expect(vi.mocked(window.setTimeout)).toHaveBeenCalledWith(
       expect.any(Function),
       6_000,
@@ -79,7 +76,7 @@ describe("ResourcesPage S9 relationship topology", () => {
   it("pins a manual view in the URL and preserves the same Pod morph identity", async () => {
     const user = userEvent.setup();
     renderEnglishResources(
-      "/resources?clusters=cluster-1&resources.types=pod&view=map",
+      "/resources?clusters=cluster-1&resources.types=pod",
       resourcesRelationTopologyPort(),
     );
 
@@ -113,7 +110,7 @@ describe("ResourcesPage S9 relationship topology", () => {
     expect(podNode.getAttribute("data-selected")).toBe("true");
   });
 
-  it("marks the graph busy instead of presenting a retained scene under a new filter", async () => {
+  it("keeps the old ready scene until a filter-derived target can run the Pod FLIP", async () => {
     const physicalPending = deferred<typeof PHYSICAL_TOPOLOGY>();
     const relationPending = deferred<RelationTopologySnapshot>();
     const relationTopology = relationSnapshot();
@@ -127,42 +124,38 @@ describe("ResourcesPage S9 relationship topology", () => {
         .mockResolvedValueOnce(relationTopology)
         .mockImplementationOnce(() => relationPending.promise),
     });
+    const bounds = vi.spyOn(Element.prototype, "getBoundingClientRect")
+      .mockReturnValue(domRect());
+    const animate = vi.fn(() => ({ cancel: vi.fn() } as unknown as Animation));
+    Object.defineProperty(HTMLElement.prototype, "animate", {
+      configurable: true,
+      value: animate,
+    });
     const rendered = renderEnglishResources(
-      "/resources?clusters=cluster-1&resources.types=pod&view=map",
+      "/resources?clusters=cluster-1&resources.types=pod",
       relationPort,
       physicalPort,
     );
 
     expect(await screen.findByRole("article", { name: "Server worker-a" })).toBeTruthy();
-    await waitFor(() => expect(relationPort.loadRelationTopology).toHaveBeenCalledOnce());
-    expect(relationPort.loadRelationTopology).toHaveBeenNthCalledWith(
-      1,
-      expect.objectContaining({
-        resources: expect.objectContaining({
-          types: expect.arrayContaining(["service", "configmap", "secret", "application"]),
-        }),
-      }),
-      {},
-      expect.any(AbortSignal),
-    );
+    expect(relationPort.loadRelationTopology).not.toHaveBeenCalled();
     await act(async () => {
       await rendered.router.navigate(
-        "/resources?clusters=cluster-1&applications=checkout&view=map",
+        "/resources?clusters=cluster-1&applications=checkout",
       );
     });
-    await waitFor(() => expect(relationPort.loadRelationTopology).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(relationPort.loadRelationTopology).toHaveBeenCalledOnce());
     expect(physicalPort.loadPhysicalTopology).toHaveBeenCalledTimes(2);
-    expect(document.querySelector('[data-morph-id="pod:pod:shop/checkout-api-0"]')).toBeNull();
-    expect(document.querySelector('[data-slot="resources-graph-shell"]')
-      ?.getAttribute("aria-busy")).toBe("true");
+    expect(document.querySelector('[data-morph-id="pod:pod:shop/checkout-api-0"]'))
+      .toBeTruthy();
 
     await act(async () => {
       relationPending.resolve(relationTopology);
       await relationPending.promise;
     });
     expect(await screen.findByText("Resource relationships")).toBeTruthy();
-    expect(document.querySelector('[data-slot="resources-graph-shell"]')
-      ?.getAttribute("aria-busy")).toBe("false");
+    await waitFor(() => expect(animate).toHaveBeenCalled());
+    expect(bounds).toHaveBeenCalled();
   });
 
   it("lets an explicit physical pin override automatic relation derivation", async () => {
@@ -199,7 +192,7 @@ describe("ResourcesPage S9 relationship topology", () => {
       }),
     });
     const partial = renderEnglishResources(
-      "/resources?clusters=cluster-1&applications=checkout&view=map",
+      "/resources?clusters=cluster-1&applications=checkout",
       partialPort,
     );
 
@@ -224,7 +217,7 @@ describe("ResourcesPage S9 relationship topology", () => {
       }),
     });
     renderEnglishResources(
-      "/resources?clusters=cluster-1&applications=checkout&view=map",
+      "/resources?clusters=cluster-1&applications=checkout",
       unavailablePort,
     );
 
@@ -264,30 +257,8 @@ function relationSnapshot(): RelationTopologySnapshot {
     graphRevision: "graph-test",
     refreshAfterSeconds: 60,
     nodes: [
-      {
-        id: "deployment:shop/checkout-api",
-        identity: {
-          resourceType: "workload",
-          kind: "Deployment",
-          namespace: "shop",
-          name: "checkout-api",
-        },
-        kind: "Deployment",
-        name: "checkout-api",
-        status: "Ready",
-      },
-      {
-        id: "pod:shop/checkout-api-0",
-        identity: {
-          resourceType: "pod",
-          kind: "Pod",
-          namespace: "shop",
-          name: "checkout-api-0",
-        },
-        kind: "Pod",
-        name: "checkout-api-0",
-        status: "CrashLoopBackOff",
-      },
+      { id: "deployment:shop/checkout-api", kind: "Deployment", name: "checkout-api", status: "Ready" },
+      { id: "pod:shop/checkout-api-0", kind: "Pod", name: "checkout-api-0", status: "CrashLoopBackOff" },
     ],
     edges: [
       { from: "deployment:shop/checkout-api", to: "pod:shop/checkout-api-0", type: "owns" },
@@ -311,6 +282,20 @@ function relationSnapshot(): RelationTopologySnapshot {
       stale: false,
       partialReasonCodes: [],
     },
+  };
+}
+
+function domRect(): DOMRect {
+  return {
+    bottom: 24,
+    height: 24,
+    left: 0,
+    right: 24,
+    top: 0,
+    width: 24,
+    x: 0,
+    y: 0,
+    toJSON: () => ({}),
   };
 }
 

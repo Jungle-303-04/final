@@ -4,6 +4,7 @@ import { ApiError } from "./client";
 import {
   appendAiMessage,
   createAiConversation,
+  deleteAiConversation,
   getAiConversation,
   listAiConversations,
 } from "./ai-conversations";
@@ -21,6 +22,10 @@ function jsonResponse(payload: unknown, status = 200): Response {
     status,
     headers: { "content-type": "application/json" },
   });
+}
+
+function emptyResponse(status = 204): Response {
+  return new Response(null, { status });
 }
 
 describe("AI conversation API", () => {
@@ -49,7 +54,7 @@ describe("AI conversation API", () => {
         jsonResponse({
           conversation: { conversation_id: "aic/123", status: "waiting" },
           messages: [{ role: "user", content: "Why is the Pod restarting?" }],
-          limit: 100,
+          limit: 50,
           has_more: false,
           next_cursor: null,
           messages_completeness: "complete",
@@ -60,32 +65,6 @@ describe("AI conversation API", () => {
     await getAiConversation("aic/123");
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/ai/conversations/aic%2F123",
-      expect.objectContaining({ method: "GET" }),
-    );
-  });
-
-  it("passes bounded message pagination without changing the conversation identity", async () => {
-    const fetchMock = vi
-      .spyOn(globalThis, "fetch")
-      .mockResolvedValue(
-        jsonResponse({
-          conversation: { conversation_id: "aic-123" },
-          messages: [],
-          limit: 50,
-          has_more: true,
-          next_cursor: "next-page",
-          messages_completeness: "partial",
-          partial_reason_codes: ["bounded_message_history"],
-        }),
-      );
-
-    await getAiConversation("aic-123", undefined, {
-      limit: 50,
-      cursor: "current/page",
-    });
-
-    expect(fetchMock).toHaveBeenCalledWith(
-      "/api/ai/conversations/aic-123?limit=50&cursor=current%2Fpage",
       expect.objectContaining({ method: "GET" }),
     );
   });
@@ -166,13 +145,52 @@ describe("AI conversation API", () => {
     const fetchMock = vi.spyOn(globalThis, "fetch");
 
     expect(() => getAiConversation(" ")).toThrow("conversationId must not be empty");
-    expect(() => getAiConversation("aic-123", undefined, { limit: 201 })).toThrow(
-      "AI conversation page limit must be between 1 and 200",
-    );
-    expect(() => getAiConversation("aic-123", undefined, { cursor: " " })).toThrow(
-      "AI conversation cursor must not be empty",
-    );
     await expect(appendAiMessage(" ", { message: "Continue" })).rejects.toThrow(
+      "conversationId must not be empty",
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("deletes a conversation and accepts the 204 response", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(emptyResponse());
+    const controller = new AbortController();
+
+    await expect(deleteAiConversation("aic/123", controller.signal)).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const [path, init] = fetchMock.mock.calls[0] ?? [];
+    const headers = new Headers(init?.headers);
+    expect(path).toBe("/api/ai/conversations/aic%2F123");
+    expect(init).toMatchObject({
+      method: "DELETE",
+      credentials: "include",
+      signal: controller.signal,
+    });
+    expect(init?.body).toBeUndefined();
+    expect(headers.get("accept")).toBe("application/json");
+    expect(headers.get("x-service-csrf")).toBe("same-origin");
+  });
+
+  it("preserves AbortError and does not retry a possibly-sent deletion", async () => {
+    const abortError = new DOMException("Aborted", "AbortError");
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockRejectedValue(abortError);
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      deleteAiConversation("aic-123", controller.signal),
+    ).rejects.toBe(abortError);
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/ai/conversations/aic-123",
+      expect.objectContaining({ signal: controller.signal }),
+    );
+  });
+
+  it("rejects an empty conversation id before making a request", () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+    expect(() => deleteAiConversation(" ")).toThrow(
       "conversationId must not be empty",
     );
     expect(fetchMock).not.toHaveBeenCalled();
@@ -202,4 +220,47 @@ describe("AI conversation API", () => {
     } satisfies Partial<ApiError>);
   });
 
+  it("preserves a delete error", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse({ detail: "conversation not found" }, 404),
+    );
+
+    await expect(deleteAiConversation("missing")).rejects.toMatchObject({
+      kind: "not-found",
+      status: 404,
+      detail: "conversation not found",
+    } satisfies Partial<ApiError>);
+  });
+
+  it.each([
+    [401, "unauthorized"],
+    [403, "forbidden"],
+    [409, "http"],
+    [422, "invalid-request"],
+    [429, "rate-limited"],
+  ] as const)(
+    "preserves a structured %i delete error",
+    async (status, kind) => {
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify({
+          detail: {
+            code: `delete_${status}`,
+            detail: `delete failed with ${status}`,
+            ...(status === 429 ? { retry_after: 7 } : {}),
+          },
+        }), {
+          status,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+
+      await expect(deleteAiConversation("aic-123")).rejects.toMatchObject({
+        code: `delete_${status}`,
+        detail: `delete failed with ${status}`,
+        kind,
+        retryAfter: status === 429 ? 7 : null,
+        status,
+      } satisfies Partial<ApiError>);
+    },
+  );
 });

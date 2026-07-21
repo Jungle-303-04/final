@@ -24,7 +24,7 @@ describe("ResourcesPage unified-filter detail identity", () => {
     const port = resourcesPort();
     const view = renderEnglishResources(
       port,
-      "/resources?clusters=cluster-1&resources.types=pod&view=list",
+      "/resources?clusters=cluster-1&resources.types=pod",
     );
     const row = await screen.findByRole("button", { name: "Open details for checkout-api-0" });
     fireEvent.click(row);
@@ -95,15 +95,14 @@ describe("ResourcesPage unified-filter detail identity", () => {
     expect(screen.getByRole("dialog", { name: "checkout-api-0 details" })).toBeTruthy();
     expectDetailQueryPreserved(readResourcesQuery());
     expect(port.loadResourceDetail).toHaveBeenCalledTimes(1);
-    await waitFor(() => {
-      const forwarded = lastFilterState(vi.mocked(filterPort.listResourcePage));
-      if (key === "resources.q") expect(forwarded.resources.query).toBe(value);
-      if (key === "namespaces") {
-        expect(forwarded.common.namespaces).toEqual([
-          { clusterId: "cluster-1", namespace: "ops" },
-        ]);
-      }
-    });
+    await waitFor(() => expect(filterPort.listResourcePage).toHaveBeenCalled());
+    const forwarded = lastFilterState(vi.mocked(filterPort.listResourcePage));
+    if (key === "resources.q") expect(forwarded.resources.query).toBe(value);
+    if (key === "namespaces") {
+      expect(forwarded.common.namespaces).toEqual([
+        { clusterId: "cluster-1", namespace: "ops" },
+      ]);
+    }
   }, 15_000);
 
   it("keeps collection controls in the list column and out of the detail panel", async () => {
@@ -126,7 +125,7 @@ describe("ResourcesPage unified-filter detail identity", () => {
     const filterPort = resourcesFilterPort();
     renderEnglishResources(
       port,
-      "/resources/node?cluster=cluster-1&clusters=cluster-1&resources.types=pod&view=list",
+      "/resources/node?cluster=cluster-1&clusters=cluster-1&resources.types=pod",
       resourcesClusterPort(),
       filterPort,
     );

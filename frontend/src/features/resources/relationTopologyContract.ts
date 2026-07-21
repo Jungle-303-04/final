@@ -4,14 +4,12 @@ import type {
   ResourcesFilterCounts,
   ResourcesFilterSnapshot,
 } from "./resourcesFilterContract";
-import type { ResourceIdentity } from "./resourcesContract";
 
 export type RelationTopologyEdgeType = "owns" | "runs_on" | "selects" | "routes_to";
 export type RelationTopologyAvailability = "available" | "unavailable";
 
 export interface RelationTopologyNode {
   id: string;
-  identity: ResourceIdentity;
   kind: string;
   name: string;
   status: string;

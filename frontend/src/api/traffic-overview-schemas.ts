@@ -1,19 +1,26 @@
 import { z } from "zod";
 
-import type { TrafficOverviewEndpoint } from "../features/traffic/trafficEndpointContract";
-
-const availabilitySchema = z.enum(["available", "partial", "unavailable"]);
-const observedAvailabilitySchema = z.enum(["available", "partial"]);
-const freshnessSchema = z.enum(["live", "stale", "partial", "disconnected"]);
-const reasonCodesSchema = z.array(z.string().min(1)).min(1);
-const observedReasonCodesSchema = z.array(z.string().min(1));
-
+// --- Literal aliases (packages.contracts.traffic.observations) ---
+export const trafficAvailabilitySchema = z.enum(["available", "partial", "unavailable"]);
 export const trafficSinceSchema = z.enum(["1m", "5m", "15m", "1h"]);
 export const trafficSortSchema = z.enum(["connections", "last_seen", "source", "destination"]);
 export const trafficSortOrderSchema = z.enum(["asc", "desc"]);
 export const trafficProtocolSchema = z.enum(["tcp", "udp", "http", "grpc", "dns", "unknown"]);
 export const trafficVerdictSchema = z.enum(["forwarded", "dropped", "error", "unknown"]);
 
+export type TrafficAvailability = z.infer<typeof trafficAvailabilitySchema>;
+export type TrafficSince = z.infer<typeof trafficSinceSchema>;
+export type TrafficSort = z.infer<typeof trafficSortSchema>;
+export type TrafficSortOrder = z.infer<typeof trafficSortOrderSchema>;
+export type TrafficProtocol = z.infer<typeof trafficProtocolSchema>;
+export type TrafficVerdict = z.infer<typeof trafficVerdictSchema>;
+
+// Freshness (packages.contracts.parity)
+const freshnessSchema = z.enum(["live", "stale", "partial", "disconnected"]);
+// tuple[str, ...] with a `()` default: the field is always emitted, so REQUIRED but may be empty.
+const reasonCodesSchema = z.array(z.string());
+
+// --- ClusterScope (packages.contracts.parity) ---
 export const trafficClusterScopeSchema = z.strictObject({
   workspace_id: z.string().min(1),
   cluster_id: z.string().min(1),
@@ -21,37 +28,79 @@ export const trafficClusterScopeSchema = z.strictObject({
   freshness: freshnessSchema,
 });
 
+// --- TrafficScopeCoverage ---
 export const trafficScopeCoverageSchema = z.strictObject({
-  availability: availabilitySchema,
+  availability: trafficAvailabilitySchema,
   scopes: z.array(trafficClusterScopeSchema),
   observed_at: z.string().min(1).nullable(),
-  reason_codes: z.array(z.string().min(1)),
+  reason_codes: reasonCodesSchema,
 }).superRefine((value, context) => {
   if (value.availability !== "available" && value.reason_codes.length === 0) {
     context.addIssue({ code: "custom", message: "incomplete traffic scope requires reasons" });
   }
 });
 
-const trafficUnavailableObservationStatusSchema = z.strictObject({
+// --- TrafficEndpoint ---
+export const trafficEndpointSchema = z.strictObject({
+  cluster_id: z.string().min(1),
+  name: z.string().min(1),
+  namespace: z.string().min(1).nullable(),
+  kind: z.string().min(1),
+  workload: z.string().min(1).nullable(),
+  service: z.string().min(1).nullable(),
+  ip: z.string().min(1).nullable(),
+  identity_stability: z.literal("provider_observed"),
+});
+
+// --- TrafficRelationship (flow item) ---
+export const trafficRelationshipSchema = z.strictObject({
+  flow_id: z.string().min(1),
+  source_key: z.string().min(1),
+  source: trafficEndpointSchema,
+  target: trafficEndpointSchema,
+  protocol: trafficProtocolSchema,
+  port: z.number().int().nullable(),
+  verdict: trafficVerdictSchema,
+  connections: z.number().int(),
+  bytes_sent: z.number().int().nullable(),
+  bytes_received: z.number().int().nullable(),
+  observed_at: z.string().min(1),
+});
+
+// --- Facets ---
+export const trafficProtocolFacetSchema = z.strictObject({
+  value: trafficProtocolSchema,
+  count: z.number().int(),
+});
+
+export const trafficVerdictFacetSchema = z.strictObject({
+  value: trafficVerdictSchema,
+  count: z.number().int(),
+});
+
+export const trafficFlowFacetsSchema = z.strictObject({
+  protocols: z.array(trafficProtocolFacetSchema),
+  verdicts: z.array(trafficVerdictFacetSchema),
+});
+
+// --- Observation: unavailable branch (TrafficObservationStatus) ---
+export const trafficObservationStatusSchema = z.strictObject({
   availability: z.literal("unavailable"),
   observed_at: z.null(),
   reason_codes: reasonCodesSchema,
 });
 
-const trafficObservedObservationStatusSchema = z.strictObject({
-  availability: observedAvailabilitySchema,
+// --- Observation: observed branch (TrafficObservedObservationStatus) ---
+export const trafficObservedObservationStatusSchema = z.strictObject({
+  availability: z.enum(["available", "partial"]),
   observed_at: z.string().min(1),
   since: trafficSinceSchema,
-  source_keys: z.array(z.string().min(1)).min(1).max(16),
-  reason_codes: observedReasonCodesSchema,
-}).superRefine(partialRequiresReason);
+  source_keys: z.array(z.string()),
+  reason_codes: reasonCodesSchema,
+});
 
-export const trafficObservationStatusSchema = z.union([
-  trafficObservedObservationStatusSchema,
-  trafficUnavailableObservationStatusSchema,
-]);
-
-const trafficUnavailableObservationSummarySchema = z.strictObject({
+// --- Summary: unavailable branch (TrafficObservationSummary) ---
+export const trafficObservationSummarySchema = z.strictObject({
   availability: z.literal("unavailable"),
   total_flow_count: z.null(),
   denied_flow_count: z.null(),
@@ -59,149 +108,51 @@ const trafficUnavailableObservationSummarySchema = z.strictObject({
   reason_codes: reasonCodesSchema,
 });
 
-const trafficObservedObservationSummarySchema = z.strictObject({
-  availability: observedAvailabilitySchema,
-  total_flow_count: z.number().int().nonnegative().safe(),
-  denied_flow_count: z.number().int().nonnegative().safe(),
-  external_flow_count: z.number().int().nonnegative().safe(),
-  reason_codes: observedReasonCodesSchema,
-}).superRefine((value, context) => {
-  partialRequiresReason(value, context);
-  if (value.denied_flow_count > value.total_flow_count) {
-    context.addIssue({ code: "custom", message: "denied count exceeds total" });
-  }
-  if (value.external_flow_count > value.total_flow_count) {
-    context.addIssue({ code: "custom", message: "external count exceeds total" });
-  }
+// --- Summary: observed branch (TrafficObservedObservationSummary) ---
+export const trafficObservedObservationSummarySchema = z.strictObject({
+  availability: z.enum(["available", "partial"]),
+  total_flow_count: z.number().int(),
+  denied_flow_count: z.number().int(),
+  external_flow_count: z.number().int(),
+  reason_codes: reasonCodesSchema,
 });
 
-export const trafficObservationSummarySchema = z.union([
-  trafficObservedObservationSummarySchema,
-  trafficUnavailableObservationSummarySchema,
-]);
-
-export const trafficEndpointSchema = z.strictObject({
-  cluster_id: z.string().min(1),
-  name: z.string().min(1).max(512),
-  namespace: z.string().max(253).nullable(),
-  kind: z.string().min(1).max(120),
-  workload: z.string().max(253).nullable(),
-  service: z.string().max(253).nullable(),
-  ip: z.string().max(255).nullable(),
-  identity_stability: z.literal("provider_observed"),
-});
-
-export const trafficRelationshipSchema = z.strictObject({
-  flow_id: z.string().min(1).max(128),
-  source_key: z.string().min(1).max(80),
-  source: trafficEndpointSchema,
-  target: trafficEndpointSchema,
-  protocol: trafficProtocolSchema,
-  port: z.number().int().min(1).max(65_535).nullable(),
-  verdict: trafficVerdictSchema,
-  connections: z.number().int().nonnegative().safe(),
-  bytes_sent: z.number().int().nonnegative().safe().nullable(),
-  bytes_received: z.number().int().nonnegative().safe().nullable(),
-  observed_at: z.string().min(1),
-});
-
-const trafficFlowFacetsSchema = z.strictObject({
-  protocols: z.array(z.strictObject({
-    value: trafficProtocolSchema,
-    count: z.number().int().positive().safe(),
-  })).max(6),
-  verdicts: z.array(z.strictObject({
-    value: trafficVerdictSchema,
-    count: z.number().int().positive().safe(),
-  })).max(4),
-});
-
-const trafficUnavailableRelationshipsSchema = z.strictObject({
+// --- Relationships: unavailable branch (TrafficRelationships) ---
+export const trafficRelationshipsSchema = z.strictObject({
   availability: z.literal("unavailable"),
   edges: z.null(),
   reason_codes: reasonCodesSchema,
 });
 
-const trafficObservedRelationshipsSchema = z.strictObject({
-  availability: observedAvailabilitySchema,
-  edges: z.array(trafficRelationshipSchema).max(200),
-  total_count: z.number().int().nonnegative().safe(),
+// --- Relationships: observed branch (TrafficObservedRelationships) ---
+export const trafficObservedRelationshipsSchema = z.strictObject({
+  availability: z.enum(["available", "partial"]),
+  edges: z.array(trafficRelationshipSchema),
+  total_count: z.number().int(),
   has_more: z.boolean(),
-  next_cursor: z.string().min(1).max(8192).nullable(),
+  next_cursor: z.string().min(1).nullable(),
   facets: trafficFlowFacetsSchema,
-  reason_codes: observedReasonCodesSchema,
-}).superRefine((value, context) => {
-  partialRequiresReason(value, context);
-  if (value.edges.length > value.total_count) {
-    context.addIssue({ code: "custom", message: "flow page exceeds total" });
-  }
-  if (value.has_more !== (value.next_cursor !== null)) {
-    context.addIssue({ code: "custom", message: "flow cursor is inconsistent" });
-  }
+  reason_codes: reasonCodesSchema,
 });
 
-export const trafficRelationshipsSchema = z.union([
-  trafficObservedRelationshipsSchema,
-  trafficUnavailableRelationshipsSchema,
-]);
-
-export const trafficServiceMetricSchema = z.strictObject({
-  availability: availabilitySchema,
-  cluster_id: z.string().min(1),
-  namespace: z.string().max(253).nullable(),
-  service: z.string().min(1).max(512),
-  rate_per_second: z.number().nonnegative().nullable(),
-  rate_unit: z.enum(["requests", "flows"]).nullable(),
-  error_rate_pct: z.number().min(0).max(100).nullable(),
-  observed_at: z.string().min(1),
-  source_keys: z.array(z.string().min(1)).min(1).max(16),
-  reason_codes: z.array(z.string().min(1)),
-}).superRefine((metric, context) => {
-  if ((metric.rate_per_second === null) !== (metric.rate_unit === null)) {
-    context.addIssue({
-      code: "custom",
-      message: "traffic service rate requires its semantic unit",
-      path: ["rate_unit"],
-    });
-  }
-  if (metric.availability === "available") {
-    if (
-      metric.rate_per_second === null
-      || metric.error_rate_pct === null
-      || metric.reason_codes.length > 0
-    ) {
-      context.addIssue({
-        code: "custom",
-        message: "available traffic service metrics require complete evidence",
-      });
-    }
-  } else if (metric.reason_codes.length === 0) {
-    context.addIssue({
-      code: "custom",
-      message: "incomplete traffic service metrics require a reason",
-      path: ["reason_codes"],
-    });
-  }
-});
-
-export const trafficOverviewSchema: z.ZodType<TrafficOverviewEndpoint> = z.strictObject({
+// --- TrafficOverviewResponse ---
+export const trafficOverviewSchema = z.strictObject({
   scope_coverage: trafficScopeCoverageSchema,
-  observation: trafficObservationStatusSchema,
-  summary: trafficObservationSummarySchema,
-  relationships: trafficRelationshipsSchema,
-  // The console rolls before/after API workers during a release. Keep the new
-  // evidence projection additive so either revision remains readable in that window.
-  service_metrics: z.array(trafficServiceMetricSchema).default([]),
-  refresh_after_seconds: z.number().int().min(1).max(3_600),
+  observation: z.union([
+    trafficObservedObservationStatusSchema,
+    trafficObservationStatusSchema,
+  ]),
+  summary: z.union([
+    trafficObservedObservationSummarySchema,
+    trafficObservationSummarySchema,
+  ]),
+  relationships: z.union([
+    trafficObservedRelationshipsSchema,
+    trafficRelationshipsSchema,
+  ]),
+  refresh_after_seconds: z.number().int(),
 });
 
-export type { TrafficOverviewEndpoint } from "../features/traffic/trafficEndpointContract";
-
-function partialRequiresReason(
-  value: { availability: "available" | "partial"; reason_codes: string[] },
-  context: z.RefinementCtx,
-) {
-  if (value.availability === "partial" && value.reason_codes.length === 0) {
-    context.addIssue({ code: "custom", message: "partial traffic observation requires reasons" });
-  }
-}
+export type TrafficEndpoint = z.infer<typeof trafficEndpointSchema>;
+export type TrafficRelationship = z.infer<typeof trafficRelationshipSchema>;
+export type TrafficOverviewEndpoint = z.infer<typeof trafficOverviewSchema>;

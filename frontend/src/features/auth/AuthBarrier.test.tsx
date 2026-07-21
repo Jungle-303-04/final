@@ -21,14 +21,6 @@ import {
 } from "./authContract";
 
 const TEST_SESSION: ProductSession = {
-  authEnabled: true,
-  authMode: "password",
-  groups: [],
-  logout: {
-    action: "end_session",
-    supported: true,
-    reauthenticationExpected: false,
-  },
   userId: "operator-17",
   roles: ["viewer"],
   workspaceId: "workspace-main",
@@ -75,7 +67,7 @@ describe("AuthBarrier", () => {
 
     renderBarrier(port);
 
-    expect(await screen.findByRole("heading", { name: "Kyro에 로그인" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Opsia에 로그인" })).toBeTruthy();
     const email = screen.getByRole("textbox", { name: "아이디 또는 이메일" });
     const password = screen.getByLabelText("비밀번호");
     expect(email.getAttribute("type")).toBe("text");
@@ -179,7 +171,7 @@ describe("AuthBarrier", () => {
     expect(loadSession).toHaveBeenCalledOnce();
 
     await user.click(screen.getByRole("button", { name: "세션 다시 확인" }));
-    expect(await screen.findByRole("heading", { name: "Kyro에 로그인" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Opsia에 로그인" })).toBeTruthy();
     expect(loadSession).toHaveBeenCalledTimes(2);
   });
 
@@ -198,23 +190,7 @@ describe("AuthBarrier", () => {
     expect(screen.getByText("로그아웃 처리 중")).toBeTruthy();
 
     signOutResult.resolve();
-    expect(await screen.findByRole("heading", { name: "Kyro에 로그인" })).toBeTruthy();
-  });
-
-  it("installs switched session authority without another bootstrap read", async () => {
-    const nextSession = { ...TEST_SESSION, workspaceId: "workspace-next" };
-    const switchWorkspace = vi.fn().mockResolvedValue(nextSession);
-    const port = authPort({ switchWorkspace });
-    const user = userEvent.setup();
-    renderBarrier(port);
-
-    expect(await screen.findByText("workspace-main")).toBeTruthy();
-    await user.click(screen.getByRole("button", { name: "테스트 워크스페이스 전환" }));
-
-    expect(await screen.findByText("workspace-next")).toBeTruthy();
-    expect(switchWorkspace).toHaveBeenCalledOnce();
-    expect(switchWorkspace).toHaveBeenCalledWith("workspace-next", expect.any(AbortSignal));
-    expect(port.loadSession).toHaveBeenCalledOnce();
+    expect(await screen.findByRole("heading", { name: "Opsia에 로그인" })).toBeTruthy();
   });
 
   it("aborts an active session request after a real unmount", async () => {
@@ -245,13 +221,6 @@ function AuthenticatedProduct({ auth }: { auth: AuthenticatedAuthState }) {
           ? t(auth.signOutIssue.messageKey, auth.signOutIssue.messageParams)
           : null}</p>
       <button onClick={auth.onSignOut} type="button">테스트 로그아웃</button>
-      <p>{auth.session.workspaceId}</p>
-      <button
-        onClick={() => void auth.switchWorkspace("workspace-next")}
-        type="button"
-      >
-        테스트 워크스페이스 전환
-      </button>
     </main>
   );
 }
@@ -281,17 +250,13 @@ function renderBarrier(
 
 function authPort(overrides: Partial<AuthPort> = {}): AuthPort {
   return {
-    listWorkspaces: overrides.listWorkspaces ?? vi.fn().mockResolvedValue({
-      currentWorkspaceId: "workspace-1",
-      items: [],
-    }),
-    loadSession: overrides.loadSession ?? vi.fn().mockResolvedValue({
+    loadSession: vi.fn().mockResolvedValue({
       status: "authenticated",
       session: TEST_SESSION,
     }),
-    signIn: overrides.signIn ?? vi.fn().mockResolvedValue(TEST_SESSION),
-    signOut: overrides.signOut ?? vi.fn().mockResolvedValue(undefined),
-    switchWorkspace: overrides.switchWorkspace ?? vi.fn().mockResolvedValue(TEST_SESSION),
+    signIn: vi.fn().mockResolvedValue(TEST_SESSION),
+    signOut: vi.fn().mockResolvedValue(undefined),
+    ...overrides,
   };
 }
 

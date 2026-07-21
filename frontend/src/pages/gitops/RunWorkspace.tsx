@@ -8,7 +8,6 @@ import {
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import type {
-  ApprovalDecision,
   ReleaseApplication,
   ReleasePlan,
   ReleaseReadiness,
@@ -43,34 +42,22 @@ export function RunWorkspace({
   plan,
   applications,
   runs,
-  runsError,
-  runsLoading,
   readiness,
   pending,
   onCheckReadiness,
   onEdit,
   onStart,
   onAction,
-  onApprovalDecision,
-  onRetryRuns,
 }: {
   plan: ReleasePlan;
   applications: ReleaseApplication[];
   runs: ReleaseRun[];
-  runsError: unknown | null;
-  runsLoading: boolean;
   readiness?: ReleaseReadiness;
   pending: boolean;
   onCheckReadiness: () => void;
   onEdit: (stepIndex?: number, field?: StepSetupField) => void;
   onStart: () => void;
   onAction: (run: ReleaseRun, action: ReleaseRunAction) => void;
-  onApprovalDecision: (
-    run: ReleaseRun,
-    approvalId: string,
-    decision: ApprovalDecision,
-  ) => void;
-  onRetryRuns: () => void;
 }) {
   const { formatDate, t } = useI18n();
   const orderedRuns = useMemo(
@@ -109,20 +96,6 @@ export function RunWorkspace({
         </>}
         title={t("workflows.runs.title")}
       />
-
-      {runsError ? (
-        <div
-          className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-xl border border-tint-crit-border bg-tint-crit-bg px-3 py-2"
-          role="alert"
-        >
-          <span className="text-xs font-medium text-tint-crit-fg">
-            {t("workflows.runs.refreshError")}
-          </span>
-          <Button disabled={runsLoading} onClick={onRetryRuns} size="sm" type="button" variant="outline">
-            {runsLoading ? t("workflows.feedback.loading") : t("common.action.retry")}
-          </Button>
-        </div>
-      ) : null}
 
       {readiness ? (
         <Surface aria-label={t("workflows.runs.precheckTitle")} className="grid min-w-0 gap-4 p-4">
@@ -184,7 +157,7 @@ export function RunWorkspace({
                 >
                   <span className="flex min-w-0 items-center justify-between gap-2">
                     <strong className="min-w-0 truncate text-xs">{shortRunId(run.run_id)}</strong>
-                    <RunStatusBadge status={run.derived_status || run.status} />
+                    <RunStatusBadge status={run.status} />
                   </span>
                   <span className="text-[0.6875rem] text-muted-foreground">
                     {t("workflows.runs.currentWave", { current: run.current_wave, total: run.total_waves })}
@@ -206,16 +179,11 @@ export function RunWorkspace({
                     <h3 className="m-0 min-w-0 text-sm font-semibold [overflow-wrap:anywhere]">
                       {selectedRun.plan_name || plan.name}
                     </h3>
-                    <RunStatusBadge status={selectedRun.derived_status || selectedRun.status} />
+                    <RunStatusBadge status={selectedRun.status} />
                   </div>
                   <OverflowIdentity className="text-xs text-muted-foreground" value={selectedRun.run_id} />
                 </div>
-                <RunActions
-                  onAction={onAction}
-                  onApprovalDecision={onApprovalDecision}
-                  pending={pending}
-                  run={selectedRun}
-                />
+                <RunActions pending={pending} run={selectedRun} onAction={onAction} />
               </div>
 
               <dl className="grid min-w-0 gap-px border-b bg-border sm:grid-cols-3">

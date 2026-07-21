@@ -49,30 +49,6 @@ describe("resource table model", () => {
     expect(resourceTableSortValue(pod, "restarts")).toBe(7);
     expect("raw" in pod).toBe(false);
   });
-
-  it("sorts Pod and Node metric columns by the server-owned snapshot evidence", () => {
-    const pod = {
-      ...row(facts("pod")),
-      tableMetrics: {
-        kind: "pod" as const,
-        cpuMillicores: 750,
-        memoryMebibytes: 512,
-      },
-    } as ResourceSummary;
-    const node = {
-      ...row(facts("node")),
-      tableMetrics: {
-        kind: "node" as const,
-        cpuMillicores: 1750,
-        memoryMebibytes: 4096,
-      },
-    } as ResourceSummary;
-
-    expect(resourceTableSortValue(pod, "cpu")).toBe(750);
-    expect(resourceTableSortValue(pod, "memory")).toBe(512);
-    expect(resourceTableSortValue(node, "cpu")).toBe(1750);
-    expect(resourceTableSortValue(node, "memory")).toBe(4096);
-  });
 });
 
 function row(value: ResourceFacts): ResourceSummary {

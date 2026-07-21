@@ -39,11 +39,11 @@ describe("AiAssistantResizeHandle", () => {
     expect(panel?.style.getPropertyValue("--ai-width")).toBe("");
 
     frame?.(16);
-    expect(panel?.style.getPropertyValue("--ai-width")).toBe("581px");
+    expect(panel?.style.getPropertyValue("--ai-width")).toBe("451px");
 
     fireEvent.pointerUp(document, { clientX: 669, pointerId: 1 });
-    expect(onWidthCommit).toHaveBeenCalledWith(575);
-    expect(panel?.dataset.width).toBe("575");
+    expect(onWidthCommit).toHaveBeenCalledWith(460);
+    expect(panel?.dataset.width).toBe("460");
     expect(panel?.dataset.resizing).toBe("true");
 
     frame?.(32);
@@ -56,12 +56,12 @@ describe("AiAssistantResizeHandle", () => {
     renderHandle(onWidthCommit);
     const handle = screen.getByRole("separator", { name: "AI 패널 너비 조절" });
 
-    expect(handle.getAttribute("aria-valuemin")).toBe("475");
-    expect(handle.getAttribute("aria-valuemax")).toBe("700");
-    expect(handle.getAttribute("aria-valuenow")).toBe("550");
+    expect(handle.getAttribute("aria-valuemin")).toBe("360");
+    expect(handle.getAttribute("aria-valuemax")).toBe("640");
+    expect(handle.getAttribute("aria-valuenow")).toBe("420");
 
     fireEvent.keyDown(handle, { key: "ArrowLeft" });
-    expect(onWidthCommit).toHaveBeenCalledWith(575);
+    expect(onWidthCommit).toHaveBeenCalledWith(440);
   });
 });
 
@@ -76,8 +76,8 @@ function renderHandle(onWidthCommit: (width: number) => void) {
 function AiResizeFixture({ onWidthCommit }: { onWidthCommit: (width: number) => void }) {
   const hostRef = useRef<HTMLDivElement>(null);
   return (
-    <div className="motion-ai-panel" data-slot="ai-assistant-panel" data-width="550" ref={hostRef}>
-      <AiAssistantResizeHandle hostRef={hostRef} onWidthCommit={onWidthCommit} width={550} />
+    <div className="motion-ai-panel" data-slot="ai-assistant-panel" data-width="420" ref={hostRef}>
+      <AiAssistantResizeHandle hostRef={hostRef} onWidthCommit={onWidthCommit} width={420} />
     </div>
   );
 }

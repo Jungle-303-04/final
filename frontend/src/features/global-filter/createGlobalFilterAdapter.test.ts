@@ -11,26 +11,7 @@ describe("createGlobalFilterAdapter", () => {
       labels: [{ key: "team", value: "checkout", count: 2, count_completeness: "exact" as const }],
       resources: [{ id: "resource-a", label: "checkout-api", kind: "Deployment", count: 1, count_completeness: "exact" as const }],
     }));
-    const searchResourceIdentities = vi.fn(async () => ({
-      hits: [{
-        id: "resource-a",
-        cluster_id: "cluster-a",
-        resource_type: "workload",
-        resource: {
-          api_group: "apps",
-          version: "v1",
-          kind: "Deployment",
-          namespace: "shop",
-          name: "checkout-api",
-          uid: "uid-resource-a",
-        },
-        matched_fields: ["name"],
-      }],
-    }));
-    const adapter = createGlobalFilterAdapter({
-      listGlobalFilterFacets,
-      searchResourceIdentities,
-    });
+    const adapter = createGlobalFilterAdapter({ listGlobalFilterFacets });
     const selection = {
       clusters: ["cluster-a"],
       namespaces: [],
@@ -45,29 +26,8 @@ describe("createGlobalFilterAdapter", () => {
       { type: "application", id: "checkout", label: "Checkout", count: 3, count_completeness: "partial" },
       { type: "resourceType", id: "pod", label: "Pod", count: 12, count_completeness: "exact" },
       { type: "label", id: "team=checkout", label: "team=checkout", key: "team", value: "checkout", count: 2, count_completeness: "exact" },
-      {
-        type: "resource",
-        id: "resource-a",
-        label: "checkout-api",
-        count: 1,
-        count_completeness: "exact",
-        clusterId: "cluster-a",
-        resourceType: "workload",
-        resource: {
-          apiGroup: "apps",
-          version: "v1",
-          kind: "Deployment",
-          namespace: "shop",
-          name: "checkout-api",
-          uid: "uid-resource-a",
-        },
-        matchedFields: ["name"],
-      },
+      { type: "resource", id: "resource-a", label: "checkout-api", kind: "Deployment", count: 1, count_completeness: "exact" },
     ]);
     expect(listGlobalFilterFacets).toHaveBeenCalledWith({ ...selection, q: "check" }, undefined);
-    expect(searchResourceIdentities).toHaveBeenCalledWith(
-      { ...selection, q: "check", limit: 12 },
-      undefined,
-    );
   });
 });

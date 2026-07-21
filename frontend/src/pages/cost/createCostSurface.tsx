@@ -1,15 +1,11 @@
 import type { ComponentType } from "react";
 
 import type { CostPort } from "../../features/cost/costContract";
-import type { RightsizingPort } from "../../features/rightsizing/rightsizingContract";
 import { CostPage } from "./CostPage";
 
-export function createCostSurface(
-  port: CostPort,
-  rightsizingPort: RightsizingPort,
-): ComponentType {
+export function createCostSurface(port: CostPort): ComponentType {
   function CostSurface() {
-    return <CostPage port={port} rightsizingPort={rightsizingPort} />;
+    return <CostPage port={port} />;
   }
 
   CostSurface.displayName = "CostSurface";

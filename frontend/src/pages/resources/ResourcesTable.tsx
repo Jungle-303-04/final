@@ -38,13 +38,11 @@ export function ResourcesTable({
   items,
   metricHistory,
   onOpen,
-  onOpenManifest,
   registerRowButton,
 }: {
   items: ResourceSummary[];
   metricHistory: ResourceMetricsHistoryFrame;
   onOpen: (identity: ResourceIdentity) => void;
-  onOpenManifest: (identity: ResourceIdentity) => void;
   registerRowButton: (identity: ResourceIdentity, element: HTMLButtonElement | null) => void;
 }) {
   const { t } = useI18n();
@@ -68,7 +66,7 @@ export function ResourcesTable({
     return sort.direction === "asc" ? order : -order;
   }), [items, sort]);
 
-  useRowShortcuts(sorted, rowButtons, dock.openLogs, onOpenManifest);
+  useRowShortcuts(sorted, rowButtons, dock.openLogs);
 
   function updateSort(key: ResourceTableColumnKey) {
     setSort((current) => current.key === key
@@ -145,7 +143,6 @@ function useRowShortcuts(
   sorted: ResourceSummary[],
   rowButtons: RefObject<Map<string, HTMLButtonElement>>,
   openLogs: ReturnType<typeof useBottomDock>["openLogs"],
-  openManifest: (identity: ResourceIdentity) => void,
 ) {
   useEffect(() => {
     const handleShortcut = (event: Event) => {
@@ -166,9 +163,6 @@ function useRowShortcuts(
         buttons[buttons.length - 1]?.focus();
       } else if (detail.id === "resources:open-row") {
         (current >= 0 ? buttons[current] : buttons[0])?.click();
-      } else if (detail.id === "resources:open-yaml") {
-        const selected = current >= 0 ? sorted[current] : sorted[0];
-        if (selected) openManifest(identityOf(selected));
       } else if (detail.id === "resources:open-logs") {
         const selected = current >= 0 ? sorted[current] : undefined;
         const target = selected ? logStreamTargetFromResource(selected) : null;
@@ -177,7 +171,7 @@ function useRowShortcuts(
     };
     window.addEventListener(PRODUCT_SHORTCUT_EVENT, handleShortcut);
     return () => window.removeEventListener(PRODUCT_SHORTCUT_EVENT, handleShortcut);
-  }, [openLogs, openManifest, rowButtons, sorted]);
+  }, [openLogs, rowButtons, sorted]);
 }
 
 function SortableHead({

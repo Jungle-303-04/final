@@ -12,27 +12,11 @@ import {
 } from "./ApplicationsSurface.testSupport";
 import type { ApplicationCardModel, ApplicationsPort } from "./applicationsContract";
 
-afterEach(() => {
-  cleanup();
-  vi.useRealTimers();
-  Object.defineProperty(document, "visibilityState", {
-    configurable: true,
-    value: "visible",
-  });
-});
+afterEach(cleanup);
 
 describe("S10 Applications surface", () => {
-  it("localizes product controls while preserving server-owned identities", async () => {
-    renderApplications(applicationsPort(), "/applications", "ko");
-
-    const catalog = await screen.findByRole("region", { name: "애플리케이션" });
-    expect(within(catalog).getByRole("columnheader", { name: "애플리케이션" })).toBeTruthy();
-    expect(within(catalog).getByRole("button", { name: "상세 보기" })).toBeTruthy();
-    expect(within(catalog).getByText("checkout-api")).toBeTruthy();
-    expect(within(catalog).getByText("prod")).toBeTruthy();
-  });
-
-  it("forwards the canonical unified filter state into the dense default table", async () => {
+  it("forwards the canonical unified filter state and switches the same result set to table view", async () => {
+    const user = userEvent.setup();
     const port = applicationsPort();
     renderApplications(
       port,
@@ -52,6 +36,7 @@ describe("S10 Applications surface", () => {
     }, expect.any(AbortSignal));
     expect(screen.queryByRole("textbox")).toBeNull();
 
+    await user.click(screen.getByRole("button", { name: "Table view" }));
     expect(screen.getByRole("region", { name: "Applications" })).toBeTruthy();
     expect(within(screen.getByRole("row", { name: /checkout-api/ })).getByText("checkout-api")).toBeTruthy();
   });
@@ -66,15 +51,16 @@ describe("S10 Applications surface", () => {
     expect(await screen.findByText("No applications to show.")).toBeTruthy();
     const connectLink = screen.getByRole("link", { name: "Connect an application in GitOps" });
     expect(connectLink.tagName).toBe("A");
-    expect(connectLink.getAttribute("href")).toBe(
-      "/deploy?clusters=cluster-1&section=repositories",
-    );
+    expect(connectLink.getAttribute("href")).toBe("/gitops?clusters=cluster-1&mode=new");
 
-    connectLink.focus();
+    await user.tab();
+    await user.tab();
+    await user.tab();
+    await user.tab();
     expect(document.activeElement).toBe(connectLink);
     await user.keyboard("{Enter}");
     await waitFor(() => expect(screen.getByTestId("location").textContent)
-      .toBe("/deploy?clusters=cluster-1&section=repositories"));
+      .toBe("/gitops?clusters=cluster-1&mode=new"));
   });
 
   it("keeps the last catalog result visible while a manual refresh reports real progress", async () => {
@@ -153,55 +139,8 @@ describe("S10 Applications surface", () => {
     });
     await user.click(screen.getByRole("button", { name: "Refresh" }));
     view.unmount();
-    await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+    await Promise.resolve();
     expect(refreshSignal?.aborted).toBe(true);
-  });
-
-  it("refreshes the visible catalog on the shared application cadence and resumes after visibility", async () => {
-    vi.useFakeTimers();
-    const listApplications = vi.fn<ApplicationsPort["listApplications"]>()
-      .mockResolvedValue([APPLICATION_CARD]);
-    const loadApplicationsRefreshPolicy = vi.fn().mockResolvedValue({
-      staleAfterSeconds: 30,
-      refreshAfterSeconds: 7,
-      keepLastSuccess: true as const,
-      pauseWhenHidden: true as const,
-      eventInvalidation: false,
-      retryAfterSeconds: null,
-      retryLimit: null,
-      postMutationRefreshAfterSeconds: null,
-    });
-    renderApplications(applicationsPort({ listApplications, loadApplicationsRefreshPolicy }));
-
-    await act(async () => {
-      await Promise.resolve();
-    });
-    expect(screen.getByText("checkout-api")).toBeTruthy();
-    expect(listApplications).toHaveBeenCalledTimes(1);
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(7_000);
-    });
-    expect(listApplications).toHaveBeenCalledTimes(2);
-
-    Object.defineProperty(document, "visibilityState", {
-      configurable: true,
-      value: "hidden",
-    });
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(70_000);
-    });
-    expect(listApplications).toHaveBeenCalledTimes(2);
-
-    Object.defineProperty(document, "visibilityState", {
-      configurable: true,
-      value: "visible",
-    });
-    await act(async () => {
-      document.dispatchEvent(new Event("visibilitychange"));
-      await Promise.resolve();
-    });
-    expect(listApplications).toHaveBeenCalledTimes(3);
   });
 
   it("opens URL-backed detail and keeps overview evidence honest", async () => {
@@ -209,8 +148,7 @@ describe("S10 Applications surface", () => {
     const port = applicationsPort();
     renderApplications(port, "/applications?clusters=cluster-1&labels=team%3Dcheckout");
 
-    const catalogRow = await screen.findByRole("row", { name: /checkout-api/ });
-    await user.click(within(catalogRow).getByRole("button", { name: "View details" }));
+    await user.click(await screen.findByRole("button", { name: /checkout-api/ }));
     await waitFor(() => expect(screen.getByTestId("location").textContent).toContain("app=app-checkout"));
     expect(screen.getByTestId("location").textContent).toContain("tab=overview");
     expect(await screen.findByText("v2.4.1 deployed")).toBeTruthy();
@@ -295,7 +233,6 @@ describe("S10 Applications surface", () => {
 
     await user.click(within(tabs).getByRole("tab", { name: "Deployments" }));
     const gitOpsLink = await screen.findByRole("link", { name: /View GitOps change/ });
-    expect(screen.getByRole("columnheader", { name: "GitOps" })).toBeTruthy();
     expect(gitOpsLink.getAttribute("href")).toBe(
       "/gitops?clusters=cluster-1&labels=team%3Dcheckout&detail=change%3Achange-42",
     );
@@ -384,7 +321,7 @@ describe("S10 Applications surface", () => {
       "workload-a",
     );
     const tabs = screen.getByRole("tablist", { name: "View details" });
-    expect(within(tabs).getAllByRole("tab")).toHaveLength(4);
+    expect(within(tabs).getAllByRole("tab")).toHaveLength(3);
     expect(within(tabs).queryByRole("tab", { name: "Deployments" })).toBeNull();
     expect(screen.queryByText("v2.4.1 deployed")).toBeNull();
 
@@ -455,8 +392,7 @@ describe("S10 Applications surface", () => {
       }),
     });
     renderApplications(port);
-    const catalogRow = await screen.findByRole("row", { name: /checkout-api/ });
-    await user.click(within(catalogRow).getByRole("button", { name: "View details" }));
+    await user.click(await screen.findByRole("button", { name: /checkout-api/ }));
     await user.click(await screen.findByRole("tab", { name: "Deployments" }));
     expect(await screen.findByText("No deployment history is available.")).toBeTruthy();
     await user.click(screen.getByRole("tab", { name: "Drift" }));

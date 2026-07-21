@@ -10,7 +10,6 @@ import {
 import { useAuthSessionGate } from "../auth/AuthSessionGate";
 import { useUnifiedFilter } from "../filters/UnifiedFilterProvider";
 import { HomePortFailure } from "../home/homeContract";
-import type { HomeClusterChoice } from "../home/homeContract";
 import {
   ASYNC_LOADING,
   asyncResourceFailure,
@@ -20,11 +19,6 @@ import {
 } from "../../shared/data/asyncResourceState";
 import { acquireSharedRequest } from "../../shared/data/sharedRequest";
 import { useVisibleRefreshClock } from "../../shared/data/useVisibleRefreshClock";
-import type { BrowserRefreshPolicy } from "../../shared/data/browserRefreshPolicyRegistry";
-import type {
-  ClusterScope,
-  ScopeTransitionOperationEvent,
-} from "../../shared/parity/referenceParity";
 import type {
   ClusterScopeCollectionState,
   ClusterScopePort,
@@ -115,13 +109,6 @@ export function ClusterScopeProvider({
     selectedCluster,
     scopeKey,
   );
-  const realtime = useScopeRealtime({
-    port,
-    policyRevision: revision,
-    reportUnauthorized,
-    scopeKey,
-    selectedCluster,
-  });
   const selectCluster = useCallback((clusterId: string) => {
     if (
       collection.phase !== "ready" ||
@@ -164,10 +151,7 @@ export function ClusterScopeProvider({
     selectedClusters,
     selectedClusterExists: selectedCluster !== null,
     selection,
-    dashboardRefreshPolicy: realtime.dashboardRefreshPolicy,
-    scopeInvalidationRevision: realtime.scopeInvalidationRevision,
     scopeKey,
-    scopeOperation: realtime.scopeOperation,
     refresh,
     selectCluster,
     toggleCluster,
@@ -178,9 +162,6 @@ export function ClusterScopeProvider({
     refresh,
     requestedClusterIds,
     requestedClusterId,
-    realtime.dashboardRefreshPolicy,
-    realtime.scopeInvalidationRevision,
-    realtime.scopeOperation,
     scopeKey,
     selectedCluster,
     selectedClusters,
@@ -190,159 +171,6 @@ export function ClusterScopeProvider({
   ]);
 
   return <ClusterScopeContext.Provider value={value}>{children}</ClusterScopeContext.Provider>;
-}
-
-function useScopeRealtime({
-  port,
-  policyRevision,
-  reportUnauthorized,
-  scopeKey,
-  selectedCluster,
-}: {
-  port: ClusterScopePort;
-  policyRevision: number;
-  reportUnauthorized: () => void;
-  scopeKey: string | null;
-  selectedCluster: HomeClusterChoice | null;
-}): {
-  dashboardRefreshPolicy: BrowserRefreshPolicy | null;
-  scopeInvalidationRevision: number;
-  scopeOperation: ScopeTransitionOperationEvent | null;
-} {
-  const clusterId = selectedCluster?.id ?? null;
-  const connectionState = selectedCluster?.connectionState ?? null;
-  const workspaceId = selectedCluster?.workspaceId ?? null;
-  const scope = useMemo<ClusterScope | null>(() => (
-    clusterId && connectionState && workspaceId && scopeKey
-    ? {
-        workspaceId,
-        clusterId,
-        namespaces: [],
-        freshness: scopeFreshness(connectionState),
-      }
-    : null
-  ), [clusterId, connectionState, scopeKey, workspaceId]);
-  const [policyRecord, setPolicyRecord] = useState<{
-    policy: BrowserRefreshPolicy | null;
-    scopeKey: string | null;
-  }>({ policy: null, scopeKey: null });
-  const [eventRecord, setEventRecord] = useState<{
-    operation: ScopeTransitionOperationEvent | null;
-    revision: number;
-    scopeKey: string | null;
-  }>({ operation: null, revision: 0, scopeKey: null });
-  const dashboardRefreshPolicy = policyRecord.scopeKey === scopeKey
-    ? policyRecord.policy
-    : null;
-  const currentEvents = eventRecord.scopeKey === scopeKey
-    ? eventRecord
-    : { operation: null, revision: 0, scopeKey };
-
-  useEffect(() => {
-    const loadPolicy = port.loadDashboardRefreshPolicy;
-    if (scopeKey === null || !scope || !loadPolicy) return;
-    let active = true;
-    const request = acquireSharedRequest(
-      port,
-      `cluster-scope-policy:${scope.workspaceId}:${scopeKey}:r${policyRevision}`,
-      (signal) => loadPolicy(signal),
-    );
-    void request.promise.then(
-      (policy) => {
-        if (active) setPolicyRecord({ policy, scopeKey });
-      },
-      (error: unknown) => {
-        if (!active || isAbortError(error)) return;
-        if (error instanceof HomePortFailure && error.code === "unauthorized") {
-          reportUnauthorized();
-        }
-      },
-    );
-    return () => {
-      active = false;
-      request.release();
-    };
-  }, [policyRevision, port, reportUnauthorized, scope, scopeKey]);
-
-  useEffect(() => {
-    const subscribe = port.subscribeDashboardInvalidations;
-    if (
-      scopeKey === null ||
-      !scope ||
-      !subscribe ||
-      dashboardRefreshPolicy?.eventInvalidation !== true
-    ) return;
-    let active = true;
-    let controller: AbortController | null = null;
-
-    const stop = () => {
-      controller?.abort();
-      controller = null;
-    };
-    const start = () => {
-      stop();
-      if (!active || document.visibilityState === "hidden") return;
-      controller = new AbortController();
-      const signal = controller.signal;
-      void (async () => {
-        try {
-          for await (const _event of subscribe(scope, {
-            signal,
-            onScopeOperation(operation) {
-              if (!active || signal.aborted || !sameScope(operation.scope, scope)) return;
-              setEventRecord((current) => ({
-                operation,
-                revision: current.scopeKey === scopeKey ? current.revision : 0,
-                scopeKey,
-              }));
-            },
-          })) {
-            if (!active || signal.aborted) return;
-            setEventRecord((current) => ({
-              operation: current.scopeKey === scopeKey ? current.operation : null,
-              revision: current.scopeKey === scopeKey ? current.revision + 1 : 1,
-              scopeKey,
-            }));
-          }
-        } catch (error) {
-          if (!active || signal.aborted || isAbortError(error)) return;
-          if (error instanceof HomePortFailure && error.code === "unauthorized") {
-            reportUnauthorized();
-          }
-        }
-      })();
-    };
-    const onVisibilityChange = () => {
-      if (document.visibilityState === "hidden") stop();
-      else start();
-    };
-    document.addEventListener("visibilitychange", onVisibilityChange);
-    start();
-    return () => {
-      active = false;
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-      stop();
-    };
-  }, [dashboardRefreshPolicy?.eventInvalidation, port, reportUnauthorized, scope, scopeKey]);
-
-  return {
-    dashboardRefreshPolicy,
-    scopeInvalidationRevision: currentEvents.revision,
-    scopeOperation: currentEvents.operation,
-  };
-}
-
-function sameScope(left: ClusterScope, right: ClusterScope): boolean {
-  return left.workspaceId === right.workspaceId && left.clusterId === right.clusterId;
-}
-
-function scopeFreshness(
-  connectionState: HomeClusterChoice["connectionState"],
-): ClusterScope["freshness"] {
-  if (connectionState === "online") return "live";
-  if (connectionState === "stale") return "stale";
-  if (connectionState === "offline") return "disconnected";
-  return "partial";
 }
 
 export function useClusterScope(): ClusterScopeValue {

@@ -6,24 +6,14 @@ describe("Clusters adapter", () => {
     const endpoints = dependencies();
     const port = createClustersAdapter(endpoints);
 
-    await expect(port.connect({
-      environment: "staging",
-      name: "Production",
-      provider: "aws",
-    })).resolves.toEqual({
+    await expect(port.connect({ name: "Production", provider: "aws" })).resolves.toEqual({
       clusterId: "production-a1b2",
       installCommand: "curl one-line | kubectl apply -f -",
       expiresAt: "2026-07-14T06:00:00Z",
     });
-    expect(endpoints.connectCluster).toHaveBeenCalledWith({
-      environment: "staging",
-      name: "Production",
-      provider: "aws",
-    }, undefined);
     await expect(port.loadConnection("production-a1b2")).resolves.toEqual({
       status: "waiting",
       stage: "agent_connected",
-      refreshAfterSeconds: 0.5,
       agentVersion: null,
       lastSeenAt: "2026-07-15T01:02:03Z",
     });
@@ -34,10 +24,11 @@ describe("Clusters adapter", () => {
     });
     await expect(port.disconnect("production-a1b2")).resolves.toMatchObject({
       status: "cleanup-required",
-      commandId: "cmd-uninstall-1",
+      uninstallCommand: "kubectl delete deployment/cluster-agent",
     });
     expect(endpoints.unregisterCluster).toHaveBeenCalledWith(
       "production-a1b2",
+      {},
       undefined,
     );
   });
@@ -50,11 +41,7 @@ describe("Clusters adapter", () => {
       expires_at: "2026-07-14T06:00:00Z",
     });
 
-    await expect(createClustersAdapter(endpoints).connect({
-      environment: "development",
-      name: "Production",
-      provider: "aws",
-    }))
+    await expect(createClustersAdapter(endpoints).connect({ name: "Production", provider: "aws" }))
       .rejects.toMatchObject({ code: "invalid-response" });
   });
 });
@@ -70,7 +57,6 @@ function dependencies() {
       cluster_id: "production-a1b2",
       connection_status: "online",
       connection_stage: "agent_connected" as const,
-      refresh_after_seconds: 0.5,
       last_agent_id: "agent-1",
       last_seen_at: "2026-07-15T01:02:03Z",
       agents: [{ details: {} }],
@@ -94,11 +80,14 @@ function dependencies() {
     unregisterCluster: vi.fn(async () => ({
       cluster_id: "production-a1b2",
       status: "cleanup_required" as const,
-      stage: "agent_cleanup_pending" as const,
-      command_id: "cmd-uninstall-1",
-      command_status_path: "/commands/cmd-uninstall-1",
+      stage: "manual_cleanup_required" as const,
+      command_id: null,
+      command_status_path: null,
+      uninstall_command: "kubectl delete deployment/cluster-agent",
       cleanup_verified: false,
-      failure_reason: "agent is offline; cleanup waits for agent reconnect",
+      resources: ["target:deployment/cluster-agent"],
+      residual_resources: ["target:serviceaccount/cluster-agent"],
+      failure_reason: "agent is offline",
     })),
   };
 }

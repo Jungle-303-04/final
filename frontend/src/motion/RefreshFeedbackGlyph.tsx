@@ -4,7 +4,7 @@ import * as m from "motion/react-m";
 
 import type { RefreshFeedbackState } from "../shared/ui/RefreshFeedback";
 import { cn } from "../shared/lib/cn";
-import { MOTION_DURATION_SECONDS } from "./useStagger";
+import { MOTION_DURATION_MS } from "./useStagger";
 import { usePrefersReducedMotion } from "./usePrefersReducedMotion";
 
 const feedbackTargets = {
@@ -17,10 +17,10 @@ const feedbackTargets = {
 
 const reducedMotionTarget = { opacity: 1 };
 const feedbackTransition = {
-  duration: MOTION_DURATION_SECONDS.quick,
+  duration: MOTION_DURATION_MS.quick / 1_000,
   ease: "easeOut",
 } as const;
-const reducedMotionTransition = { duration: MOTION_DURATION_SECONDS.none } as const;
+const reducedMotionTransition = { duration: 0 } as const;
 
 /** The only Motion-owned refresh rendering surface. */
 export function RefreshFeedbackGlyph({

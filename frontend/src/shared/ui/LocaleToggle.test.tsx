@@ -16,7 +16,6 @@ afterEach(() => {
 describe("LocaleToggle", () => {
   it("shows the current English locale and switches immediately to Korean", async () => {
     const user = userEvent.setup();
-    window.localStorage.setItem(PRODUCT_LOCALE_STORAGE_KEY, "en");
     render(
       <I18nProvider storage={window.localStorage} navigatorLanguage="en-US">
         <LocaleToggle />

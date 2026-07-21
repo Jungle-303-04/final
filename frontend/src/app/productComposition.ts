@@ -13,10 +13,6 @@ import {
   type AiAssistantPort,
 } from "../features/ai-assistant/aiAssistantContract";
 import {
-  EMPTY_AI_CONVERSATION_HISTORY_PORT,
-  type AiConversationHistoryPort,
-} from "../features/ai-assistant/aiConversationHistoryContract";
-import {
   EMPTY_LOG_STREAM_PORT,
   type LogStreamPort,
 } from "../features/log-stream/logStreamContract";
@@ -33,31 +29,11 @@ import {
   type ComparePort,
 } from "../features/compare/compareContract";
 import {
-  EMPTY_DIAGNOSE_PORT,
-  type DiagnosePort,
-} from "../features/diagnose/diagnoseContract";
-import {
   createOperationStatusStore,
   type OperationStatusStore,
 } from "../features/operations/OperationStatusStore";
 import { EMPTY_OPERATION_EVENTS_PORT } from "../features/operations/operationEventsContract";
-import {
-  EMPTY_SHELL_STATE_PORT,
-  type ShellStatePort,
-} from "../features/shell-state/shellStateContract";
 import type { ProductSurfaceLoader } from "./surfaceLoader";
-import {
-  EMPTY_RUNTIME_STATUS_PORT,
-  type RuntimeStatusPort,
-} from "../features/runtime-status/runtimeStatusContract";
-import {
-  EMPTY_PORT_FORWARD_SESSION_PORT,
-  type PortForwardSessionPort,
-} from "../features/service-access/portForwardSessionContract";
-import {
-  EMPTY_RCA_CONTEXT_PORT,
-  type RcaContextPort,
-} from "../features/issues/rcaContextContract";
 
 export interface ProductSurfaceRegistration {
   id: ProductSurfaceId;
@@ -69,16 +45,10 @@ export interface ProductComposition {
   clusterScope: ClusterScopePort;
   globalFilter: GlobalFilterPort;
   aiAssistant: AiAssistantPort;
-  aiConversationHistory: AiConversationHistoryPort;
   logStream: LogStreamPort;
   alertEvents: AlertEventsPort;
   workloadDetail: WorkloadDetailPort;
   compare: ComparePort;
-  diagnose: DiagnosePort;
-  shellState: ShellStatePort;
-  runtimeStatus: RuntimeStatusPort;
-  portForwardSessions: PortForwardSessionPort;
-  rcaContext: RcaContextPort;
   operationStatusStore: OperationStatusStore;
   surfaces: readonly ProductSurfaceRegistration[];
   releasedSurfaceIds: ReadonlySet<ProductSurfaceId>;
@@ -97,12 +67,6 @@ export function createProductComposition(
   dispose: () => void = () => undefined,
   workloadDetail: WorkloadDetailPort = EMPTY_WORKLOAD_DETAIL_PORT,
   compare: ComparePort = EMPTY_COMPARE_PORT,
-  diagnose: DiagnosePort = EMPTY_DIAGNOSE_PORT,
-  shellState: ShellStatePort = EMPTY_SHELL_STATE_PORT,
-  runtimeStatus: RuntimeStatusPort = EMPTY_RUNTIME_STATUS_PORT,
-  portForwardSessions: PortForwardSessionPort = EMPTY_PORT_FORWARD_SESSION_PORT,
-  rcaContext: RcaContextPort = EMPTY_RCA_CONTEXT_PORT,
-  aiConversationHistory: AiConversationHistoryPort = EMPTY_AI_CONVERSATION_HISTORY_PORT,
 ): ProductComposition {
   const byId = new Map<ProductSurfaceId, ProductSurfaceRegistration>();
 
@@ -129,16 +93,10 @@ export function createProductComposition(
     clusterScope,
     globalFilter,
     aiAssistant,
-    aiConversationHistory,
     logStream,
     alertEvents,
     workloadDetail,
     compare,
-    diagnose,
-    shellState,
-    runtimeStatus,
-    portForwardSessions,
-    rcaContext,
     operationStatusStore,
     surfaces,
     releasedSurfaceIds: new Set(surfaces.map((surface) => surface.id)),

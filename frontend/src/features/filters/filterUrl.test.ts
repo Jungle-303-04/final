@@ -6,6 +6,8 @@ import {
 } from "./filterContract";
 import {
   canonicalizeProductFilterUrl,
+  detailHistoryMode,
+  filterHistoryMode,
   parseProductFilterUrl,
   productFilterNavigationHref,
   serializeProductFilterUrl,
@@ -35,7 +37,6 @@ describe("VP-010 unified filter URL", () => {
       },
       issues: {
         severity: ["warning", "critical"],
-        category: ["scheduling", "container_restart"],
         status: ["open"],
         environment: ["prod"],
         query: "payments",
@@ -70,8 +71,8 @@ describe("VP-010 unified filter URL", () => {
       "&resources.health=degraded,healthy" +
       "&resources.includeDeleted=true" +
       "&resources.q=checkout%20api" +
+      "&resources.view=graph" +
       "&issues.severity=critical,warning" +
-      "&issues.category=container_restart,scheduling" +
       "&issues.status=open" +
       "&issues.environment=prod" +
       "&issues.q=payments" +
@@ -85,8 +86,7 @@ describe("VP-010 unified filter URL", () => {
       "&gitops.q=release" +
       "&checks.severity=critical" +
       "&checks.category=security" +
-      "&checks.q=policy" +
-      "&view=map",
+      "&checks.q=policy",
     );
     expect(parseProductFilterUrl(search).state).toEqual({
       ...state,
@@ -103,19 +103,9 @@ describe("VP-010 unified filter URL", () => {
           { key: "tier", value: "critical" },
         ],
       },
-      resources: {
-        ...state.resources,
-        types: ["Deployment", "Pod"],
-        health: ["degraded", "healthy"],
-        view: "table",
-      },
-      issues: {
-        ...state.issues,
-        severity: ["critical", "warning"],
-        category: ["container_restart", "scheduling"],
-      },
+      resources: { ...state.resources, types: ["Deployment", "Pod"], health: ["degraded", "healthy"] },
+      issues: { ...state.issues, severity: ["critical", "warning"] },
     });
-    expect(parseProductFilterUrl(search).detail.resourceSurfaceView).toBe("map");
   });
 
   it("keeps Label as an AND axis, including contradictory values for the same key", () => {
@@ -289,5 +279,60 @@ describe("VP-010 unified filter URL", () => {
       "&applications=unknown-app&labels=team%3Dcheckout" +
       "&resources.types=Pod&issues.status=open",
     );
+  });
+  it("round-trips an application instance only with its application detail", () => {
+    const parsed = parseProductFilterUrl(
+      "?clusters=cluster-a&app=app-checkout&instance=binding-prod&tab=overview",
+    );
+
+    expect(parsed.detail).toMatchObject({
+      application: "app-checkout",
+      applicationInstance: "binding-prod",
+      tab: "overview",
+    });
+    expect(serializeProductFilterUrl(parsed.state, parsed.detail)).toBe(
+      "?clusters=cluster-a&app=app-checkout&instance=binding-prod&tab=overview",
+    );
+    expect(canonicalizeProductFilterUrl("?detail=change-42&instance=binding-prod"))
+      .toBe("?detail=change-42");
+  });
+  it("round-trips an opaque workload only with its application detail", () => {
+    const parsed = parseProductFilterUrl(
+      "?app=app-checkout&instance=binding-prod&workload=inventory-key&tab=topology",
+    );
+
+    expect(parsed.detail).toMatchObject({
+      application: "app-checkout",
+      applicationInstance: "binding-prod",
+      applicationWorkload: "inventory-key",
+      tab: "topology",
+    });
+    expect(serializeProductFilterUrl(parsed.state, parsed.detail)).toBe(
+      "?app=app-checkout&instance=binding-prod&workload=inventory-key&tab=topology",
+    );
+    expect(canonicalizeProductFilterUrl("?detail=change-42&workload=inventory-key"))
+      .toBe("?detail=change-42");
+  });
+  it("uses push for explicit filter changes and replace for typing or migration", () => {
+    expect(filterHistoryMode("chip-add")).toBe("push");
+    expect(filterHistoryMode("chip-remove")).toBe("push");
+    expect(filterHistoryMode("clear-labels")).toBe("push");
+    expect(filterHistoryMode("clear-filters")).toBe("push");
+    expect(filterHistoryMode("view-change")).toBe("push");
+    expect(filterHistoryMode("typing")).toBe("replace");
+    expect(filterHistoryMode("canonicalize")).toBe("replace");
+    expect(filterHistoryMode("legacy-migration")).toBe("replace");
+  });
+  it("uses explicit history policies for detail navigation", () => {
+    expect(detailHistoryMode("detail-open")).toBe("push");
+    expect(detailHistoryMode("drill-in")).toBe("push");
+    expect(detailHistoryMode("detail-instance")).toBe("push");
+    expect(detailHistoryMode("detail-workload")).toBe("push");
+    expect(detailHistoryMode("detail-close")).toBe("replace");
+    expect(detailHistoryMode("detail-tab")).toBe("replace");
+    expect(detailHistoryMode("detail-expand")).toBe("replace");
+    expect(detailHistoryMode("detail-instance-default")).toBe("replace");
+    expect(detailHistoryMode("detail-workload-default")).toBe("replace");
+    expect(detailHistoryMode("detail-workload-recovery")).toBe("replace");
   });
 });

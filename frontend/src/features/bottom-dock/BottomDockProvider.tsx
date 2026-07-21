@@ -33,10 +33,6 @@ export interface BottomDockController extends BottomDockState {
   retryTab: (id: string) => void;
   setCollapsed: (collapsed: boolean) => void;
   setHeight: (height: number) => void;
-  invalidateNamespaceScope: (
-    clusterId: string,
-    allowedNamespaces: readonly string[],
-  ) => void;
   activeStreamId: string | null;
 }
 
@@ -48,7 +44,6 @@ const EMPTY_CONTROLLER: BottomDockController = {
   retryTab: () => undefined,
   setCollapsed: () => undefined,
   setHeight: () => undefined,
-  invalidateNamespaceScope: () => undefined,
   activeStreamId: null,
 };
 
@@ -189,20 +184,6 @@ export function BottomDockProvider({
     },
     setCollapsed: (collapsed) => dispatch({ type: "collapse", collapsed }),
     setHeight: (height) => dispatch({ type: "resize", height }),
-    invalidateNamespaceScope(clusterId, allowedNamespaces) {
-      const allowed = new Set(allowedNamespaces);
-      for (const tab of stateRef.current.tabs) {
-        if (
-          tab.target.clusterId !== clusterId ||
-          allowed.size === 0 ||
-          allowed.has(tab.target.namespace)
-        ) continue;
-        subscriptions.current.get(tab.id)?.close();
-        subscriptions.current.delete(tab.id);
-        discardQueuedEvents((event) => event.id === tab.id);
-        dispatch({ type: "close", id: tab.id });
-      }
-    },
   }), [discardQueuedEvents, state, start]);
 
   const activeTab = state.tabs.find((tab) => tab.id === state.activeTabId) ?? null;

@@ -60,7 +60,6 @@ export type TimelineMessageKey =
   | "timeline.empty.unavailable"
   | "timeline.count.one"
   | "timeline.count.other"
-  | "timeline.truncated"
   | "timeline.list.label"
   | "timeline.swimlane.label"
   | "timeline.swimlane.axis"

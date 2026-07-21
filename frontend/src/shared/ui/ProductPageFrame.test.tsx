@@ -9,6 +9,7 @@ describe("ProductPageFrame", () => {
     const { container } = render(<ProductPageFrame>Timeline content</ProductPageFrame>);
     const frame = container.querySelector('[data-slot="product-page-frame"]');
 
-    expect(frame?.className).toContain("pb-(--product-floating-action-clearance)");
+    expect(frame?.className).toContain("pb-[var(--product-floating-action-clearance)]");
+    expect(frame?.className).toContain("sm:pb-[var(--product-floating-action-clearance)]");
   });
 });

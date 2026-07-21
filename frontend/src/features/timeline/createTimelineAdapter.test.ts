@@ -128,51 +128,6 @@ describe("Timeline adapter", () => {
     });
   });
 
-  it("accepts query bounds that advance between capability and snapshot reads", async () => {
-    const advanced = capabilities();
-    advanced.query_bounds = {
-      ...advanced.query_bounds,
-      server_now_ms: advanced.query_bounds.server_now_ms + 250,
-      earliest_queryable_ms: advanced.query_bounds.earliest_queryable_ms + 250,
-    };
-    const adapter = adapterFor({
-      getTimelineCapabilities: async () => capabilities(),
-      getTimelineSnapshot: async () => snapshot("opaque.snapshot", [], advanced),
-      subscribeTimelineEvents: async function* () {},
-    });
-
-    await expect(adapter.readTimeline(timelineQuery())).resolves.toMatchObject({
-      session: { cursor: { token: "opaque.snapshot" } },
-    });
-  });
-
-  it("fails closed when snapshot query bounds regress or change retention", async () => {
-    const regressed = capabilities();
-    regressed.query_bounds = {
-      ...regressed.query_bounds,
-      server_now_ms: regressed.query_bounds.server_now_ms - 1,
-      earliest_queryable_ms: regressed.query_bounds.earliest_queryable_ms - 1,
-    };
-    const changedRetention = capabilities();
-    changedRetention.query_bounds = {
-      ...changedRetention.query_bounds,
-      server_now_ms: changedRetention.query_bounds.server_now_ms + 250,
-      earliest_queryable_ms: changedRetention.query_bounds.earliest_queryable_ms + 249,
-    };
-
-    for (const descriptor of [regressed, changedRetention]) {
-      const adapter = adapterFor({
-        getTimelineCapabilities: async () => capabilities(),
-        getTimelineSnapshot: async () => snapshot("opaque.snapshot", [], descriptor),
-        subscribeTimelineEvents: async function* () {},
-      });
-
-      await expect(adapter.readTimeline(timelineQuery())).rejects.toMatchObject({
-        code: "invalid-response",
-      });
-    }
-  });
-
   it("fails closed when a snapshot control catalog differs from preflight", async () => {
     const preflight = capabilities();
     const adapter = adapterFor({
@@ -190,6 +145,73 @@ describe("Timeline adapter", () => {
     await expect(adapter.readTimeline(timelineQuery())).rejects.toMatchObject({
       code: "invalid-response",
     });
+  });
+
+  it("accepts a snapshot whose descriptor only advanced the live server clock", async () => {
+    // Regression: the bootstrap capabilities read and the later snapshot read are
+    // separate requests, so `query_bounds.server_now_ms`/`earliest_queryable_ms`
+    // legitimately advance. That clock must not be part of the control-contract
+    // equality, or every honest 200 snapshot fails closed as unavailable.
+    const preflight = capabilities();
+    const advanced = {
+      ...preflight,
+      query_bounds: {
+        server_now_ms: preflight.query_bounds.server_now_ms + 5_000,
+        earliest_queryable_ms: preflight.query_bounds.earliest_queryable_ms + 5_000,
+        max_window_ms: preflight.query_bounds.max_window_ms,
+      },
+    };
+    const adapter = adapterFor({
+      getTimelineCapabilities: async () => preflight,
+      getTimelineSnapshot: async () => snapshot("opaque.snapshot", [], advanced),
+      subscribeTimelineEvents: async function* () {},
+    });
+
+    await expect(adapter.readTimeline(timelineQuery())).resolves.toBeDefined();
+  });
+
+  it("still fails closed when a snapshot changes the stable window bound", async () => {
+    const preflight = capabilities();
+    const changed = {
+      ...preflight,
+      query_bounds: {
+        ...preflight.query_bounds,
+        max_window_ms: preflight.query_bounds.max_window_ms + 1,
+      },
+    };
+    const adapter = adapterFor({
+      getTimelineCapabilities: async () => preflight,
+      getTimelineSnapshot: async () => snapshot("opaque.snapshot", [], changed),
+      subscribeTimelineEvents: async function* () {},
+    });
+
+    await expect(adapter.readTimeline(timelineQuery())).rejects.toMatchObject({
+      code: "invalid-response",
+    });
+  });
+
+  it("shares a signal-independent capability bootstrap so an aborted caller cannot reject co-awaiters", async () => {
+    // React StrictMode remounts abort the first caller mid-flight; the shared
+    // bootstrap request must not adopt that signal, or a still-mounted co-awaiter
+    // rejects with a spurious "unknown" failure and the whole surface fails closed.
+    let observedSignal: AbortSignal | undefined | "unset" = "unset";
+    const controller = new AbortController();
+    const adapter = adapterFor({
+      getTimelineCapabilities: async (signal) => {
+        observedSignal = signal;
+        return capabilities();
+      },
+      getTimelineSnapshot: async () => snapshot("opaque.snapshot"),
+      subscribeTimelineEvents: async function* () {},
+    });
+    controller.abort();
+
+    const readCapabilities = adapter.readCapabilities;
+    if (readCapabilities === undefined) throw new Error("adapter must expose readCapabilities");
+    const projected = await readCapabilities(controller.signal, "default");
+
+    expect(projected.selectedSourceMode).toBe("retained");
+    expect(observedSignal).toBeUndefined();
   });
 
   it("maps URL activity keys, common scope fields, filters, and a finite live window", async () => {

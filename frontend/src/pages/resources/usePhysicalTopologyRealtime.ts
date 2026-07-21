@@ -24,7 +24,6 @@ import type { ResourceMetricLiveSeries } from "./resourceMetricLiveSeries";
 import { mergePhysicalTopologyRealtime } from "./mergePhysicalTopologyRealtime";
 import {
   createRealtimeOverlay,
-  isPhysicalTopologyPodDelta,
   reducePhysicalTopologyRealtimeOverlay,
   toPhysicalTopologyLiveStatus,
   type PhysicalTopologyLiveState,
@@ -58,7 +57,6 @@ export function usePhysicalTopologyRealtime(input: {
   clusterId: string | null;
   frame: PhysicalTopologyFrame;
   port: PhysicalTopologyRealtimePort;
-  onResourceDelta?: () => void;
   replayAtMs?: number;
   rows?: readonly ResourceSummary[];
   workspaceId: string | null;
@@ -74,7 +72,6 @@ export function usePhysicalTopologyRealtime(input: {
   const reducedMotion = usePrefersReducedMotion();
   const currentReplayAt = useEffectEvent(() => replayAtMs);
   const currentActualView = useEffectEvent(() => ({ frame, rows }));
-  const notifyResourceDelta = useEffectEvent(() => input.onResourceDelta?.());
 
   useEffect(() => {
     let disposed = false;
@@ -171,7 +168,6 @@ export function usePhysicalTopologyRealtime(input: {
     const flushFrame = (messages: readonly unknown[]) => {
       if (disposed || messages.length === 0) return;
       let accepted = false;
-      let resourceDeltaAccepted = false;
       const actualView = currentActualView();
       for (const message of messages) {
         const ingest = timeline.ingest(message);
@@ -180,7 +176,6 @@ export function usePhysicalTopologyRealtime(input: {
           return;
         }
         accepted ||= ingest.accepted;
-        resourceDeltaAccepted ||= ingest.accepted && isPhysicalTopologyPodDelta(message, clusterId);
         if (ingest.accepted && actualView.frame.phase === "ready") {
           // Samples retain the exact graph/table cut that was current at their
           // own server revision, even when several records share one paint.
@@ -202,7 +197,6 @@ export function usePhysicalTopologyRealtime(input: {
         }
       }
       if (accepted) setTimelineRevision((current) => current + 1);
-      if (resourceDeltaAccepted) notifyResourceDelta();
       setOverlay((current) => {
         if (current.scope !== scope) return current;
         const next = messages.reduce<RealtimeOverlay>(

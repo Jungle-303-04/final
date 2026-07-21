@@ -69,28 +69,4 @@ describe("ResourceSparkline", () => {
     expect(screen.getByRole("img", { name: "CPU trend unavailable" })).toBeTruthy();
     expect(view.container.querySelector(".recharts-line")).toBeNull();
   });
-
-  it("keeps identical row geometry while measured points arrive", () => {
-    const view = renderSparkline(null);
-    const unavailable = screen.getByRole("img", { name: "CPU trend unavailable" });
-
-    expect(unavailable.className).toContain("h-7");
-    view.rerender(
-      <I18nProvider navigatorLanguage="en-US" storage={null}>
-        <ResourceSparkline
-          identity={IDENTITY}
-          name="checkout-0"
-          onOpen={view.onOpen}
-          series={history([10, 18])}
-        />
-      </I18nProvider>,
-    );
-
-    const measured = screen.getByRole("button", { name: /CPU trend/u });
-    const measuredClasses = measured.className.split(/\s+/u);
-
-    expect(measuredClasses).toContain("h-7");
-    expect(measuredClasses).toContain("flex");
-    expect(measuredClasses).not.toContain("inline-flex");
-  });
 });

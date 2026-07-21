@@ -83,10 +83,6 @@ function recoveryCandidate(
     validationChecks: [...candidate.validation_checks],
     rollbackPlan: candidate.rollback_plan,
     evidenceRefs: [...candidate.evidence_refs],
-    recommendationReason: optional(candidate.recommendation_reason ?? null),
-    expectedOutcome: optional(candidate.expected_outcome ?? null),
-    riskExplanation: optional(candidate.risk_explanation ?? null),
-    rollbackReason: optional(candidate.rollback_reason ?? null),
   };
 }
 

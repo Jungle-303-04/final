@@ -1,19 +1,32 @@
 // @vitest-environment jsdom
 
-import { cleanup, screen, waitFor } from "@testing-library/react";
+import { ThemeProvider } from "next-themes";
+import type { ComponentType } from "react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  createMemoryRouter,
+  RouterProvider,
+  useLocation,
+  useNavigationType,
+} from "react-router-dom";
+import { ProductRouter } from "./ProductRouter";
+import { createProductComposition } from "./productComposition";
+import { createProductSurfaceLoader } from "./surfaceLoader";
+import { AuthSessionGateProvider } from "../features/auth/AuthSessionGate";
+import type { AuthPort } from "../features/auth/authContract";
+import type { ClusterScopePort } from "../features/cluster-scope/clusterScopeContract";
 import type {
   ProductDetailQuery,
   UnifiedFilterState,
 } from "../features/filters/filterContract";
 import { serializeProductFilterUrl } from "../features/filters/filterUrl";
-import { installMatchMedia } from "./__tests__/ProductShellInteractionSupport";
+import { I18nProvider } from "../shared/i18n";
 import {
-  currentLocation,
-  emptyClusterScope,
-  renderProductRouter,
-} from "./ProductRouter.filterCutover.testSupport";
+  installMatchMedia,
+  testAuth,
+} from "./__tests__/ProductShellInteractionSupport";
 
 const FILTER_STATE: UnifiedFilterState = {
   common: {
@@ -37,7 +50,6 @@ const FILTER_STATE: UnifiedFilterState = {
   },
   issues: {
     severity: ["critical", "warning"],
-    category: ["container_restart", "scheduling"],
     status: ["open", "resolved"],
     environment: ["production", "staging"],
     query: "packet loss",
@@ -71,11 +83,18 @@ const DETAIL_QUERY: ProductDetailQuery = {
 };
 
 const FILTER_SEARCH = serializeProductFilterUrl(FILTER_STATE, DETAIL_QUERY);
-const FILTER_ONLY_SEARCH = serializeProductFilterUrl({ ...FILTER_STATE, resources: { ...FILTER_STATE.resources, view: "table" } });
+const FILTER_ONLY_SEARCH = serializeProductFilterUrl(FILTER_STATE);
+
+const authPort: AuthPort = {
+  loadSession: async () => ({ status: "unauthenticated" }),
+  signIn: async () => { throw new Error("not used"); },
+  signOut: async () => undefined,
+};
 
 beforeEach(() => {
   installMatchMedia(false);
 });
+
 afterEach(() => {
   cleanup();
   document.documentElement.className = "";
@@ -156,7 +175,7 @@ describe("ProductRouter unified filter cutover", () => {
     expect(router.state.historyAction).toBe("REPLACE");
   });
 
-  it("redirects a legacy workflow alias directly to the Deploy repository section", async () => {
+  it("redirects the previous workflow path to the current workflow surface", async () => {
     const { router } = renderProductRouter(
       `/workflows${FILTER_SEARCH}#detail`,
       emptyClusterScope,
@@ -164,44 +183,7 @@ describe("ProductRouter unified filter cutover", () => {
     );
 
     await waitFor(() => {
-      expect(currentLocation(router)).toBe(
-        `/deploy${FILTER_ONLY_SEARCH}&section=repositories`,
-      );
-    });
-    expect(router.state.historyAction).toBe("REPLACE");
-  });
-
-  it.each([
-    "/gitops/detail/application/default/storefront",
-    "/gitops/resource",
-  ])("canonicalizes the legacy GitOps path %s to the Deploy repository section", async (path) => {
-    const { router } = renderProductRouter(
-      `${path}${FILTER_SEARCH}#detail`,
-      emptyClusterScope,
-      true,
-    );
-
-    await waitFor(() => {
-      expect(currentLocation(router)).toBe(
-        `/deploy${FILTER_ONLY_SEARCH}&section=repositories`,
-      );
-    });
-    expect(router.state.historyAction).toBe("REPLACE");
-  });
-
-  it("redirects Traffic directly to the Resources flow view without dropping filters", async () => {
-    const { router } = renderProductRouter(
-      `/traffic${FILTER_SEARCH}#detail`,
-      emptyClusterScope,
-    );
-
-    await waitFor(() => {
-      const location = router.state.location;
-      expect(location.pathname).toBe("/resources");
-      const parsed = new URLSearchParams(location.search);
-      expect(parsed.get("view")).toBe("flow");
-      expect(parsed.get("clusters")).toBe("cluster-a,cluster-b");
-      expect(parsed.get("detail")).toBe("checkout/api");
+      expect(currentLocation(router)).toBe(`/gitops${FILTER_ONLY_SEARCH}`);
     });
     expect(router.state.historyAction).toBe("REPLACE");
   });
@@ -230,16 +212,88 @@ describe("ProductRouter unified filter cutover", () => {
     expect(currentLocation(router)).toBe(`/home${FILTER_SEARCH}#detail`);
   });
 
-  it("redirects the removed Topology route through the normal unknown-route fallback", async () => {
+  it("keeps a known but unregistered upstream screen at its URL and explains that it is unavailable", async () => {
     const { router } = renderProductRouter(
       `/topology${FILTER_SEARCH}#detail`,
       emptyClusterScope,
     );
 
-    await waitFor(() => {
-      expect(currentLocation(router)).toBe(`/home${FILTER_ONLY_SEARCH}`);
-    });
-    expect(router.state.historyAction).toBe("REPLACE");
-    expect(screen.queryByRole("heading", { name: "Topology is unavailable" })).toBeNull();
+    expect(await screen.findByRole("heading", { name: "Topology is unavailable" })).toBeTruthy();
+    expect(currentLocation(router)).toBe(`/topology${FILTER_SEARCH}#detail`);
   });
 });
+
+const emptyClusterScope: ClusterScopePort = {
+  listClusterChoices: async () => ({ completeness: "unknown", clusters: [] }),
+};
+
+function renderProductRouter(
+  initialEntry: string,
+  clusterScope: ClusterScopePort,
+  includeWorkflows = false,
+) {
+  const composition = createProductComposition([
+    { id: "home", loader: surfaceLoader(HomeSurface) },
+    { id: "clusters", loader: surfaceLoader(ClustersSurface) },
+    { id: "resources", loader: surfaceLoader(ResourcesSurface) },
+    { id: "issues", loader: surfaceLoader(IssuesSurface) },
+    ...(includeWorkflows ? [{ id: "gitops" as const, loader: surfaceLoader(WorkflowsSurface) }] : []),
+  ], authPort, clusterScope);
+  const router = createMemoryRouter([{
+    path: "*",
+    element: (
+      <I18nProvider navigatorLanguage="en-US" storage={null}>
+        <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
+          <AuthSessionGateProvider reportUnauthorized={vi.fn()}>
+            <ProductRouter auth={testAuth} composition={composition} />
+            <LocationProbe />
+          </AuthSessionGateProvider>
+        </ThemeProvider>
+      </I18nProvider>
+    ),
+  }], { initialEntries: [initialEntry] });
+
+  return {
+    ...render(<RouterProvider router={router} />),
+    router,
+  };
+}
+
+function surfaceLoader(Component: ComponentType) {
+  return createProductSurfaceLoader(async () => ({ default: Component }));
+}
+
+function HomeSurface() {
+  return <p>Home surface</p>;
+}
+
+function ResourcesSurface() {
+  return <p>Resources surface</p>;
+}
+
+function ClustersSurface() {
+  return <p>Clusters surface</p>;
+}
+
+function IssuesSurface() {
+  return <p>Issues surface</p>;
+}
+
+function WorkflowsSurface() {
+  return <p>Workflows surface</p>;
+}
+
+function LocationProbe() {
+  const location = useLocation();
+  const navigationType = useNavigationType();
+  return (
+    <output data-testid="router-location">
+      {`${navigationType}:${location.pathname}${location.search}${location.hash}`}
+    </output>
+  );
+}
+
+function currentLocation(router: ReturnType<typeof createMemoryRouter>): string {
+  const { hash, pathname, search } = router.state.location;
+  return `${pathname}${search}${hash}`;
+}

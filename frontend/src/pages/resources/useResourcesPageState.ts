@@ -4,15 +4,7 @@ import { useAuthSessionGate } from "../../features/auth/AuthSessionGate";
 import { useClusterScope } from "../../features/cluster-scope/ClusterScopeProvider";
 import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
 import type { ResourcesPort } from "../../features/resources/resourcesContract";
-import type { ResourcesRefreshPolicyKey } from "../../features/resources/resourceMetricsHistoryContract";
-import type {
-  BrowserRefreshPolicy,
-  BrowserRefreshPolicyRegistry,
-} from "../../shared/data/browserRefreshPolicyRegistry";
-import {
-  useServerRefreshScheduler,
-  type ServerRefreshController,
-} from "../../shared/data/useServerRefreshScheduler";
+import { useVisibleRefreshClock } from "../../shared/data/useVisibleRefreshClock";
 import {
   blockForFailure,
   hasRetryBlocks,
@@ -27,15 +19,14 @@ import {
 import { resolveResourceType } from "./resourcesUrlState";
 import { useResourcesDataFrame } from "./useResourcesDataFrame";
 import { useResourcesDetailState } from "./useResourcesDetailState";
-import { useResourceSurfaceView } from "./useResourceSurfaceView";
-export function useResourcesPageState(
-  port: ResourcesPort,
-  refreshPolicies: BrowserRefreshPolicyRegistry<ResourcesRefreshPolicyKey>,
-  editorRefreshPaused = false,
-) {
+
+const RESOURCE_COUNTS_POLL_INTERVAL_MS = 10_000;
+const POD_STATE_POLL_INTERVAL_MS = 5_000;
+export function useResourcesPageState(port: ResourcesPort) {
   const { reportUnauthorized } = useAuthSessionGate();
   const clusterScope = useClusterScope();
   const filter = useUnifiedFilter();
+  const refreshClusterScope = clusterScope.refresh;
   const params = useParams<"*">();
   const selectedClusterId = clusterScope.requestedClusterId;
   const legacyTypeResolution = resolveResourceType(params["*"]);
@@ -52,9 +43,6 @@ export function useResourcesPageState(
         (candidate) => candidate.clusterId === selectedClusterId,
       )
     : [];
-  const catalogNamespaces = [...new Set(
-    selectedNamespaces.map((candidate) => candidate.namespace),
-  )].sort();
   const namespace =
     namespaceRefs.length === 1 && selectedNamespaces.length === 1
       ? (selectedNamespaces[0]?.namespace ?? null)
@@ -66,20 +54,11 @@ export function useResourcesPageState(
     filter.state.common.labels.length === 0 &&
     filter.state.resources.health.length === 0 &&
     filter.state.resources.query.length === 0;
+  const view = filter.state.resources.view;
   const listQuerySupported = listFiltersSupported;
   const includeDeleted = filter.state.resources.includeDeleted;
   const choices = clusterScope.collection;
   const [retryBlocks, setRetryBlocks] = useState<ResourcesRetryBlocks>({});
-  const retryBlocksRef = useRef(retryBlocks);
-  const clearMapRetryBlocks = useCallback(() => {
-    setRetryBlocks((current) =>
-      withoutRetryBlock(withoutRetryBlock(current, "catalog"), "list"),
-    );
-  }, []);
-  const surface = useResourceSurfaceView(clearMapRetryBlocks);
-  useEffect(() => {
-    retryBlocksRef.current = retryBlocks;
-  }, [retryBlocks]);
   const {
     closeDetail,
     detailIdentity,
@@ -87,133 +66,76 @@ export function useResourcesPageState(
     detailTarget,
     navigateDetail,
     openDetail,
-    openDetailTarget,
     registerRowButton,
   } = useResourcesDetailState(
     selectedClusterId,
     selectedResourceType,
     setRetryBlocks,
   );
-  const automaticRefreshPaused = editorRefreshPaused || hasRetryBlocks(retryBlocks);
-  const [catalogRevision, setCatalogRevision] = useState(0);
-  const [revision, setRevision] = useState(0);
-  const [podRevision, setPodRevision] = useState(0);
-  const listPolicyScope = [
-    selectedClusterId ?? "",
-    selectedResourceType ?? "",
-    namespace ?? "",
-    includeDeleted ? "deleted" : "active",
-  ].join("\u001f");
-  const listRefreshPolicyKey = selectedResourceType === "pod" || selectedResourceType === "node"
-    ? "metrics_kubernetes"
-    : "resource_list_slow";
-  const [listPolicyRecord, setListPolicyRecord] = useState<{
-    policy: BrowserRefreshPolicy;
-    scope: string;
-  } | null>(null);
-  const refreshAfterSeconds = listPolicyRecord?.scope === listPolicyScope
-    ? listPolicyRecord.policy.refreshAfterSeconds
-    : null;
-  const policyScope = useRef({ catalog: selectedClusterId, list: listPolicyScope });
-  useEffect(() => {
-    policyScope.current = { catalog: selectedClusterId, list: listPolicyScope };
-  }, [listPolicyScope, selectedClusterId]);
-  const catalogRefresh = useServerRefreshScheduler(
-    () => setCatalogRevision((current) => current + 1),
+  const automaticRefreshPaused = hasRetryBlocks(retryBlocks);
+  const { refresh: advanceRevision, revision } = useVisibleRefreshClock(
+    !automaticRefreshPaused,
+    RESOURCE_COUNTS_POLL_INTERVAL_MS,
   );
-  const listRefresh = useServerRefreshScheduler(
-    () => setRevision((current) => current + 1),
+  const { refresh: advancePodRevision, revision: podRevision } = useVisibleRefreshClock(
+    !automaticRefreshPaused && clusterScope.selectedClusterExists,
+    POD_STATE_POLL_INTERVAL_MS,
   );
-  useEffect(() => {
-    if (!editorRefreshPaused) return;
-    catalogRefresh.backgroundFailure();
-    listRefresh.backgroundFailure();
-  }, [catalogRefresh, editorRefreshPaused, listRefresh]);
-  const acceptPolicy = useCallback((
-    key: "resource_list" | "resource_list_slow" | "metrics_kubernetes",
-    controller: ServerRefreshController,
-  ) => {
-    const requestedScope = key === "resource_list"
-      ? selectedClusterId
-      : listPolicyScope;
-    const isCurrentScope = () => (
-      key === "resource_list"
-        ? policyScope.current.catalog
-        : policyScope.current.list
-    ) === requestedScope;
-    void refreshPolicies.getPolicy(key).then(
-      (policy) => {
-        if (!isCurrentScope()) return;
-        if (key !== "resource_list") {
-          setListPolicyRecord({ policy, scope: listPolicyScope });
-        }
-        controller.acceptSuccess(policy);
-      },
-      () => {
-        if (isCurrentScope()) controller.backgroundFailure();
-      },
-    );
-  }, [listPolicyScope, refreshPolicies, selectedClusterId]);
+  const observedRevision = useRef(revision);
+  const resumedFromBackground = useRef(false);
   const recordFailure = useCallback(
     (
       target: ResourcesRequestTarget,
       failure: ReturnType<typeof toResourcesFailure>,
     ) => {
       const block = blockForFailure(target, failure);
-      const next = block
-        ? withRetryBlock(retryBlocksRef.current, block)
-        : withoutRetryBlock(retryBlocksRef.current, target);
-      retryBlocksRef.current = next;
-      setRetryBlocks(next);
-      if (target === "catalog") catalogRefresh.backgroundFailure();
-      else listRefresh.backgroundFailure();
+      setRetryBlocks((current) =>
+        block
+          ? withRetryBlock(current, block)
+          : withoutRetryBlock(current, target),
+      );
     },
-    [catalogRefresh, listRefresh],
+    [],
   );
   const recordSuccess = useCallback((target: ResourcesRequestTarget) => {
-    const next = withoutRetryBlock(retryBlocksRef.current, target);
-    retryBlocksRef.current = next;
-    setRetryBlocks(next);
-      if (editorRefreshPaused) {
-        if (target === "catalog") catalogRefresh.backgroundFailure();
-        else listRefresh.backgroundFailure();
-      } else if (target === "catalog") {
-      acceptPolicy("resource_list", catalogRefresh);
-    } else if (next.list === undefined && next.detail === undefined) {
-      acceptPolicy(listRefreshPolicyKey, listRefresh);
-    } else {
-      listRefresh.backgroundFailure();
-    }
-  }, [acceptPolicy, catalogRefresh, editorRefreshPaused, listRefresh, listRefreshPolicyKey]);
+    setRetryBlocks((current) => withoutRetryBlock(current, target));
+  }, []);
   const refresh = useCallback(() => {
-    catalogRefresh.requestRefresh();
-    listRefresh.requestRefresh();
-    setPodRevision((current) => current + 1);
-    clusterScope.refresh();
-  }, [catalogRefresh, clusterScope, listRefresh]);
+    advanceRevision();
+    advancePodRevision();
+  }, [advancePodRevision, advanceRevision]);
+
   useEffect(() => {
-    catalogRefresh.backgroundFailure();
-  }, [catalogRefresh, selectedClusterId]);
+    if (observedRevision.current === revision) return;
+    observedRevision.current = revision;
+    if (resumedFromBackground.current) {
+      resumedFromBackground.current = false;
+      return;
+    }
+    refreshClusterScope();
+  }, [refreshClusterScope, revision]);
+
   useEffect(() => {
-    listRefresh.backgroundFailure();
-  }, [includeDeleted, listRefresh, namespace, selectedClusterId, selectedResourceType]);
+    const rememberVisibilityResume = () => {
+      if (document.visibilityState === "visible") resumedFromBackground.current = true;
+    };
+    document.addEventListener("visibilitychange", rememberVisibilityResume);
+    return () => document.removeEventListener("visibilitychange", rememberVisibilityResume);
+  }, []);
+
   useEffect(() => {
     const retryAt = scheduledRateLimitRetryAt(retryBlocks);
     if (retryAt === null) return;
-    const timer = window.setTimeout(() => {
-      if (retryBlocks.catalog?.code === "rate-limited") catalogRefresh.requestRefresh();
-      if (
-        retryBlocks.list?.code === "rate-limited" ||
-        retryBlocks.detail?.code === "rate-limited"
-      ) listRefresh.requestRefresh();
-    }, Math.max(0, retryAt - Date.now()));
+    const timer = window.setTimeout(
+      advanceRevision,
+      Math.max(0, retryAt - Date.now()),
+    );
     return () => window.clearTimeout(timer);
-  }, [catalogRefresh, listRefresh, retryBlocks]);
+  }, [advanceRevision, retryBlocks]);
+
   const selectedClusterExists = clusterScope.selectedClusterExists;
   const frame = useResourcesDataFrame({
-    catalogNamespaces,
     catalogQuerySupported: true,
-    catalogRevision,
     detailClusterId: detailTarget?.clusterId ?? null,
     detailIdentity,
     includeDeleted,
@@ -223,7 +145,7 @@ export function useResourcesPageState(
     onRequestFailure: recordFailure,
     onRequestSuccess: recordSuccess,
     reportUnauthorized,
-    listRevision: revision,
+    revision,
     selectedClusterExists,
     selectedClusterId,
     selectedResourceType,
@@ -244,13 +166,6 @@ export function useResourcesPageState(
     },
     [filter],
   );
-  const requestResourceEventInvalidation = useCallback(() => {
-    if (
-      listPolicyRecord?.scope !== listPolicyScope ||
-      listPolicyRecord.policy.eventInvalidation !== true
-    ) return;
-    listRefresh.requestEventInvalidation();
-  }, [listPolicyRecord, listPolicyScope, listRefresh]);
 
   return useMemo(
     () => ({
@@ -268,13 +183,12 @@ export function useResourcesPageState(
       detailFull: filter.detail.full,
       filterProjectionUnsupported:
         !listFiltersSupported,
-      view: surface.view,
+      view,
       search: filter.state.resources.query,
       namespace,
       includeDeleted,
       detailTab: filter.detail.tab ?? "overview",
       automaticRefreshPaused,
-      refreshAfterSeconds,
       retryWaitSeconds: retryWaitSeconds(retryBlocks),
       recordListFailure(failure: ReturnType<typeof toResourcesFailure>) {
         recordFailure("list", failure);
@@ -285,7 +199,6 @@ export function useResourcesPageState(
       revision,
       podRevision,
       refresh,
-      requestResourceEventInvalidation,
       selectResourceType,
       cycleResourceType(direction: -1 | 1) {
         if (
@@ -347,7 +260,20 @@ export function useResourcesPageState(
           value ? "chip-add" : "chip-remove",
         );
       },
-      setView: surface.setView,
+      setView(value: typeof view) {
+        if (value === "graph") {
+          setRetryBlocks((current) =>
+            withoutRetryBlock(withoutRetryBlock(current, "catalog"), "list"),
+          );
+        }
+        filter.updateFilters(
+          (current) => ({
+            ...current,
+            resources: { ...current.resources, view: value },
+          }),
+          "view-change",
+        );
+      },
       setDetailTab(value: string) {
         filter.updateDetail(
           (current) => ({ ...current, tab: value }),
@@ -361,7 +287,6 @@ export function useResourcesPageState(
         );
       },
       openDetail,
-      openDetailTarget,
       navigateDetail,
       closeDetail,
       registerRowButton,
@@ -377,10 +302,7 @@ export function useResourcesPageState(
       namespace,
       navigateDetail,
       openDetail,
-      openDetailTarget,
       refresh,
-      refreshAfterSeconds,
-      requestResourceEventInvalidation,
       filter,
       recordFailure,
       recordSuccess,
@@ -395,7 +317,7 @@ export function useResourcesPageState(
       canonicalTypes.length,
       listFiltersSupported,
       clusterScope.selection,
-      surface,
+      view,
       legacyTypeResolution.kind,
     ],
   );

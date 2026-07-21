@@ -6,29 +6,17 @@ import type { PhysicalTopologyPort } from "../../features/resources/physicalTopo
 import type { PhysicalTopologyRealtimePort } from "../../features/resources/physicalTopologyRealtimeContract";
 import type { RelationTopologyPort } from "../../features/resources/relationTopologyContract";
 import type { ChangeTimelinePort } from "../../features/resources/changeTimelineContract";
-import type {
-  ResourceMetricsHistoryPort,
-  ResourcesRefreshPolicyKey,
-} from "../../features/resources/resourceMetricsHistoryContract";
+import type { ResourceMetricsHistoryPort } from "../../features/resources/resourceMetricsHistoryContract";
 import type {
   ResourceActionsPort,
   ResourceCapabilitiesPort,
 } from "../../features/resources/resourceCapabilitiesContract";
 import type { ResourceManifestPort } from "../../features/resources/resourceManifestContract";
-import type { ResourceIssuesPort } from "../../features/issues/resourceIssuesContract";
-import type { ChecksPort } from "../../features/checks/checksContract";
 import { ResourcesPage } from "./ResourcesPage";
 import {
   EMPTY_POD_TERMINAL_PORT,
   type PodTerminalPort,
 } from "../../features/pod-terminal/podTerminalContract";
-import type { ServiceAccessPort } from "../../features/service-access/serviceAccessContract";
-import type { PortForwardSessionPort } from "../../features/service-access/portForwardSessionContract";
-import type { TimelinePort } from "../../features/timeline/timelineContract";
-import type { BrowserRefreshPolicyRegistry } from "../../shared/data/browserRefreshPolicyRegistry";
-import type { ResourceFilesPort } from "../../features/resource-files/resourceFilesContract";
-import type { TrafficPort } from "../../features/traffic/trafficContract";
-import type { GitOpsPort } from "../../features/gitops/gitOpsContract";
 
 export function createResourcesSurface(
   port: ResourcesPort,
@@ -38,20 +26,11 @@ export function createResourcesSurface(
   nodePodsPort: Pick<HomePort, "loadNodePods">,
   relationTopologyPort: RelationTopologyPort,
   changeTimelinePort: ChangeTimelinePort,
-  timelinePort: TimelinePort,
   resourceMetricsHistoryPort: ResourceMetricsHistoryPort,
-  refreshPolicies: BrowserRefreshPolicyRegistry<ResourcesRefreshPolicyKey>,
   resourceCapabilitiesPort: ResourceCapabilitiesPort,
   resourceActionsPort: ResourceActionsPort,
   podTerminalPort: PodTerminalPort = EMPTY_POD_TERMINAL_PORT,
   resourceManifestPort?: ResourceManifestPort,
-  resourceIssuesPort?: ResourceIssuesPort,
-  checksPort?: ChecksPort,
-  serviceAccessPort?: ServiceAccessPort,
-  portForwardSessions?: PortForwardSessionPort,
-  resourceFilesPort?: ResourceFilesPort,
-  trafficPort?: TrafficPort,
-  repositoryLineagePort?: Pick<GitOpsPort, "listApplications" | "listSyncTargets">,
 ): ComponentType {
   function ResourcesSurface() {
     return (
@@ -62,20 +41,11 @@ export function createResourcesSurface(
         nodePodsPort={nodePodsPort}
         relationTopologyPort={relationTopologyPort}
         changeTimelinePort={changeTimelinePort}
-        timelinePort={timelinePort}
         resourceMetricsHistoryPort={resourceMetricsHistoryPort}
-        refreshPolicies={refreshPolicies}
         resourceCapabilitiesPort={resourceCapabilitiesPort}
         resourceActionsPort={resourceActionsPort}
         podTerminalPort={podTerminalPort}
         resourceManifestPort={resourceManifestPort}
-        resourceIssuesPort={resourceIssuesPort}
-        checksPort={checksPort}
-        serviceAccessPort={serviceAccessPort}
-        portForwardSessions={portForwardSessions}
-        resourceFilesPort={resourceFilesPort}
-        trafficPort={trafficPort}
-        repositoryLineagePort={repositoryLineagePort}
         port={port}
       />
     );

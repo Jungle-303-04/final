@@ -1,6 +1,4 @@
 import { z } from "zod";
-import { rightsizingWorkloadEvidenceSchema } from "./rightsizing-schemas";
-import { workloadDetailResourceRefSchema } from "./workload-resource-ref-schemas";
 
 const availabilitySchema = z.enum(["available", "partial", "unavailable"]);
 const freshnessSchema = z.enum(["live", "stale", "partial", "disconnected"]);
@@ -19,10 +17,16 @@ const featureNameSchema = z.enum([
   "operations",
   "yaml",
   "compare",
-  "execution",
 ]);
 
-export { workloadDetailResourceRefSchema } from "./workload-resource-ref-schemas";
+export const workloadDetailResourceRefSchema = z.strictObject({
+  api_group: z.string(),
+  version: z.string().min(1),
+  kind: z.string().min(1),
+  namespace: nullableTextSchema,
+  name: z.string().min(1),
+  uid: z.string().min(1),
+});
 
 const workloadDetailScopeSchema = z.strictObject({
   workspace_id: z.string().min(1),
@@ -117,7 +121,6 @@ export const workloadDetailSchema = z.strictObject({
     pods: workloadPodCollectionSchema,
     events: workloadEventCollectionSchema,
     log_stream: workloadLogStreamSchema,
-    rightsizing: rightsizingWorkloadEvidenceSchema,
     capabilities: capabilitySetSchema,
     features: z.array(workloadDetailFeatureSchema),
   }),

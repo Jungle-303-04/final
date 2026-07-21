@@ -31,10 +31,6 @@ describe("cluster disconnect policy", () => {
       ...TARGET,
       environment: "management",
     })).toBe(false);
-    expect(canOfferClusterDisconnect(["service_admin"], {
-      ...TARGET,
-      observationMode: "simulation",
-    })).toBe(false);
   });
 
   it("removes soft-unregistered expired registrations from the active card list", () => {

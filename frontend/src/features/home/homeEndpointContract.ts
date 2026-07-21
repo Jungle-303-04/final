@@ -9,15 +9,11 @@ export interface HomeEndpointClusterSummary {
   status: string;
   settings: Record<string, unknown>;
   connection_status: string;
-  observation_mode?: "agent" | "simulation";
   connection_stage?: HomeConnectionStage;
   last_agent_id: string | null;
   last_agent_seen_at: string | null;
   node_count: number | null;
   pod_count: number | null;
-  namespace_count?: number | null;
-  kubernetes_version?: string | null;
-  crd_discovery_status?: "exact" | "partial" | "unavailable" | null;
   incident_count: number | null;
   server_count?: number | null;
   app_count?: number | null;
@@ -84,52 +80,10 @@ export interface HomeEndpointClusterOverview {
   usage: HomeEndpointUsage | null;
 }
 
-export interface HomeEndpointFleetClusterSummary {
-  cluster_id: string;
-  name: string;
-  health: string;
-  pods_running: number;
-  pods_total: number;
-  nodes_ready: number;
-  nodes_total: number;
-  open_incidents: number;
-  restarts_recent: number;
-  cpu_pct: number | null;
-  mem_pct: number | null;
-  last_seen_at: string | null;
-  coverage?: HomeEndpointClusterDataCoverage | null;
-}
-
-export interface HomeEndpointClusterObservationCoverage {
-  availability: "available" | "partial" | "unavailable";
-  observed_at: string | null; reason_codes: string[];
-}
-export interface HomeEndpointClusterDataCoverage {
-  inventory: HomeEndpointClusterObservationCoverage; cpu: HomeEndpointClusterObservationCoverage;
-  memory: HomeEndpointClusterObservationCoverage;
-}
-
-export interface HomeEndpointFleetSummary {
-  clusters: HomeEndpointFleetClusterSummary[];
-  totals: {
-    clusters: number;
-    healthy: number;
-    warning: number;
-    critical: number;
-    stale: number;
-    unknown: number;
-    open_incidents: number;
-    pending_approvals: number;
-    running_workflows: number;
-    dead_letters: number;
-  };
-}
-
 export interface HomeEndpointNode {
   name: string;
   ready: boolean;
   health: string;
-  kubernetes_version: string | null;
   pods_running: number;
   pods_capacity: number;
   cpu_pct: number | null;
@@ -141,94 +95,6 @@ export interface HomeEndpointNode {
 export interface HomeEndpointNodeCollection {
   cluster_id: string;
   nodes: HomeEndpointNode[];
-  coverage?: HomeEndpointClusterDataCoverage | null;
-}
-
-export interface HomeEndpointInsightCoverage {
-  availability: "available" | "partial" | "unavailable";
-  observed_at: string | null;
-  reason_codes: string[];
-}
-
-export interface HomeEndpointInsights {
-  cluster_id: string;
-  topology: {
-    coverage: HomeEndpointInsightCoverage;
-    node_count: number | null;
-    edge_count: number | null;
-    omitted_node_count: number | null;
-    omitted_edge_count: number | null;
-    relation_completeness: "exact" | "partial" | "unavailable";
-  };
-  explore: {
-    traffic: { coverage: HomeEndpointInsightCoverage };
-    cost: { coverage: HomeEndpointInsightCoverage };
-  };
-  posture: {
-    network_policy: {
-      coverage: HomeEndpointInsightCoverage;
-      total_policies: number | null;
-      covered_workloads: number | null;
-      total_workloads: number | null;
-    };
-    gitops: {
-      coverage: HomeEndpointInsightCoverage;
-      controller_count: number | null;
-      provider_counts: Record<string, number>;
-      health_counts: Record<string, number>;
-    };
-    audit: {
-      coverage: HomeEndpointInsightCoverage;
-      total_check_count: number | null;
-      total_finding_count: number | null;
-      severity_counts: Partial<Record<"warning" | "danger", number>>;
-    };
-  };
-  custom_resources: {
-    coverage: HomeEndpointInsightCoverage;
-    items: Array<{
-      api_group: string;
-      version: string;
-      kind: string;
-      count: number;
-    }>;
-    total_kinds: number | null;
-    total_resources: number | null;
-    has_more: boolean;
-  };
-  helm: {
-    coverage: HomeEndpointInsightCoverage;
-    release_count: number | null;
-    status_counts: Record<string, number>;
-  };
-  certificate_expiry: {
-    coverage: HomeEndpointInsightCoverage;
-    items: Array<{
-      secret: HomeEndpointResourceRef;
-      source_certificate: HomeEndpointResourceRef;
-      not_after: string;
-      status: "valid" | "expiring" | "expired";
-      seconds_remaining: number;
-      observed_at: string | null;
-    }>;
-    tls_secret_count: number | null;
-    observed_expiry_count: number | null;
-    expiring_count: number | null;
-    expired_count: number | null;
-    earliest_expiry: string | null;
-    warning_before_seconds: number;
-    has_more: boolean;
-  };
-  refresh_after_seconds: number;
-}
-
-export interface HomeEndpointResourceRef {
-  api_group: string;
-  version: string;
-  kind: string;
-  namespace: string | null;
-  name: string;
-  uid: string;
 }
 
 export interface HomeEndpointPod {
@@ -260,11 +126,6 @@ export interface HomeEndpointDependencies {
     clusterId: string,
     signal?: AbortSignal,
   ): Promise<HomeEndpointClusterOverview>;
-  getFleetSummary?(signal?: AbortSignal): Promise<HomeEndpointFleetSummary>;
-  getHomeInsights(
-    clusterId: string,
-    signal?: AbortSignal,
-  ): Promise<HomeEndpointInsights>;
   getClusterNodesSummary(
     clusterId: string,
     signal?: AbortSignal,
@@ -274,27 +135,4 @@ export interface HomeEndpointDependencies {
     nodeName: string,
     signal?: AbortSignal,
   ): Promise<HomeEndpointPodCollection>;
-  subscribeHomeDashboardEvents(
-    clusterId: string,
-    options?: HomeEndpointDashboardEventSubscription,
-  ): AsyncIterable<HomeEndpointDashboardEvent>;
-}
-
-export interface HomeEndpointDashboardEventSubscription {
-  after?: string;
-  signal?: AbortSignal;
-}
-
-export interface HomeEndpointDashboardEvent {
-  kind: "connected" | "deferred_ready" | "heartbeat";
-  cursor: string;
-  scope: {
-    workspace_id: string;
-    cluster_id: string;
-    namespaces: readonly string[];
-    freshness: "live" | "stale" | "partial" | "disconnected";
-  };
-  reconnect_after_ms: number;
-  snapshot_id?: string;
-  occurred_at?: string;
 }

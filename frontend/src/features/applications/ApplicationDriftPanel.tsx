@@ -15,8 +15,8 @@ export function ApplicationDriftPanel({
   resource: ApplicationsResource<ApplicationDriftModel | null>;
   retry: () => void;
 }) {
-  const { locale, t } = useI18n();
-  const copy = applicationsCopy(t);
+  const { locale } = useI18n();
+  const copy = applicationsCopy(locale);
   if (resource.phase === "loading") return <p className="p-6 text-sm text-muted-foreground">{copy.loading}</p>;
   if (resource.phase === "failed") return <ApplicationsFailureState failure={resource.failure} onRetry={retry} />;
   const drift = resource.data;

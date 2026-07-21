@@ -4,12 +4,8 @@ import { abbreviatedIdentity, presentProductSession } from "./sessionPresentatio
 describe("session presentation", () => {
   it("uses display name, then email, then an abbreviated identifier", () => {
     expect(presentProductSession({
-      authEnabled: true,
-      authMode: "password",
       displayName: "Woo Nyong",
       email: "woonyong.kr@gmail.com",
-      groups: [],
-      logout: { action: "end_session", supported: true, reauthenticationExpected: false },
       roles: ["service_admin"],
       userId: "user-bf4f9d6a-acf5-5612-bcd9-00d938e4a063",
       workspaceId: "default",
@@ -21,21 +17,13 @@ describe("session presentation", () => {
     });
 
     expect(presentProductSession({
-      authEnabled: true,
-      authMode: "password",
       email: "woonyong.kr@gmail.com",
-      groups: [],
-      logout: { action: "end_session", supported: true, reauthenticationExpected: false },
       roles: ["service_admin"],
       userId: "user-bf4f9d6a-acf5-5612-bcd9-00d938e4a063",
       workspaceId: "default",
     }).displayName).toBe("woonyong.kr@gmail.com");
 
     expect(presentProductSession({
-      authEnabled: true,
-      authMode: "password",
-      groups: [],
-      logout: { action: "end_session", supported: true, reauthenticationExpected: false },
       roles: ["service_admin"],
       userId: "user-bf4f9d6a-acf5-5612-bcd9-00d938e4a063",
       workspaceId: "default",

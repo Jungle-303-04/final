@@ -1,7 +1,7 @@
 import type { SupportedLocale } from "./types";
 
 export const PRODUCT_LOCALE_STORAGE_KEY = "opsia.locale";
-export const DEFAULT_LOCALE: SupportedLocale = "ko";
+export const DEFAULT_LOCALE: SupportedLocale = "en";
 export const SUPPORTED_LOCALES = ["en", "ko"] as const satisfies readonly SupportedLocale[];
 
 export interface LocaleStorage {
@@ -21,9 +21,7 @@ export function isSupportedLocale(value: unknown): value is SupportedLocale {
 export function detectNavigatorLocale(language: string | null | undefined): SupportedLocale {
   if (typeof language !== "string") return DEFAULT_LOCALE;
   const normalized = language.trim().toLowerCase().replace(/_/g, "-");
-  if (normalized === "ko" || normalized.startsWith("ko-")) return "ko";
-  if (normalized === "en" || normalized.startsWith("en-")) return "en";
-  return DEFAULT_LOCALE;
+  return normalized === "ko" || normalized.startsWith("ko-") ? "ko" : DEFAULT_LOCALE;
 }
 
 export function readPersistedLocale(storage: LocaleStorage | null | undefined): SupportedLocale | null {

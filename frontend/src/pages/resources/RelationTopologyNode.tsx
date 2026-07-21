@@ -1,4 +1,18 @@
 import { Handle, Position, type NodeProps } from "@xyflow/react";
+import {
+  Box,
+  Boxes,
+  CircleDot,
+  CloudCog,
+  Component,
+  Container,
+  Database,
+  GitBranch,
+  Globe2,
+  Network,
+  ServerCog,
+  Waypoints,
+} from "lucide-react";
 import type { KeyboardEvent } from "react";
 
 import type {
@@ -14,7 +28,6 @@ import {
   TooltipTrigger,
 } from "../../shared/ui/primitives/tooltip";
 import type { RelationGraphNode } from "./relationTopologyGraphTypes";
-import { normalizeResourceKind, renderResourceKindIcon } from "./resourcePresentation";
 
 export function RelationTopologyNode({ data }: NodeProps<RelationGraphNode>) {
   return (
@@ -40,7 +53,7 @@ export function RelationTopologyNodeCard({
 }) {
   const { t } = useI18n();
   const { resource, tone } = graphNode;
-  const pod = normalizeResourceKind(resource.kind) === "pod";
+  const pod = normalizedKind(resource.kind) === "pod";
   const status = resource.status || "—";
   const select = () => onSelect(resource.id);
   const handleKeyDown = (event: KeyboardEvent<HTMLElement>) => {
@@ -129,8 +142,25 @@ export function RelationTopologyNodeCard({
   );
 }
 
+function normalizedKind(kind: string): string {
+  return kind.trim().toLocaleLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
 function RelationKindIcon({ kind }: { kind: string }) {
-  return renderResourceKindIcon(kind, { "aria-hidden": true, className: "size-4" });
+  const normalized = normalizedKind(kind);
+  const props = { "aria-hidden": true, className: "size-4" } as const;
+  if (normalized === "pod") return <Box {...props} />;
+  if (["deployment", "replicaset", "statefulset", "daemonset"].includes(normalized)) return <Boxes {...props} />;
+  if (["job", "cronjob"].includes(normalized)) return <Container {...props} />;
+  if (normalized === "service") return <Waypoints {...props} />;
+  if (["ingress", "gateway", "httproute"].includes(normalized)) return <Globe2 {...props} />;
+  if (["endpoint", "endpoints", "endpointslice"].includes(normalized)) return <Network {...props} />;
+  if (normalized === "node") return <ServerCog {...props} />;
+  if (["persistentvolume", "persistentvolumeclaim"].includes(normalized)) return <Database {...props} />;
+  if (["configmap", "secret"].includes(normalized)) return <CloudCog {...props} />;
+  if (normalized === "namespace") return <Component {...props} />;
+  if (normalized.includes("controller")) return <GitBranch {...props} />;
+  return <CircleDot {...props} />;
 }
 
 function toneClassName(tone: RelationHealthTone): string {

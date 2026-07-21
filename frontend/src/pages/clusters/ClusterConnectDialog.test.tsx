@@ -1,19 +1,18 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { AuthSessionGateProvider } from "../../features/auth/AuthSessionGate";
 import type { ClustersPort } from "../../features/clusters/clustersContract";
-import {
-  deferred,
-  renderDialog,
-  renderHarness,
-  waitingPort,
-} from "./tests/ClusterConnectDialog.testSupport";
+import { UnifiedFilterProvider } from "../../features/filters/UnifiedFilterProvider";
+import { I18nProvider } from "../../shared/i18n";
+import { ClusterConnectDialog } from "./ClusterConnectDialog";
 
 afterEach(() => {
   cleanup();
-  window.localStorage.clear();
   vi.restoreAllMocks();
 });
 
@@ -24,17 +23,6 @@ describe("ClusterConnectDialog", () => {
     const port = waitingPort();
     vi.mocked(port.connect).mockReturnValue(pending.promise);
     renderDialog(port);
-
-    expect([
-      "AWS EKS",
-      "Google GKE",
-      "Azure AKS",
-      "Your servers",
-    ].every((name) => screen.getByRole("button", { name }))).toBe(true);
-    const dialog = screen.getByRole("dialog");
-    screen.getByRole("button", { name: "Close" }).focus();
-    await user.tab();
-    expect(dialog.contains(document.activeElement)).toBe(true);
 
     await user.type(screen.getByRole("textbox", { name: "Cluster name" }), "Production");
     await user.click(screen.getByRole("button", { name: "Generate install command" }));
@@ -51,24 +39,6 @@ describe("ClusterConnectDialog", () => {
       expiresAt: "2026-07-14T06:00:00Z",
     });
     expect(await screen.findByText("curl secret-command | kubectl apply -f -")).toBeTruthy();
-  });
-
-  it("stores the selected environment in the real registration request", async () => {
-    const user = userEvent.setup();
-    const port = waitingPort();
-    renderDialog(port);
-
-    expect(screen.getByRole("button", { name: "Development" }).getAttribute("aria-pressed"))
-      .toBe("true");
-    await user.click(screen.getByRole("button", { name: "Production" }));
-    await user.type(screen.getByRole("textbox", { name: "Cluster name" }), "Game Cluster");
-    await user.click(screen.getByRole("button", { name: "Generate install command" }));
-
-    expect(port.connect).toHaveBeenCalledWith({
-      environment: "production",
-      name: "Game Cluster",
-      provider: "aws",
-    }, expect.any(AbortSignal));
   });
 
   it("shows only the server command, copies it, and polls without logging the credential", async () => {
@@ -136,7 +106,6 @@ describe("ClusterConnectDialog", () => {
     vi.mocked(port.loadConnection).mockResolvedValue({
       status: "connected",
       stage: "ready",
-      refreshAfterSeconds: null,
       agentVersion: null,
       lastSeenAt: "2026-07-15T01:02:03Z",
     });
@@ -147,7 +116,7 @@ describe("ClusterConnectDialog", () => {
 
     expect(await screen.findByText("Cluster connected", {}, { timeout: 4_000 })).toBeTruthy();
     expect(screen.getByRole("link", { name: "View cluster" }).getAttribute("href"))
-      .toBe("/resources?clusters=production-a1b2&view=map");
+      .toBe("/resources?clusters=production-a1b2");
     expect(onConnected).toHaveBeenCalledOnce();
   });
 
@@ -157,7 +126,6 @@ describe("ClusterConnectDialog", () => {
     vi.mocked(port.loadConnection).mockResolvedValue({
       status: "waiting",
       stage: "agent_connected",
-      refreshAfterSeconds: 0.5,
       agentVersion: "2026.07.15",
       lastSeenAt: "2026-07-15T01:02:03Z",
     });
@@ -185,7 +153,7 @@ describe("ClusterConnectDialog", () => {
     await user.click(screen.getByRole("button", { name: "Close" }));
     expect(screen.queryByText("curl secret-command | kubectl apply -f -")).toBeNull();
     now += 14_000;
-    await user.click(screen.getByRole("button", { name: "Connect a cluster" }));
+    await user.click(screen.getByRole("button", { name: "Open connection" }));
 
     expect(await screen.findByText("curl secret-command | kubectl apply -f -")).toBeTruthy();
     expect(await screen.findByText("14s elapsed")).toBeTruthy();
@@ -200,14 +168,12 @@ describe("ClusterConnectDialog", () => {
       .mockResolvedValueOnce({
         status: "expired",
         stage: "expired",
-        refreshAfterSeconds: null,
         agentVersion: null,
         lastSeenAt: null,
       })
       .mockResolvedValue({
         status: "waiting",
         stage: "awaiting_install",
-        refreshAfterSeconds: 0.5,
         agentVersion: null,
         lastSeenAt: null,
       });
@@ -240,34 +206,113 @@ describe("ClusterConnectDialog", () => {
     expect(port.connect).not.toHaveBeenCalled();
   });
 
-  it("keeps the server-confirmed completion visible without inventing a second finalizing poll", async () => {
+  it("shows the server-confirmed ready stage before revealing the completion screen", async () => {
     const user = userEvent.setup();
-    const onConnected = vi.fn();
-    const onRegistered = vi.fn();
     const port = waitingPort();
     const connected = {
       status: "connected" as const,
       stage: "ready" as const,
-      refreshAfterSeconds: null,
       agentVersion: "2026.07.15",
       lastSeenAt: "2026-07-15T01:02:03Z",
     };
-    vi.mocked(port.loadConnection).mockResolvedValue(connected);
-    renderHarness(port, onConnected, onRegistered);
+    let confirmReady: ((value: typeof connected) => void) | undefined;
+    vi.mocked(port.loadConnection)
+      .mockResolvedValueOnce(connected)
+      .mockImplementationOnce(() => new Promise((resolve) => {
+        confirmReady = resolve;
+      }));
+    renderDialog(port);
 
     await user.type(screen.getByRole("textbox", { name: "Cluster name" }), "Production");
     fireEvent.click(screen.getByRole("button", { name: "Generate install command" }));
 
-    await waitFor(() => expect(onRegistered).toHaveBeenCalledOnce());
-    await waitFor(() => expect(onConnected).toHaveBeenCalledOnce());
-    expect(port.loadConnection).toHaveBeenCalledOnce();
-    expect(screen.getByRole("dialog")).toBeTruthy();
-    expect(screen.getByText("Cluster connected")).toBeTruthy();
-    expect(screen.getByText("2026.07.15")).toBeTruthy();
-    expect(screen.getByTestId("cluster-notification-probe").textContent)
-      .toBe("cluster-connected:production-a1b2");
-    expect(screen.getByRole("link", { name: "View cluster" }).getAttribute("href"))
-      .toBe("/resources?clusters=production-a1b2&view=map");
+    expect((await screen.findAllByText("Finalizing the connection")).length).toBeGreaterThan(0);
+    expect(screen.queryByText("Cluster connected")).toBeNull();
+    await waitFor(() => expect(port.loadConnection).toHaveBeenCalledTimes(2), { timeout: 4_000 });
+    confirmReady?.(connected);
+    expect(await screen.findByText("Cluster connected", {}, { timeout: 4_000 })).toBeTruthy();
   });
-
 });
+
+function waitingPort(): ClustersPort {
+  return {
+    connect: vi.fn(async () => ({
+      clusterId: "production-a1b2",
+      installCommand: "curl secret-command | kubectl apply -f -",
+      expiresAt: "2026-07-14T06:00:00Z",
+    })),
+    loadConnection: vi.fn(async () => ({
+      status: "waiting" as const,
+      stage: "awaiting_install" as const,
+      agentVersion: null,
+      lastSeenAt: null,
+    })),
+    reissue: vi.fn(async () => ({
+      clusterId: "production-a1b2",
+      installCommand: "curl rotated-command | kubectl apply -f -",
+      expiresAt: "2026-07-15T07:00:00Z",
+    })),
+  };
+}
+
+function renderDialog(
+  port: ClustersPort,
+  onConnected = vi.fn(),
+  existingNames: readonly string[] = [],
+) {
+  return render(
+    <I18nProvider navigatorLanguage="en-US" storage={null}>
+      <AuthSessionGateProvider reportUnauthorized={vi.fn()}>
+        <MemoryRouter>
+          <UnifiedFilterProvider>
+            <ClusterConnectDialog
+              existingNames={existingNames}
+              onConnected={onConnected}
+              onOpenChange={vi.fn()}
+              open
+              port={port}
+            />
+          </UnifiedFilterProvider>
+        </MemoryRouter>
+      </AuthSessionGateProvider>
+    </I18nProvider>,
+  );
+}
+
+function renderHarness(port: ClustersPort) {
+  return render(
+    <I18nProvider navigatorLanguage="en-US" storage={null}>
+      <AuthSessionGateProvider reportUnauthorized={vi.fn()}>
+        <MemoryRouter>
+          <UnifiedFilterProvider>
+            <ConnectionHarness port={port} />
+          </UnifiedFilterProvider>
+        </MemoryRouter>
+      </AuthSessionGateProvider>
+    </I18nProvider>,
+  );
+}
+
+function ConnectionHarness({ port }: { port: ClustersPort }) {
+  const [open, setOpen] = useState(true);
+  return (
+    <>
+      <button onClick={() => setOpen(true)} type="button">Open connection</button>
+      <ClusterConnectDialog
+        existingNames={[]}
+        onConnected={vi.fn()}
+        onOpenChange={setOpen}
+        open={open}
+        port={port}
+      />
+    </>
+  );
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((onResolve) => {
+    resolve = onResolve;
+  });
+  return { promise, resolve };
+}

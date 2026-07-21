@@ -42,26 +42,6 @@ export function productFilterNavigationHref(
   return `${path}${serializeProductFilterUrl(parsed.state)}`;
 }
 
-export function productResourceHealthHref(
-  href: string,
-  health: readonly string[],
-): string {
-  const hashIndex = href.indexOf("#");
-  const hash = hashIndex >= 0 ? href.slice(hashIndex) : "";
-  const pathAndSearch = hashIndex >= 0 ? href.slice(0, hashIndex) : href;
-  const searchIndex = pathAndSearch.indexOf("?");
-  const path = searchIndex >= 0 ? pathAndSearch.slice(0, searchIndex) : pathAndSearch;
-  const search = searchIndex >= 0 ? pathAndSearch.slice(searchIndex) : "";
-  const parsed = parseProductFilterUrl(search);
-  return `${path}${serializeProductFilterUrl({
-    ...parsed.state,
-    resources: {
-      ...parsed.state.resources,
-      health,
-    },
-  }, parsed.detail)}${hash}`;
-}
-
 export function filterHistoryMode(intent: FilterMutationIntent): FilterHistoryMode {
   switch (intent) {
     case "chip-add":
@@ -93,15 +73,8 @@ export function detailHistoryMode(intent: DetailMutationIntent): FilterHistoryMo
     case "topology-view-reset":
       return "replace";
     case "topology-view":
-    case "resource-surface-view":
-    case "surface-tab":
     case "time-range":
     case "graph-visibility":
-    case "home-period":
-    case "traffic-filter":
-    case "traffic-sort":
-    case "traffic-flow":
-    case "traffic-page":
       return "push";
     case "time-at":
       return "replace";

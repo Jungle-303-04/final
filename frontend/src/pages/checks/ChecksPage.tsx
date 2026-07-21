@@ -1,34 +1,26 @@
-import { CircleAlert, Settings, ShieldCheck } from "lucide-react";
-import { useMemo, useState, type ReactNode } from "react";
+import { CircleAlert } from "lucide-react";
+import { useMemo, type ReactNode } from "react";
 
 import { useClusterScope } from "../../features/cluster-scope/ClusterScopeProvider";
 import {
   ChecksPortFailure,
   type ChecksClusterScope,
   type ChecksDetailResponse,
-  type ChecksOverview,
   type ChecksPort,
   type ChecksScopeCoverage,
 } from "../../features/checks/checksContract";
-import { checksCopy, type ChecksCopy } from "../../features/checks/checksCopy";
+import { CHECKS_COPY } from "../../features/checks/checksCopy";
 import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
 import { RefreshAction } from "../../motion/RefreshAction";
 import { namespaceSelector, normalizeNamespaceRefs } from "../../features/filters/filterUrlSyntax";
-import { useI18n } from "../../shared/i18n";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
-import { ProductSurfaceTitle } from "../../shared/ui/ProductSurfaceTitle";
-import { Surface, SurfaceSection } from "../../shared/ui/Surface";
 import { Alert, AlertDescription, AlertTitle } from "../../shared/ui/primitives/alert";
 import { Badge } from "../../shared/ui/primitives/badge";
-import { Button } from "../../shared/ui/primitives/button";
+import { Card, CardContent, CardHeader, CardTitle } from "../../shared/ui/primitives/card";
 import { useChecksDetail, useChecksOverview } from "./useChecksData";
-import { ChecksSettingsDialog } from "./ChecksSettingsDialog";
-import { ChecksAvailabilityReasons as AvailabilityReasons } from "./ChecksAvailabilityReasons";
-import { CatalogSection, ChecksSummaryChips, FindingsList, FindingsSection } from "./ChecksOverviewSections";
 
 export function ChecksPage({ port }: { port: ChecksPort }) {
-  const copy = useChecksCopy();
   const clusterScope = useClusterScope();
   const filters = useUnifiedFilter();
   const selection = scopeSelection(clusterScope);
@@ -41,7 +33,7 @@ export function ChecksPage({ port }: { port: ChecksPort }) {
   if (selection.kind === "loading") return <ProductStateScreen kind="loading" placement="content" />;
   if (selection.kind === "empty") return <ProductStateScreen kind="empty" placement="content" />;
   if (selection.kind === "error") {
-    return <ProductStateScreen kind="error" issue={{ code: "unknown", safeDetail: copy.scopeSelectionUnavailable }} placement="content" />;
+    return <ProductStateScreen kind="error" issue={{ code: "unknown", safeDetail: CHECKS_COPY.scopeSelectionUnavailable }} placement="content" />;
   }
   return <ChecksReadyPage checkId={checkId} clusterIds={selection.clusterIds} namespaces={namespaces} port={port} />;
 }
@@ -57,32 +49,15 @@ function ChecksReadyPage({
   namespaces: readonly string[];
   port: ChecksPort;
 }) {
-  const copy = useChecksCopy();
   const data = useChecksOverview(port, { clusterIds, namespaces });
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const catalog = data.frame.phase === "ready" && data.frame.data.catalog.availability !== "unavailable"
-    ? data.frame.data.catalog.entries
-    : [];
   return (
     <ProductPageFrame className="gap-4">
-      <header className="flex min-w-0 items-center gap-2.5">
-        <ProductSurfaceTitle icon={ShieldCheck} title={copy.title} />
-        <p className="sr-only">{copy.description}</p>
-        <Button aria-label={copy.settingsAction} className="ml-auto shrink-0 whitespace-nowrap" onClick={() => setSettingsOpen(true)} size="sm" variant="outline">
-          <Settings aria-hidden="true" />{copy.settingsAction}
-        </Button>
+      <header className="grid min-w-0 gap-1">
+        <h1 className="text-2xl font-semibold tracking-tight">{CHECKS_COPY.title}</h1>
+        <p className="max-w-3xl text-sm leading-6 text-muted-foreground">{CHECKS_COPY.description}</p>
       </header>
       <ChecksOverviewContent frame={data.frame} onRefresh={data.refresh} />
       {checkId === null ? null : <ChecksDetailPanel checkId={checkId} clusterIds={clusterIds} namespaces={namespaces} port={port} />}
-      {settingsOpen ? (
-        <ChecksSettingsDialog
-          catalog={catalog}
-          onOpenChange={setSettingsOpen}
-          onSaved={data.refresh}
-          open
-          port={port}
-        />
-      ) : null}
     </ProductPageFrame>
   );
 }
@@ -94,54 +69,42 @@ function ChecksOverviewContent({
   frame: ReturnType<typeof useChecksOverview>["frame"];
   onRefresh: () => void;
 }) {
-  const copy = useChecksCopy();
   if (frame.phase === "idle" || frame.phase === "loading") {
     return <ProductStateScreen kind="loading" placement="content" />;
   }
   if (frame.phase === "failed") return <ChecksFailureScreen failure={frame.failure} onRefresh={onRefresh} />;
   const overview = frame.data;
   return (
-    <div className="grid min-w-0 gap-3">
-      <div className="flex min-w-0 flex-wrap items-center gap-2">
-        <h2 className="sr-only" id="checks-overview-title">{copy.title}</h2>
-        <ChecksSummaryChips overview={overview} />
-        <p className="min-w-0 truncate text-caption text-muted-foreground" title={overview.scopeCoverage.observedAt ?? copy.notObserved}>
-          {overview.scopeCoverage.observedAt ?? copy.notObserved}
-        </p>
-        <span className="ml-auto" />
+    <section aria-labelledby="checks-overview-title" className="grid min-w-0 gap-4">
+      <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <h2 className="sr-only" id="checks-overview-title">{CHECKS_COPY.title}</h2>
+        <p className="min-w-0 break-words text-sm text-muted-foreground">{overview.scopeCoverage.observedAt ?? CHECKS_COPY.notObserved}</p>
         <RefreshAction
           hasFailed={frame.refreshFailure !== null}
           isRefreshing={frame.refreshing}
-          label={copy.refresh}
+          label={CHECKS_COPY.refresh}
           onRefresh={onRefresh}
           statusCopy={{
-            cancelled: copy.refreshCancelled,
-            failed: copy.refreshFailed,
-            pending: copy.refreshPending,
-            reconnecting: copy.refreshReconnecting,
-            succeeded: copy.refreshSucceeded,
+            cancelled: CHECKS_COPY.refreshCancelled,
+            failed: CHECKS_COPY.refreshFailed,
+            pending: CHECKS_COPY.refreshPending,
+            reconnecting: CHECKS_COPY.refreshReconnecting,
+            succeeded: CHECKS_COPY.refreshSucceeded,
           }}
         />
       </div>
-      <Surface aria-labelledby="checks-overview-title" className="min-w-0 overflow-hidden rounded-card">
-        {overview.resultSet.availability === "unavailable" ? (
-          <UnavailableSection
-            icon={<CircleAlert aria-hidden="true" />}
-            reasons={overview.resultSet.reasonCodes}
-            title={copy.resultStatus}
-          >
-            {copy.resultUnavailable}
-          </UnavailableSection>
-        ) : <FindingsSection resultSet={overview.resultSet} />}
-        {overview.catalog.availability === "unavailable" ? (
-          <UnavailableSection reasons={overview.catalog.reasonCodes} title={copy.catalogStatus}>
-            {copy.catalogUnavailable}
-          </UnavailableSection>
-        ) : <CatalogSection catalog={overview.catalog} />}
-        <VisibilitySection visibility={overview.visibility} />
-        <ScopeSection coverage={overview.scopeCoverage} />
-      </Surface>
-    </div>
+      <UnavailableCard
+        icon={<CircleAlert aria-hidden="true" />}
+        reasons={overview.resultSet.reasonCodes}
+        title={CHECKS_COPY.resultStatus}
+      >
+        {CHECKS_COPY.resultUnavailable}
+      </UnavailableCard>
+      <UnavailableCard reasons={overview.catalog.reasonCodes} title={CHECKS_COPY.catalogStatus}>
+        {CHECKS_COPY.catalogUnavailable}
+      </UnavailableCard>
+      <ScopeCard coverage={overview.scopeCoverage} />
+    </section>
   );
 }
 
@@ -161,82 +124,24 @@ function ChecksDetailPanel({
     return <ProductStateScreen kind="loading" placement="content" />;
   }
   if (data.frame.phase === "failed") return <ChecksFailureScreen failure={data.frame.failure} onRefresh={data.refresh} />;
-  return <ChecksDetailSection response={data.frame.data} />;
+  return <ChecksDetailCard response={data.frame.data} />;
 }
 
-function ChecksDetailSection({ response }: { response: ChecksDetailResponse }) {
-  const copy = useChecksCopy();
-  if (response.detail.availability === "unavailable") {
-    return (
-      <section aria-label={copy.detailStatus} className="grid min-w-0 gap-2 border-y py-4">
-        <h2 className="truncate text-base font-semibold" title={response.detail.requestedCheckId}>
-          {copy.detailStatus}: {response.detail.requestedCheckId}
-        </h2>
-        <p className="text-sm text-muted-foreground">{copy.detailUnavailable}</p>
+function ChecksDetailCard({ response }: { response: ChecksDetailResponse }) {
+  return (
+    <Card aria-label={CHECKS_COPY.detailStatus}>
+      <CardHeader className="min-w-0 border-b">
+        <CardTitle className="truncate" title={response.detail.requestedCheckId}>{CHECKS_COPY.detailStatus}: {response.detail.requestedCheckId}</CardTitle>
+      </CardHeader>
+      <CardContent className="grid min-w-0 gap-2">
+        <p className="text-sm text-muted-foreground">{CHECKS_COPY.detailUnavailable}</p>
         <AvailabilityReasons reasons={response.detail.reasonCodes} />
-      </section>
-    );
-  }
-  return (
-    <section aria-label={copy.detailStatus} className="grid min-w-0 gap-3 border-y py-4">
-      <h2 className="break-words text-base font-semibold" title={response.detail.requestedCheckId}>
-        {response.detail.title}
-      </h2>
-      <div className="flex min-w-0 flex-wrap gap-2">
-        <Badge variant="outline">{response.detail.category}</Badge>
-        <Badge variant={response.detail.effectiveSeverity === "danger" ? "destructive" : "secondary"}>
-          {response.detail.effectiveSeverity}
-        </Badge>
-      </div>
-      <p className="break-words text-sm">{response.detail.message}</p>
-      <p className="break-words text-sm text-muted-foreground">{response.detail.remediation}</p>
-      <FindingsList findings={response.detail.findings} />
-      <AvailabilityReasons reasons={response.detail.reasonCodes} />
-    </section>
+      </CardContent>
+    </Card>
   );
 }
 
-function VisibilitySection({ visibility }: { visibility: ChecksOverview["visibility"] }) {
-  const copy = useChecksCopy();
-  if (visibility.availability === "unavailable") {
-    return (
-      <UnavailableSection reasons={visibility.reasonCodes} title={copy.visibilityStatus}>
-        {copy.visibilityUnavailable}
-      </UnavailableSection>
-    );
-  }
-  return (
-    <SurfaceSection className="grid min-w-0 gap-3 p-4">
-      <h3 className="text-base font-semibold">{copy.visibilityStatus}</h3>
-      <ul className="min-w-0 divide-y" aria-label={copy.visibilityStatus}>
-        {visibility.clusters.map((cluster) => (
-          <li className="grid min-w-0 gap-2 py-3 first:pt-0 last:pb-0" key={cluster.clusterId}>
-            <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
-              <span className="min-w-0 break-words text-sm font-medium">{cluster.clusterId}</span>
-              <Badge variant={cluster.state === "ok" ? "secondary" : "outline"}>{cluster.state}</Badge>
-            </div>
-            <p className="break-words text-xs text-muted-foreground">
-              {copy.observedNamespaces}: {cluster.namespaceScope.length === 0 ? copy.noNamespaces : cluster.namespaceScope.join(", ")}
-            </p>
-            <div className="flex min-w-0 flex-wrap gap-2">
-              {Object.entries(cluster.core).map(([kind, access]) => (
-                <Badge key={kind} variant={access === "allowed" ? "secondary" : "outline"}>{kind}: {access}</Badge>
-              ))}
-            </div>
-            {cluster.missingOptionalKinds.length === 0 ? null : (
-              <p className="break-words text-xs text-muted-foreground">
-                {copy.missingOptionalKinds}: {cluster.missingOptionalKinds.join(", ")}
-              </p>
-            )}
-          </li>
-        ))}
-      </ul>
-      <AvailabilityReasons reasons={visibility.reasonCodes} />
-    </SurfaceSection>
-  );
-}
-
-function UnavailableSection({
+function UnavailableCard({
   children,
   icon,
   reasons,
@@ -248,42 +153,40 @@ function UnavailableSection({
   title: string;
 }) {
   return (
-    <SurfaceSection className="p-4">
-      <Alert>
-        {icon}
-        <AlertTitle>{title}</AlertTitle>
-        <AlertDescription>
-          <p>{children}</p>
-          <AvailabilityReasons reasons={reasons} />
-        </AlertDescription>
-      </Alert>
-    </SurfaceSection>
+    <Alert>
+      {icon}
+      <AlertTitle>{title}</AlertTitle>
+      <AlertDescription>
+        <p>{children}</p>
+        <AvailabilityReasons reasons={reasons} />
+      </AlertDescription>
+    </Alert>
   );
 }
 
-function ScopeSection({ coverage }: { coverage: ChecksScopeCoverage }) {
-  const copy = useChecksCopy();
+function ScopeCard({ coverage }: { coverage: ChecksScopeCoverage }) {
   return (
-    <SurfaceSection className="grid min-w-0 gap-3 p-4">
-      <div className="grid min-w-0 gap-1">
-        <h3 className="text-base font-semibold">{copy.scope}</h3>
-        {coverage.availability === "available" ? null : <p className="text-sm text-muted-foreground">{copy.scopeUnavailable}</p>}
-      </div>
-      {coverage.scopes.length === 0 ? <p className="text-sm text-muted-foreground">{copy.notObserved}</p> : (
-        <ul className="min-w-0 divide-y" aria-label={copy.scope}>
-          {coverage.scopes.map((scope) => <ScopeRow key={scope.clusterId} scope={scope} />)}
-        </ul>
-      )}
-      <AvailabilityReasons reasons={coverage.reasonCodes} />
-    </SurfaceSection>
+    <Card>
+      <CardHeader className="border-b">
+        <CardTitle>{CHECKS_COPY.scope}</CardTitle>
+        {coverage.availability === "available" ? null : <p className="text-sm text-muted-foreground">{CHECKS_COPY.scopeUnavailable}</p>}
+      </CardHeader>
+      <CardContent className="grid min-w-0 gap-3">
+        {coverage.scopes.length === 0 ? <p className="text-sm text-muted-foreground">{CHECKS_COPY.notObserved}</p> : (
+          <ul className="grid min-w-0 gap-2" aria-label={CHECKS_COPY.scope}>
+            {coverage.scopes.map((scope) => <ScopeRow key={scope.clusterId} scope={scope} />)}
+          </ul>
+        )}
+        <AvailabilityReasons reasons={coverage.reasonCodes} />
+      </CardContent>
+    </Card>
   );
 }
 
 function ScopeRow({ scope }: { scope: ChecksClusterScope }) {
-  const copy = useChecksCopy();
-  const namespaces = scope.namespaces.length === 0 ? copy.noNamespaces : scope.namespaces.join(", ");
+  const namespaces = scope.namespaces.length === 0 ? CHECKS_COPY.noNamespaces : scope.namespaces.join(", ");
   return (
-    <li className="grid min-w-0 gap-2 py-3 first:pt-0 last:pb-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+    <li className="grid min-w-0 gap-2 rounded-lg border p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
       <div className="min-w-0">
         <p className="truncate font-medium" title={scope.clusterId}>{scope.clusterId}</p>
         <p className="mt-0.5 break-words text-xs text-muted-foreground">{namespaces}</p>
@@ -293,6 +196,28 @@ function ScopeRow({ scope }: { scope: ChecksClusterScope }) {
   );
 }
 
+function AvailabilityReasons({ reasons }: { reasons: readonly string[] }) {
+  if (reasons.length === 0) return null;
+  return (
+    <ul className="grid gap-1 pt-1 text-xs text-muted-foreground" aria-label="Availability reasons">
+      {humanAvailabilityReasons(reasons).map((reason) => <li key={reason}>{reason}</li>)}
+    </ul>
+  );
+}
+
+function humanAvailabilityReasons(reasons: readonly string[]): readonly string[] {
+  const messages = new Set<string>();
+  for (const reason of reasons) {
+    if (reason === "authorization_scope_empty") messages.add(CHECKS_COPY.scopeReasonAuthorization);
+    else if (reason.startsWith("inventory_snapshot_unavailable:")) messages.add(CHECKS_COPY.scopeReasonUnavailable);
+    else if (reason.startsWith("inventory_snapshot_incomplete:") || reason === "agent_snapshot_truncated") messages.add(CHECKS_COPY.scopeReasonPartial);
+    else if (reason !== "checks_result_projection_not_integrated" && reason !== "checks_catalog_not_integrated") {
+      messages.add(CHECKS_COPY.scopeReasonGeneric);
+    }
+  }
+  return [...messages];
+}
+
 function ChecksFailureScreen({
   failure,
   onRefresh,
@@ -300,18 +225,13 @@ function ChecksFailureScreen({
   failure: ChecksPortFailure;
   onRefresh: () => void;
 }) {
-  const copy = useChecksCopy();
   if (failure.code === "forbidden") {
-    return <ProductStateScreen kind="forbidden" issue={{ code: "forbidden", safeDetail: copy.refreshFailed }} placement="content" />;
+    return <ProductStateScreen kind="forbidden" issue={{ code: "forbidden", safeDetail: CHECKS_COPY.refreshFailed }} placement="content" />;
   }
   if (failure.code === "offline") {
-    return <ProductStateScreen kind="offline" issue={{ code: "network", safeDetail: copy.refreshFailed }} placement="content" retry={{ pending: false, onRetry: onRefresh }} />;
+    return <ProductStateScreen kind="offline" issue={{ code: "network", safeDetail: CHECKS_COPY.refreshFailed }} placement="content" retry={{ pending: false, onRetry: onRefresh }} />;
   }
-  return <ProductStateScreen kind="error" issue={{ code: failure.code === "invalid-response" ? "invalid-response" : "unknown", safeDetail: copy.refreshFailed }} placement="content" retry={{ pending: false, onRetry: onRefresh }} />;
-}
-
-function useChecksCopy(): ChecksCopy {
-  return checksCopy(useI18n().t);
+  return <ProductStateScreen kind="error" issue={{ code: failure.code === "invalid-response" ? "invalid-response" : "unknown", safeDetail: CHECKS_COPY.refreshFailed }} placement="content" retry={{ pending: false, onRetry: onRefresh }} />;
 }
 
 function checkDetailId(value: string | null): string | null {

@@ -5,15 +5,6 @@ import {
 import type { ProductRouteDefinition } from "./productRoutes";
 import type { MessageKey, TranslationParameters } from "../shared/i18n";
 import { resourcesShortcutDefinitions } from "./resourcesShortcutDefinitions";
-import {
-  definitionForModifiedEvent,
-  isEditableEvent,
-  isUnavailableForAllShortcuts,
-  normalizeDefinitionKey,
-  normalizeEventKey,
-  serializeDefinitionSequence,
-  shouldIgnoreEvent,
-} from "./shortcutKeyMatcher";
 
 export type ShortcutGroup = "navigation" | "global" | "context";
 
@@ -25,10 +16,7 @@ export type ProductContextShortcutId =
   | "resources:first-row"
   | "resources:last-row"
   | "resources:open-row"
-  | "resources:open-yaml"
-  | "resources:open-logs"
-  | "resources:previous-kind"
-  | "resources:next-kind";
+  | "resources:open-logs";
 
 export interface ProductShortcutEventDetail {
   id: ProductContextShortcutId;
@@ -74,10 +62,9 @@ const shortcutRouteLabelKeys = {
   gitops: "shell.shortcut.route.gitops",
   home: "shell.shortcut.route.home",
   issues: "shell.shortcut.route.issues",
-  alerts: "shell.shortcut.route.alerts",
-  ai: "shell.shortcut.route.ai",
+  alerts: "settings.section.alerts",
   resources: "shell.shortcut.route.resources",
-  deploy: "shell.shortcut.route.deploy",
+  topology: "shell.shortcut.route.topology",
   timeline: "shell.shortcut.route.timeline",
   traffic: "shell.shortcut.route.traffic",
   helm: "shell.shortcut.route.helm",
@@ -113,32 +100,6 @@ export function shellShortcutDefinitions(
       sequence: ["k"],
       modifier: "meta-or-control",
       allowInInputs: true,
-    },
-    {
-      id: "diagnostics",
-      labelKey: "shell.diagnostics.open",
-      group: "global",
-      sequence: ["shift+d"],
-      modifier: "meta-or-control",
-      allowInInputs: true,
-    },
-    {
-      id: "namespace",
-      labelKey: "shell.filter.group.namespace",
-      group: "global",
-      sequence: ["n"],
-    },
-    {
-      id: "context",
-      labelKey: "shell.filter.group.cluster",
-      group: "global",
-      sequence: ["c"],
-    },
-    {
-      id: "search",
-      labelKey: "shell.shortcut.search",
-      group: "global",
-      sequence: ["/"],
     },
     {
       id: "theme",
@@ -283,4 +244,77 @@ export function createShortcutMatcher(
     reset,
     dispose: reset,
   };
+}
+
+function definitionForModifiedEvent(
+  definitionsBySequence: ReadonlyMap<string, ShortcutDefinition>,
+  key: string,
+  event: ShortcutKeyEvent,
+): ShortcutDefinition | null {
+  if (event.altKey || (!event.metaKey && !event.ctrlKey)) return null;
+  return definitionsBySequence.get(serializeDefinitionSequence([key], "meta-or-control")) ?? null;
+}
+
+function shouldIgnoreEvent(event: ShortcutKeyEvent): boolean {
+  if (
+    event.defaultPrevented
+    || event.isComposing
+    || event.keyCode === 229
+    || event.metaKey
+    || event.ctrlKey
+    || event.altKey
+    || event.getModifierState?.("AltGraph")
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+function isUnavailableForAllShortcuts(event: ShortcutKeyEvent): boolean {
+  return event.defaultPrevented || event.isComposing || event.keyCode === 229 ||
+    event.altKey || event.getModifierState?.("AltGraph") === true;
+}
+
+function isEditableEvent(event: ShortcutKeyEvent): boolean {
+  const path = event.composedPath?.() ?? [];
+  const candidates = path.length > 0 ? path : [event.target];
+  return candidates.some(isEditableCandidate);
+}
+
+function isEditableCandidate(candidate: unknown): boolean {
+  if (!candidate || typeof candidate !== "object") return false;
+
+  const element = candidate as {
+    tagName?: unknown;
+    isContentEditable?: unknown;
+    getAttribute?: (name: string) => string | null;
+  };
+  const tagName = typeof element.tagName === "string" ? element.tagName.toUpperCase() : "";
+  if (["INPUT", "TEXTAREA", "SELECT"].includes(tagName)) return true;
+  if (element.isContentEditable === true) return true;
+
+  const role = element.getAttribute?.("role");
+  return role === "textbox" || role === "combobox";
+}
+
+function normalizeDefinitionKey(key: string): string {
+  const normalized = key.toLocaleLowerCase("en-US");
+  if (/^(?:[a-z0-9?]|shift\+[a-z0-9])$/u.test(normalized)) return normalized;
+  throw new Error(`invalid shortcut key: ${key}`);
+}
+
+function normalizeEventKey(key: string, shiftKey: boolean): string | null {
+  if (key === "?") return key;
+  if (key.length !== 1) return null;
+  const normalized = key.toLocaleLowerCase("en-US");
+  if (!/^[a-z0-9]$/u.test(normalized)) return null;
+  const isShiftedLetter = /^[A-Z]$/u.test(key);
+  return shiftKey || isShiftedLetter ? `shift+${normalized}` : normalized;
+}
+function serializeDefinitionSequence(
+  sequence: readonly string[],
+  modifier?: ShortcutDefinition["modifier"],
+): string {
+  return `${modifier ?? "none"}\u0000${sequence.join("\u0000")}`;
 }

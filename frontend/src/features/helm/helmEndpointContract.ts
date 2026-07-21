@@ -1,3 +1,11 @@
+// Hand-written wire-shape contract for the Helm release endpoints.
+//
+// These interfaces MUST stay structurally identical to the inferred output of the
+// Zod schemas in `src/api/helm-releases-schemas.ts`, but this file deliberately does
+// NOT import from `../../api` — the architecture keeps feature endpoint contracts
+// decoupled from the api/zod layer (that coupling is enforced by apiBoundary.test.ts,
+// and structural drift is caught by the api-side schema + contract test).
+
 export interface HelmEndpointClusterScope {
   workspace_id: string;
   cluster_id: string;
@@ -19,26 +27,10 @@ export interface HelmEndpointUnavailableFeature {
   reason_code: string;
 }
 
-export interface HelmEndpointUpgradeInput {
-  name: string;
-  value_type: "string" | "integer" | "number" | "boolean";
-  required: boolean;
-  default: string | number | boolean | null;
-  allowed_values: Array<string | number | boolean | null>;
-}
-
-export interface HelmEndpointReleaseCommands {
-  availability: "available";
-  actions: ["upgrade", "rollback", "uninstall"];
-  confirmation_required: true;
-  realtime: true;
-  upgrade_targets: Array<{
-    item_id: string;
-    name: string;
-    version: string;
-    chart_version: string;
-    inputs: HelmEndpointUpgradeInput[];
-  }>;
+export interface HelmEndpointResourceHealthAvailability {
+  availability: "unavailable";
+  reason_code: string;
+  health: null;
 }
 
 export interface HelmEndpointResourceHealthObservation {
@@ -48,6 +40,10 @@ export interface HelmEndpointResourceHealthObservation {
   observed_at: string | null;
   reason_codes: string[];
 }
+
+export type HelmEndpointResourceHealth =
+  | HelmEndpointResourceHealthObservation
+  | HelmEndpointResourceHealthAvailability;
 
 export interface HelmEndpointOwnedResource {
   resource: HelmEndpointResourceRef;
@@ -64,6 +60,38 @@ export interface HelmEndpointOwnedResourceObservation {
   reason_codes: string[];
 }
 
+export type HelmEndpointOwnedResources =
+  | HelmEndpointOwnedResourceObservation
+  | HelmEndpointUnavailableFeature;
+
+export interface HelmEndpointUpgradeInput {
+  name: string;
+  value_type: "string" | "integer" | "number" | "boolean";
+  required: boolean;
+  default: string | number | boolean | null;
+  allowed_values: (string | number | boolean | null)[];
+}
+
+export interface HelmEndpointUpgradeTarget {
+  item_id: string;
+  name: string;
+  version: string;
+  chart_version: string;
+  inputs: HelmEndpointUpgradeInput[];
+}
+
+export interface HelmEndpointReleaseCommands {
+  availability: "available";
+  actions: ("upgrade" | "rollback" | "uninstall")[];
+  confirmation_required: true;
+  realtime: true;
+  upgrade_targets: HelmEndpointUpgradeTarget[];
+}
+
+export type HelmEndpointCommands =
+  | HelmEndpointUnavailableFeature
+  | HelmEndpointReleaseCommands;
+
 export interface HelmEndpointRelease {
   scope: HelmEndpointClusterScope;
   name: string;
@@ -77,230 +105,45 @@ export interface HelmEndpointRelease {
   status: string | null;
   revision: number | null;
   observed_at: string | null;
-  resource_health:
-    | (HelmEndpointUnavailableFeature & { health: null })
-    | HelmEndpointResourceHealthObservation;
+  resource_health: HelmEndpointResourceHealth;
 }
 
-export interface HelmEndpointChartVersion {
-  version: string;
-  app_version: string | null;
-  deprecated: boolean;
+export interface HelmEndpointHistoryEntry {
+  storage: HelmEndpointResourceRef;
+  revision: number | null;
+  status: string | null;
+  observed_at: string | null;
 }
 
-export interface HelmReleaseUpgradeInfoEndpoint {
+export interface HelmEndpointObservationCoverage {
   availability: "available" | "partial" | "unavailable";
-  chart_name: string | null;
-  current_version: string | null;
-  latest_version: string | null;
-  update_available: boolean | null;
-  source: HelmChartSourceEndpoint | null;
   observed_at: string | null;
   reason_codes: string[];
-  refresh_after_seconds: number;
 }
 
-export interface HelmReleaseVersionListEndpoint {
-  availability: "available" | "partial" | "unavailable";
-  chart_name: string | null;
-  current_version: string | null;
-  source: HelmChartSourceEndpoint | null;
-  versions: HelmEndpointChartVersion[];
-  observed_at: string | null;
-  truncated: boolean;
-  reason_codes: string[];
-  refresh_after_seconds: number;
-}
-
-export interface HelmReleaseUpgradeBatchEndpoint {
-  releases: Record<string, HelmReleaseUpgradeInfoEndpoint>;
-  coverage: HelmReleaseListEndpoint["coverage"];
-  truncated: boolean;
-  reason_codes: string[];
-  refresh_after_seconds: number;
+export interface HelmEndpointDetail {
+  release: HelmEndpointRelease;
+  history: HelmEndpointHistoryEntry[];
+  manifest: HelmEndpointUnavailableFeature;
+  values: HelmEndpointUnavailableFeature;
+  owned_resources: HelmEndpointOwnedResources;
+  commands: HelmEndpointCommands;
 }
 
 export interface HelmReleaseListEndpoint {
   releases: HelmEndpointRelease[];
+  coverage: HelmEndpointObservationCoverage;
   refresh_after_seconds: number;
   post_mutation_refresh_after_seconds: number;
-  coverage: {
-    availability: "available" | "partial" | "unavailable";
-    observed_at: string | null;
-    reason_codes: string[];
-  };
 }
 
 export interface HelmReleaseDetailEndpoint {
+  detail: HelmEndpointDetail;
   refresh_after_seconds: number;
   post_mutation_refresh_after_seconds: number;
-  detail: {
-    release: HelmEndpointRelease;
-    history: {
-      storage: HelmEndpointResourceRef;
-      revision: number | null;
-      status: string | null;
-      observed_at: string | null;
-    }[];
-    manifest: HelmEndpointUnavailableFeature;
-    values: HelmEndpointUnavailableFeature;
-    owned_resources: HelmEndpointUnavailableFeature | HelmEndpointOwnedResourceObservation;
-    commands: HelmEndpointUnavailableFeature | HelmEndpointReleaseCommands;
-  };
-}
-
-export interface HelmChartSourceEndpoint {
-  source_id: string;
-  provider: "repository" | "oci";
-  name: string;
-  reference: string;
-  status: "active" | "disabled";
-  actions: Array<"refresh" | "delete">;
-  credentials_configured: boolean;
-  observed_at: string | null;
-}
-
-export interface HelmChartSourcePageEndpoint {
-  items: HelmChartSourceEndpoint[];
-  limit: number;
-  has_more: boolean;
-  next_cursor: string | null;
-}
-
-export interface HelmChartSummaryEndpoint {
-  source: HelmChartSourceEndpoint;
-  name: string;
-  version: string;
-  app_version: string | null;
-  description: string | null;
-  deprecated: boolean;
-}
-
-export interface HelmChartCatalogPageEndpoint {
-  availability: "available" | "partial" | "unavailable";
-  items: HelmChartSummaryEndpoint[];
-  total: number;
-  limit: number;
-  query: string;
-  source_id: string | null;
-  provider: "repository" | "oci" | null;
-  all_versions: boolean;
-  observed_at: string | null;
-  truncated: boolean;
-  reason_codes: string[];
-}
-
-export interface HelmChartDetailEndpoint {
-  availability: "available" | "partial" | "unavailable";
-  chart: HelmChartSummaryEndpoint | null;
-  versions: HelmEndpointChartVersion[];
-  values_schema:
-    | { availability: "available"; schema: Record<string, unknown> }
-    | { availability: "unavailable"; schema: null; reason_code: string };
-  install:
-    | {
-      availability: "available";
-      target: {
-        item_id: string;
-        name: string;
-        version: string;
-        chart_version: string;
-        inputs: HelmEndpointUpgradeInput[];
-      };
-    }
-    | { availability: "unavailable"; target: null; reason_code: string };
-  observed_at: string | null;
-  truncated: boolean;
-  reason_codes: string[];
-}
-
-export type HelmChartSourceCredentialEndpointInput =
-  | { kind: "bearer"; token: string }
-  | { kind: "basic"; username: string; password: string };
-
-export interface HelmChartSourceRegisterEndpointInput {
-  provider: "repository" | "oci";
-  name: string;
-  reference: string;
-  credential?: HelmChartSourceCredentialEndpointInput;
-}
-
-export interface HelmChartSourceDeleteEndpointInput {
-  provider: "repository" | "oci";
-  name: string;
-  reference: string;
-}
-
-export interface HelmConfigMutationEndpointReceipt {
-  accepted: true;
-  event_id: string;
-  correlation_id: string;
-  command_id: null;
-}
-
-export interface HelmEndpointCommandReceipt {
-  accepted: true;
-  event_id: string;
-  audit_event_id: string;
-  correlation_id: string;
-  command_id: string;
-  status: "queued" | "leased" | "running" | "cancel_requested" | "cancelling" | "completed" | "failed" | "cancelled";
 }
 
 export interface HelmEndpointDependencies {
-  searchHelmCharts(
-    query?: {
-      query?: string;
-      sourceId?: string;
-      provider?: "repository" | "oci";
-      allVersions?: boolean;
-      limit?: number;
-    },
-    signal?: AbortSignal,
-  ): Promise<HelmChartCatalogPageEndpoint>;
-  getHelmChartDetail(
-    input: { sourceId: string; chart: string; version?: string },
-    signal?: AbortSignal,
-  ): Promise<HelmChartDetailEndpoint>;
-  listHelmInstallTargets(signal?: AbortSignal): Promise<{
-    namespace: string;
-    targets: Array<{
-      item_id: string;
-      name: string;
-      version: string;
-      chart_version: string;
-      inputs: HelmEndpointUpgradeInput[];
-    }>;
-  }>;
-  startHelmReleaseInstall(
-    input: {
-      clusterId: string;
-      namespace: string;
-      applicationName: string;
-      releaseName: string;
-      catalogItemId: string;
-      catalogVersion: string;
-      values: Readonly<Record<string, unknown>>;
-      confirmation: true;
-      idempotencyKey: string;
-    },
-    signal?: AbortSignal,
-  ): Promise<HelmEndpointCommandReceipt>;
-  searchArtifactHubCharts(
-    query: {
-      query: string;
-      offset?: number;
-      limit?: number;
-      sort?: "relevance" | "stars" | "last_updated";
-      official?: boolean;
-      verified?: boolean;
-    },
-    signal?: AbortSignal,
-  ): Promise<ArtifactHubSearchPageEndpoint>;
-  getArtifactHubChart(
-    input: { repository: string; chart: string; version?: string },
-    signal?: AbortSignal,
-  ): Promise<ArtifactHubChartDetailEndpoint>;
   listHelmReleases(
     query: { clusterIds?: readonly string[]; namespaces?: readonly string[] },
     signal?: AbortSignal,
@@ -309,141 +152,4 @@ export interface HelmEndpointDependencies {
     input: { clusterId: string; namespace: string; releaseName: string },
     signal?: AbortSignal,
   ): Promise<HelmReleaseDetailEndpoint>;
-  getHelmReleaseUpgradeInfo(
-    input: { clusterId: string; namespace: string; releaseName: string },
-    signal?: AbortSignal,
-  ): Promise<HelmReleaseUpgradeInfoEndpoint>;
-  listHelmReleaseVersions(
-    input: { clusterId: string; namespace: string; releaseName: string },
-    signal?: AbortSignal,
-  ): Promise<HelmReleaseVersionListEndpoint>;
-  checkHelmReleaseUpgrades(
-    query: { clusterIds?: readonly string[]; namespaces?: readonly string[] },
-    signal?: AbortSignal,
-  ): Promise<HelmReleaseUpgradeBatchEndpoint>;
-  startHelmArtifactRead(
-    input: {
-      clusterId: string;
-      namespace: string;
-      releaseName: string;
-      artifact:
-        | "manifest"
-        | "values"
-        | "manifest_diff"
-        | "values_diff"
-        | "notes_diff"
-        | "hooks_diff"
-        | "resources_diff";
-      revision: number;
-      comparisonRevision?: number;
-      allValues?: boolean;
-    },
-    signal?: AbortSignal,
-  ): Promise<HelmEndpointCommandReceipt>;
-  startHelmReleaseValuesPreview(
-    input: {
-      clusterId: string;
-      namespace: string;
-      releaseName: string;
-      expectedRevision: number;
-      catalogItemId: string;
-      catalogVersion: string;
-      values: Readonly<Record<string, unknown>>;
-    },
-    signal?: AbortSignal,
-  ): Promise<HelmEndpointCommandReceipt>;
-  startHelmReleaseUpgrade(
-    input: {
-      clusterId: string;
-      namespace: string;
-      releaseName: string;
-      expectedRevision: number;
-      catalogItemId: string;
-      catalogVersion: string;
-      values: Readonly<Record<string, unknown>>;
-      confirmation: true;
-      reason?: string;
-    },
-    signal?: AbortSignal,
-  ): Promise<HelmEndpointCommandReceipt>;
-  startHelmReleaseRollback(
-    input: {
-      clusterId: string;
-      namespace: string;
-      releaseName: string;
-      expectedRevision: number;
-      revision: number;
-      confirmation: true;
-      reason?: string;
-    },
-    signal?: AbortSignal,
-  ): Promise<HelmEndpointCommandReceipt>;
-  startHelmReleaseUninstall(
-    input: {
-      clusterId: string;
-      namespace: string;
-      releaseName: string;
-      expectedRevision: number;
-      confirmation: true;
-      reason?: string;
-    },
-    signal?: AbortSignal,
-  ): Promise<HelmEndpointCommandReceipt>;
-  listHelmChartSources(
-    query?: { limit?: number; cursor?: string },
-    signal?: AbortSignal,
-  ): Promise<HelmChartSourcePageEndpoint>;
-  registerHelmChartSource(
-    input: HelmChartSourceRegisterEndpointInput,
-    signal?: AbortSignal,
-  ): Promise<HelmChartSourceEndpoint>;
-  deleteHelmChartSource(
-    sourceId: string,
-    input: HelmChartSourceDeleteEndpointInput,
-    signal?: AbortSignal,
-  ): Promise<HelmConfigMutationEndpointReceipt>;
-  refreshHelmRepository(
-    name: string,
-    signal?: AbortSignal,
-  ): Promise<{
-    source_id: string;
-    chart_count: number;
-    observed_at: string;
-    event_id: string;
-    correlation_id: string;
-  }>;
-}
-
-export interface ArtifactHubChartEndpoint {
-  package_id: string;
-  name: string;
-  version: string;
-  app_version: string | null;
-  description: string | null;
-  stars: number;
-  deprecated: boolean;
-  signed: boolean;
-  repository: {
-    name: string;
-    url: string;
-    official: boolean;
-    verified_publisher: boolean;
-  };
-}
-
-export interface ArtifactHubSearchPageEndpoint {
-  items: ArtifactHubChartEndpoint[];
-  total: number;
-  offset: number;
-  limit: number;
-  has_more: boolean;
-  observed_at: string;
-}
-
-export interface ArtifactHubChartDetailEndpoint {
-  chart: ArtifactHubChartEndpoint;
-  readme: string | null;
-  available_versions: Array<{ version: string; app_version: string | null }>;
-  versions_truncated: boolean;
-  observed_at: string;
 }

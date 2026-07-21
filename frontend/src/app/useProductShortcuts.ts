@@ -13,26 +13,21 @@ interface ProductShortcutOptions {
   isCommandPaletteOpen: boolean;
   isHelpOpen: boolean;
   onCommandPaletteOpen: () => void;
-  onContextOpen: () => void;
-  onDiagnosticsOpen: () => void;
   onHelpToggle: () => void;
-  onNamespaceOpen: () => void;
   onRouteSelect: (routeDefinition: ProductRouteDefinition) => void;
-  onSearchFocus: () => void;
   onThemeToggle: () => void;
 }
 
 /** Installs one shell listener and delegates every route action to its descriptor owner. */
 export function useProductShortcuts(options: ProductShortcutOptions) {
   const latestOptions = useRef(options);
-  const definitionsIdentity = shortcutDefinitionsIdentity(options.definitions);
 
   useEffect(() => {
     latestOptions.current = options;
   });
 
   useEffect(() => {
-    const matcher = createShortcutMatcher(latestOptions.current.definitions);
+    const matcher = createShortcutMatcher(options.definitions);
 
     const handleKeyDown = (event: KeyboardEvent) => {
       const current = latestOptions.current;
@@ -44,7 +39,7 @@ export function useProductShortcuts(options: ProductShortcutOptions) {
         matcher.reset();
         return;
       }
-      if (!current.isHelpOpen && hasOpenDialog()) {
+      if (!current.isHelpOpen && document.querySelector('[role="dialog"]')) {
         matcher.reset();
         return;
       }
@@ -69,22 +64,6 @@ export function useProductShortcuts(options: ProductShortcutOptions) {
         current.onCommandPaletteOpen();
         return;
       }
-      if (definition.id === "diagnostics") {
-        current.onDiagnosticsOpen();
-        return;
-      }
-      if (definition.id === "namespace") {
-        current.onNamespaceOpen();
-        return;
-      }
-      if (definition.id === "context") {
-        current.onContextOpen();
-        return;
-      }
-      if (definition.id === "search") {
-        current.onSearchFocus();
-        return;
-      }
       if (definition.id === "theme") {
         current.onThemeToggle();
         return;
@@ -106,28 +85,5 @@ export function useProductShortcuts(options: ProductShortcutOptions) {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       matcher.dispose();
     };
-  }, [definitionsIdentity]);
-}
-
-function shortcutDefinitionsIdentity(definitions: readonly ShortcutDefinition[]): string {
-  return JSON.stringify(definitions.map((definition) => ({
-    allowInInputs: definition.allowInInputs ?? false,
-    allowRepeat: definition.allowRepeat ?? false,
-    available: definition.available ?? true,
-    id: definition.id,
-    modifier: definition.modifier ?? null,
-    sequence: definition.sequence,
-    targetRoute: definition.targetRoute ?? null,
-  })));
-}
-
-function hasOpenDialog(): boolean {
-  // Profile utilities stay mounted so their imperative shortcut targets remain available.
-  // Base UI marks that closed popover through a hidden ancestor and `data-closed`.
-  return Array.from(document.querySelectorAll<HTMLElement>('[role="dialog"]')).some((dialog) => {
-    if (dialog.hasAttribute("data-closed") || dialog.getAttribute("aria-hidden") === "true") {
-      return false;
-    }
-    return dialog.closest("[hidden], [inert]") === null;
-  });
+  }, [options.definitions]);
 }

@@ -12,18 +12,10 @@ export type LogStreamTarget =
       kind: "deployments" | "statefulsets" | "daemonsets";
       namespace: string;
       name: string;
-    }
-  | {
-      type: "scheduled-run";
-      clusterId: string;
-      kind: string;
-      namespace: string;
-      name: string;
-      runKey: string;
     };
 
 export type LogStreamEvent =
-  | { type: "connected"; streamId: string; containers: readonly string[] }
+  | { type: "connected"; streamId: string }
   | {
       type: "log";
       id: string;
@@ -35,11 +27,7 @@ export type LogStreamEvent =
     }
   | { type: "pod-added"; pod: string }
   | { type: "pod-removed"; pod: string }
-  | {
-      type: "end";
-      reason: string;
-      diagnostic: LogStreamDiagnostic | null;
-    }
+  | { type: "end"; reason: string }
   | { type: "error"; code: string; retryable: boolean };
 
 export type LogStreamFailureCode =
@@ -52,10 +40,6 @@ export type LogStreamFailureCode =
   | "unavailable"
   | "invalid-response"
   | "error";
-
-export interface LogStreamDiagnostic {
-  code: "no_matching_pods" | "no_log_lines";
-}
 
 export class LogStreamFailure extends Error {
   constructor(readonly code: LogStreamFailureCode) {
@@ -81,11 +65,7 @@ export const EMPTY_LOG_STREAM_PORT: LogStreamPort = {
 };
 
 export function logStreamTargetKey(target: LogStreamTarget): string {
-  if (target.type === "pod") {
-    return ["pod", target.clusterId, target.namespace, target.name, target.container ?? ""].join(":");
-  }
-  if (target.type === "scheduled-run") {
-    return ["scheduled-run", target.clusterId, target.kind, target.namespace, target.name, target.runKey].join(":");
-  }
-  return ["workload", target.clusterId, target.kind, target.namespace, target.name].join(":");
+  return target.type === "pod"
+    ? ["pod", target.clusterId, target.namespace, target.name, target.container ?? ""].join(":")
+    : ["workload", target.clusterId, target.kind, target.namespace, target.name].join(":");
 }

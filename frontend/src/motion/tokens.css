@@ -1,68 +1,20 @@
 :root {
-  /* demo-freeze-v3 canonical duration tokens */
-  --motion-micro: 120ms;
-  --motion-fade: 180ms;
-  --motion-draw: 850ms;
-  --motion-meter: 1200ms;
-  --motion-count: 1400ms;
-  --motion-soft: 320ms;
-  --motion-spring: 500ms;
-  --motion-page: 550ms;
-
-  /* Compatibility aliases; new code consumes the semantic tokens above. */
-  --motion-instant: var(--motion-micro);
-  --motion-quick: var(--motion-fade);
-  --motion-pop: var(--motion-soft);
-  --motion-ai: var(--motion-soft);
-  --motion-dock: var(--motion-spring);
-  --motion-layout: var(--motion-spring);
-  --motion-camera: var(--motion-page);
-  --motion-value: var(--motion-draw);
-  --motion-pulse: 1200ms;
-  --motion-breathe: 1600ms;
-  --motion-diagnose-cycle: 2400ms;
+  --motion-instant: 120ms;
+  --motion-quick: 180ms;
+  --motion-pop: 340ms;
+  --motion-ai: 300ms;
+  --motion-dock: 240ms;
+  --motion-layout: 320ms;
+  --motion-camera: 420ms;
+  --motion-value: 500ms;
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
   --ease-spring: cubic-bezier(0.34, 1.2, 0.5, 1);
   --ease-pop: cubic-bezier(0.34, 1.4, 0.5, 1);
-  --ease-soft: var(--ease-out);
-  --ease-page: var(--ease-spring);
-  --ease-draw: cubic-bezier(0.22, 1, 0.36, 1);
-  --ease-linear: linear;
   --stagger-node: 70ms;
   --stagger-pod: 32ms;
   --stagger-row: 18ms;
-  --stagger-list: 40ms;
-  --stagger-list-cap: 320ms;
   --stagger-max: 520ms;
-}
-
-.motion-meter-fill {
-  background-color: var(--meter-fill-color, var(--status-unknown));
-}
-
-.motion-meter-fill[data-meter-tone="critical"] {
-  --meter-fill-color: var(--status-critical);
-}
-
-.motion-meter-fill[data-meter-tone="healthy"] {
-  --meter-fill-color: var(--status-healthy);
-}
-
-.motion-meter-fill[data-meter-tone="primary"] {
-  --meter-fill-color: var(--primary);
-}
-
-.motion-meter-fill[data-meter-tone="stale"] {
-  --meter-fill-color: var(--status-stale);
-}
-
-.motion-meter-fill[data-meter-tone="unknown"] {
-  --meter-fill-color: var(--status-unknown);
-}
-
-.motion-meter-fill[data-meter-tone="warning"] {
-  --meter-fill-color: var(--status-warning);
 }
 
 @keyframes motion-pod-pop {
@@ -136,145 +88,6 @@
   }
 }
 
-@keyframes motion-connection-success {
-  from {
-    opacity: 0;
-    transform: rotate(-6deg) scale(0.82);
-  }
-
-  to {
-    opacity: 1;
-    transform: rotate(0) scale(1);
-  }
-}
-
-@keyframes motion-operation-toast-enter {
-  from {
-    opacity: 0;
-    transform: translateY(-0.5rem) scale(0.97);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-@keyframes motion-assistant-surface-enter {
-  from {
-    opacity: 0;
-    transform: translateY(0.375rem);
-  }
-}
-
-@keyframes motion-assistant-user-enter {
-  from {
-    opacity: 0;
-    transform: translateX(0.75rem);
-  }
-}
-
-@keyframes motion-assistant-evidence-enter {
-  from {
-    opacity: 0;
-    transform: translateY(0.25rem);
-  }
-}
-
-@keyframes motion-assistant-thinking {
-  0%,
-  100% {
-    opacity: 0.5;
-    transform: translateY(0);
-  }
-
-  50% {
-    opacity: 1;
-    transform: translateY(-0.125rem);
-  }
-}
-
-@keyframes motion-assistant-caret {
-  0%,
-  45% {
-    opacity: 1;
-  }
-
-  55%,
-  100% {
-    opacity: 0;
-  }
-}
-
-@keyframes motion-live-dot {
-  0%,
-  100% {
-    opacity: 0.55;
-    transform: scale(0.82);
-  }
-
-  50% {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-@keyframes motion-spin {
-  to {
-    transform: rotate(1turn);
-  }
-}
-
-@keyframes motion-topology-overlay-enter {
-  from {
-    opacity: 0;
-    transform: translateY(-0.25rem);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes motion-diagnose-entry {
-  from {
-    opacity: 0;
-    transform: translateY(0.375rem);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes motion-diagnose-thinking {
-  from {
-    background-position: 200% 0;
-  }
-
-  to {
-    background-position: -200% 0;
-  }
-}
-
-@keyframes motion-diagnose-verdict {
-  0% {
-    box-shadow: 0 0 0 0 color-mix(in oklch, var(--color-primary) 0%, transparent);
-  }
-
-  24% {
-    box-shadow:
-      0 0 0 1px color-mix(in oklch, var(--color-primary) 52%, transparent),
-      0 0 1.25rem 0.125rem color-mix(in oklch, var(--color-primary) 24%, transparent);
-  }
-
-  100% {
-    box-shadow: 0 0 0 0 transparent;
-  }
-}
-
 .motion-pod-pop {
   animation: motion-pod-pop var(--motion-pop) var(--ease-pop) backwards;
 }
@@ -284,11 +97,11 @@
 }
 
 .motion-ghost-breathe {
-  animation: motion-ghost-breathe var(--motion-breathe) var(--ease-in-out) infinite;
+  animation: motion-ghost-breathe 1.6s var(--ease-in-out) infinite;
 }
 
 .motion-rail-flow {
-  animation: motion-rail-flow var(--motion-pulse) var(--ease-linear) infinite;
+  animation: motion-rail-flow 1.2s linear infinite;
   stroke-dasharray: 3 3;
 }
 
@@ -302,121 +115,6 @@
 
 .motion-wizard-stage {
   animation: motion-wizard-stage-enter var(--motion-layout) var(--ease-spring) backwards;
-}
-
-.motion-connection-choice {
-  transition:
-    border-color var(--motion-quick) var(--ease-out),
-    background-color var(--motion-quick) var(--ease-out),
-    box-shadow var(--motion-quick) var(--ease-out),
-    transform var(--motion-quick) var(--ease-spring);
-}
-
-.motion-connection-choice:hover {
-  transform: translateY(-0.125rem);
-}
-
-.motion-connection-success {
-  animation: motion-connection-success var(--motion-camera) var(--ease-pop) backwards;
-}
-
-.motion-operation-toast {
-  animation: motion-operation-toast-enter var(--motion-layout) var(--ease-spring) backwards;
-}
-
-.motion-assistant-surface {
-  animation: motion-assistant-surface-enter var(--motion-ai) var(--ease-out) backwards;
-}
-
-.motion-assistant-user-message {
-  animation: motion-assistant-user-enter var(--motion-quick) var(--ease-out) backwards;
-}
-
-.motion-assistant-evidence-step {
-  animation: motion-assistant-evidence-enter var(--motion-ai) var(--ease-out) backwards;
-}
-
-.motion-assistant-card-collapse,
-.motion-assistant-evidence-collapse {
-  display: grid;
-  grid-template-rows: 1fr;
-  opacity: 1;
-  transition:
-    grid-template-rows var(--motion-layout) var(--ease-out),
-    opacity var(--motion-ai) var(--ease-out);
-}
-
-.motion-assistant-card-collapse[data-collapsed="true"],
-.motion-assistant-evidence-collapse[data-collapsed="true"] {
-  grid-template-rows: 0fr;
-  opacity: 0;
-}
-
-.motion-assistant-card-collapse > *,
-.motion-assistant-evidence-collapse > * {
-  min-height: 0;
-  overflow: hidden;
-}
-
-.motion-assistant-thinking {
-  animation: motion-assistant-thinking var(--motion-value) var(--ease-in-out) infinite;
-}
-
-.motion-assistant-loading {
-  animation: motion-assistant-thinking var(--motion-value) var(--ease-in-out) infinite;
-}
-
-.motion-assistant-typing::after {
-  display: inline-block;
-  width: 0.0625rem;
-  height: 1em;
-  margin-inline-start: 0.125rem;
-  animation: motion-assistant-caret var(--motion-value) steps(1, end) infinite;
-  background: currentColor;
-  content: "";
-  vertical-align: -0.125em;
-}
-
-.motion-live-dot {
-  animation: motion-live-dot var(--motion-pulse) var(--ease-in-out) infinite;
-}
-
-.motion-connect-stage-active {
-  animation: motion-spin var(--motion-pulse) var(--ease-linear) infinite;
-}
-
-.motion-topology-overlay {
-  animation: motion-topology-overlay-enter var(--motion-quick) var(--ease-out) backwards;
-}
-
-.motion-diagnose-entry {
-  animation: motion-diagnose-entry var(--motion-quick) var(--ease-out) backwards;
-}
-
-.motion-diagnose-thinking {
-  color: transparent;
-  background: linear-gradient(
-    90deg,
-    var(--color-muted-foreground) 0%,
-    var(--color-muted-foreground) 38%,
-    var(--color-primary) 50%,
-    var(--color-muted-foreground) 62%,
-    var(--color-muted-foreground) 100%
-  );
-  background-clip: text;
-  background-size: 200% 100%;
-  animation:
-    motion-diagnose-thinking var(--motion-diagnose-cycle) var(--ease-linear)
-    infinite;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-
-.motion-diagnose-verdict {
-  animation:
-    motion-diagnose-entry var(--motion-layout) var(--ease-out) backwards,
-    motion-diagnose-verdict var(--motion-diagnose-cycle) var(--ease-out)
-    var(--motion-instant) both;
 }
 
 .motion-live-preview {
@@ -447,7 +145,7 @@
 }
 
 .motion-ai-panel {
-  --ai-width: 550px;
+  --ai-width: 420px;
   width: 0;
   transition: width var(--motion-ai) var(--ease-spring);
 }
@@ -457,23 +155,28 @@
   will-change: width;
 }
 
-.motion-ai-panel[data-width="475"] { --ai-width: 475px; }
+.motion-ai-panel[data-width="360"] { --ai-width: 360px; }
+.motion-ai-panel[data-width="380"] { --ai-width: 380px; }
+.motion-ai-panel[data-width="400"] { --ai-width: 400px; }
+.motion-ai-panel[data-width="420"] { --ai-width: 420px; }
+.motion-ai-panel[data-width="440"] { --ai-width: 440px; }
+.motion-ai-panel[data-width="460"] { --ai-width: 460px; }
+.motion-ai-panel[data-width="480"] { --ai-width: 480px; }
 .motion-ai-panel[data-width="500"] { --ai-width: 500px; }
-.motion-ai-panel[data-width="525"] { --ai-width: 525px; }
-.motion-ai-panel[data-width="550"] { --ai-width: 550px; }
-.motion-ai-panel[data-width="575"] { --ai-width: 575px; }
+.motion-ai-panel[data-width="520"] { --ai-width: 520px; }
+.motion-ai-panel[data-width="540"] { --ai-width: 540px; }
+.motion-ai-panel[data-width="560"] { --ai-width: 560px; }
+.motion-ai-panel[data-width="580"] { --ai-width: 580px; }
 .motion-ai-panel[data-width="600"] { --ai-width: 600px; }
-.motion-ai-panel[data-width="625"] { --ai-width: 625px; }
-.motion-ai-panel[data-width="650"] { --ai-width: 650px; }
-.motion-ai-panel[data-width="675"] { --ai-width: 675px; }
-.motion-ai-panel[data-width="700"] { --ai-width: 700px; }
+.motion-ai-panel[data-width="620"] { --ai-width: 620px; }
+.motion-ai-panel[data-width="640"] { --ai-width: 640px; }
 
 .motion-ai-panel[data-open="true"] {
-  width: var(--ai-width, 550px);
+  width: var(--ai-width, 420px);
 }
 
 .motion-ai-panel > [data-slot="ai-assistant-inner"] {
-  width: var(--ai-width, 550px);
+  width: var(--ai-width, 420px);
 }
 
 .motion-bottom-dock {
@@ -529,33 +232,10 @@
   }
 
   .motion-wizard-stage,
-  .motion-connection-choice,
-  .motion-connection-success,
-  .motion-operation-toast,
-  .motion-assistant-surface,
-  .motion-assistant-user-message,
-  .motion-assistant-evidence-step,
-  .motion-assistant-card-collapse,
-  .motion-assistant-evidence-collapse,
-  .motion-assistant-thinking,
-  .motion-assistant-loading,
-  .motion-assistant-typing,
-  .motion-live-dot,
-  .motion-connect-stage-active,
-  .motion-topology-overlay,
-  .motion-diagnose-entry,
-  .motion-diagnose-verdict,
   .motion-live-preview,
   .motion-live-preview-value {
     animation: none !important;
     transition: none !important;
     transform: none !important;
-  }
-
-  .motion-diagnose-thinking {
-    animation: none !important;
-    color: var(--color-muted-foreground);
-    background: none;
-    -webkit-text-fill-color: currentColor;
   }
 }

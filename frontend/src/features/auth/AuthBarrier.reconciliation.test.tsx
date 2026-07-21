@@ -17,14 +17,6 @@ import {
 } from "./authContract";
 
 const TEST_SESSION: ProductSession = {
-  authEnabled: true,
-  authMode: "password",
-  groups: [],
-  logout: {
-    action: "end_session",
-    supported: true,
-    reauthenticationExpected: false,
-  },
   userId: "operator-17",
   roles: ["viewer"],
   workspaceId: "workspace-main",
@@ -101,7 +93,7 @@ describe("AuthBarrier mutation reconciliation", () => {
     renderBarrier(port);
     await user.click(await screen.findByRole("button", { name: "테스트 로그아웃" }));
 
-    expect(await screen.findByRole("heading", { name: "Kyro에 로그인" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Opsia에 로그인" })).toBeTruthy();
     expect(loadSession).toHaveBeenCalledTimes(2);
   });
 
@@ -158,7 +150,7 @@ describe("AuthBarrier mutation reconciliation", () => {
     await user.click(unauthorized);
     await user.click(unauthorized);
 
-    expect(await screen.findByRole("heading", { name: "Kyro에 로그인" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Opsia에 로그인" })).toBeTruthy();
     expect(loadSession).toHaveBeenCalledTimes(2);
   });
 });
@@ -196,17 +188,10 @@ function renderBarrier(port: AuthPort) {
 
 function authPort(overrides: Partial<AuthPort> = {}): AuthPort {
   return {
-    listWorkspaces: overrides.listWorkspaces ?? vi.fn().mockResolvedValue({
-      currentWorkspaceId: "workspace-1",
-      items: [],
-    }),
-    loadSession: overrides.loadSession ?? vi.fn().mockResolvedValue({
-      status: "authenticated",
-      session: TEST_SESSION,
-    }),
-    signIn: overrides.signIn ?? vi.fn().mockResolvedValue(TEST_SESSION),
-    signOut: overrides.signOut ?? vi.fn().mockResolvedValue(undefined),
-    switchWorkspace: overrides.switchWorkspace ?? vi.fn().mockResolvedValue(TEST_SESSION),
+    loadSession: vi.fn().mockResolvedValue({ status: "authenticated", session: TEST_SESSION }),
+    signIn: vi.fn().mockResolvedValue(TEST_SESSION),
+    signOut: vi.fn().mockResolvedValue(undefined),
+    ...overrides,
   };
 }
 

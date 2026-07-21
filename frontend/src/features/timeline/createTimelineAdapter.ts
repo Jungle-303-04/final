@@ -47,6 +47,8 @@ export interface TimelineAdapterDependencies extends TimelineEndpointDependencie
 }
 
 export function createTimelineAdapter(dependencies: TimelineAdapterDependencies): TimelinePort {
+  // reconnect backoff jitter, not domain data — used only to space stream retry
+  // attempts (deterministic random is injected in tests); never a rendered value.
   const random = dependencies.random ?? Math.random;
   let capabilities: TimelineCapabilities | null = null;
   let activeCapabilityCacheKey: string | null = null;
@@ -194,7 +196,7 @@ export function createTimelineAdapter(dependencies: TimelineAdapterDependencies)
   };
 
   async function loadCapabilities(
-    signal?: AbortSignal,
+    _signal?: AbortSignal,
     workspaceCacheKey?: string,
   ): Promise<TimelineCapabilities> {
     const cacheKey = workspaceCacheKey === undefined
@@ -206,8 +208,14 @@ export function createTimelineAdapter(dependencies: TimelineAdapterDependencies)
       activeCapabilityCacheKey = cacheKey;
       return cached;
     }
+    // The bootstrap request is shared across every concurrent caller keyed by
+    // workspace, so it must not adopt a single caller's abort signal. Otherwise
+    // one caller unmounting (e.g. React StrictMode's setup→cleanup→setup) aborts
+    // the shared request and every co-awaiter — including a still-mounted one —
+    // rejects with an AbortError that surfaces as a spurious failure. Each caller
+    // still governs its own flow through the component-level active checks.
     const request = capabilityRequestsByWorkspace.get(cacheKey)
-      ?? dependencies.getTimelineCapabilities(signal)
+      ?? dependencies.getTimelineCapabilities()
       .then(toTimelineCapabilityDescriptor);
     capabilityRequestsByWorkspace.set(cacheKey, request);
     try {
@@ -293,8 +301,6 @@ function toTimelineSnapshot(
     policy,
     events: endpoint.snapshot.events.map(toEvent),
     coverage: endpoint.snapshot.coverage.map(toCoverage),
-    truncated: endpoint.snapshot.truncated ?? false,
-    eventLimit: endpoint.snapshot.event_limit ?? null,
     pinSetRevision: endpoint.snapshot.pin_set_revision,
   };
 }
@@ -392,7 +398,12 @@ function assertMatchingCapabilityDescriptors(
   if (
     preflight.selectedSourceMode !== snapshot.selectedSourceMode
     || preflight.maxRetainedRangeMs !== snapshot.maxRetainedRangeMs
-    || !areCompatibleQueryBounds(preflight.queryBounds, snapshot.queryBounds)
+    // `queryBounds` carries the live server clock (`serverNowMs`,
+    // `earliestQueryableMs`) which legitimately advances between the bootstrap
+    // capabilities read and the later snapshot read. Only the stable window
+    // bound is part of the control contract; comparing the clock would reject
+    // every honest 200 snapshot.
+    || preflight.queryBounds.maxWindowMs !== snapshot.queryBounds.maxWindowMs
     || preflight.namespaceFilterPolicy !== snapshot.namespaceFilterPolicy
     || preflight.availableSourceModes.length !== snapshot.availableSourceModes.length
     || preflight.availableSourceModes.some((mode, index) => mode !== snapshot.availableSourceModes[index])
@@ -400,20 +411,6 @@ function assertMatchingCapabilityDescriptors(
   ) {
     throw new TimelineFailure("invalid-response", "Timeline snapshot capabilities disagreed with bootstrap.");
   }
-}
-
-function areCompatibleQueryBounds(
-  preflight: TimelineCapabilities["queryBounds"],
-  snapshot: TimelineCapabilities["queryBounds"],
-): boolean {
-  const preflightRetentionMs = preflight.serverNowMs - preflight.earliestQueryableMs;
-  const snapshotRetentionMs = snapshot.serverNowMs - snapshot.earliestQueryableMs;
-
-  return preflight.maxWindowMs === snapshot.maxWindowMs
-    && snapshot.serverNowMs >= preflight.serverNowMs
-    && snapshot.earliestQueryableMs >= preflight.earliestQueryableMs
-    && snapshot.earliestQueryableMs <= snapshot.serverNowMs
-    && snapshotRetentionMs === preflightRetentionMs;
 }
 
 function assertControlSelection(

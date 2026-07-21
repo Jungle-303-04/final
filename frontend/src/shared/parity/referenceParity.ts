@@ -50,32 +50,12 @@ export interface CommandReceipt {
     | "cancelled";
 }
 
-/** Receipt for an immediate configuration mutation backed by a durable audit event. */
-export interface ConfigMutationReceipt {
-  accepted: true;
-  eventId: string;
-  correlationId: string;
-}
-
 export interface OperationEvent {
   commandId: string;
   sequence: number;
   kind: "progress" | "log" | "completed" | "failed" | "cancelled";
   payload: Record<string, unknown>;
   occurredAt: string;
-}
-
-/**
- * A scope change is not an Agent command: all registered clusters remain
- * connected concurrently. The browser still projects its authenticated SSE
- * hand-off with the same progress/completed semantics as an OperationEvent.
- */
-export interface ScopeTransitionOperationEvent {
-  kind: Extract<OperationEvent["kind"], "progress" | "completed">;
-  phase: "context_switch_progress" | "context_changed";
-  scope: ClusterScope;
-  attempt: number;
-  retryAfterMs: number | null;
 }
 
 export type OperationStreamFailure = "forbidden" | "invalid" | "unavailable";

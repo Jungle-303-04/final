@@ -21,8 +21,8 @@ export function ApplicationDeploymentsPanel({
   resource: ApplicationsResource<readonly ApplicationDeploymentModel[] | null>;
   retry: () => void;
 }) {
-  const { locale, t } = useI18n();
-  const copy = applicationsCopy(t);
+  const { locale } = useI18n();
+  const copy = applicationsCopy(locale);
   if (resource.phase === "loading") return <p className="p-6 text-sm text-muted-foreground">{copy.loading}</p>;
   if (resource.phase === "failed") return <ApplicationsFailureState failure={resource.failure} onRetry={retry} />;
   const deployments = resource.data ?? [];
@@ -37,7 +37,7 @@ export function ApplicationDeploymentsPanel({
             <TableHead>{copy.time}</TableHead><TableHead>{copy.environment}</TableHead>
             <TableHead>{copy.version}</TableHead><TableHead>{copy.gitSha}</TableHead>
             <TableHead>{copy.actor}</TableHead><TableHead>{copy.status}</TableHead>
-            <TableHead><span className="sr-only">{copy.gitOps}</span></TableHead>
+            <TableHead><span className="sr-only">GitOps</span></TableHead>
           </TableRow></TableHeader>
           <TableBody>{deployments.map((deployment) => (
             <TableRow key={deployment.id}>

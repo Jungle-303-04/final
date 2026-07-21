@@ -109,7 +109,6 @@ describe("Timeline API transport", () => {
     const headers = new Headers(init?.headers);
     expect(headers.get("accept")).toBe("application/x-ndjson");
     expect(headers.get("content-type")).toBe("application/json");
-    expect(headers.get("x-timeline-snapshot-contract")).toBe("bounded-v1");
     expect(headers.get("x-service-csrf")).toBe("same-origin");
     expect(JSON.parse(String(init?.body))).toEqual(request);
   });
@@ -304,8 +303,6 @@ function snapshotFrame() {
     },
     capabilities: capabilityDescriptor(),
     events: [event()],
-    truncated: false,
-    event_limit: null,
     pin_set_revision: null,
   };
 }

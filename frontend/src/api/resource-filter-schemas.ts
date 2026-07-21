@@ -152,64 +152,6 @@ export const inventoryResourceClusterIdentitySchema = z.strictObject({
   provider: z.string().nullable(),
 });
 
-const resourceTableMetricEvidenceShape = {
-  resource_uid: z.string().min(1).nullable(),
-  source_snapshot_id: z.string().min(1),
-  observed_at: nullableRfc3339TimestampSchema,
-  measurement_window: z.string().min(1).max(64).nullable(),
-  cpu_mcores: z.number().nonnegative().nullable(),
-  memory_mib: z.number().nonnegative().nullable(),
-  completeness: filterCountCompletenessSchema,
-  reason_codes: z.array(z.string().min(1)).max(16),
-};
-
-export const resourceTablePodMetricsSchema = z.strictObject({
-  ...resourceTableMetricEvidenceShape,
-  kind: z.literal("pod"),
-  cpu_request_mcores: z.number().positive().nullable(),
-  cpu_limit_mcores: z.number().positive().nullable(),
-  memory_request_mib: z.number().positive().nullable(),
-  memory_limit_mib: z.number().positive().nullable(),
-}).superRefine((metrics, context) => {
-  validateTableMetricEvidence(metrics, [
-    metrics.resource_uid,
-    metrics.observed_at,
-    metrics.measurement_window,
-    metrics.cpu_mcores,
-    metrics.memory_mib,
-    metrics.cpu_request_mcores,
-    metrics.cpu_limit_mcores,
-    metrics.memory_request_mib,
-    metrics.memory_limit_mib,
-  ], context);
-});
-
-export const resourceTableNodeMetricsSchema = z.strictObject({
-  ...resourceTableMetricEvidenceShape,
-  kind: z.literal("node"),
-  cpu_allocatable_mcores: z.number().nonnegative().nullable(),
-  memory_allocatable_mib: z.number().nonnegative().nullable(),
-  pod_count: z.number().int().nonnegative().nullable(),
-  pod_allocatable: z.number().int().nonnegative().nullable(),
-}).superRefine((metrics, context) => {
-  validateTableMetricEvidence(metrics, [
-    metrics.resource_uid,
-    metrics.observed_at,
-    metrics.measurement_window,
-    metrics.cpu_mcores,
-    metrics.memory_mib,
-    metrics.cpu_allocatable_mcores,
-    metrics.memory_allocatable_mib,
-    metrics.pod_count,
-    metrics.pod_allocatable,
-  ], context);
-});
-
-export const resourceTableMetricsSchema = z.union([
-  resourceTablePodMetricsSchema,
-  resourceTableNodeMetricsSchema,
-]);
-
 const filteredInventoryResourceSchema = inventoryResourceSchema.extend({
   observed_at: nullableRfc3339TimestampSchema,
   first_seen_at: nullableRfc3339TimestampSchema,
@@ -219,12 +161,50 @@ const filteredInventoryResourceSchema = inventoryResourceSchema.extend({
   updated_at: nullableRfc3339TimestampSchema,
 });
 
+// ResourceTableMetricEvidence base (packages.contracts.gateway.responses).
+const resourceTableMetricEvidenceShape = {
+  resource_uid: z.string().min(1).nullable(),
+  source_snapshot_id: z.string().min(1),
+  observed_at: z.string().min(1).nullable(),
+  measurement_window: z.string().min(1).max(64).nullable(),
+  cpu_mcores: z.number().min(0).nullable(),
+  memory_mib: z.number().min(0).nullable(),
+  completeness: filterCountCompletenessSchema,
+  reason_codes: z.array(z.string()).max(16),
+};
+
+// ResourceTablePodMetrics — evidence base + pod request/limit fields.
+export const resourceTablePodMetricsSchema = z.strictObject({
+  ...resourceTableMetricEvidenceShape,
+  kind: z.literal("pod"),
+  cpu_request_mcores: z.number().nullable(),
+  cpu_limit_mcores: z.number().nullable(),
+  memory_request_mib: z.number().nullable(),
+  memory_limit_mib: z.number().nullable(),
+});
+
+// ResourceTableNodeMetrics — evidence base + node allocatable/pod counts.
+export const resourceTableNodeMetricsSchema = z.strictObject({
+  ...resourceTableMetricEvidenceShape,
+  kind: z.literal("node"),
+  cpu_allocatable_mcores: z.number().nullable(),
+  memory_allocatable_mib: z.number().nullable(),
+  pod_count: z.number().int().nullable(),
+  pod_allocatable: z.number().int().nullable(),
+});
+
+export const resourceTableMetricsSchema = z.discriminatedUnion("kind", [
+  resourceTablePodMetricsSchema,
+  resourceTableNodeMetricsSchema,
+]);
+
 export const filteredInventoryResourceItemSchema = z.strictObject({
   resource: filteredInventoryResourceSchema,
   cluster: inventoryResourceClusterIdentitySchema,
   application_ids: z.array(z.string().min(1)),
   application_binding_completeness: filterCountCompletenessSchema,
-  metrics: resourceTableMetricsSchema.nullable().optional(),
+  // ResourceTablePodMetrics | ResourceTableNodeMetrics | None
+  metrics: resourceTableMetricsSchema.nullable(),
 }).superRefine((item, context) => {
   if (item.resource.cluster_id !== item.cluster.cluster_id) {
     context.addIssue({
@@ -240,33 +220,10 @@ export const filteredInventoryResourceItemSchema = z.strictObject({
       path: ["application_ids"],
     });
   }
-  if (item.metrics !== null && item.metrics !== undefined) {
-    if (item.metrics.kind !== item.resource.resource_type) {
-      context.addIssue({
-        code: "custom",
-        message: "resource table metrics must match resource type",
-        path: ["metrics", "kind"],
-      });
-    }
-    if (item.metrics.resource_uid !== item.resource.uid) {
-      context.addIssue({
-        code: "custom",
-        message: "resource table metrics must match resource uid",
-        path: ["metrics", "resource_uid"],
-      });
-    }
-    if (item.metrics.source_snapshot_id !== item.resource.snapshot_id) {
-      context.addIssue({
-        code: "custom",
-        message: "resource table metrics must match source snapshot",
-        path: ["metrics", "source_snapshot_id"],
-      });
-    }
-  }
 });
 
 export const filteredInventoryResourceListSchema = z.strictObject({
-  items: z.array(filteredInventoryResourceItemSchema).max(200),
+  items: z.array(filteredInventoryResourceItemSchema),
   next_cursor: z.string().min(1).nullable(),
   has_more: z.boolean(),
   counts: filterResultCountsSchema,
@@ -346,56 +303,6 @@ function validateCountCompleteness(
   });
 }
 
-function validateTableMetricEvidence(
-  metrics: {
-    completeness: FilterCountCompleteness;
-    reason_codes: string[];
-    cpu_mcores: number | null;
-    memory_mib: number | null;
-  },
-  required: unknown[],
-  context: z.RefinementCtx,
-): void {
-  if (
-    metrics.reason_codes.some((reason, index) =>
-      reason !== [...new Set(metrics.reason_codes)].sort()[index]
-    )
-  ) {
-    context.addIssue({
-      code: "custom",
-      message: "resource table metric reasons must be unique and ordered",
-      path: ["reason_codes"],
-    });
-  }
-  if (
-    metrics.completeness === "exact" &&
-    (required.some((value) => value === null) || metrics.reason_codes.length > 0)
-  ) {
-    context.addIssue({
-      code: "custom",
-      message: "exact resource table metrics require complete evidence",
-      path: ["completeness"],
-    });
-  }
-  if (metrics.completeness === "partial" && metrics.reason_codes.length === 0) {
-    context.addIssue({
-      code: "custom",
-      message: "partial resource table metrics require reason codes",
-      path: ["reason_codes"],
-    });
-  }
-  if (
-    metrics.completeness === "unavailable" &&
-    (metrics.cpu_mcores !== null || metrics.memory_mib !== null || metrics.reason_codes.length === 0)
-  ) {
-    context.addIssue({
-      code: "custom",
-      message: "unavailable resource table metrics cannot expose usage",
-      path: ["completeness"],
-    });
-  }
-}
-
 function validateLabelSelector(
   selector: { key: string; value: string; selector: string },
   context: z.RefinementCtx,
@@ -424,8 +331,6 @@ export type ResourceFilterFacetPage = z.infer<typeof resourceFilterFacetPageSche
 export type FilteredInventoryResourceItem = z.infer<
   typeof filteredInventoryResourceItemSchema
 >;
-export type ResourceTablePodMetrics = z.infer<typeof resourceTablePodMetricsSchema>;
-export type ResourceTableNodeMetrics = z.infer<typeof resourceTableNodeMetricsSchema>;
 export type FilteredInventoryResourceList = z.infer<
   typeof filteredInventoryResourceListSchema
 >;

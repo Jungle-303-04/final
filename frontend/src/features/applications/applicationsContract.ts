@@ -1,7 +1,3 @@
-import type { CostWorkloadAllocation } from "../cost/costContract";
-import type { CostWorkloadAllocationEndpoint } from "../cost/costEndpointContract";
-import type { BrowserRefreshPolicy } from "../../shared/data/browserRefreshPolicyRegistry";
-
 export type ApplicationsFailureCode =
   | "forbidden"
   | "invalid-response"
@@ -226,7 +222,7 @@ export interface ApplicationWorkloadDetail {
   resourceCountsCompleteness: ApplicationProjectionCompleteness;
   topology: ApplicationTopology;
   history: ApplicationUnavailableEvidence;
-  cost: CostWorkloadAllocation;
+  cost: ApplicationUnavailableEvidence;
   actions: ApplicationUnavailableEvidence;
 }
 
@@ -284,7 +280,6 @@ export interface ApplicationDriftModel {
 }
 
 export interface ApplicationsPort {
-  loadApplicationsRefreshPolicy(signal?: AbortSignal): Promise<BrowserRefreshPolicy>;
   listApplications(
     filter: ApplicationCatalogFilter,
     signal?: AbortSignal,
@@ -526,7 +521,7 @@ export interface ApplicationDetailEndpointItem extends ApplicationCatalogEndpoin
     resource_counts_completeness: ApplicationProjectionCompleteness;
     topology: ApplicationDetailEndpointItem["topology"];
     history: { availability: "unavailable"; reason_codes: string[] };
-    cost: CostWorkloadAllocationEndpoint;
+    cost: { availability: "unavailable"; reason_codes: string[] };
     actions: { availability: "unavailable"; reason_codes: string[] };
   } | null;
 }

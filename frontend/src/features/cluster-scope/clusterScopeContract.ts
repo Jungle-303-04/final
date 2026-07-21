@@ -5,15 +5,11 @@ import type {
   HomePortFailure,
 } from "../home/homeContract";
 import type { AsyncResourceState } from "../../shared/data/asyncResourceState";
-import type { BrowserRefreshPolicy } from "../../shared/data/browserRefreshPolicyRegistry";
-import type { ScopeTransitionOperationEvent } from "../../shared/parity/referenceParity";
 
 export type ClusterScopeChoice = HomeClusterChoice;
 export type ClusterScopeCollection = HomeClusterChoices;
 export type ClusterScopeFailure = HomePortFailure;
-export type ClusterScopePort = Pick<HomePort, "listClusterChoices"> & Partial<
-  Pick<HomePort, "loadDashboardRefreshPolicy" | "subscribeDashboardInvalidations">
->;
+export type ClusterScopePort = Pick<HomePort, "listClusterChoices">;
 export type ClusterScopeCollectionState = AsyncResourceState<
   ClusterScopeCollection,
   ClusterScopeFailure
@@ -41,10 +37,7 @@ export interface ClusterScopeValue {
   selectedCluster: ClusterScopeChoice | null;
   selectedClusterExists: boolean;
   selection: ClusterScopeSelection;
-  dashboardRefreshPolicy: BrowserRefreshPolicy | null;
-  scopeInvalidationRevision: number;
   scopeKey: string | null;
-  scopeOperation: ScopeTransitionOperationEvent | null;
   refresh: () => void;
   selectCluster: (clusterId: string) => void;
   toggleCluster: (clusterId: string) => void;

@@ -18,26 +18,15 @@ export function createLogStreamAdapter(
         onEvent: (event: LogStreamEndpointEvent) => handlers.onEvent(toEvent(event)),
         onFailure: (error: unknown) => handlers.onFailure(toFailure(error)),
       };
-      if (target.type === "pod") {
-        return endpoints.openPodLogStream(
+      return target.type === "pod"
+        ? endpoints.openPodLogStream(
             target.clusterId,
             target.namespace,
             target.name,
             target.container,
             endpointHandlers,
-          );
-      }
-      if (target.type === "scheduled-run") {
-        return endpoints.openScheduledWorkloadRunLogStream(
-          target.clusterId,
-          target.kind,
-          target.namespace,
-          target.name,
-          target.runKey,
-          endpointHandlers,
-        );
-      }
-      return endpoints.openWorkloadLogStream(
+          )
+        : endpoints.openWorkloadLogStream(
             target.clusterId,
             target.kind,
             target.namespace,
@@ -49,13 +38,7 @@ export function createLogStreamAdapter(
 }
 
 function toEvent(event: LogStreamEndpointEvent): LogStreamEvent {
-  if (event.type === "connected") {
-    return {
-      type: "connected",
-      streamId: required(event.stream_id),
-      containers: [...event.containers],
-    };
-  }
+  if (event.type === "connected") return { type: "connected", streamId: required(event.stream_id) };
   if (event.type === "log") {
     return {
       type: "log",
@@ -73,15 +56,7 @@ function toEvent(event: LogStreamEndpointEvent): LogStreamEvent {
       pod: required(event.pod),
     };
   }
-  if (event.type === "end") {
-    return {
-      type: "end",
-      reason: required(event.reason),
-      diagnostic: event.diagnostic === null ? null : {
-        code: event.diagnostic.code,
-      },
-    };
-  }
+  if (event.type === "end") return { type: "end", reason: required(event.reason) };
   return {
     type: "error",
     code: required(event.code),

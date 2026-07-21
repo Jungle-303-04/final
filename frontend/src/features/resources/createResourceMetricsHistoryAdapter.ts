@@ -2,23 +2,17 @@ import {
   isResourcesAbortError,
   toResourcesPortFailure,
 } from "./createResourcesAdapter";
-import type {
-  ResourceMetricsHistoryEndpointDependencies,
-  ScopedMetricEndpointRun,
-} from "./resourceMetricsHistoryEndpointContract";
-import type {
-  ResourceMetricHistoryPoint,
-  ResourceMetricsHistoryPort,
-} from "./resourceMetricsHistoryContract";
+import type { ResourceMetricsHistoryEndpointDependencies } from "./resourceMetricsHistoryEndpointContract";
+import type { ResourceMetricsHistoryPort } from "./resourceMetricsHistoryContract";
 import { toResourceMetricsHistory } from "./resourceMetricsHistoryCanonical";
 import { createResourceMetricsHistoryRequest } from "./resourcesFilterRequest";
-import { ResourcesPortFailure, type ResourceSummary } from "./resourcesContract";
+import { ResourcesPortFailure } from "./resourcesContract";
 import { ResourcesCanonicalError } from "./resourcesValidation";
 
 export function createResourceMetricsHistoryAdapter(
   endpoints: ResourceMetricsHistoryEndpointDependencies,
 ): ResourceMetricsHistoryPort {
-  const base: ResourceMetricsHistoryPort = {
+  return {
     async loadResourceMetricsHistory(state, resourceIds, options, signal) {
       return withMetricsFailure(async () => {
         const query = createResourceMetricsHistoryRequest(state, resourceIds, options);
@@ -29,128 +23,6 @@ export function createResourceMetricsHistoryAdapter(
         );
       });
     },
-  };
-  if (endpoints.runScopedMetricQuery === undefined) {
-    return base;
-  }
-  return {
-    ...base,
-    async loadScopedResourceMetrics(resource, range, signal) {
-      return withMetricsFailure(async () => {
-        const pvc = resource.kind === "PersistentVolumeClaim";
-        const hpa = resource.kind === "HorizontalPodAutoscaler";
-        const run = await endpoints.runScopedMetricQuery!({
-          cluster_id: resource.clusterId,
-          subject: pvc
-            ? { kind: "pvc", resource_id: resource.inventoryKey }
-            : { kind: "resource", resource_id: resource.inventoryKey },
-          categories: pvc
-            ? ["volume_usage"]
-            : hpa
-              ? ["hpa_current_replicas", "hpa_desired_replicas"]
-              : ["cpu", "memory", "network_rx", "network_tx", "filesystem", "restarts"],
-          range,
-        }, { signal });
-        return {
-          series: toScopedSeries(resource, run),
-          completeness: run.completeness,
-          partialReasonCodes: run.reasonCodes,
-          refreshPolicyKey: run.endpoint.refresh_policy_key,
-          source: "prometheus",
-          freshness: run.endpoint.scope.freshness,
-        };
-      });
-    },
-  };
-}
-
-function toScopedSeries(
-  observedResource: ResourceSummary,
-  run: ScopedMetricEndpointRun,
-) {
-  const resourceId = observedResource.inventoryKey;
-  const resource = run.endpoint.resource;
-  if (resource === null || run.observations.length === 0) return null;
-  const points = new Map<number, ResourceMetricHistoryPoint>();
-  for (const observation of run.observations) {
-    for (const series of observation.result.series) {
-      for (const point of series.values) {
-        if (point.timestamp === null || point.value === null) continue;
-        const existing = points.get(point.timestamp) ?? {
-          observedAt: new Date(point.timestamp * 1_000).toISOString(),
-          cpuMillicores: null,
-          memoryMebibytes: null,
-          volumeUsagePercent: null,
-          networkReceiveBytesPerSecond: null,
-          networkTransmitBytesPerSecond: null,
-          filesystemBytes: null,
-          restartCount: null,
-          hpaCurrentReplicas: null,
-          hpaDesiredReplicas: null,
-        };
-        if (observation.category === "cpu") existing.cpuMillicores = point.value * 1_000;
-        if (observation.category === "memory") {
-          existing.memoryMebibytes = point.value / (1024 * 1024);
-        }
-        if (observation.category === "volume_usage") {
-          existing.volumeUsagePercent = point.value * 100;
-        }
-        if (observation.category === "network_rx") {
-          existing.networkReceiveBytesPerSecond = point.value;
-        }
-        if (observation.category === "network_tx") {
-          existing.networkTransmitBytesPerSecond = point.value;
-        }
-        if (observation.category === "filesystem") existing.filesystemBytes = point.value;
-        if (observation.category === "restarts") existing.restartCount = point.value;
-        if (observation.category === "hpa_current_replicas") {
-          existing.hpaCurrentReplicas = point.value;
-        }
-        if (observation.category === "hpa_desired_replicas") {
-          existing.hpaDesiredReplicas = point.value;
-        }
-        points.set(point.timestamp, existing);
-      }
-    }
-  }
-  const ordered = [...points.entries()]
-    .sort(([left], [right]) => left - right)
-    .map(([, point]) => point);
-  if (ordered.length === 0) return null;
-  return {
-    resourceId,
-    clusterId: run.endpoint.scope.cluster_id,
-    resourceType: resource.kind === "PersistentVolumeClaim"
-      ? "pvc" as const
-      : resource.kind === "HorizontalPodAutoscaler"
-        ? "hpa" as const
-      : resource.kind === "Node"
-        ? "node" as const
-        : "pod" as const,
-    namespace: resource.namespace,
-    name: resource.name,
-    points: ordered,
-    references: metricReferences(observedResource),
-    hasSparklinePoints: ordered.length > 1,
-    completeness: run.completeness,
-    partialReasonCodes: run.reasonCodes,
-    source: "prometheus" as const,
-    freshness: run.endpoint.scope.freshness,
-  };
-}
-
-function metricReferences(resource: ResourceSummary) {
-  const evidence = resource.tableMetrics;
-  if (
-    evidence?.kind !== "pod" ||
-    resource.uid === null ||
-    evidence.resourceUid !== resource.uid
-  ) return undefined;
-  return {
-    cpuRequestMillicores: evidence.cpuRequestMillicores,
-    cpuLimitMillicores: evidence.cpuLimitMillicores,
-    memoryRequestMebibytes: evidence.memoryRequestMebibytes,
-    memoryLimitMebibytes: evidence.memoryLimitMebibytes,
   };
 }
 

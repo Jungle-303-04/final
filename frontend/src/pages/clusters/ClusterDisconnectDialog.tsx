@@ -1,6 +1,8 @@
 import {
   Check,
   CircleCheck,
+  Clipboard,
+  ShieldCheck,
   TriangleAlert,
   Unplug,
 } from "lucide-react";
@@ -34,6 +36,7 @@ export type DisconnectPhase =
   | "submitting"
   | "uninstalling"
   | "cleanup-required"
+  | "residual-cleanup"
   | "succeeded"
   | "failed";
 
@@ -61,6 +64,7 @@ export function ClusterDisconnectDialog({
   const [confirmation, setConfirmation] = useState("");
   const [phase, setPhase] = useState<DisconnectPhase>("confirm");
   const [receipt, setReceipt] = useState<ClusterDisconnectReceipt | null>(null);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => () => abort.current?.abort(), []);
 
@@ -71,7 +75,7 @@ export function ClusterDisconnectDialog({
   if (cluster === null) return null;
   const confirmed = confirmation === cluster.name;
   const pending = phase === "submitting" || phase === "uninstalling";
-  const terminal = phase === "succeeded";
+  const terminal = phase === "succeeded" || phase === "residual-cleanup";
 
   const changeOpen = (nextOpen: boolean) => {
     if (!nextOpen && (pending || phase === "cleanup-required")) {
@@ -84,6 +88,7 @@ export function ClusterDisconnectDialog({
       setConfirmation("");
       setPhase("confirm");
       setReceipt(null);
+      setCopied(false);
     }
     onOpenChange(nextOpen);
   };
@@ -95,6 +100,7 @@ export function ClusterDisconnectDialog({
 
   const followCommand = async (
     commandId: string,
+    uninstallCommand: string | null,
     controller: AbortController,
   ): Promise<void> => {
     setPhase("uninstalling");
@@ -102,15 +108,15 @@ export function ClusterDisconnectDialog({
     while (!controller.signal.aborted) {
       const progress = await port.loadDisconnect(commandId, controller.signal);
       if (progress.status === "completed" && progress.cleanupCompleted) {
-        finishDisconnect("succeeded");
+        finishDisconnect("residual-cleanup");
         return;
       }
       if (progress.status === "completed" || progress.status === "failed") {
-        setPhase("cleanup-required");
+        setPhase(uninstallCommand ? "cleanup-required" : "failed");
         return;
       }
       if (Date.now() >= deadline) {
-        setPhase("cleanup-required");
+        setPhase(uninstallCommand ? "cleanup-required" : "failed");
         return;
       }
       await wait(COMMAND_POLL_MS, controller.signal);
@@ -126,11 +132,11 @@ export function ClusterDisconnectDialog({
       finishDisconnect("succeeded");
       return;
     }
-    if (nextReceipt.commandId === null) {
+    if (nextReceipt.status === "cleanup-required" || nextReceipt.commandId === null) {
       setPhase("cleanup-required");
       return;
     }
-    await followCommand(nextReceipt.commandId, controller);
+    await followCommand(nextReceipt.commandId, nextReceipt.uninstallCommand, controller);
   };
 
   const submit = async (event: FormEvent) => {
@@ -151,14 +157,17 @@ export function ClusterDisconnectDialog({
     }
   };
 
-  const retryCleanup = async () => {
-    if (pending || receipt?.commandId === null || receipt === null) return;
+  const confirmCleanup = async () => {
+    if (pending) return;
     const controller = new AbortController();
     abort.current?.abort();
     abort.current = controller;
-    setPhase("uninstalling");
+    setPhase("submitting");
     try {
-      await followCommand(receipt.commandId, controller);
+      const nextReceipt = await port.confirmManualCleanup(cluster.id, controller.signal);
+      if (controller.signal.aborted) return;
+      setReceipt(nextReceipt);
+      finishDisconnect("succeeded");
     } catch (error) {
       if (isAbortError(error)) return;
       handleFailure(error, reportUnauthorized);
@@ -166,6 +175,12 @@ export function ClusterDisconnectDialog({
     } finally {
       if (abort.current === controller) abort.current = null;
     }
+  };
+
+  const copyCommand = async () => {
+    if (!receipt?.uninstallCommand) return;
+    await navigator.clipboard?.writeText(receipt.uninstallCommand);
+    setCopied(true);
   };
 
   return (
@@ -210,12 +225,23 @@ export function ClusterDisconnectDialog({
 
           {pending ? <DisconnectProgress phase={phase} t={t} /> : null}
 
-          {phase === "cleanup-required" ? (
-            <Alert>
-              <TriangleAlert aria-hidden="true" />
-              <AlertTitle>{t("clusters.disconnect.pending.title")}</AlertTitle>
-              <AlertDescription>{t("clusters.disconnect.pending.description")}</AlertDescription>
-            </Alert>
+          {phase === "cleanup-required" || phase === "residual-cleanup" ? (
+            <CleanupCommand
+              command={receipt?.uninstallCommand ?? null}
+              copied={copied}
+              copyLabel={t("clusters.disconnect.manual.copy")}
+              description={t("clusters.disconnect.manual.description")}
+              onCopy={() => void copyCommand()}
+              residualResources={receipt?.residualResources ?? []}
+              resourcesLabel={(count, resources) => t("clusters.disconnect.manual.resources", {
+                count,
+                resources,
+              })}
+              commandLabel={t("clusters.disconnect.manual.command")}
+              title={phase === "residual-cleanup"
+                ? t("clusters.disconnect.residual.title")
+                : t("clusters.disconnect.manual.title")}
+            />
           ) : null}
 
           {phase === "succeeded" ? (
@@ -239,18 +265,10 @@ export function ClusterDisconnectDialog({
                 {t("common.action.close")}
               </Button>
             ) : phase === "cleanup-required" ? (
-              <div className="flex w-full items-center justify-between gap-3">
-                <Button onClick={() => changeOpen(false)} type="button" variant="outline">
-                  {t("clusters.disconnect.background")}
-                </Button>
-                <Button
-                  disabled={receipt?.commandId == null}
-                  onClick={() => void retryCleanup()}
-                  type="button"
-                >
-                  {t("clusters.disconnect.pending.retry")}
-                </Button>
-              </div>
+              <Button onClick={() => void confirmCleanup()} type="button">
+                <ShieldCheck aria-hidden="true" />
+                {t("clusters.disconnect.manual.force")}
+              </Button>
             ) : pending ? (
               <div className="flex w-full items-center justify-between gap-3">
                 <p className="inline-flex min-w-0 items-center gap-2 text-sm text-muted-foreground" role="status">
@@ -294,10 +312,7 @@ function DisconnectProgress({ phase, t }: { phase: DisconnectPhase; t: Translati
     { label: t("clusters.disconnect.progress.registration"), state: "pending" },
   ];
   return (
-    <ol
-      aria-label={t("clusters.disconnect.progress.aria")}
-      className="grid gap-2 rounded-xl border bg-muted/30 p-3"
-    >
+    <ol className="grid gap-2 rounded-xl border bg-muted/30 p-3" aria-label="클러스터 연결 해제 진행">
       {steps.map((step) => (
         <li className="flex min-w-0 items-center gap-2 text-sm" key={step.label}>
           {step.state === "complete" ? (
@@ -314,11 +329,71 @@ function DisconnectProgress({ phase, t }: { phase: DisconnectPhase; t: Translati
   );
 }
 
+function CleanupCommand({
+  command,
+  commandLabel,
+  copied,
+  copyLabel,
+  description,
+  onCopy,
+  residualResources,
+  resourcesLabel,
+  title,
+}: {
+  command: string | null;
+  commandLabel: string;
+  copied: boolean;
+  copyLabel: string;
+  description: string;
+  onCopy: () => void;
+  residualResources: string[];
+  resourcesLabel: (count: number, resources: string) => string;
+  title: string;
+}) {
+  return (
+    <section className="grid min-w-0 gap-3 rounded-xl border border-amber-500/35 bg-amber-500/5 p-4">
+      <div className="flex items-start gap-2">
+        <TriangleAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-amber-600" />
+        <div className="min-w-0">
+          <h3 className="font-medium">{title}</h3>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {description}
+          </p>
+        </div>
+      </div>
+      {command ? (
+        <div className="grid min-w-0 gap-2">
+          <p className="text-xs font-medium">{commandLabel}</p>
+          <div className="flex min-w-0 items-start gap-2 overflow-hidden rounded-lg bg-zinc-950 p-3 text-zinc-100">
+            <pre className="min-w-0 flex-1 select-text whitespace-pre-wrap break-all text-xs leading-5 [overflow-wrap:anywhere]">{command}</pre>
+            <Button
+              aria-label={copyLabel}
+              className="shrink-0 text-zinc-100 hover:bg-white/10 hover:text-white"
+              onClick={onCopy}
+              size="icon"
+              type="button"
+              variant="ghost"
+            >
+              {copied ? <Check aria-hidden="true" /> : <Clipboard aria-hidden="true" />}
+            </Button>
+          </div>
+        </div>
+      ) : null}
+      {residualResources.length > 0 ? (
+        <p className="break-words text-xs text-muted-foreground">
+          {resourcesLabel(residualResources.length, residualResources.join(", "))}
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
 function phaseTitle(
   phase: DisconnectPhase,
   t: TranslationFunction,
 ): string {
-  if (phase === "cleanup-required") return t("clusters.disconnect.pending.heading");
+  if (phase === "cleanup-required") return t("clusters.disconnect.manual.heading");
+  if (phase === "residual-cleanup") return t("clusters.disconnect.agentStopped.title");
   if (phase === "succeeded") return t("clusters.disconnect.success.title");
   return t("clusters.disconnect.title");
 }

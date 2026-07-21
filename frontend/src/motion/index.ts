@@ -29,22 +29,8 @@ export {
 } from "./useRafDimensionPreview";
 export {
   MOTION_DURATION_MS,
-  MOTION_DURATION_SECONDS,
   STAGGER_MS,
   podWaveDelay,
   staggerDelay,
   useStagger,
 } from "./useStagger";
-export {
-  EASE_DRAW,
-  LIST_STAGGER,
-  MOTION_SPRING,
-  MOTION_TWEEN,
-  RECHARTS_EASE_DRAW,
-  listStaggerDelay,
-} from "./transitions";
-export {
-  SurfaceRowMotion,
-  SurfaceRowMotionProvider,
-  SurfaceRowPresence,
-} from "./SurfaceRowMotion";

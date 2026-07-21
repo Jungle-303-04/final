@@ -30,7 +30,6 @@ describe("resource metrics history API", () => {
 
   it("exports and requests one bounded batch with the canonical filter scope", async () => {
     const payload = {
-      refresh_policy_key: "metrics_kubernetes",
       series: [{
         resource_id: "pod:shop/api-0",
         cluster_id: "cluster-1",
@@ -41,28 +40,6 @@ describe("resource metrics history API", () => {
           { observed_at: "2026-07-14T00:00:00Z", cpu_mcores: 12, mem_mib: null },
           { observed_at: "2026-07-14T00:01:00Z", cpu_mcores: null, mem_mib: 64 },
         ],
-        current_observation: {
-          observed_at: "2026-07-14T00:00:58Z",
-          measurement_window: "30s",
-          cpu_mcores: 12,
-          mem_mib: 64,
-          container_metrics_complete: true,
-          containers: [{
-            name: "app",
-            cpu_mcores: 12,
-            mem_mib: 64,
-          }],
-        },
-        container_series: [{
-          name: "app",
-          points: [
-            { observed_at: "2026-07-14T00:00:00Z", cpu_mcores: 12, mem_mib: 64 },
-          ],
-          completeness: "partial",
-          partial_reason_codes: ["container_metrics_history_partial"],
-        }],
-        container_history_completeness: "partial",
-        container_history_reason_codes: ["container_metrics_history_partial"],
         has_sparkline_points: true,
         completeness: "partial",
         partial_reason_codes: ["sample_gap"],
@@ -93,7 +70,6 @@ describe("resource metrics history API", () => {
 
   it("accepts a measured Node series without a namespace", async () => {
     const payload = {
-      refresh_policy_key: "metrics_kubernetes",
       series: [{
         resource_id: "node-a",
         cluster_id: "cluster-1",
@@ -105,17 +81,6 @@ describe("resource metrics history API", () => {
           cpu_mcores: 640.5,
           mem_mib: 4096,
         }],
-        current_observation: {
-          observed_at: "2026-07-15T04:59:58Z",
-          measurement_window: "30s",
-          cpu_mcores: 640.5,
-          mem_mib: 4096,
-          container_metrics_complete: false,
-          containers: [],
-        },
-        container_series: [],
-        container_history_completeness: "unavailable",
-        container_history_reason_codes: ["container_metrics_not_applicable"],
         has_sparkline_points: true,
         completeness: "exact",
         partial_reason_codes: [],
@@ -144,7 +109,6 @@ describe("resource metrics history API", () => {
     expect(fetchMock).not.toHaveBeenCalled();
 
     fetchMock.mockResolvedValue(response({
-      refresh_policy_key: "metrics_kubernetes",
       series: [{
         resource_id: "pod-1",
         cluster_id: "cluster-1",
@@ -152,9 +116,6 @@ describe("resource metrics history API", () => {
         namespace: "shop",
         name: "api-0",
         points: [{ observed_at: "2026-07-14T00:00:00Z", cpu_mcores: null, mem_mib: null }],
-        container_series: [],
-        container_history_completeness: "unavailable",
-        container_history_reason_codes: ["container_metrics_history_unavailable"],
         has_sparkline_points: true,
         completeness: "partial",
         partial_reason_codes: ["sample_gap"],

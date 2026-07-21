@@ -55,6 +55,7 @@ describe("Resources filter response schemas", () => {
         cluster: { cluster_id: "cluster-a", name: null, provider: "private-cloud" },
         application_ids: ["app-checkout"],
         application_binding_completeness: "partial",
+        metrics: null,
       }],
       next_cursor: null,
       has_more: false,

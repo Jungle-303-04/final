@@ -1,0 +1,159 @@
+import { useEffect, useState } from "react";
+
+import { listInventoryResourcesByType } from "../api/inventory-query";
+import { getInventorySummary } from "../api/inventory-summary";
+
+// UI-PHASE2-001: typed live adapter for the 통합 리소스 37종 테이블.
+// Reads only `GET /api/clusters/{id}/inventory/resources?resource_type=` and
+// `GET /api/clusters/{id}/inventory/summary`. Contract fields that the backend
+// does not expose (cpu/mem/replicas/endpoints/ready/restarts …) are never
+// fabricated — the table renders those columns as "관측 안 됨" blanks.
+
+export type ResourcesFeedStatus = "loading" | "ready" | "unavailable";
+
+export type Row = Record<string, unknown>;
+
+export interface InventoryResourcesView {
+  status: ResourcesFeedStatus;
+  rows: Row[];
+}
+
+export interface InventoryKindCountsView {
+  status: ResourcesFeedStatus;
+  // meta[clusterId][resource_type] = observed count. resource_type keys are
+  // lowercased so lookups by kindToResourceType (also lowercased) always align.
+  meta: Record<string, Record<string, number>>;
+}
+
+const RESOURCE_QUERY_LIMIT = 500;
+
+// kindId → backend resource_type 추정값. 백엔드 resource_type의 정확한 표기가
+// 불확실하므로 대부분은 kindId를 소문자화한 값(= 쿠버네티스 kind 소문자)을 쓰고,
+// 약어로 표기된 종류(HPA/PVC)만 정식 kind 이름으로 매핑한다.
+const KIND_TO_RESOURCE_TYPE: Record<string, string> = {
+  HPA: "horizontalpodautoscaler",
+  PVC: "persistentvolumeclaim",
+};
+
+export function kindToResourceType(kindId: string): string {
+  return KIND_TO_RESOURCE_TYPE[kindId] ?? kindId.toLowerCase();
+}
+
+function isAbortError(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "name" in error
+    && (error as { name?: unknown }).name === "AbortError";
+}
+
+interface InventoryResourceRow {
+  name: string;
+  namespace: string | null;
+  kind: string;
+  status: string;
+  health: string;
+  resource_type: string;
+  uid: string | null;
+  created_at: string | null;
+  cluster_id: string;
+  inventory_key: string;
+}
+
+// 계약이 노출하는 필드만 Row로 옮긴다 — SPEC 특화 필드(replicas/cpu/mem 등)는
+// 절대 채우지 않는다. 값이 없으면 undefined로 두고 셀이 "–"를 렌더한다.
+function toRow(resource: InventoryResourceRow): Row {
+  return {
+    name: resource.name,
+    ns: resource.namespace ?? undefined,
+    kind: resource.kind,
+    status: resource.status,
+    health: resource.health,
+    resource_type: resource.resource_type,
+    uid: resource.uid ?? undefined,
+    created: resource.created_at ?? undefined,
+    cluster: resource.cluster_id,
+    _key: resource.inventory_key,
+  };
+}
+
+export function useInventoryResources(
+  clusterId: string | null,
+  resourceType: string | null,
+): InventoryResourcesView {
+  const [view, setView] = useState<InventoryResourcesView>({ status: "loading", rows: [] });
+  const rt = resourceType?.trim() ?? "";
+  const canFetch = clusterId !== null && rt !== "";
+  // useEffect dep = 조인된 단일 문자열 key. 클러스터 id·resource_type 모두 공백이
+  // 없으므로 이펙트 내부에서 key만으로 되살려 참조(exhaustive-deps: key 하나).
+  const key = canFetch ? [clusterId, rt].join(" ") : "";
+  useEffect(() => {
+    // 빈 스코프(클러스터 미선택) 또는 resource_type 미지정 시 요청하지 않는다.
+    // 동기 setState 금지 규칙에 따라 여기서는 상태를 만지지 않고,
+    // 아래 파생 반환(canFetch === false → 빈 ready)으로 빈 결과를 낸다.
+    if (key === "") return;
+    const [cid, type] = key.split(" ");
+    const controller = new AbortController();
+    listInventoryResourcesByType(
+      cid,
+      { resourceType: type, limit: RESOURCE_QUERY_LIMIT },
+      controller.signal,
+    )
+      .then((response) => {
+        if (controller.signal.aborted) return;
+        // 이중 안전장치: 서버가 resource_type 쿼리 표기를 다르게 받거나 무시해도,
+        // 정식 kind 소문자 === 추정 resource_type 로 한 번 더 걸러 표기 불일치로
+        // 빈 표/오염 행이 나오는 것을 막는다.
+        const rows = response.resources
+          .filter((resource) => resource.kind.toLowerCase() === type)
+          .map(toRow);
+        setView({ status: "ready", rows });
+      })
+      .catch((cause: unknown) => {
+        if (isAbortError(cause)) return;
+        setView({ status: "unavailable", rows: [] });
+      });
+    return () => controller.abort();
+  }, [key]);
+  return canFetch ? view : { status: "ready", rows: [] };
+}
+
+export function useInventoryKindCounts(
+  clusterIds: readonly string[],
+): InventoryKindCountsView {
+  const [view, setView] = useState<InventoryKindCountsView>({ status: "loading", meta: {} });
+  const key = clusterIds.join(" ");
+  useEffect(() => {
+    const ids = key ? key.split(" ") : [];
+    if (ids.length === 0) return;
+    const controller = new AbortController();
+    const meta: Record<string, Record<string, number>> = {};
+    let remaining = ids.length;
+    let anyReady = false;
+    for (const id of ids) {
+      void getInventorySummary(id, controller.signal)
+        .then((summary) => {
+          if (controller.signal.aborted) return;
+          anyReady = true;
+          const byType: Record<string, number> = {};
+          for (const ns of summary.namespaces) {
+            for (const count of ns.counts) {
+              const type = count.resource_type.toLowerCase();
+              byType[type] = (byType[type] ?? 0) + count.count;
+            }
+          }
+          meta[id] = byType;
+        })
+        .catch((cause: unknown) => {
+          if (isAbortError(cause)) return;
+          // 한 클러스터의 인벤토리 실패는 그 클러스터만 비운다(전체 실패 아님).
+        })
+        .finally(() => {
+          if (controller.signal.aborted) return;
+          remaining -= 1;
+          if (remaining === 0) {
+            setView({ status: anyReady ? "ready" : "unavailable", meta });
+          }
+        });
+    }
+    return () => controller.abort();
+  }, [key]);
+  return view;
+}

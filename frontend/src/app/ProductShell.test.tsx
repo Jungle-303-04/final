@@ -12,24 +12,10 @@ import { UnifiedFilterProvider } from "../features/filters/UnifiedFilterProvider
 import { I18nProvider } from "../shared/i18n";
 
 const testAuth: AuthenticatedAuthState = {
-  listWorkspaces: async () => ({ currentWorkspaceId: "test-workspace", items: [] }),
-  session: {
-    authEnabled: true,
-    authMode: "password",
-    groups: [],
-    logout: {
-      action: "end_session",
-      supported: true,
-      reauthenticationExpected: false,
-    },
-    userId: "test-user",
-    roles: ["viewer"],
-    workspaceId: "test-workspace",
-  },
+  session: { userId: "test-user", roles: ["viewer"], workspaceId: "test-workspace" },
   signOutIssue: null,
   signOutPending: false,
   onSignOut: () => undefined,
-  switchWorkspace: async () => { throw new Error("not used"); },
 };
 const testClusterScope: ClusterScopePort = {
   listClusterChoices: async () => ({ completeness: "unknown", clusters: [] }),
@@ -70,28 +56,14 @@ describe("ProductShell", () => {
     expect(markup).not.toContain("workspace_id");
     expect(markup).toContain("Open profile menu for test-use…");
     expect(markup).toContain("Current workspace: test-workspace");
-    expect(markup).toContain('data-slot="product-header-workspace"');
-    expect(markup).toContain('data-slot="workspace-switcher-trigger"');
-    expect(markup).toContain('data-slot="product-header-account"');
-    expect(markup).toContain('data-slot="profile-menu-trigger"');
-    expect(markup).toContain('data-slot="sidebar-footer"');
-    expect(markup).toContain('aria-label="Settings"');
+    expect(markup).toContain('aria-label="Current language: English"');
     expect(markup).toContain("test-user");
-    expect(markup).toContain('data-slot="sidebar-inset"');
-    expect(markup).toContain("overflow-hidden");
-    expect(markup).toContain("overflow-y-auto");
+    expect(markup).toContain("overflow-x-hidden");
+    expect(markup).toContain("data-horizontal:w-auto");
     expect(markup).toContain('aria-current="page"');
     expect(markup).toContain('href="#product-main"');
     expect(markup).toContain("Issue content");
     expect(markup.match(/data-slot="unified-filter-bar"/gu)).toHaveLength(1);
-    expect(markup.indexOf('data-slot="workspace-switcher-trigger"')).toBeLessThan(
-      markup.indexOf('data-slot="unified-filter-bar"'),
-    );
-    expect(markup.indexOf('data-slot="unified-filter-bar"')).toBeLessThan(
-      markup.indexOf('data-slot="profile-menu-trigger"'),
-    );
-    expect(markup).toContain('id="product-main"');
-    expect(markup).toContain("flex-1 overflow-y-auto");
   });
 
   it("never names an unreleased route while an unknown URL redirects", () => {
@@ -158,10 +130,10 @@ describe("ProductShell", () => {
     );
 
     expect(markup).toContain("홈");
-    expect(markup).toContain("이슈");
+    expect(markup).toContain("인시던트");
     expect(markup).toContain("test-use… 프로필 메뉴 열기");
     expect(markup).toContain("워크스페이스");
-    expect(markup).toContain("자동 갱신");
+    expect(markup).toContain("언어");
   });
 
   it("links the product brand to the released declarative landing route", () => {

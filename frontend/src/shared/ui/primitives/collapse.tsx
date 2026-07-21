@@ -22,7 +22,7 @@ function Collapse({
   return (
     <div
       className={cn(
-        "grid transition-[grid-template-rows] duration-(--motion-quick) ease-(--ease-out) motion-reduce:transition-none",
+        "grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none",
         open ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
         className,
       )}
@@ -52,7 +52,7 @@ function CollapseChevron({
     <ChevronRightIcon
       aria-hidden="true"
       className={cn(
-        "shrink-0 text-muted-foreground transition-transform duration-(--motion-quick) motion-reduce:transition-none",
+        "shrink-0 text-muted-foreground transition-transform duration-200 motion-reduce:transition-none",
         open && "rotate-90",
         className,
       )}

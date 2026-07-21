@@ -17,17 +17,14 @@ export interface IssueRecoveryProgress {
 }
 
 const FAILED_STATUSES = new Set(["command_rejected", "pr_failed"]);
-const COMPLETED_STATUSES = new Set([
-  "command_completed",
-  "incident_resolved",
-  "pr_created",
-  "resolved",
-]);
+const COMPLETED_STATUSES = new Set(["incident_resolved", "resolved"]);
 const VERIFYING_STATUSES = new Set([
+  "command_completed",
   "pr_requested",
   "pr_patch_prepared",
   "pr_diff_explained",
   "pr_ready_for_creation",
+  "pr_created",
 ]);
 const EXECUTING_STATUSES = new Set([
   "command_requested",
@@ -36,20 +33,17 @@ const EXECUTING_STATUSES = new Set([
 ]);
 
 const FAILED_SUBJECTS = new Set([
-  "approval.rejected",
   "command.rejected",
   "safe_pr.failed",
-  "workflow.run.failed",
+  "workflow.failed",
 ]);
-const COMPLETED_SUBJECTS = new Set([
-  "command.completed",
-  "safe_pr.created",
-  "workflow.run.completed",
-]);
+const COMPLETED_SUBJECTS = new Set(["incident.resolved"]);
 const VERIFYING_SUBJECTS = new Set([
+  "command.completed",
   "safe_pr.requested",
   "safe_pr.patch_prepared",
   "safe_pr.ready_for_creation",
+  "safe_pr.created",
 ]);
 const EXECUTING_SUBJECTS = new Set([
   "command.requested",
@@ -75,30 +69,29 @@ export function issueRecoveryProgress({
   const status = normalize(selected.status);
   const subject = normalize(selected.currentSubject);
   const events = audit?.items ?? [];
-  const latestEvent = events[events.length - 1] ?? null;
-  const latestSubject = normalize(latestEvent?.subject ?? "");
+  const latestEvent = events[0] ?? null;
 
   if (
     selectionFailed || FAILED_STATUSES.has(status) || FAILED_SUBJECTS.has(subject) ||
-    FAILED_SUBJECTS.has(latestSubject)
+    events.some((event) => FAILED_SUBJECTS.has(normalize(event.subject)))
   ) {
-    return phase("failed", failureStep(status, subject, latestSubject), latestEvent);
+    return phase("failed", failureStep(status, subject, events), latestEvent);
   }
   if (
     COMPLETED_STATUSES.has(status) || COMPLETED_SUBJECTS.has(subject) ||
-    COMPLETED_SUBJECTS.has(latestSubject)
+    events.some((event) => COMPLETED_SUBJECTS.has(normalize(event.subject)))
   ) {
     return phase("completed", 4, latestEvent);
   }
   if (
     VERIFYING_STATUSES.has(status) || VERIFYING_SUBJECTS.has(subject) ||
-    VERIFYING_SUBJECTS.has(latestSubject)
+    events.some((event) => VERIFYING_SUBJECTS.has(normalize(event.subject)))
   ) {
     return phase("verifying", 3, latestEvent);
   }
   if (
     EXECUTING_STATUSES.has(status) || EXECUTING_SUBJECTS.has(subject) ||
-    EXECUTING_SUBJECTS.has(latestSubject)
+    events.some((event) => EXECUTING_SUBJECTS.has(normalize(event.subject)))
   ) {
     return phase("executing", 2, latestEvent);
   }
@@ -113,11 +106,6 @@ export function issueRecoveryProgress({
 
 export function recoveryProgressIsTerminal(progress: IssueRecoveryProgress): boolean {
   return progress.phase === "completed" || progress.phase === "failed";
-}
-
-export function recoveryStatusIsTerminal(status: string): boolean {
-  const normalized = normalize(status);
-  return COMPLETED_STATUSES.has(normalized) || FAILED_STATUSES.has(normalized);
 }
 
 function phase(
@@ -136,15 +124,18 @@ function phase(
 function failureStep(
   status: string,
   subject: string,
-  latestSubject: string,
+  events: IssueAuditTimelinePage["items"],
 ): number {
   if (
-    status === "pr_failed" || subject === "safe_pr.failed" || subject === "workflow.run.failed" ||
-    latestSubject === "safe_pr.failed" || latestSubject === "workflow.run.failed"
+    status === "pr_failed" || subject === "safe_pr.failed" || subject === "workflow.failed" ||
+    events.some((event) => {
+      const eventSubject = normalize(event.subject);
+      return eventSubject === "safe_pr.failed" || eventSubject === "workflow.failed";
+    })
   ) return 3;
   if (
     status === "command_rejected" || subject === "command.rejected" ||
-    latestSubject === "command.rejected"
+    events.some((event) => normalize(event.subject) === "command.rejected")
   ) return 2;
   return 1;
 }

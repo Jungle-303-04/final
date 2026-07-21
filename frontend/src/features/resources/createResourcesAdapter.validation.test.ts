@@ -165,15 +165,7 @@ describe("canonical Resources adapter validation", () => {
     }],
     ["invalid catalog timestamp", {
       ...INVENTORY_SUMMARY,
-      counts_evidence: { ...INVENTORY_SUMMARY.counts_evidence, observed_at: "yesterday" },
-    }],
-    ["observed catalog with reasons", {
-      ...INVENTORY_SUMMARY,
-      counts_evidence: {
-        ...INVENTORY_SUMMARY.counts_evidence,
-        completeness: "observed",
-        reason_codes: ["must-not-be-present"],
-      },
+      latest_snapshot: { collected_at: "yesterday" },
     }],
   ])("rejects %s", async (_name, payload) => {
     await expect(createResourcesAdapter(endpoints({

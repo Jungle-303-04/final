@@ -59,7 +59,7 @@ function SheetOverlay({
     <SheetPrimitive.Backdrop
       {...props}
       className={cn(
-        "fixed inset-0 isolate z-50 min-h-dvh bg-foreground/10 transition-opacity duration-(--motion-quick) supports-backdrop-filter:backdrop-blur-xs data-ending-style:opacity-0 data-starting-style:opacity-0 motion-reduce:transition-none forced-colors:bg-[Canvas] forced-colors:opacity-75",
+        "fixed inset-0 isolate z-50 min-h-dvh bg-foreground/10 transition-opacity duration-150 supports-backdrop-filter:backdrop-blur-xs data-ending-style:opacity-0 data-starting-style:opacity-0 motion-reduce:transition-none forced-colors:bg-[Canvas] forced-colors:opacity-75",
         className,
       )}
       data-slot="sheet-overlay"
@@ -83,7 +83,7 @@ function SheetContent({
       <SheetPrimitive.Popup
         {...props}
         className={cn(
-          "fixed isolate z-50 flex flex-col gap-4 bg-popover bg-clip-padding text-sm text-popover-foreground shadow-lg ring-1 ring-foreground/10 transition duration-(--motion-dock) ease-(--ease-spring) outline-none focus-visible:ring-3 focus-visible:ring-ring/50 data-ending-style:opacity-0 data-starting-style:opacity-0 motion-reduce:transition-none forced-colors:border forced-colors:border-[CanvasText] forced-colors:shadow-none",
+          "fixed isolate z-50 flex flex-col gap-4 bg-popover bg-clip-padding text-sm text-popover-foreground shadow-lg ring-1 ring-foreground/10 transition duration-200 ease-in-out outline-none focus-visible:ring-3 focus-visible:ring-ring/50 data-ending-style:opacity-0 data-starting-style:opacity-0 motion-reduce:duration-0 motion-reduce:transition-none forced-colors:border forced-colors:border-[CanvasText] forced-colors:shadow-none",
           sheetSideClassName[side],
           className,
         )}

@@ -1,11 +1,9 @@
-import { describe, expect, expectTypeOf, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   DESKTOP_COMMAND,
   createDesktopBridge,
   type DesktopCapabilitySet,
-  type DesktopLocalPortForwardRequest,
-  type DesktopPortForwardSession,
 } from "./desktopBridge";
 
 const CAPABILITIES: DesktopCapabilitySet = {
@@ -16,16 +14,10 @@ const CAPABILITIES: DesktopCapabilitySet = {
   externalUrl: { state: "available" },
   safeFile: { state: "available" },
   localTerminal: { state: "available" },
-  portForwardSessions: { state: "available" },
   updater: { state: "unsupported", reason: "Not implemented." },
 };
 
 describe("desktopBridge", () => {
-  it("exposes loopback as the only native port-forward listen address", () => {
-    expectTypeOf<DesktopPortForwardSession["listenAddress"]>()
-      .toEqualTypeOf<"127.0.0.1">();
-  });
-
   it("keeps browser mode honest about unavailable native capabilities", async () => {
     const bridge = createDesktopBridge(undefined);
 
@@ -33,102 +25,8 @@ describe("desktopBridge", () => {
     await expect(bridge.capabilities()).resolves.toMatchObject({
       platform: "browser",
       localTerminal: { state: "unsupported" },
-      portForwardSessions: { state: "unsupported" },
       updater: { state: "unsupported" },
     });
-  });
-
-  it("lists and stops only native-owned port-forward sessions through typed commands", async () => {
-    const calls: Array<{ command: string; args: Record<string, unknown> | undefined }> = [];
-    const invoke = async <T,>(
-      command: string,
-      args?: Record<string, unknown>,
-    ): Promise<T> => {
-      calls.push({ command, args });
-      return (command === DESKTOP_COMMAND.portForwardSessions ? [{
-          id: "0d47b74f-4218-4f5a-a149-53bfb0610217",
-          workspaceId: "workspace-a",
-          clusterId: "cluster-a",
-          freshness: "live",
-          namespace: "shop",
-          resourceKind: "Service",
-          resourceName: "checkout",
-          resourceUid: "uid-service-1",
-          podName: null,
-          podPort: 8080,
-          localPort: 18080,
-          listenAddress: "127.0.0.1",
-          serviceName: "checkout",
-          servicePort: 80,
-          scheme: "http",
-          startedAt: "2026-07-17T03:00:00Z",
-          status: "running",
-          error: null,
-          exitCode: null,
-        }] : undefined) as T;
-    };
-    const bridge = createDesktopBridge({ core: { invoke } });
-
-    await expect(bridge.listPortForwardSessions()).resolves.toHaveLength(1);
-    await bridge.stopPortForwardSession("0d47b74f-4218-4f5a-a149-53bfb0610217");
-
-    expect(calls).toEqual([
-      { command: DESKTOP_COMMAND.portForwardSessions, args: undefined },
-      {
-        command: DESKTOP_COMMAND.portForwardStop,
-        args: { request: { sessionId: "0d47b74f-4218-4f5a-a149-53bfb0610217" } },
-      },
-    ]);
-  });
-
-  it("starts and recreates an exact confirmed native port-forward request", async () => {
-    const calls: Array<{ command: string; args: Record<string, unknown> | undefined }> = [];
-    const receipt = {
-      sessionId: "0d47b74f-4218-4f5a-a149-53bfb0610217",
-      generation: 4,
-      localPort: 18_080,
-      startedAt: "2026-07-17T03:00:00Z",
-    };
-    const invoke = async <T,>(
-      command: string,
-      args?: Record<string, unknown>,
-    ): Promise<T> => {
-      calls.push({ command, args });
-      return receipt as T;
-    };
-    const bridge = createDesktopBridge({ core: { invoke } });
-    const request = {
-      scope: {
-        workspaceId: "workspace-a",
-        clusterId: "cluster-a",
-        namespaces: ["shop"],
-        freshness: "live" as const,
-      },
-      resource: {
-        apiGroup: "" as const,
-        version: "v1" as const,
-        kind: "Service" as const,
-        namespace: "shop",
-        name: "checkout",
-        uid: "uid-service-1",
-      },
-      capabilityRevision: "a".repeat(64),
-      remotePort: 80,
-      localPort: 18_080,
-      listenAddress: "127.0.0.1" as const,
-      confirmation: true as const,
-    } satisfies DesktopLocalPortForwardRequest;
-
-    await expect(bridge.startPortForward(request)).resolves.toEqual(receipt);
-    await expect(bridge.recreatePortForward(receipt.sessionId)).resolves.toEqual(receipt);
-
-    expect(calls).toEqual([
-      { command: DESKTOP_COMMAND.portForwardStart, args: { request } },
-      {
-        command: DESKTOP_COMMAND.portForwardRecreate,
-        args: { request: { sessionId: receipt.sessionId, confirmation: true } },
-      },
-    ]);
   });
 
   it("does not treat the legacy window global as a desktop capability", async () => {

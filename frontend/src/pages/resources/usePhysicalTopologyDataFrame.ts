@@ -5,9 +5,6 @@ import type {
   PhysicalTopologyPort,
   PhysicalTopologySnapshot,
 } from "../../features/resources/physicalTopologyContract";
-import type { ResourcesRefreshPolicyKey } from "../../features/resources/resourceMetricsHistoryContract";
-import type { BrowserRefreshPolicyRegistry } from "../../shared/data/browserRefreshPolicyRegistry";
-import { useServerRefreshScheduler } from "../../shared/data/useServerRefreshScheduler";
 import {
   ResourcesPortFailure,
   type ResourcesPortFailure as ResourcesPortFailureType,
@@ -27,7 +24,6 @@ export function usePhysicalTopologyDataFrame(input: {
   active: boolean;
   filterState: UnifiedFilterState;
   port: PhysicalTopologyPort;
-  refreshPolicies: BrowserRefreshPolicyRegistry<ResourcesRefreshPolicyKey>;
   reportUnauthorized: () => void;
   revision: number;
 }): PhysicalTopologyFrame {
@@ -35,15 +31,10 @@ export function usePhysicalTopologyDataFrame(input: {
     active,
     filterState,
     port,
-    refreshPolicies,
     reportUnauthorized,
     revision,
   } = input;
   const requestSequence = useRef(0);
-  const [refreshRevision, setRefreshRevision] = useState(0);
-  const refreshController = useServerRefreshScheduler(
-    () => setRefreshRevision((current) => current + 1),
-  );
   const filterKey = useMemo(
     () => serializeProductFilterUrl(filterState),
     [filterState],
@@ -60,10 +51,6 @@ export function usePhysicalTopologyDataFrame(input: {
     scope: null,
     frame: idleFrame(),
   });
-
-  useEffect(() => {
-    refreshController.backgroundFailure();
-  }, [refreshController, scope]);
 
   useEffect(() => {
     const requestId = ++requestSequence.current;
@@ -92,23 +79,12 @@ export function usePhysicalTopologyDataFrame(input: {
           updatedAt: Date.now(),
         },
       });
-      void refreshPolicies.getPolicy("metrics_kubernetes", controller.signal).then(
-        (policy) => {
-          if (controller.signal.aborted || requestSequence.current !== requestId) return;
-          refreshController.acceptSuccess(policy);
-        },
-        () => {
-          if (controller.signal.aborted || requestSequence.current !== requestId) return;
-          refreshController.backgroundFailure();
-        },
-      );
     }).catch((error: unknown) => {
       if (controller.signal.aborted || requestSequence.current !== requestId) return;
       const failure = error instanceof ResourcesPortFailure
         ? error
         : new ResourcesPortFailure("error");
       if (failure.code === "unauthorized") reportUnauthorized();
-      refreshController.backgroundFailure();
       setRecord((current) => current.scope === scope && current.frame.phase === "ready"
         ? { scope, frame: { ...current.frame, refreshFailure: failure, refreshing: false } }
         : {
@@ -126,9 +102,6 @@ export function usePhysicalTopologyDataFrame(input: {
     return () => controller.abort();
   }, [
     port,
-    refreshController,
-    refreshPolicies,
-    refreshRevision,
     reportUnauthorized,
     requestState,
     revision,

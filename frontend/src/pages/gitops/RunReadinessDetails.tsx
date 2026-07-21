@@ -35,13 +35,7 @@ export function checkCoveredBySetupIssues(
     return issues.filter((issue) => issue.field === "commit_sha" || issue.field === "image").length >= check.blockers.length;
   }
   if (check.check_id === "plan.application_context") {
-    return issues.filter((issue) => (
-      issue.field === "application_id"
-      || issue.field === "repo_ref"
-      || issue.field === "branch"
-      || issue.field === "manifest_path"
-      || issue.field === "cluster_id"
-    )).length >= check.blockers.length;
+    return issues.filter((issue) => issue.field === "cluster_id").length >= check.blockers.length;
   }
   return false;
 }
@@ -107,13 +101,9 @@ export function ReadinessCheckRow({
 type T = ReturnType<typeof useI18n>["t"];
 
 function setupFieldLabel(field: StepSetupField, t: T): string {
-  if (field === "application_id") return t("workflows.editor.application");
-  if (field === "repo_ref") return t("workflows.detail.repository");
-  if (field === "branch") return t("workflows.detail.branch");
-  if (field === "manifest_path") return t("workflows.detail.manifest");
-  if (field === "cluster_id") return t("workflows.editor.cluster");
   if (field === "commit_sha") return t("workflows.editor.commitSha");
-  return t("workflows.editor.image");
+  if (field === "image") return t("workflows.editor.image");
+  return t("workflows.editor.cluster");
 }
 
 function readinessCheckLabel(checkId: string, t: T): string {

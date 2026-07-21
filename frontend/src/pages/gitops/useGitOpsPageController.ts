@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type {
-  ApprovalDecision,
   GeneratedManifest,
   GitOpsPort,
   ReleaseApplication,
@@ -10,7 +9,6 @@ import type {
   ReleaseTargetInput,
   SafePrResult,
 } from "../../features/gitops/gitOpsContract";
-import { createEmptyProductDetailQuery } from "../../features/filters/filterContract";
 import {
   clonePlan,
   createEmptyPlan,
@@ -20,68 +18,20 @@ import {
   type WorkflowView,
 } from "../../features/gitops/workflowModel";
 import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
-import { useOptionalProductNotifications } from "../../features/notifications/ProductNotificationsProvider";
-import type { BrowserRefreshPolicyRegistry } from "../../shared/data/browserRefreshPolicyRegistry";
 import { useI18n } from "../../shared/i18n";
-import { toast } from "../../shared/ui/primitives/sonner";
-import { useWorkflowData, type WorkflowRunTransition } from "./useWorkflowData";
-import {
-  validRunTimestamp,
-  workflowNotificationTone,
-  workflowStatusKey,
-} from "./workflowRunPresentation";
+import { useWorkflowData } from "./useWorkflowData";
 
 type Operation = "idle" | "save" | "create" | "target" | "readiness" | "start" | "run" | "generate" | "safe-pr";
 export type WorkflowFeedback = { tone: "success" | "danger"; message: string };
 
-export function useGitOpsPageController(
-  port: GitOpsPort,
-  refreshPolicies: BrowserRefreshPolicyRegistry<"gitops_rows">,
-) {
+export function useGitOpsPageController(port: GitOpsPort) {
   const { t } = useI18n();
-  const filter = useUnifiedFilter();
-  const { detail, updateDetail } = filter;
-  const notifications = useOptionalProductNotifications();
+  const { detail, updateDetail } = useUnifiedFilter();
   const requestedPlanId = detail.workflowPlan || "";
   const requestedView = detail.workflowView ?? null;
   const view: WorkflowView = isWorkflowView(requestedView) ? requestedView : "overview";
   const creating = detail.workflowMode === "new";
-  const announceRunTransition = useCallback(({ run, status }: WorkflowRunTransition) => {
-    const statusLabel = t(workflowStatusKey(status));
-    const title = `${run.plan_name} · ${statusLabel}`;
-    const description = `${run.run_id} · ${t("workflows.runs.currentWave", {
-      current: run.current_wave,
-      total: run.total_waves,
-    })}`;
-    const href = filter.navigationHref("/deploy", {
-      ...createEmptyProductDetailQuery(),
-      detail: run.run_id,
-      surfaceTab: "workflows",
-      workflowPlan: run.plan_id,
-      workflowView: "runs",
-    });
-    const tone = workflowNotificationTone(status);
-    const id = `workflow-run:${run.run_id}`;
-    notifications?.publish({
-      description,
-      href,
-      id,
-      occurredAt: validRunTimestamp(run.updated_at) ?? new Date().toISOString(),
-      title,
-      tone,
-    });
-    const toastOptions = { description, id: `${id}:${status}` };
-    if (tone === "critical") toast.error(title, toastOptions);
-    else if (tone === "warning") toast.warning(title, toastOptions);
-    else if (tone === "healthy") toast.success(title, toastOptions);
-    else toast.info(title, toastOptions);
-  }, [filter, notifications, t]);
-  const data = useWorkflowData(
-    port,
-    requestedPlanId || undefined,
-    refreshPolicies,
-    announceRunTransition,
-  );
+  const data = useWorkflowData(port, requestedPlanId || undefined);
   const selectedPlan = data.plans.find((plan) => plan.plan_id === requestedPlanId);
   const [draft, setDraft] = useState<ReleasePlan>();
   const [newPlan, setNewPlan] = useState(createEmptyPlan);
@@ -91,6 +41,7 @@ export function useGitOpsPageController(
   const [manifestStepIndex, setManifestStepIndex] = useState<number>();
   const [safePr, setSafePr] = useState<SafePrResult>();
   const [safePrStepIndex, setSafePrStepIndex] = useState<number>();
+  const [editorTarget, setEditorTarget] = useState<{ stepId: string; field?: StepSetupField }>();
   const [operation, setOperation] = useState<Operation>("idle");
   const [feedback, setFeedback] = useState<WorkflowFeedback>();
   const latestRun = useMemo(
@@ -107,6 +58,7 @@ export function useGitOpsPageController(
       setManifestStepIndex(undefined);
       setSafePr(undefined);
       setSafePrStepIndex(undefined);
+      setEditorTarget(undefined);
     });
     return () => cancelAnimationFrame(frame);
   }, [selectedPlan]);
@@ -125,9 +77,11 @@ export function useGitOpsPageController(
     }), "detail-tab");
   };
 
-  const openEditor = (stepIndex?: number, _field?: StepSetupField) => {
+  const openEditor = (stepIndex?: number, field?: StepSetupField) => {
     const step = typeof stepIndex === "number" ? selectedPlan?.steps[stepIndex] : undefined;
-    if (step && typeof stepIndex === "number") setSelectedStepId(stepKey(step, stepIndex));
+    setEditorTarget(step && typeof stepIndex === "number"
+      ? { stepId: stepKey(step, stepIndex), field }
+      : undefined);
     setView("edit");
   };
 
@@ -245,15 +199,6 @@ export function useGitOpsPageController(
     } catch { handleError(); } finally { setOperation("idle"); }
   };
 
-  const decideApproval = async (approvalId: string, decision: ApprovalDecision) => {
-    setOperation("run");
-    try {
-      await port.decideApproval(approvalId, decision);
-      data.refreshRuns();
-      setFeedback({ tone: "success", message: t("workflows.feedback.actionComplete") });
-    } catch { handleError(); } finally { setOperation("idle"); }
-  };
-
   const generateManifest = async (stepIndex: number) => {
     if (!selectedPlan) return;
     setOperation("generate");
@@ -281,9 +226,9 @@ export function useGitOpsPageController(
   return {
     data, view, creating, selectedPlan, draft, setDraft, newPlan, setNewPlan,
     selectedStepId, setSelectedStepId, readiness, manifest, manifestStepIndex,
-    safePr, safePrStepIndex, operation,
+    safePr, safePrStepIndex, editorTarget, operation,
     feedback, setFeedback, latestRun, setView, selectPlan, openPlan, showPlanList, beginCreate, cancelCreate,
-    openEditor, saveDraft, createPlan, createTarget, checkReadiness, startPlan, runAction, decideApproval,
+    openEditor, saveDraft, createPlan, createTarget, checkReadiness, startPlan, runAction,
     generateManifest, submitSafePr,
   };
 }

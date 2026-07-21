@@ -25,28 +25,6 @@ describe("Timeline evidence frame reducer", () => {
     expect(reduced.events).toHaveLength(reduced.policy.maxBatchEvents);
   });
 
-  it("keeps no-op suffix references and appends an advanced Kubernetes Event observation once", () => {
-    const first = kubernetesEvent("event-uid-1", 1, "2026-07-15T00:01:00Z");
-    const initial = normalizeTimelineSnapshot(snapshot([first]));
-    const replayed: TimelineStreamFrame = {
-      kind: "event",
-      cursor: { token: "opaque.replayed" },
-      event: first,
-    };
-    const advanced: TimelineStreamFrame = {
-      kind: "event",
-      cursor: { token: "opaque.advanced" },
-      event: kubernetesEvent("event-uid-1", 2, "2026-07-15T00:02:00Z"),
-    };
-
-    expect(applyTimelineFrames(initial, [])).toBe(initial);
-    expect(applyTimelineFrames(initial, [replayed])).toBe(initial);
-
-    const reduced = applyTimelineFrames(initial, [advanced, advanced]);
-    expect(reduced.events.map((item) => item.metadata.count)).toEqual([1, 2]);
-    expect(reduced.events).toHaveLength(2);
-  });
-
   it("keeps presentation preferences in one session but replaces it for persistent pin membership", () => {
     const query = timelineQuery();
     const presentationOnly: TimelineQuery = {
@@ -116,8 +94,6 @@ function snapshot(
     policy,
     events,
     coverage,
-    truncated: false,
-    eventLimit: null,
     pinSetRevision: null,
   };
 }
@@ -178,32 +154,5 @@ function event(id: string): TimelineEvent {
     title: id,
     owner: null,
     metadata: {},
-  };
-}
-
-function kubernetesEvent(uid: string, count: number, occurredAt: string): TimelineEvent {
-  const resource = {
-    apiGroup: "",
-    version: "v1",
-    kind: "Event",
-    namespace: "payments",
-    name: "checkout-warning",
-    uid,
-  };
-  return {
-    id: `kubernetes_event:${uid}:${count}:${occurredAt}`,
-    source: "kubernetes_event",
-    sourceKey: `kubernetes_event:${uid}:${count}:${occurredAt}`,
-    nativeId: uid,
-    activity: "k8s_event",
-    occurredAt,
-    scope: { workspaceId: "workspace-a", clusterId: "cluster-a", namespaces: [], freshness: "live" },
-    subject: { kind: "resource", resource },
-    resource,
-    type: "k8s_event",
-    severity: "warning",
-    title: "Kubernetes event observed",
-    owner: null,
-    metadata: { count },
   };
 }

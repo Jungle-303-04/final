@@ -12,10 +12,6 @@ export interface IssueRecoveryCandidate {
   validationChecks: string[];
   rollbackPlan: string;
   evidenceRefs: string[];
-  recommendationReason: string | null;
-  expectedOutcome: string | null;
-  riskExplanation: string | null;
-  rollbackReason: string | null;
 }
 
 export interface IssueRecoveryPlan {

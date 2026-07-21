@@ -29,7 +29,6 @@ describe("release flow API client", () => {
     expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/release-plans/plan-1");
     expect(init?.method).toBe("PUT");
     expect(JSON.parse(String(init?.body))).toEqual({
-      plan_id: "plan-1",
       name: "Production release",
       description: "Verified path",
       status: "draft",
@@ -42,27 +41,6 @@ describe("release flow API client", () => {
         config: { environment: "production" },
       }],
     });
-  });
-
-  it("keeps the saved plan identity through readiness and release start", async () => {
-    const fetchMock = vi.spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce(response({
-        ready: true,
-        mode: "demo",
-        summary: "ready",
-        checks: [],
-        next_actions: [],
-        blockers: [],
-        warnings: [],
-      }))
-      .mockResolvedValueOnce(response({ run: runFixture("running") }));
-    const client = createReleaseFlowClient();
-
-    await expect(client.checkReadiness(planFixture())).resolves.toMatchObject({ ready: true });
-    await expect(client.startPlan(planFixture())).resolves.toMatchObject({ status: "running" });
-
-    expect(fetchMock.mock.calls.map((call) => JSON.parse(String(call[1]?.body)).plan_id))
-      .toEqual(["plan-1", "plan-1"]);
   });
 
   it("renders the selected step without starting a release", async () => {
@@ -81,31 +59,6 @@ describe("release flow API client", () => {
     expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/release-plans/render-manifest");
     expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)).step_index).toBe(0);
   });
-
-  it.each(["rollback", "cancel", "pause", "resume"] as const)(
-    "maps the %s control to the canonical audited release-run action",
-    async (action) => {
-      const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-        response({ run: runFixture(action === "cancel" ? "cancelled" : "running") }),
-      );
-
-      const result = await createReleaseFlowClient().runAction(
-        "run/production",
-        action,
-        "operator reason",
-      );
-
-      expect(result.run_id).toBe("run-production");
-      expect(fetchMock).toHaveBeenCalledWith(
-        `/api/release-runs/run%2Fproduction/${action}`,
-        expect.objectContaining({
-          method: "POST",
-          credentials: "include",
-          body: JSON.stringify({ reason: "operator reason" }),
-        }),
-      );
-    },
-  );
 });
 
 function planFixture() {
@@ -124,23 +77,6 @@ function planFixture() {
       depends_on: [],
       config: { environment: "production" },
     }],
-  };
-}
-
-function runFixture(status: string) {
-  return {
-    run_id: "run-production",
-    plan_id: "plan-1",
-    plan_name: "Production release",
-    status,
-    current_wave: 1,
-    total_waves: 1,
-    settings: {},
-    github: {},
-    rollback: {},
-    health: {},
-    steps: [],
-    events: [],
   };
 }
 

@@ -1,14 +1,12 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import type { HomeClusterChoice } from "../../features/home/homeContract";
 import { UnifiedFilterProvider } from "../../features/filters/UnifiedFilterProvider";
 import { I18nProvider } from "../../shared/i18n";
 import { HomeClusterGrid } from "./HomeClusterGrid";
-
-afterEach(cleanup);
 
 const clusters: HomeClusterChoice[] = [{
   id: "cluster-production",
@@ -26,7 +24,7 @@ const clusters: HomeClusterChoice[] = [{
 }];
 
 describe("HomeClusterGrid", () => {
-  it("keeps v3 cluster tiles inside the named Resources explorer", () => {
+  it("explains the same Resources exploration destination used by every cluster tile", () => {
     render(
       <I18nProvider navigatorLanguage="en-US" storage={null}>
         <MemoryRouter initialEntries={["/home"]}>
@@ -37,43 +35,9 @@ describe("HomeClusterGrid", () => {
       </I18nProvider>,
     );
 
-    const explorer = screen.getByRole("region", { name: "Cluster resource explorer" });
-    expect(within(explorer).queryByRole("heading", { name: "Explore resources by cluster" }))
-      .toBeNull();
-    expect(within(explorer).getByRole("link", { name: "Open resources for Production" })
-      .getAttribute("href")).toBe("/resources?clusters=cluster-production&view=map");
-  });
-
-  it("keeps the D22 connection entry out of the cluster grid", () => {
-    render(
-      <I18nProvider navigatorLanguage="en-US" storage={null}>
-        <MemoryRouter initialEntries={["/home"]}>
-          <UnifiedFilterProvider>
-            <HomeClusterGrid clusters={clusters} />
-          </UnifiedFilterProvider>
-        </MemoryRouter>
-      </I18nProvider>,
-    );
-
-    expect(screen.queryByRole("button", { name: /Connect cluster/u })).toBeNull();
-    expect(document.querySelector('[data-slot="home-cluster-connect-cell"]')).toBeNull();
-  });
-
-  it("keeps a single scoped cluster on the fixed v3 two-column track", () => {
-    render(
-      <I18nProvider navigatorLanguage="en-US" storage={null}>
-        <MemoryRouter initialEntries={["/home?clusters=cluster-production"]}>
-          <UnifiedFilterProvider>
-            <HomeClusterGrid clusters={clusters} />
-          </UnifiedFilterProvider>
-        </MemoryRouter>
-      </I18nProvider>,
-    );
-
-    const grid = document.querySelector('[data-slot="home-cluster-grid"]');
-    expect(grid?.className).toContain("md:grid-cols-2");
-    expect(document.querySelector('[data-slot="home-cluster-cell"]')?.className)
-      .not.toContain("col-span");
-    expect(document.querySelector('[data-slot="home-cluster-connect-cell"]')).toBeNull();
+    expect(screen.getByRole("heading", { name: "Explore resources by cluster" })).toBeTruthy();
+    expect(screen.getByText("Choose a cluster to explore its resources.")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Open resources for Production" })
+      .getAttribute("href")).toBe("/resources?clusters=cluster-production");
   });
 });

@@ -1,8 +1,8 @@
 export type ProductSurfaceId =
   | "home"
   | "resources"
-  | "deploy"
   | "issues"
+  | "topology"
   | "applications"
   | "timeline"
   | "traffic"
@@ -12,7 +12,6 @@ export type ProductSurfaceId =
   | "cost"
   | "clusters"
   | "alerts"
-  | "ai"
   | "settings";
 
 export type ProductRouteIcon = ProductSurfaceId;
@@ -29,9 +28,6 @@ export interface ProductRouteDefinition {
   match: "exact" | "prefix";
   landing: boolean;
   family: ProductRouteFamily;
-  navigation: boolean;
-  redirectTo: ProductSurfaceId | null;
-  redirectSection: "applications" | "repositories" | "helm" | null;
 }
 
 /**
@@ -42,59 +38,38 @@ export interface ProductRouteDefinition {
 export const PRODUCT_ROUTE_CATALOG = [
   route("home", "Home", "/home", "g h", { match: "exact", landing: true, family: "reference-primary" }),
   route("resources", "Resources", "/resources", "g r", { family: "reference-primary" }),
-  route("deploy", "Deploy", "/deploy", "g d", { family: "reference-primary" }),
   route("issues", "Incidents", "/issues", "g i", { family: "reference-primary" }),
+  route("topology", "Topology", "/topology", "g t", { family: "reference-primary" }),
+  route("applications", "Applications", "/applications", "g a", { family: "reference-primary" }),
   route("timeline", "Timeline", "/timeline", "g l", { family: "reference-primary" }),
+  route("traffic", "Traffic", "/traffic", "g f", { family: "reference-primary" }),
+  route("helm", "Helm", "/helm", "g m", { family: "reference-primary" }),
+  route("gitops", "GitOps", "/gitops", "g o", {
+    aliases: ["/workflows"],
+    family: "reference-primary",
+  }),
   route("checks", "Checks", "/checks", "g u", {
     aliases: ["/audit"],
     family: "reference-primary",
   }),
   route("cost", "Cost", "/cost", "g c", { family: "reference-primary" }),
-  route("alerts", "Alerts", "/alerts", "g b", { family: "reference-primary" }),
-  route("ai", "AI conversations", "/ai", "g a", { family: "reference-primary" }),
-  route("settings", "Settings", "/settings", "g s", { family: "reference-primary" }),
-  route("clusters", "Clusters", "/clusters", "g k", {
-    navigation: false,
-    redirectTo: "home",
-  }),
-  route("traffic", "Traffic", "/traffic", "g f", {
-    navigation: false,
-    redirectTo: "resources",
-  }),
-  route("applications", "Applications", "/applications", "g a", {
-    navigation: false,
-    redirectSection: "applications",
-    redirectTo: "deploy",
-  }),
-  route("gitops", "GitOps", "/gitops", "g o", {
-    aliases: ["/workflows"],
-    navigation: false,
-    redirectSection: "repositories",
-    redirectTo: "deploy",
-  }),
-  route("helm", "Helm", "/helm", "g m", {
-    navigation: false,
-    redirectSection: "helm",
-    redirectTo: "deploy",
-  }),
+  route("clusters", "Clusters", "/clusters", "g k"),
+  route("alerts", "Alerts", "/alerts", "g b"),
+  route("settings", "Settings", "/settings", "g s"),
 ] as const satisfies readonly ProductRouteDefinition[];
 
 export function referenceNavigationRoutes(): readonly ProductRouteDefinition[] {
-  return PRODUCT_ROUTE_CATALOG.filter(({ family, navigation }) =>
-    family === "reference-primary" && navigation
-  );
+  return PRODUCT_ROUTE_CATALOG.filter(({ family }) => family === "reference-primary");
 }
 
 export function productKeyboardNavigationRoutes(): readonly ProductRouteDefinition[] {
-  return PRODUCT_ROUTE_CATALOG.filter(({ navigation }) => navigation);
+  return PRODUCT_ROUTE_CATALOG;
 }
 
 export function productNavigationForReleasedSurfaces(
   releasedSurfaceIds: ReadonlySet<ProductSurfaceId>,
 ): readonly ProductRouteDefinition[] {
-  return PRODUCT_ROUTE_CATALOG.filter((routeDefinition) =>
-    routeDefinition.navigation && releasedSurfaceIds.has(routeDefinition.id)
-  );
+  return PRODUCT_ROUTE_CATALOG.filter((routeDefinition) => releasedSurfaceIds.has(routeDefinition.id));
 }
 
 export function landingProductRouteForReleasedSurfaces(
@@ -143,9 +118,6 @@ function route(
     match: behavior.match ?? "prefix",
     landing: behavior.landing ?? false,
     family: behavior.family ?? "product",
-    navigation: behavior.navigation ?? true,
-    redirectTo: behavior.redirectTo ?? null,
-    redirectSection: behavior.redirectSection ?? null,
   };
 }
 
@@ -154,9 +126,6 @@ interface ProductRouteBehavior {
   family?: ProductRouteFamily;
   match?: "exact" | "prefix";
   landing?: boolean;
-  navigation?: boolean;
-  redirectTo?: ProductSurfaceId;
-  redirectSection?: "applications" | "repositories" | "helm";
 }
 
 function failToResolveLandingRoute(

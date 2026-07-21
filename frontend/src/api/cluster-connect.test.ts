@@ -15,20 +15,12 @@ describe("cluster connect API", () => {
       expires_at: "2026-07-14T06:00:00Z",
     }));
 
-    await expect(connectCluster({
-      environment: "production",
-      name: "Production",
-      provider: "aws",
-    })).resolves
+    await expect(connectCluster({ name: "Production", provider: "aws" })).resolves
       .toMatchObject({ cluster_id: "production-a1b2" });
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/clusters/connect",
       expect.objectContaining({
-        body: JSON.stringify({
-          environment: "production",
-          name: "Production",
-          provider: "aws",
-        }),
+        body: JSON.stringify({ name: "Production", provider: "aws" }),
         credentials: "include",
         method: "POST",
       }),

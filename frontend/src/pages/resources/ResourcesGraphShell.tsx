@@ -6,7 +6,6 @@ import type { TimelineRange } from "../../features/filters/filterContract";
 import { useCameraMorph } from "../../motion/useCameraMorph";
 import { useI18n } from "../../shared/i18n";
 import { Button } from "../../shared/ui/primitives/button";
-import { TopologyOverlayBar } from "../../shared/ui/TopologyOverlayBar";
 import { cn } from "../../shared/lib/cn";
 import type { PhysicalTopologyFrame } from "./usePhysicalTopologyDataFrame";
 import type { RelationTopologyFrame } from "./useRelationTopologyDataFrame";
@@ -78,20 +77,56 @@ export function ResourcesGraphShell({
   const { t } = useI18n();
   const rootRef = useRef<HTMLDivElement>(null);
   const { capture, play } = useCameraMorph(rootRef);
-  const displayedView = topologyView;
+  const [displayedView, setDisplayedView] = useState<ResourceTopologyView>("physical");
   const [autoHintVisible, setAutoHintVisible] = useState(false);
-  const hintedRelationRevision = useRef<string | null>(null);
   const { beginResize, height, reset, resizeBy } = useResizableGraphHeight();
+  const [retainedPhysical, setRetainedPhysical] = useState<
+    Extract<PhysicalTopologyFrame, { phase: "ready" }> | null
+  >(
+    frame.phase === "ready" ? frame : null,
+  );
+  const [retainedRelation, setRetainedRelation] = useState<{
+    clusterId: string;
+    frame: Extract<RelationTopologyFrame, { phase: "ready" }>;
+  } | null>(relationFrame.phase === "ready" ? { clusterId, frame: relationFrame } : null);
+
   useEffect(() => {
-    if (
-      topologyView !== "relations" ||
-      topologyPinned ||
-      relationFrame.phase !== "ready" ||
-      hintedRelationRevision.current === relationFrame.data.graphRevision
-    ) return;
-    hintedRelationRevision.current = relationFrame.data.graphRevision;
-    setAutoHintVisible(true);
-  }, [relationFrame, topologyPinned, topologyView]);
+    if (frame.phase !== "ready" && relationFrame.phase !== "ready") return undefined;
+    const animationFrame = requestAnimationFrame(() => {
+      if (frame.phase === "ready") setRetainedPhysical(frame);
+      if (relationFrame.phase === "ready") {
+        setRetainedRelation({ clusterId, frame: relationFrame });
+      }
+    });
+    return () => cancelAnimationFrame(animationFrame);
+  }, [clusterId, frame, relationFrame]);
+
+  const physicalSceneFrame = displayedView === "physical" &&
+      topologyView !== displayedView &&
+      frame.phase !== "ready" &&
+      retainedPhysical?.data.clusterId === clusterId
+    ? retainedPhysical
+    : frame;
+  const relationSceneFrame = displayedView === "relations" &&
+      topologyView !== displayedView &&
+      relationFrame.phase !== "ready" &&
+      retainedRelation?.clusterId === clusterId
+    ? retainedRelation.frame
+    : relationFrame;
+  useEffect(() => {
+    if (topologyView === displayedView) return;
+    const targetPhase = topologyView === "relations" ? relationFrame.phase : frame.phase;
+    if (targetPhase !== "ready" && targetPhase !== "failed") return;
+    capture();
+    const animationFrame = requestAnimationFrame(() => {
+      setDisplayedView(topologyView);
+      setAutoHintVisible(
+        targetPhase === "ready" && topologyView === "relations" && !topologyPinned,
+      );
+    });
+    return () => cancelAnimationFrame(animationFrame);
+  }, [capture, displayedView, frame.phase, relationFrame.phase, topologyPinned, topologyView]);
+
   useEffect(() => {
     if (!autoHintVisible) return undefined;
     const timeout = window.setTimeout(() => setAutoHintVisible(false), 6_000);
@@ -121,16 +156,15 @@ export function ResourcesGraphShell({
   }, [capture, displayedView, frame.phase, play]);
 
   const displayedFrame = displayedView === "relations"
-    ? relationFrame
-    : frame;
+    ? relationSceneFrame
+    : physicalSceneFrame;
   const changeTopologyView = (view: ResourceTopologyView) => {
-    capture();
     setAutoHintVisible(false);
     onTopologyViewChange(view);
   };
   return (
     <div
-      aria-busy={displayedFrame.phase === "loading"}
+      aria-busy={topologyView !== displayedView || displayedFrame.phase === "loading"}
       aria-live="polite"
       className={cn(
         "group/resources-graph relative isolate flex overflow-hidden bg-linear-to-b from-muted/20 via-card to-muted/40",
@@ -157,8 +191,8 @@ export function ResourcesGraphShell({
         onSelectAll={onSelectAll}
         onTimelineRangeChange={onTimelineRangeChange}
         onTopologyViewChange={changeTopologyView}
-        physicalFrame={frame}
-        relationFrame={relationFrame}
+        physicalFrame={physicalSceneFrame}
+        relationFrame={relationSceneFrame}
         timelineRange={timelineRange}
         topologyView={topologyView}
       />
@@ -174,14 +208,14 @@ export function ResourcesGraphShell({
           >
             {displayedView === "relations" ? (
               <RelationTopologyCanvas
-                frame={relationFrame}
+                frame={relationSceneFrame}
                 onSelectResource={onSelectRelationResource}
                 selectedResourceId={selectedRelationResourceId}
               />
             ) : (
               <ResourcesPhysicalTopologyScene
                 clusterId={clusterId}
-                frame={frame}
+                frame={physicalSceneFrame}
                 nodePodsPort={nodePodsPort}
                 onOpenPod={onOpenPod}
                 onNodePodsUnauthorized={onNodePodsUnauthorized}
@@ -190,27 +224,25 @@ export function ResourcesGraphShell({
               />
             )}
             {autoHintVisible ? (
-              <TopologyOverlayBar className="items-end">
-                <div
-                  className="motion-topology-overlay flex max-w-sm items-center gap-2 rounded-lg border bg-background/90 px-3 py-2 text-xs shadow-sm backdrop-blur"
-                  data-slot="resources-graph-auto-hint"
-                  role="status"
+              <div
+                className="pointer-events-none absolute right-3 top-3 z-30 flex max-w-sm items-center gap-2 rounded-lg border bg-background/40 px-3 py-2 text-xs shadow-sm backdrop-blur"
+                data-slot="resources-graph-auto-hint"
+                role="status"
+              >
+                <span>{t("resources.graph.autoHint")}</span>
+                <Button
+                  className="pointer-events-auto"
+                  onClick={() => {
+                    setAutoHintVisible(false);
+                    changeTopologyView("physical");
+                  }}
+                  size="sm"
+                  type="button"
+                  variant="outline"
                 >
-                  <span>{t("resources.graph.autoHint")}</span>
-                  <Button
-                    className="pointer-events-auto"
-                    onClick={() => {
-                      setAutoHintVisible(false);
-                      changeTopologyView("physical");
-                    }}
-                    size="sm"
-                    type="button"
-                    variant="outline"
-                  >
-                    {t("resources.graph.autoHint.revert")}
-                  </Button>
-                </div>
-              </TopologyOverlayBar>
+                  {t("resources.graph.autoHint.revert")}
+                </Button>
+              </div>
             ) : null}
           </div>
 

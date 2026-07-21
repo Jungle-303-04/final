@@ -10,11 +10,10 @@ import {
 } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { acquireSharedRequest } from "../../shared/data/sharedRequest";
 import { toast } from "../../shared/ui/primitives/sonner";
 import { useI18n } from "../../shared/i18n";
-import { alertEventResourceHref } from "../filters/alertEventResourceHref";
 import type { AlertEvent, AlertEventsPort } from "./alertEventsContract";
+
 const POLL_INTERVAL_MS = 10_000;
 
 interface AlertEventsContextValue {
@@ -22,6 +21,7 @@ interface AlertEventsContextValue {
   error: Error | null;
   initialLoading: boolean;
   pending: Readonly<Record<string, "ack" | "promote">>;
+  unreadCount: number;
   acknowledge(eventId: string): Promise<void>;
   promote(eventId: string): Promise<void>;
   refresh(): void;
@@ -44,39 +44,28 @@ export function AlertEventsProvider({
   const [pending, setPending] = useState<Record<string, "ack" | "promote">>({});
   const [refreshKey, setRefreshKey] = useState(0);
   const seen = useRef<Set<string> | null>(null);
-  const translationRef = useRef(t);
-
-  useEffect(() => {
-    translationRef.current = t;
-  }, [t]);
 
   useEffect(() => {
     let active = true;
     let inFlight = false;
-    let pollSequence = 0;
-    let currentRequest: { release(): void } | null = null;
+    let controller: AbortController | null = null;
 
-    const load = async (requestKey: string) => {
+    const load = async () => {
       if (inFlight || document.visibilityState === "hidden") return;
       inFlight = true;
-      const request = acquireSharedRequest(
-        port,
-        requestKey,
-        (signal) => port.list(signal),
-      );
-      currentRequest = request;
+      controller = new AbortController();
       try {
-        const response = sortNewest(await request.promise);
+        const response = sortNewest(await port.list(controller.signal));
         if (!active) return;
         const currentIds = new Set(response.map((event) => event.event_id));
         if (seen.current !== null) {
           for (const event of response) {
-            if (event.status !== "firing" || event.severity !== "critical" || seen.current.has(event.event_id)) continue;
-            toast.warning(event.rule_name ?? translationRef.current("alerts.toast.new"), {
+            if (event.status !== "firing" || seen.current.has(event.event_id)) continue;
+            toast.warning(event.rule_name ?? t("alerts.toast.new"), {
               description: alertTarget(event),
               action: {
-                label: translationRef.current("alerts.toast.view"),
-                onClick: () => navigate(alertEventResourceHref(event.subject)),
+                label: t("alerts.toast.view"),
+                onClick: () => navigate("/alerts"),
               },
             });
           }
@@ -86,36 +75,26 @@ export function AlertEventsProvider({
         setError(null);
       } catch (cause) {
         if (!active || isAbortError(cause)) return;
-        setError(cause instanceof Error
-          ? cause
-          : new Error(translationRef.current("alerts.list.failure")));
+        setError(cause instanceof Error ? cause : new Error(t("alerts.list.failure")));
       } finally {
         if (active) setInitialLoading(false);
-        request.release();
-        if (currentRequest === request) currentRequest = null;
         inFlight = false;
       }
     };
 
-    void load(`alert-events:list:${refreshKey}:initial`);
-    const interval = window.setInterval(() => {
-      pollSequence += 1;
-      void load(`alert-events:list:${refreshKey}:poll:${pollSequence}`);
-    }, POLL_INTERVAL_MS);
+    void load();
+    const interval = window.setInterval(() => void load(), POLL_INTERVAL_MS);
     const handleVisibility = () => {
-      if (document.visibilityState === "visible") {
-        pollSequence += 1;
-        void load(`alert-events:list:${refreshKey}:visible:${pollSequence}`);
-      }
+      if (document.visibilityState === "visible") void load();
     };
     document.addEventListener("visibilitychange", handleVisibility);
     return () => {
       active = false;
-      currentRequest?.release();
+      controller?.abort();
       window.clearInterval(interval);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, [navigate, port, refreshKey]);
+  }, [navigate, port, refreshKey, t]);
 
   const runMutation = useCallback(async (
     eventId: string,
@@ -160,6 +139,7 @@ export function AlertEventsProvider({
     error,
     initialLoading,
     pending,
+    unreadCount: events.filter((event) => event.status === "firing").length,
     acknowledge: (eventId) => runMutation(eventId, "ack"),
     promote: (eventId) => runMutation(eventId, "promote"),
     refresh: () => setRefreshKey((current) => current + 1),
@@ -175,7 +155,7 @@ export function useAlertEvents(): AlertEventsContextValue {
 }
 
 function sortNewest(events: readonly AlertEvent[]): readonly AlertEvent[] {
-  return [...new Map(events.map((event) => [event.event_id, event])).values()].sort((left, right) => (
+  return [...events].sort((left, right) => (
     Date.parse(right.fired_at) - Date.parse(left.fired_at)
   ));
 }

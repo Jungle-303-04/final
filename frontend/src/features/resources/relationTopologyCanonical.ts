@@ -27,12 +27,6 @@ export function toRelationTopology(
     refreshAfterSeconds: value.refresh_after_seconds,
     nodes: value.nodes.map((node) => ({
       id: node.node_id,
-      identity: {
-        resourceType: node.identity.resource_type,
-        kind: node.identity.kind,
-        namespace: node.identity.namespace,
-        name: node.identity.name,
-      },
       kind: node.identity.kind,
       name: node.identity.name,
       status: node.status,
