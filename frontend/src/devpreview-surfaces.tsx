@@ -13,7 +13,7 @@ import { useCostOverview } from "./devpreview/costFeed";
 import { useChecksOverview } from "./devpreview/checksFeed";
 import { useRcaIssueDetails, useRecoveryPlan, type RcaIssueDetailView } from "./devpreview/rcaDetailFeed";
 import { useSession, sessionInitial } from "./devpreview/sessionFeed";
-import { useAiConversations } from "./devpreview/aiFeed";
+import { useAiConversations, useConversationDetail } from "./devpreview/aiFeed";
 import { useAlertEvents, useAlertRules, useAlertChannels } from "./devpreview/alertsFeed";
 import { useApplications, useHelmReleases } from "./devpreview/deployFeed";
 import { useChangeTimeline } from "./devpreview/changeTimelineFeed";
@@ -82,8 +82,8 @@ function ReasonNotes({ codes }: { codes: string[] }) {
       {rows.map((k) => (
         <li key={k} style={{ display: "flex", alignItems: "baseline", gap: 8, fontSize: TYPE.caption2, color: UI.ink2 }}>
           <span style={{ width: 4, height: 4, borderRadius: 999, background: HP.warn, flexShrink: 0, transform: "translateY(-2px)" }} />
+          {/* M27/M28: 원시 reason code는 사용자에게 노출하지 않는다 — 한글 honest 라벨만 표기. */}
           <span style={{ flex: 1, minWidth: 0 }}>{reasonLabel(k)}</span>
-          <code style={{ fontFamily: MONO, fontSize: TYPE.micro, color: UI.ink3, opacity: 0.65, whiteSpace: "nowrap" }}>{k}</code>
         </li>
       ))}
     </ul>
@@ -925,7 +925,7 @@ export function AlertsSurface({ onOpenRef }: { onOpenRef: (kind: string, name: s
             <TRow key={r.ruleId} cols={ruleCols} i={i} cells={[
               <Mono key="n">{r.name}</Mono>,
               <span key="c" style={{ fontSize: TYPE.label, color: UI.ink2, fontFamily: MONO }}>{r.metric} {r.comparator} {r.threshold}</span>,
-              <Pill key="s" tone={severityTone(r.severity)} label={r.severity} />,
+              <Pill key="s" tone={severityTone(r.severity)} label={koLabel(r.severity)} />,
               <Mono key="ch">{r.channels.length}</Mono>,
               <Pill key="e" tone={r.enabled ? "ok" : "info"} label={r.enabled ? "활성" : "중지"} />,
             ]} />
@@ -955,7 +955,51 @@ export function AlertsSurface({ onOpenRef }: { onOpenRef: (kind: string, name: s
 // 돌려준 대화만 렌더하고, 없으면 정직한 빈 상태, 실패는 정직한 unavailable로 둔다.
 export function AiHistorySurface({ onOpenPanel }: { onOpenPanel: () => void }) {
   const feed = useAiConversations();
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // 행 클릭 시 선택한 대화 id로 상세(GET /api/ai/conversations/{id})를 조회해 실 Q&A를 렌더한다.
+  const detail = useConversationDetail(selectedId);
   const cols: [string, string][] = [["대화", "minmax(260px,2fr)"], ["시간", "minmax(80px,0.6fr)"]];
+
+  if (selectedId !== null) {
+    const selected = feed.items.find((c) => c.id === selectedId);
+    // user turn은 question 필드에, assistant turn은 parts(text)에 실 내용이 담긴다.
+    const turnText = (turn: (typeof detail.turns)[number]) =>
+      turn.role === "user"
+        ? (turn.question ?? "")
+        : (turn.parts ?? [])
+            .filter((part): part is Extract<typeof part, { kind: "text" }> => part.kind === "text")
+            .map((part) => part.markdown)
+            .join("\n");
+    return (
+      <Page title={selected?.title ?? "AI 대화"} icon={Sparkles}
+        action={<button onClick={() => setSelectedId(null)} style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${UI.line}`, background: UI.card, color: UI.ink2, borderRadius: 9, padding: "6px 13px", fontSize: TYPE.label2, fontWeight: 700, cursor: "pointer" }}>← 목록</button>}>
+        <Card>
+          {detail.status === "loading" ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              {[0, 1, 2].map((n) => (
+                <div key={n} style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                  <span style={{ width: 36, height: 10, borderRadius: 4, background: inkA(0.07) }} />
+                  <span style={{ width: n % 2 ? "62%" : "88%", height: 13, borderRadius: 5, background: inkA(0.05) }} />
+                  <span style={{ width: "46%", height: 13, borderRadius: 5, background: inkA(0.05) }} />
+                </div>
+              ))}
+            </div>
+          )
+            : detail.status === "unavailable" ? <div style={{ fontSize: TYPE.label2, color: UI.ink3, padding: "6px 2px" }}>이 대화의 상세 이력은 관측되지 않습니다.</div>
+            : detail.turns.length === 0 ? <div style={{ fontSize: TYPE.label2, color: UI.ink3, padding: "6px 2px" }}>대화 메시지가 없습니다.</div>
+            : <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                {detail.turns.map((turn, i) => (
+                  <div key={i} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    <span style={{ fontSize: TYPE.caption, fontWeight: 700, color: turn.role === "user" ? BLUE : UI.ink2 }}>{turn.role === "user" ? "질문" : "응답"}</span>
+                    <div style={{ fontSize: TYPE.label2, color: UI.ink, whiteSpace: "pre-wrap", lineHeight: 1.65 }}>{turnText(turn) || "(내용 없음)"}</div>
+                  </div>
+                ))}
+              </div>}
+        </Card>
+      </Page>
+    );
+  }
+
   return (
     <Page title="AI 대화" icon={Sparkles}
       action={<button onClick={onOpenPanel} style={{ display: "flex", alignItems: "center", gap: 6, border: "none", background: BLUE, color: UI.card, borderRadius: 9, padding: "6px 13px", fontSize: TYPE.label2, fontWeight: 700, cursor: "pointer" }}>새 대화</button>}>
@@ -965,7 +1009,7 @@ export function AiHistorySurface({ onOpenPanel }: { onOpenPanel: () => void }) {
           : feed.status === "unavailable" ? emptyRow("대화 내역을 불러오지 못했습니다.")
           : feed.items.length === 0 ? emptyRow("저장된 AI 대화 없음")
           : feed.items.map((c, i) => (
-            <TRow key={c.id} cols={cols} i={i} onClick={onOpenPanel} cells={[
+            <TRow key={c.id} cols={cols} i={i} onClick={() => setSelectedId(c.id)} cells={[
               <span key="t" style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
                 <span style={{ fontSize: TYPE.label2, fontWeight: 700, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.title}</span>
                 <span style={{ fontSize: TYPE.micro, fontFamily: MONO, color: UI.ink3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.id}</span>

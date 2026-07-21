@@ -82,7 +82,9 @@ export function useInventoryResources(
 ): InventoryResourcesView {
   const [view, setView] = useState<InventoryResourcesView>({ status: "loading", rows: [] });
   const rt = resourceType?.trim() ?? "";
-  const canFetch = clusterId !== null && rt !== "";
+  // 빈 문자열 clusterId(cold-start 파생)를 차단해 `GET /api/clusters//inventory/resources`
+  // double-slash 404를 막는다. all-cluster 스코프는 useInventoryResourcesAcrossClusters(fan-out)로 조회.
+  const canFetch = clusterId !== null && clusterId.trim() !== "" && rt !== "";
   // useEffect dep = 조인된 단일 문자열 key. 클러스터 id·resource_type 모두 공백이
   // 없으므로 이펙트 내부에서 key만으로 되살려 참조(exhaustive-deps: key 하나).
   const key = canFetch ? [clusterId, rt].join(" ") : "";
