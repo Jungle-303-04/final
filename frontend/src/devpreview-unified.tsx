@@ -10,8 +10,8 @@ import {
   Home, ListTree, AlertTriangle, Clock, Coins, Settings, Sparkles, PanelLeftClose, PanelLeftOpen,
   Bell, Pencil, Check, Hourglass, Webhook, SignalHigh, Building2, LogOut, RefreshCw,
 } from "lucide-react";
-import { OpsiaMap, HomeClusterSection } from "./devpreview-opsia";
-import { WidgetFrame, RatioBar, Donut, RankList, MultiLine, MiniTimeline } from "./devpreview/widgets";
+import { HomeClustersWidget, OpsiaMap } from "./devpreview-opsia";
+import { DASHBOARD_WIDGET_GRID_CLASS, DASHBOARD_WIDGET_GRID_ITEM_CLASS, WidgetFrame, RatioBar, Donut, RankList, MultiLine, MiniTimeline, dashboardWidgetGridStyle, dashboardWidgetItemStyle, type DashboardWidgetSpan } from "./devpreview/widgets";
 import { DeploySurface, IssuesSurface, TimelineSurface, ChecksSurface, CostSurface, SettingsSurface, AlertsSurface, AiHistorySurface, IssueDetail, type RcaIncident } from "./devpreview-surfaces";
 import { AiPanel } from "./devpreview-ai";
 import { onAction, type DemoAction } from "./devpreview/bus";
@@ -991,28 +991,60 @@ function GlobalNav({ collapsed, setCollapsed, surface, onSurface }: {
 
 // ── 홈 서피스 (D21: 고정 헤더 + 클러스터 섹션 + 위젯 보드 W2~W8) ─────────────
 // 모든 숫자는 단일 인벤토리 파생. 위젯 배치는 localStorage 보존, 편집=숨김·추가·이동(제품은 dnd-kit 드래그).
-const W_DEFS: { id: string; title: string; info: string; span: 1 | 2 | 4 }[] = [
-  // 4칸 그리드 스팬 설계 — 1행 [1+1+2] · 2행 [1+2+1] · 3행 [4]: 기본 배치에서 빈칸 0
-  { id: "W2", title: "이슈", info: "장애 상태 파드에서 파생된 활성 이슈 상위 3건", span: 1 },
-  { id: "W3", title: "저장소 동기화", info: "Git 저장소 단위 동기화 상태 — 앱 단위 현황은 배포 화면", span: 1 },
-  { id: "W4", title: "활동 추이", info: "기간 내 배포·알림·장애 리소스 수의 흐름", span: 2 },
-  { id: "W5", title: "네임스페이스 파드 분포", info: "파드 수 상위 네임스페이스 — 항목 클릭 시 리소스 목록으로 필터 이동", span: 1 },
-  { id: "W6", title: "장애·주의 리소스", info: "지금 주의가 필요한 리소스 상위 5 — 행 클릭 시 상세", span: 2 },
-  { id: "W7", title: "비용", info: "이번 달 클러스터 비용 요약 (증가는 주의 톤)", span: 1 },
-  { id: "W8", title: "최근 변경", info: "타임라인 최신 변경 5건의 미니 뷰", span: 4 },
+const W_DEFS: { id: string; title: string; info: string; defaultSpan: DashboardWidgetSpan }[] = [
+  { id: "W1", title: "Clusters", info: "연결된 클러스터의 라이브 상태와 사용률을 한 행에서 비교", defaultSpan: 4 },
+  { id: "W2", title: "이슈", info: "장애 상태 파드에서 파생된 활성 이슈 상위 3건", defaultSpan: 2 },
+  { id: "W3", title: "저장소 동기화", info: "Git 저장소 단위 동기화 상태 — 앱 단위 현황은 배포 화면", defaultSpan: 2 },
+  { id: "W4", title: "활동 추이", info: "기간 내 배포·알림·장애 리소스 수의 흐름", defaultSpan: 3 },
+  { id: "W5", title: "네임스페이스 파드 분포", info: "파드 수 상위 네임스페이스 — 항목 클릭 시 리소스 목록으로 필터 이동", defaultSpan: 2 },
+  { id: "W6", title: "장애·주의 리소스", info: "지금 주의가 필요한 리소스 상위 5 — 행 클릭 시 상세", defaultSpan: 2 },
+  { id: "W7", title: "비용", info: "이번 달 클러스터 비용 요약 (증가는 주의 톤)", defaultSpan: 1 },
+  { id: "W8", title: "최근 변경", info: "타임라인 최신 변경 5건의 미니 뷰", defaultSpan: 4 },
 ];
 const BOARD_KEY = "opsia-demo-board-v2"; // v2: W5~W8 기본 노출(D21 위젯 보드 전체가 기본값)
-type BoardState = { order: string[]; hidden: string[]; collapsed: string[] };
-const defaultBoard = (): BoardState => ({ order: W_DEFS.map((w) => w.id), hidden: [], collapsed: [] });
+type BoardState = { order: string[]; hidden: string[]; spans: Record<string, DashboardWidgetSpan>; types: Record<string, string> };
+const defaultBoard = (): BoardState => ({
+  order: W_DEFS.map((w) => w.id),
+  hidden: [],
+  spans: Object.fromEntries(W_DEFS.map((w) => [w.id, w.defaultSpan])),
+  types: Object.fromEntries(W_DEFS.map((w) => [w.id, w.id])),
+});
 const readBoard = (): BoardState => {
-  try { const s = JSON.parse(localStorage.getItem(BOARD_KEY) || ""); if (Array.isArray(s.order)) return { ...defaultBoard(), ...s }; } catch { /* 기본값 */ }
+  try {
+    const s = JSON.parse(localStorage.getItem(BOARD_KEY) || "");
+    if (Array.isArray(s.order)) {
+      const defaults = defaultBoard();
+      const knownIds = new Set(W_DEFS.map((w) => w.id));
+      const legacyOrder = s.order.filter((id: unknown): id is string => typeof id === "string" && knownIds.has(id));
+      const missing = defaults.order.filter((id) => !legacyOrder.includes(id));
+      // W1 Clusters is a new primary dashboard slot. Existing users keep their
+      // customized relative order, while the newly introduced cluster summary
+      // is inserted first instead of being buried below legacy widgets.
+      const order = [...missing.filter((id) => id === "W1"), ...legacyOrder, ...missing.filter((id) => id !== "W1")];
+      const spans = { ...defaults.spans };
+      const types = { ...defaults.types };
+      for (const id of order) {
+        const span = Number(s.spans?.[id]);
+        if ([1, 2, 3, 4].includes(span)) spans[id] = span as DashboardWidgetSpan;
+        const type = s.types?.[id];
+        if (typeof type === "string" && knownIds.has(type)) types[id] = type;
+      }
+      return {
+        order,
+        hidden: Array.isArray(s.hidden) ? s.hidden.filter((id: unknown): id is string => typeof id === "string" && knownIds.has(id)) : [],
+        spans,
+        types,
+      };
+    }
+  } catch { /* 기본값 */ }
   return defaultBoard();
 };
 
-function HomeSurface({ clusterMeta, incidentClusterIds, onDrillCluster, onConnect, onOpenPod: _onOpenPod, onPickNs, onWidgetDeepLink, onOpenIssues, pendingCl = [], pendingRepo = [] }: {
+function HomeSurface({ clusterMeta, incidentClusterIds, onDrillCluster, onClusterSettings, onClusterDisconnect, onConnect, onOpenPod: _onOpenPod, onPickNs, onWidgetDeepLink, onOpenIssues, pendingCl = [], pendingRepo = [] }: {
   clusterMeta: Record<string, Record<string, number>>;
   incidentClusterIds: readonly string[];
   onDrillCluster: (clId: string) => void; onConnect: () => void;
+  onClusterSettings?: (clId: string) => void; onClusterDisconnect?: (clId: string) => void;
   onOpenPod: (name: string) => void; onPickNs: (ns: string) => void;
   pendingCl?: string[]; pendingRepo?: string[]; onWidgetDeepLink?: (id: string) => void; onOpenIssues?: () => void;
 }) {
@@ -1082,6 +1114,8 @@ function HomeSurface({ clusterMeta, incidentClusterIds, onDrillCluster, onConnec
 
   const body = (id: string) => {
     switch (id) {
+      case "W1":
+        return <HomeClustersWidget onOpen={onDrillCluster} onSettings={onClusterSettings} onDisconnect={onClusterDisconnect} pending={pendingCl} />;
       case "W2":
         if (issues.status === "loading") return <span style={{ fontSize: TYPE.label2, color: UI.ink3 }}>불러오는 중…</span>;
         if (issues.status === "unavailable") return <span style={{ fontSize: TYPE.label2, color: UI.ink3 }}>이슈를 불러오지 못했습니다</span>;
@@ -1157,7 +1191,7 @@ function HomeSurface({ clusterMeta, incidentClusterIds, onDrillCluster, onConnec
   };
 
   const visible = board.order.filter((id) => !board.hidden.includes(id));
-  const hiddenDefs = W_DEFS.filter((w) => board.hidden.includes(w.id));
+  const hiddenSlots = board.order.filter((id) => board.hidden.includes(id));
   return (
     <main style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 16, padding: "14px 18px 40px" }}>
       {/* ── 고정 헤더: 상태 요약 줄(지도 요약 줄과 같은 칩 문법·같은 표기 — 두 화면이 다른 형식으로 말하지 않는다) ── */}
@@ -1205,17 +1239,17 @@ function HomeSurface({ clusterMeta, incidentClusterIds, onDrillCluster, onConnec
         </span>
       </div>
 
-      {/* ── 클러스터 섹션 (보드 밖 고정 — 홈의 본질) ── */}
-      <HomeClusterSection meta={clusterMeta} onOpen={onDrillCluster} pending={pendingCl} />
-
-      {/* ── 위젯 보드 — 4칸 그리드 + 밀집 배치(dense): 숨김·이동으로 생긴 빈칸에 작은 위젯이 위로 올라와 채운다 ── */}
-      {/* stretch 정렬 — 같은 행의 위젯은 세로 크기가 동일하다(가장 큰 위젯 기준) */}
-      <div style={{ display: "grid", gridTemplateColumns: narrow ? "minmax(0, 1fr)" : "repeat(4, minmax(0, 1fr))", gridAutoFlow: "row dense", gap: 14 }}>
+      {/* 위젯은 4열 unit을 공유하고 각 슬롯의 선택 span을 보존한다. 준비/빈/오류/로딩은
+          같은 고정 래퍼 안에서만 바뀌므로 데이터 전환 중 레이아웃 이동이 없다. */}
+      <div className={DASHBOARD_WIDGET_GRID_CLASS} data-dashboard-widget-grid="four-column" style={dashboardWidgetGridStyle()}>
         {visible.map((id) => {
-          const def = W_DEFS.find((w) => w.id === id)!;
+          const widgetType = board.types[id] ?? id;
+          const def = W_DEFS.find((w) => w.id === widgetType) ?? W_DEFS.find((w) => w.id === id)!;
+          const span = board.spans[id] ?? def.defaultSpan;
           return (
-            <motion.div key={id} layout transition={SPRING}
-              style={{ gridColumn: narrow ? "span 1" : `span ${Math.min(def.span, 4)}`, minWidth: 0, height: "100%", opacity: dragId === id ? 0.55 : 1 }}>
+            <motion.div key={id} layout transition={SPRING} className={DASHBOARD_WIDGET_GRID_ITEM_CLASS}
+              data-dashboard-widget-slot={id} data-dashboard-widget-span={span}
+              style={{ ...dashboardWidgetItemStyle(span), opacity: dragId === id ? 0.55 : 1 }}>
               {/* 네이티브 드래그는 플레인 래퍼가 담당 — motion의 팬 제스처 onDragStart와 충돌 방지 */}
               <div draggable={editing}
                 onDragStart={editing ? (e: React.DragEvent) => { setDragId(id); e.dataTransfer.effectAllowed = "move"; } : undefined}
@@ -1223,24 +1257,31 @@ function HomeSurface({ clusterMeta, incidentClusterIds, onDrillCluster, onConnec
                 onDragEnd={editing ? () => setDragId(null) : undefined}
                 style={{ height: "100%", cursor: editing ? "grab" : undefined }}>
               <WidgetFrame title={def.title} info={def.info}
-                onDeepLink={onWidgetDeepLink ? () => onWidgetDeepLink(id) : undefined} deepLabel="전체 보기"
-                collapsed={board.collapsed.includes(id)}
-                onToggle={() => save({ ...board, collapsed: board.collapsed.includes(id) ? board.collapsed.filter((x) => x !== id) : [...board.collapsed, id] })}
+                onDeepLink={onWidgetDeepLink ? () => onWidgetDeepLink(widgetType) : undefined}
                 editing={editing}
+                span={span}
+                widgetType={widgetType}
+                widgetTypes={W_DEFS.map(({ id: typeId, title }) => ({ id: typeId, title }))}
+                onSpanChange={(nextSpan) => save({ ...board, spans: { ...board.spans, [id]: nextSpan } })}
+                onTypeChange={(nextType) => save({ ...board, types: { ...board.types, [id]: nextType } })}
+                onEdit={() => setEditing(true)}
                 onRemove={() => save({ ...board, hidden: [...board.hidden, id] })}>
-                {body(id)}
+                {body(widgetType)}
               </WidgetFrame>
               </div>
             </motion.div>
           );
         })}
-        {editing && hiddenDefs.length > 0 && (
+        {editing && hiddenSlots.length > 0 && (
           <div style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", border: `1.5px dashed ${UI.line}`, borderRadius: 14, padding: "11px 14px" }}>
             <span style={{ fontSize: TYPE.label, fontWeight: 700, color: UI.ink3, whiteSpace: "nowrap" }}>위젯 추가</span>
-            {hiddenDefs.map((w) => (
-              <button key={w.id} onClick={() => save({ ...board, hidden: board.hidden.filter((x) => x !== w.id) })}
-                style={{ border: `1px solid ${UI.line}`, background: UI.card, color: UI.ink, borderRadius: 999, padding: "4px 12px", fontSize: TYPE.label, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>+ {w.title}</button>
-            ))}
+            {hiddenSlots.map((id) => {
+              const def = W_DEFS.find((w) => w.id === (board.types[id] ?? id)) ?? W_DEFS.find((w) => w.id === id)!;
+              return (
+                <button key={id} onClick={() => save({ ...board, hidden: board.hidden.filter((x) => x !== id) })}
+                  style={{ border: `1px solid ${UI.line}`, background: UI.card, color: UI.ink, borderRadius: 999, padding: "4px 12px", fontSize: TYPE.label, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>+ {def.title}</button>
+              );
+            })}
           </div>
         )}
       </div>
@@ -1758,13 +1799,16 @@ function App() {
         /* 홈 — 위젯 보드 (D21). 카드 클릭=지도 드릴, 위젯 액션=전부 실 목적지 */
         <HomeSurface clusterMeta={clusterMeta} incidentClusterIds={incidentClusterIds} pendingCl={pendingCl} pendingRepo={pendingRepo}
           onWidgetDeepLink={(id) => {
-            if (id === "W2") setSurface("issues");
+            if (id === "W1") { setSurface("resources"); setResView("map"); }
+            else if (id === "W2") setSurface("issues");
             else if (id === "W3") setSurface("deploy");
             else if (id === "W4" || id === "W8") setSurface("timeline");
             else if (id === "W7") setSurface("cost");
             else { setSurface("resources"); setResView("list"); setKindId("Pod"); }
           }}
           onDrillCluster={(cl) => { setDrillCl(cl); setSurface("resources"); setResView("map"); }}
+          onClusterSettings={() => setSurface("settings")}
+          onClusterDisconnect={(cl) => { setDrillCl(cl); setSurface("resources"); setResView("map"); }}
           onOpenIssues={() => setSurface("issues")}
           onConnect={() => setConnectModal("cluster")}
           onOpenPod={(name) => openRef("Pod", name)}
@@ -1794,8 +1838,7 @@ function App() {
                 onAddCluster={() => setConnectModal("cluster")}
                 onAddRepo={() => setConnectModal("repo")}
                 stickyTop={topH + 12}
-                clusterMeta={clusterMeta}
-                onOpenKind={(kid) => { setKindId(kid); setResView("list"); }} />
+              />
               {/* 종류(kind) 탐색은 쿠버네티스 관점의 본문이 오너 — 인프라 뷰 패널에 같은 목록을 두 번 두지 않는다 */}
             </>
           )}

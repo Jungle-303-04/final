@@ -4,9 +4,9 @@
 // 구조: 클러스터(리스트) → 노드(관측 목록) → 파드(관측 목록).
 // no backfill: 계약이 노출하지 않는 값(CPU/MEM/용량/파드→노드 귀속 등)은 절대
 // 지어내지 않는다. 관측이 없으면 "관측 안 됨"/"관측된 리소스가 없습니다"를 렌더한다.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Box, ChevronRight, ChevronLeft, Plug, FileCog, Cpu, Activity, Server, Network } from "lucide-react";
+import { Activity, AlertTriangle, Box, ChevronLeft, ChevronRight, Cpu, EllipsisVertical, ExternalLink, FileCog, Network, Plug, RotateCcw, Server, Settings, Unplug } from "lucide-react";
 import { UI, BLUE, HP, TINT, MONO, TYPE, SOFT, SPRING, PAGE, PRESENT_SCALE, DUR, inkA, blueA, LINE3, INK4, BRAND, cardA } from "./devpreview/theme";
 import { AwsIcon, GithubIcon } from "./devpreview/brandIcons";
 import { statusLabel, reasonLabel } from "./devpreview/statusLabel";
@@ -14,6 +14,7 @@ import { useNarrowViewport } from "./devpreview/useNarrowViewport";
 import { useDevpreviewContracts, type DevpreviewCluster } from "./devpreview/contracts";
 import { isActiveIncidentCluster } from "./devpreview/rcaIssuesFeed";
 import { useClusterSummaries, type ClusterSummaryView } from "./devpreview/clusterSummaryFeed";
+import { HOME_CARD_GRID_CLASS, HOME_CARD_GRID_ITEM_CLASS, homeCardGridItemStyle, homeCardGridStyle } from "./devpreview/widgets";
 import {
   podsForNode,
   useClusterTopology,
@@ -79,48 +80,6 @@ function ClusterMiniUsage({ label, value }: { label: string; value: number | nul
   );
 }
 
-// 클러스터 개요 스트립 — 실 클러스터 계약(정체성·버전) + 셸 인벤토리 kind 카운트.
-// 계정/ARN/코어수/네트워크/디스크 등 가짜 파생값은 제거했다.
-function ClusterOverview({ cl, meta, topology, onKind }: {
-  cl?: DevpreviewCluster;
-  meta?: Record<string, number>;
-  topology?: ClusterTopologyView;
-  onKind?: (kindId: string) => void;
-}) {
-  const KIND_LINKS: [string, string][] = [["StatefulSet", "StatefulSets"], ["DaemonSet", "DaemonSets"], ["Service", "Services"], ["Ingress", "Ingresses"], ["Job", "Jobs"], ["CronJob", "CronJobs"]];
-  const hasMeta = meta !== undefined;
-  const topologyLoading = topology === undefined || topology.status === "loading";
-  const nodesReady = topologyLoading ? "…" : topology?.nodesReady ?? "—";
-  const nodesTotal = topologyLoading ? "…" : topology?.nodesTotal ?? "—";
-  const podsTotal = topologyLoading ? "…" : topology?.podsTotal ?? "—";
-  const omittedPods = topology?.truncatedPodCount ?? 0;
-  return (
-    <div style={{ display: "flex", gap: 18, alignItems: "flex-start", flexWrap: "wrap", background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 14, padding: "12px 16px", marginBottom: 14 }}>
-      <div style={{ minWidth: 0, flex: "1 1 340px", display: "flex", flexDirection: "column", gap: 3, fontFamily: MONO, fontSize: TYPE.caption, color: UI.ink2 }}>
-        <span>{cl ? `${cl.provider.toUpperCase()} · Kubernetes ${cl.kubernetesVersion ?? "관측 안 됨"}` : "클러스터 관측 안 됨"}</span>
-        <span style={{ color: UI.ink3 }}>
-          노드 {nodesReady}/{nodesTotal} 준비 · 파드 {podsTotal} · 네임스페이스 {meta?.Namespace ?? cl?.namespaceCount ?? "—"}
-          {topology?.status === "ready" && topology.partial
-            ? ` · 일부 관측${omittedPods > 0 ? ` · ${omittedPods}개 미표시` : ""}`
-            : ""}
-        </span>
-        <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: TYPE.caption, color: UI.ink3 }}>
-          <span className="pulsedot" style={{ width: 6, height: 6, borderRadius: 999, background: cl?.connectionStatus === "online" ? HP.ok : UI.ink3 }} />
-          {cl?.connectionStatus === "online" ? "연결됨" : "연결 상태 관측 대기"}
-        </span>
-      </div>
-      <div style={{ flex: "1 1 280px", minWidth: 0, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(112px, 100%), 1fr))", gap: "5px 12px", alignContent: "center" }}>
-        {KIND_LINKS.map(([kid, lb]) => (
-          <button key={kid} type="button" disabled={!onKind} className="kindlink" onClick={onKind ? () => onKind(kid) : undefined}
-            style={{ minWidth: 0, display: "flex", alignItems: "baseline", gap: 5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", border: "none", background: "transparent", padding: 0, textAlign: "left", font: "inherit", fontSize: TYPE.label, color: UI.ink2, cursor: onKind ? "pointer" : "default" }}>
-            <b style={{ fontFamily: MONO, fontWeight: 700, color: UI.ink, fontVariantNumeric: "tabular-nums" }}>{hasMeta ? (meta?.[kid] ?? 0) : "—"}</b>{lb}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 function ClusterRow({ cl, summary, topology, onOpen }: {
   cl: DevpreviewCluster;
   summary?: ClusterSummaryView;
@@ -161,11 +120,11 @@ function ClusterRow({ cl, summary, topology, onOpen }: {
           </span>
           <span style={{ display: "block", fontSize: TYPE.caption2, color: UI.ink3, marginTop: 2, fontFamily: MONO }}>{cl.provider.toUpperCase()} · {cl.kubernetesVersion ?? "—"}</span>
         </span>
-        {healthy
-          ? <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: TYPE.caption, fontWeight: 700, color: TINT.ok.fg, background: TINT.ok.bg, border: `1px solid ${TINT.ok.bd}`, borderRadius: 999, padding: "3px 9px", flexShrink: 0 }}><span className="pulsedot" style={{ width: 6, height: 6, borderRadius: 999, background: HP.ok }} />정상</span>
-          : incidentsObserved
+        {!healthy && (incidentsObserved
             ? <span style={{ fontSize: TYPE.caption, fontWeight: 700, color: UI.card, background: HP.crit, borderRadius: 999, padding: "3px 9px", fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>장애 {incidents}</span>
-            : <span style={{ fontSize: TYPE.caption, fontWeight: 700, color: UI.ink2, background: UI.bg2, border: `1px solid ${UI.line}`, borderRadius: 999, padding: "3px 9px", flexShrink: 0 }}>{statusLabel(cl.connectionStage ?? cl.connectionStatus)}</span>}
+            : !isHealthyConnection(cl)
+              ? <span style={{ fontSize: TYPE.caption, fontWeight: 700, color: TINT.warn.fg, background: TINT.warn.bg, border: `1px solid ${TINT.warn.bd}`, borderRadius: 999, padding: "3px 9px", flexShrink: 0 }}>{statusLabel(cl.connectionStage ?? cl.connectionStatus)}</span>
+              : null)}
       </div>
 
       <div style={{ display: "flex", gap: 14, fontSize: TYPE.label, color: UI.ink2, fontVariantNumeric: "tabular-nums", flexWrap: "wrap" }}>
@@ -184,10 +143,138 @@ function ClusterRow({ cl, summary, topology, onOpen }: {
         <ClusterMiniUsage label="CPU" value={cpuPct} />
         <ClusterMiniUsage label="MEM" value={memPct} />
       </div>
-      <span style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 5, color: BLUE, fontSize: TYPE.label2, fontWeight: 700 }}>
-        노드 보기 <ChevronRight size={13} />
-      </span>
     </motion.button>
+  );
+}
+
+function isHealthyConnection(cluster: Pick<DevpreviewCluster, "connectionStatus" | "connectionStage">): boolean {
+  const state = String(cluster.connectionStage ?? cluster.connectionStatus).toLowerCase();
+  return cluster.connectionStatus === "online"
+    && ["agent_connected", "connected", "online", "ready", "snapshot_received"].includes(state);
+}
+
+function CompactUsage({ label, value }: { label: string; value: number | null }) {
+  return (
+    <span style={{ display: "grid", gridTemplateColumns: "30px minmax(48px, 1fr) 38px", alignItems: "center", gap: 6, minWidth: 0 }}>
+      <span style={{ fontSize: TYPE.micro, fontWeight: 700, color: UI.ink3 }}>{label}</span>
+      <span style={{ height: 4, borderRadius: 999, background: inkA(0.06), overflow: "hidden" }}>
+        {value !== null && <span style={{ display: "block", width: `${value}%`, height: "100%", borderRadius: 999, background: value >= 90 ? HP.crit : value >= 75 ? HP.warn : HP.ok }} />}
+      </span>
+      <span style={{ textAlign: "right", fontSize: TYPE.micro, fontWeight: 700, fontFamily: MONO, color: value === null ? UI.ink3 : UI.ink }}>{value === null ? "—" : `${value}%`}</span>
+    </span>
+  );
+}
+
+function CompactClusterRow({ cl, summary, onOpen, onSettings, onDisconnect }: {
+  cl: DevpreviewCluster;
+  summary?: ClusterSummaryView;
+  onOpen: () => void;
+  onSettings?: () => void;
+  onDisconnect?: () => void;
+}) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const close = (event: MouseEvent) => {
+      if (!menuRef.current?.contains(event.target as Node)) setMenuOpen(false);
+    };
+    const escape = (event: KeyboardEvent) => { if (event.key === "Escape") setMenuOpen(false); };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [menuOpen]);
+  const summaryLoading = summary === undefined || summary.status === "loading";
+  const ready = summary?.nodesReady ?? null;
+  const nodes = summary?.nodesTotal ?? null;
+  const pods = summary?.podsRunning ?? null;
+  const summaryNodes = summary?.nodes ?? [];
+  const slots = summaryNodes.length > 0 ? summaryNodes.reduce((total, node) => total + node.podsCapacity, 0) : null;
+  const incidentsObserved = isActiveIncidentCluster(cl);
+  const incidents = incidentsObserved ? cl.incidentCount ?? summary?.openIncidents ?? 0 : 0;
+  const unavailable = summary?.status === "unavailable" || (!summaryLoading && summary?.cpuPct === null && summary?.memPct === null);
+  const connectionWarning = !isHealthyConnection(cl);
+  const fmt = (value: number | null) => summaryLoading ? "…" : value ?? "—";
+  const activate = () => { setMenuOpen(false); onOpen(); };
+  return (
+    <motion.div role="button" tabIndex={0} aria-label={`${cl.displayName} 클러스터 상세`} onClick={activate}
+      onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); activate(); } }}
+      whileHover={{ backgroundColor: inkA(0.025) }}
+      className="home-cluster-compact-row"
+      style={{ position: "relative", display: "grid", gridTemplateColumns: "minmax(170px, 1.35fr) minmax(210px, 1.25fr) minmax(180px, 1fr) auto", alignItems: "center", gap: 14, minHeight: 54, padding: "8px 4px", borderTop: `1px solid ${UI.line2}`, cursor: "pointer", outline: "none" }}>
+      <span style={{ display: "flex", alignItems: "center", gap: 9, minWidth: 0 }}>
+        <span style={{ width: 27, height: 27, borderRadius: 8, background: `linear-gradient(135deg, ${BRAND.awsA}, ${BRAND.awsB})`, display: "grid", placeItems: "center", flexShrink: 0 }}><AwsIcon size={15} style={{ color: UI.card }} /></span>
+        <span style={{ minWidth: 0 }}>
+          <span title={cl.displayName} style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: TYPE.label2, fontWeight: 750, fontFamily: MONO, color: UI.ink }}>{cl.displayName}</span>
+          <span style={{ display: "block", marginTop: 1, fontSize: TYPE.micro, color: UI.ink3 }}>{cl.environment ?? cl.provider.toUpperCase()}</span>
+        </span>
+        {incidents > 0 ? (
+          <span style={{ marginLeft: "auto", flexShrink: 0, fontSize: TYPE.micro, fontWeight: 700, color: HP.crit, background: TINT.crit.bg, borderRadius: 999, padding: "2px 6px" }}>장애 {incidents}</span>
+        ) : connectionWarning ? (
+          <span style={{ marginLeft: "auto", flexShrink: 0, fontSize: TYPE.micro, fontWeight: 700, color: TINT.warn.fg, background: TINT.warn.bg, borderRadius: 999, padding: "2px 6px" }}>{statusLabel(cl.connectionStage ?? cl.connectionStatus)}</span>
+        ) : unavailable ? (
+          <span style={{ marginLeft: "auto", flexShrink: 0, fontSize: TYPE.micro, fontWeight: 700, color: TINT.warn.fg }}>일부 관측</span>
+        ) : null}
+      </span>
+      <span className="home-cluster-compact-facts" style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, auto))", alignItems: "center", gap: 12, minWidth: 0, fontSize: TYPE.caption2, color: UI.ink3 }}>
+        <span>노드 <b style={{ color: UI.ink, fontFamily: MONO }}>{fmt(ready)}/{fmt(nodes)}</b></span>
+        <span>파드 <b style={{ color: UI.ink, fontFamily: MONO }}>{fmt(pods)}</b></span>
+        <span>NS <b style={{ color: UI.ink, fontFamily: MONO }}>{cl.namespaceCount ?? "—"}</b></span>
+        <span>슬롯 <b style={{ color: UI.ink, fontFamily: MONO }}>{fmt(pods)}/{fmt(slots)}</b></span>
+      </span>
+      <span className="home-cluster-compact-usage" style={{ display: "grid", gap: 4, minWidth: 0 }}>
+        <CompactUsage label="CPU" value={summaryLoading ? null : summary?.cpuPct ?? null} />
+        <CompactUsage label="MEM" value={summaryLoading ? null : summary?.memPct ?? null} />
+      </span>
+      <span ref={menuRef} style={{ position: "relative" }} onClick={(event) => event.stopPropagation()}>
+        <button type="button" aria-label={`${cl.displayName} 클러스터 메뉴`} aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}
+          style={{ width: 28, height: 28, display: "grid", placeItems: "center", border: "none", borderRadius: 7, background: menuOpen ? inkA(0.06) : "transparent", color: UI.ink3, cursor: "pointer" }}><EllipsisVertical size={15} /></button>
+        {menuOpen && (
+          <span role="menu" aria-label={`${cl.displayName} 클러스터 작업`} style={{ position: "absolute", top: 31, right: 0, zIndex: 50, width: 156, display: "flex", flexDirection: "column", gap: 2, padding: 5, border: `1px solid ${UI.line}`, borderRadius: 10, background: UI.card, boxShadow: `0 16px 40px -18px ${inkA(0.35)}` }}>
+            <button role="menuitem" type="button" onClick={activate} style={compactMenuStyle}><ExternalLink size={13} />상세 보기</button>
+            {onSettings && <button role="menuitem" type="button" onClick={() => { setMenuOpen(false); onSettings(); }} style={compactMenuStyle}><Settings size={13} />설정</button>}
+            {onDisconnect && <button role="menuitem" type="button" onClick={() => { setMenuOpen(false); onDisconnect(); }} style={{ ...compactMenuStyle, color: HP.crit }}><Unplug size={13} />연결 해제…</button>}
+          </span>
+        )}
+      </span>
+    </motion.div>
+  );
+}
+
+const compactMenuStyle: React.CSSProperties = {
+  display: "flex", alignItems: "center", gap: 7, width: "100%", border: "none", borderRadius: 7,
+  background: "transparent", color: UI.ink2, padding: "7px 8px", textAlign: "left", fontSize: TYPE.caption2,
+  fontWeight: 600, cursor: "pointer",
+};
+
+export function HomeClustersWidget({ onOpen, onSettings, onDisconnect, pending = [] }: {
+  onOpen: (clusterId: string) => void;
+  onSettings?: (clusterId: string) => void;
+  onDisconnect?: (clusterId: string) => void;
+  pending?: string[];
+}) {
+  const { clusters } = useDevpreviewContracts();
+  const summaries = useClusterSummaries(clusters.map((cluster) => cluster.id));
+  return (
+    <div data-home-clusters="compact" style={{ flex: 1, minHeight: 0, overflowY: "auto", overscrollBehavior: "contain", scrollbarGutter: "stable" }}>
+      {clusters.map((cluster) => (
+        <CompactClusterRow key={cluster.id} cl={cluster} summary={summaries[cluster.id]}
+          onOpen={() => onOpen(cluster.id)}
+          onSettings={onSettings ? () => onSettings(cluster.id) : undefined}
+          onDisconnect={onDisconnect ? () => onDisconnect(cluster.id) : undefined} />
+      ))}
+      {pending.map((name) => (
+        <div key={name} style={{ display: "grid", gridTemplateColumns: "minmax(170px, 1.35fr) minmax(210px, 1.25fr) minmax(180px, 1fr) 28px", alignItems: "center", gap: 14, minHeight: 54, padding: "8px 4px", borderTop: `1px solid ${UI.line2}` }}>
+          <span style={{ minWidth: 0, fontFamily: MONO, fontSize: TYPE.label2, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
+          <span style={{ fontSize: TYPE.caption2, color: TINT.blue.fg }}>부트스트랩 중 · 첫 인벤토리 대기</span>
+          <span style={{ fontSize: TYPE.caption2, color: UI.ink3 }}>CPU — · MEM —</span><span />
+        </div>
+      ))}
+      {clusters.length === 0 && pending.length === 0 && <span style={{ display: "block", padding: "18px 4px", color: UI.ink3, fontSize: TYPE.label2 }}>연결된 클러스터가 없습니다.</span>}
+    </div>
   );
 }
 
@@ -215,7 +302,7 @@ function AddClusterCard({ onClick, delay = 0, compact = false }: { onClick: () =
 export function PendingClusterCard({ name, delay = 0 }: { name: string; delay?: number }) {
   return (
     <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ ...SOFT, delay }}
-      style={{ display: "flex", flexDirection: "column", gap: 12, minHeight: 200, background: UI.card, border: `1px solid ${blueA(0.3)}`, borderRadius: 16, padding: 16, boxSizing: "border-box" }}>
+      style={{ display: "flex", flexDirection: "column", gap: 12, minHeight: 0, height: "100%", background: UI.card, border: `1px solid ${blueA(0.3)}`, borderRadius: 16, padding: 16, boxSizing: "border-box" }}>
       <div style={{ display: "flex", alignItems: "flex-start", gap: 10, minWidth: 0 }}>
         <span style={{ width: 30, height: 30, borderRadius: 9, background: inkA(0.06), display: "grid", placeItems: "center", flexShrink: 0 }}>
           <AwsIcon size={17} style={{ color: UI.ink3 }} />
@@ -245,17 +332,15 @@ export function HomeClusterSection({ meta: _meta, onOpen, pending = [] }: {
   // priority 14: 홈은 OpsiaMap의 `.op` 스타일 블록(반응형 media query 포함) 밖에서
   // 렌더되므로 그 media query가 적용되지 않는다. 좁은 화면 1열 전환을 인라인으로 보장한다.
   const narrow = useNarrowViewport();
-  const span = narrow ? "span 1" : "span 2";
   return (
-    // 넓은 화면: 4칸 그리드에 카드 2칸씩(= 2열). 좁은 화면(≤768px): 1열로 스택.
-    <div className="home-cluster-grid" style={{ display: "grid", gridTemplateColumns: narrow ? "minmax(0, 1fr)" : "repeat(4, minmax(0, 1fr))", gridAutoFlow: "row dense", gap: 14 }}>
+    <div className={HOME_CARD_GRID_CLASS} data-home-card-grid="uniform" style={homeCardGridStyle(narrow)}>
       {clusters.map((cl) => (
-        <div key={cl.id} style={{ gridColumn: span, minWidth: 0 }}>
+        <div key={cl.id} className={HOME_CARD_GRID_ITEM_CLASS} data-home-card-layout="unit" style={homeCardGridItemStyle(narrow)}>
           <ClusterRow cl={cl} summary={summaries[cl.id]} onOpen={() => onOpen(cl.id)} />
         </div>
       ))}
       {pending.map((n, i) => (
-        <div key={n} style={{ gridColumn: span, minWidth: 0 }}>
+        <div key={n} className={HOME_CARD_GRID_ITEM_CLASS} data-home-card-layout="unit" style={homeCardGridItemStyle(narrow)}>
           <PendingClusterCard name={n} delay={(clusters.length + i) * 0.05} />
         </div>
       ))}
@@ -265,13 +350,15 @@ export function HomeClusterSection({ meta: _meta, onOpen, pending = [] }: {
 }
 
 // ── 노드 카드 — 정본 physical topology 계약의 서버·측정값·pod count만 렌더한다.
-function NodeCard({ node, onOpen, onTip }: {
-  node: InvNode; onOpen: () => void; onTip: (t: TipData) => void;
+export function NodeCard({ node, problemPodCount, onOpen, onTip }: {
+  node: InvNode; problemPodCount: number | null; onOpen: () => void; onTip: (t: TipData) => void;
 }) {
   const sev = healthSev(node.health);
   const statusText = node.status ? statusLabel(node.status) : "상태 관측 안 됨";
   const healthText = statusLabel(node.health);
   const showStatus = statusText !== healthText;
+  const problemConditionCount = (node.conditions ?? []).filter((condition) => !/^ready$/i.test(condition)).length;
+  const restartsRecent = node.restartsRecent ?? 0;
   return (
     <motion.button transition={SPRING} onClick={onOpen}
       whileHover={{ boxShadow: `0 10px 26px -20px ${inkA(0.16)}`, borderColor: LINE3 }}
@@ -288,13 +375,31 @@ function NodeCard({ node, onOpen, onTip }: {
           <div title={node.name} style={{ fontSize: TYPE.body, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink, fontFamily: MONO, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", lineHeight: 1.35 }}>{node.name}</div>
           {showStatus && <div style={{ fontSize: TYPE.caption2, color: UI.ink3, marginTop: 2 }}>{statusText}</div>}
         </div>
-        <span style={{ width: 8, height: 8, borderRadius: 999, background: sevColor(sev), flexShrink: 0, marginTop: 4 }} />
+        {sev !== "ok" && <span style={{ width: 8, height: 8, borderRadius: 999, background: sevColor(sev), flexShrink: 0, marginTop: 4 }} />}
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-        <HealthChip health={node.health} />
-        <span style={{ fontSize: TYPE.caption, color: UI.ink3, fontFamily: MONO }}>
-          파드 {node.matchedPodCount ?? "—"}/{node.totalPodCount ?? "—"}
+        {sev !== "ok" && <HealthChip health={node.health} />}
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: TYPE.caption, color: UI.ink3 }}>
+          <Box size={12} aria-hidden="true" />파드 슬롯
+          <b style={{ color: UI.ink, fontFamily: MONO }}>{node.matchedPodCount ?? "—"}</b>
+          <span>/</span>
+          <b style={{ color: UI.ink, fontFamily: MONO }}>{node.totalPodCount ?? "—"}</b>
         </span>
+        {problemPodCount !== null && problemPodCount > 0 && (
+          <span aria-label={`문제 파드 ${problemPodCount}`} style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: TYPE.caption, fontWeight: 700, color: TINT.crit.fg }}>
+            <AlertTriangle size={12} aria-hidden="true" /><b style={{ fontFamily: MONO }}>{problemPodCount}</b>문제 파드
+          </span>
+        )}
+        {restartsRecent > 0 && (
+          <span aria-label={`최근 재시작 ${restartsRecent}`} style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: TYPE.caption, fontWeight: 700, color: TINT.warn.fg }}>
+            <RotateCcw size={12} aria-hidden="true" /><b style={{ fontFamily: MONO }}>{restartsRecent}</b>최근 재시작
+          </span>
+        )}
+        {problemConditionCount > 0 && (
+          <span aria-label={`문제 조건 ${problemConditionCount}`} style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: TYPE.caption, fontWeight: 700, color: TINT.warn.fg }}>
+            <AlertTriangle size={12} aria-hidden="true" /><b style={{ fontFamily: MONO }}>{problemConditionCount}</b>조건
+          </span>
+        )}
       </div>
       <div style={{ display: "grid", gap: 6, marginTop: "auto" }}>
         <ClusterMiniUsage label="CPU" value={node.cpuPercent} />
@@ -302,6 +407,55 @@ function NodeCard({ node, onOpen, onTip }: {
       </div>
     </motion.button>
   );
+}
+
+/**
+ * The node-summary endpoint is the canonical CPU/MEM source used by the Home
+ * cards. Reconcile by exact node name and never substitute topology metrics.
+ * Summary-only nodes remain visible while the heavier topology projection is
+ * partial; duplicate summary names collapse to one honest card.
+ */
+export function nodesWithSummaryMetrics(
+  topologyNodes: readonly InvNode[],
+  summary: ClusterSummaryView | undefined,
+  clusterId: string,
+): InvNode[] {
+  const topologyByName = new Map(topologyNodes.map((node) => [node.name, node]));
+  if (summary?.status !== "ready") {
+    return topologyNodes.map((node) => ({
+      ...node,
+      cpuPercent: null,
+      memoryPercent: null,
+    }));
+  }
+
+  const summaryByName = new Map(summary.nodes.map((node) => [node.name, node]));
+  return Array.from(summaryByName.values(), (node) => {
+    const topologyNode = topologyByName.get(node.name);
+    return {
+      name: node.name,
+      status: node.ready ? "ready" : "not_ready",
+      health: node.health,
+      cluster: clusterId,
+      key: topologyNode?.key ?? node.name,
+      cpuPercent: node.cpuPct,
+      memoryPercent: node.memPct,
+      matchedPodCount: node.podsRunning,
+      totalPodCount: node.podsCapacity,
+      restartsRecent: node.restartsRecent,
+      conditions: node.conditions,
+    };
+  });
+}
+
+function problemPodsForNode(
+  node: InvNode,
+  topologyNodes: readonly InvNode[],
+  pods: readonly InvPod[],
+): number | null {
+  const topologyNode = topologyNodes.find((candidate) => candidate.name === node.name);
+  if (topologyNode === undefined) return null;
+  return podsForNode(pods, topologyNode.key).filter((pod) => isBadHealth(pod.health)).length;
 }
 
 // ── 파드 행 — 관측된 파드 하나. name/ns/status/health 만. CPU/MEM/재시작/나이/QoS는
@@ -332,7 +486,7 @@ function PodRow({ pod, onClick, onTip }: {
 
 // ── 앱 ─────────────────────────────
 // embedded: 셸(통합 리소스)에 내장될 때 자체 헤더·내비를 숨기고 스코프 변화를 알림
-export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOpenRca, lensTab, onAddCluster, onAddRepo, stickyTop, clusterMeta, onOpenKind, initialCluster, pendingClusters, pendingRepos }: {
+export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOpenRca, lensTab, onAddCluster, onAddRepo, stickyTop, initialCluster, pendingClusters, pendingRepos }: {
   embedded?: boolean;
   onScopeChange?: (v: View) => void;
   /** 임베드 모드: 파드 클릭 시 셸의 통합 상세 오버레이를 연다 (내부 패널 대신) */
@@ -346,10 +500,6 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
   onAddRepo?: () => void;
   /** 탐색 패널 고정 오프셋(CSS px) — 셸 sticky 헤더 바로 아래 */
   stickyTop?: number;
-  /** 클러스터 카드 메타(종류·네임스페이스 카운트) — 셸 인벤토리에서 파생, 표 필터와 동일 로직 */
-  clusterMeta?: Record<string, Record<string, number>>;
-  /** 카드의 종류 링크 클릭 — 드릴과 함께 셸 표 종류를 전환 */
-  onOpenKind?: (kindId: string) => void;
   /** 홈 카드 클릭 등 외부 진입 시 해당 클러스터 노드 뷰로 시작 (스코프 전달 — D21) */
   initialCluster?: string;
   /** 세션 중 등록된 연결 대기 항목 — 목록에 실반영(등록의 결과가 보여야 한다) */
@@ -366,7 +516,12 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
   // 드릴된 클러스터의 관측된 노드·파드(실 인벤토리 계약). 클러스터 뷰에선 null → 무요청.
   const activeCluster = view.level === "clusters" ? null : view.cluster;
   const topology = useClusterTopology(activeCluster);
-  const { nodes, pods } = topology;
+  const { nodes: topologyNodes, pods } = topology;
+  const activeSummary = activeCluster ? clusterSummaries[activeCluster] : undefined;
+  const nodes = useMemo(
+    () => nodesWithSummaryMetrics(topologyNodes, activeSummary, activeCluster ?? ""),
+    [activeCluster, activeSummary, topologyNodes],
+  );
   const activeNode = view.level === "pods" ? nodes.find((node) => node.name === view.node) : undefined;
   const nodePods = view.level === "pods" && activeNode
     ? podsForNode(pods, activeNode.key)
@@ -409,9 +564,6 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
   if (view.level !== "clusters") crumbs.push({ label: view.cluster, onClick: view.level === "pods" ? () => go({ level: "nodes", cluster: view.cluster }, -1) : undefined });
   if (view.level === "pods") crumbs.push({ label: view.node });
 
-  const activeClusterMeta = view.level !== "clusters" ? clusterMeta?.[view.cluster] : undefined;
-  const activeClusterObj = view.level !== "clusters" ? clusters.find((c) => c.id === view.cluster) : undefined;
-
   return (
     <div className="op">
       <div style={{ width: embedded ? "100%" : 1220, maxWidth: "100%", margin: "0 auto", padding: embedded ? 0 : "32px 24px 48px" }}>
@@ -432,14 +584,16 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
           const seg: React.CSSProperties = { display: "flex", alignItems: "center", gap: 5, fontSize: TYPE.label, fontWeight: 600, color: UI.ink2, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 999, padding: "5px 11px", whiteSpace: "nowrap" };
           const num: React.CSSProperties = { fontFamily: MONO, fontWeight: 700, color: UI.ink, fontVariantNumeric: "tabular-nums" };
           const drilled = view.level !== "clusters";
-          const observing = drilled && topology.status === "ready";
+          const observing = drilled && (topology.status === "ready" || activeSummary?.status === "ready");
+          const nodesReady = activeSummary?.status === "ready" ? activeSummary.nodesReady : topology.nodesReady;
+          const nodesTotal = activeSummary?.status === "ready" ? activeSummary.nodesTotal : topology.nodesTotal;
           return (
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
               <span style={seg}><Server size={11} style={{ color: UI.ink3 }} />클러스터 <b style={num}>{clusters.length}</b>
                 {(pendingClusters?.length ?? 0) > 0 && <span style={{ color: TINT.blue.fg }}>· 연결 중 {pendingClusters!.length}</span>}
               </span>
               {drilled && (
-                <span style={seg}><Cpu size={11} style={{ color: UI.ink3 }} />노드 <b style={num}>{observing ? topology.nodesTotal ?? "—" : topology.status === "loading" ? "…" : "—"}</b></span>
+                <span style={seg}><Cpu size={11} style={{ color: UI.ink3 }} />노드 <b style={num}>{observing ? `${nodesReady ?? "—"}/${nodesTotal ?? "—"}` : topology.status === "loading" || activeSummary?.status === "loading" ? "…" : "—"}</b></span>
               )}
               {drilled && (
                 <span style={seg}><Box size={11} style={{ color: UI.ink3 }} />파드 <b style={num}>{observing ? topology.podsTotal ?? "—" : topology.status === "loading" ? "…" : "—"}</b></span>
@@ -507,10 +661,9 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
                 )}
 
                 {view.level === "nodes" && (<>
-                  <ClusterOverview cl={activeClusterObj} meta={activeClusterMeta} topology={topology} onKind={onOpenKind} />
-                  {topology.status === "loading" ? (
+                  {nodes.length === 0 && topology.status === "loading" && activeSummary?.status !== "ready" ? (
                     <NodeSkeleton />
-                  ) : topology.status === "unavailable" ? (
+                  ) : nodes.length === 0 && topology.status === "unavailable" && activeSummary?.status !== "ready" ? (
                     <EmptyState icon={<Server size={18} strokeWidth={1.75} />} label="인벤토리 관측 안 됨"
                       hint="에이전트가 아직 이 클러스터의 노드 인벤토리를 보고하지 않았습니다." />
                   ) : nodes.length === 0 ? (
@@ -524,7 +677,7 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
                     <div className="node-grid" style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 12 }}>
                       {nodes.map((node, i) => (
                         <motion.div key={node.key} style={{ minWidth: 0, maxWidth: "100%" }} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ ...SOFT, delay: i * 0.04 }}>
-                          <NodeCard node={node} onOpen={() => go({ level: "pods", cluster: view.cluster, node: node.name }, 1)} onTip={onTip} />
+                          <NodeCard node={node} problemPodCount={problemPodsForNode(node, topologyNodes, pods)} onOpen={() => go({ level: "pods", cluster: view.cluster, node: node.name }, 1)} onTip={onTip} />
                         </motion.div>
                       ))}
                     </div>

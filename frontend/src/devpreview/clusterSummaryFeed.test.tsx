@@ -31,6 +31,10 @@ describe("useClusterSummaries", () => {
       openIncidents: null,
       nodesReady: 1,
       nodesTotal: 2,
+      nodes: [
+        expect.objectContaining({ name: "worker-a", cpuPct: 20, memPct: null, restartsRecent: 0, conditions: ["Ready"] }),
+        expect.objectContaining({ name: "worker-b", cpuPct: 40, memPct: 40, restartsRecent: 1, conditions: ["MemoryPressure"] }),
+      ],
     });
   });
 

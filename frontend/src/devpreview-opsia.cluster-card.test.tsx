@@ -4,6 +4,8 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 const onOpen = vi.fn();
+const onSettings = vi.fn();
+const onDisconnect = vi.fn();
 
 vi.mock("./devpreview/contracts", () => ({
   useDevpreviewContracts: () => ({
@@ -41,6 +43,10 @@ vi.mock("./devpreview/clusterSummaryFeed", () => ({
       nodesReady: 2,
       nodesTotal: 3,
       openIncidents: null,
+      nodes: [
+        { name: "node-a", ready: true, health: "healthy", cpuPct: 25, memPct: 40, podsRunning: 4, podsCapacity: 29, restartsRecent: 0, conditions: [] },
+        { name: "node-b", ready: true, health: "healthy", cpuPct: 25, memPct: 40, podsRunning: 5, podsCapacity: 29, restartsRecent: 0, conditions: [] },
+      ],
     },
   }),
 }));
@@ -49,20 +55,37 @@ vi.mock("./devpreview/useNarrowViewport", () => ({
   useNarrowViewport: () => false,
 }));
 
-import { HomeClusterSection } from "./devpreview-opsia";
+import { HomeClustersWidget } from "./devpreview-opsia";
 
-describe("HomeClusterSection", () => {
-  it("renders the provider display name but opens the immutable registration id", () => {
+describe("HomeClustersWidget", () => {
+  it("renders one dense cluster row with real metrics and opens the immutable registration id", () => {
     onOpen.mockClear();
-    render(<HomeClusterSection onOpen={onOpen} />);
+    onSettings.mockClear();
+    onDisconnect.mockClear();
+    const rendered = render(<HomeClustersWidget onOpen={onOpen} onSettings={onSettings} onDisconnect={onDisconnect} />);
 
     expect(screen.getByText("game-server")).toBeTruthy();
     expect(screen.queryByText("registration-7f6f2")).toBeNull();
     expect(screen.getByText("2/3")).toBeTruthy();
+    expect(screen.getByText("9/58")).toBeTruthy();
     expect(screen.getByText("25%")).toBeTruthy();
     expect(screen.getByText("40%")).toBeTruthy();
+    expect(screen.queryByText("정상")).toBeNull();
+    expect(screen.queryByText("노드 보기")).toBeNull();
+    expect(screen.queryByText("v1.32.0-eks")).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: /game-server/ }));
+    const compact = rendered.container.querySelector("[data-home-clusters='compact']") as HTMLElement;
+    expect(compact.style.overflowY).toBe("auto");
+
+    fireEvent.click(screen.getByRole("button", { name: "game-server 클러스터 상세" }));
     expect(onOpen).toHaveBeenCalledWith("registration-7f6f2");
+
+    fireEvent.click(screen.getByRole("button", { name: "game-server 클러스터 메뉴" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "설정" }));
+    expect(onSettings).toHaveBeenCalledWith("registration-7f6f2");
+
+    fireEvent.click(screen.getByRole("button", { name: "game-server 클러스터 메뉴" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "연결 해제…" }));
+    expect(onDisconnect).toHaveBeenCalledWith("registration-7f6f2");
   });
 });

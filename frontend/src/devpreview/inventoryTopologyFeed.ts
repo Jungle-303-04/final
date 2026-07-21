@@ -21,6 +21,8 @@ export interface InvNode {
   memoryPercent: number | null;
   matchedPodCount: number | null;
   totalPodCount: number | null;
+  restartsRecent?: number;
+  conditions?: string[];
 }
 
 export interface InvPod {
@@ -139,6 +141,8 @@ export function toClusterTopologyView(topology: PhysicalTopologyEndpoint): Clust
       memoryPercent: server.mem_pct,
       matchedPodCount: server.matched_pod_count,
       totalPodCount: server.total_pod_count,
+      restartsRecent: 0,
+      conditions: [],
     })),
     pods: topology.pods.map((pod) => ({
       name: pod.name,

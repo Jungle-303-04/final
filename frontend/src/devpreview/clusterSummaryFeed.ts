@@ -15,6 +15,18 @@ const SUMMARY_REFRESH_MS = 20_000;
 
 export type ClusterSummaryStatus = "loading" | "ready" | "unavailable";
 
+export interface ClusterNodeSummaryView {
+  name: string;
+  ready: boolean;
+  health: string;
+  cpuPct: number | null;
+  memPct: number | null;
+  podsRunning: number;
+  podsCapacity: number;
+  restartsRecent: number;
+  conditions: string[];
+}
+
 export interface ClusterSummaryView {
   status: ClusterSummaryStatus;
   health: string | null;
@@ -25,6 +37,7 @@ export interface ClusterSummaryView {
   nodesReady: number | null;
   nodesTotal: number | null;
   openIncidents: number | null;
+  nodes: ClusterNodeSummaryView[];
 }
 
 const UNAVAILABLE: ClusterSummaryView = {
@@ -37,6 +50,7 @@ const UNAVAILABLE: ClusterSummaryView = {
   nodesReady: null,
   nodesTotal: null,
   openIncidents: null,
+  nodes: [],
 };
 
 export function toClusterSummaryView(detail: ClusterNodesSummary): ClusterSummaryView {
@@ -52,6 +66,17 @@ export function toClusterSummaryView(detail: ClusterNodesSummary): ClusterSummar
     nodesReady: detail.nodes.filter((node) => node.ready).length,
     nodesTotal: detail.nodes.length,
     openIncidents: null,
+    nodes: detail.nodes.map((node) => ({
+      name: node.name,
+      ready: node.ready,
+      health: node.health,
+      cpuPct: node.cpu_pct,
+      memPct: node.mem_pct,
+      podsRunning: node.pods_running,
+      podsCapacity: node.pods_capacity,
+      restartsRecent: node.restarts_recent,
+      conditions: node.conditions,
+    })),
   };
 }
 

@@ -1,53 +1,161 @@
 // ── 홈 위젯 보드 부품 (D21 · Surface Spec §2) — 데모 구현.
 // WidgetFrame 하나 + 시각 부품(KpiCard/RatioBar/MiniBars/Donut/RankList)만 존재한다.
 // 위젯별 자체 시각 신설 금지 — 제품 이식 시 shared/ui/charts/로 재구현되는 사양 원본.
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
-import { Info, ChevronRight, ChevronDown } from "lucide-react";
+import { ChevronRight, EllipsisVertical, Info, Pencil, Trash2 } from "lucide-react";
 import { UI, BLUE, HP, TINT, MONO, TYPE, SOFT, DUR, inkA, blueA, critA, okA, warnA, IDENT } from "./theme";
 
-// ── WidgetFrame — 유일한 위젯 껍데기: 제목 + ⓘ 툴팁 + `>` 딥링크(실 목적지만) + 접기 ──
-export function WidgetFrame({ title, info, onDeepLink, deepLabel, collapsed, onToggle, editing, onRemove, children }: {
-  title: string; info?: string; onDeepLink?: () => void; deepLabel?: string;
-  collapsed?: boolean; onToggle?: () => void; editing?: boolean; onRemove?: () => void;
+export const HOME_CARD_GRID_CLASS = "home-card-grid";
+export const HOME_CARD_GRID_ITEM_CLASS = "home-card-grid-item";
+export const DASHBOARD_WIDGET_GRID_CLASS = "dashboard-widget-grid";
+export const DASHBOARD_WIDGET_GRID_ITEM_CLASS = "dashboard-widget-grid-item";
+export type DashboardWidgetSpan = 1 | 2 | 3 | 4;
+
+export function homeCardGridStyle(narrow: boolean): React.CSSProperties {
+  return {
+    display: "grid",
+    gridTemplateColumns: narrow ? "minmax(0, 1fr)" : "repeat(3, minmax(0, 1fr))",
+    gridAutoFlow: "row",
+    alignItems: "stretch",
+    gap: 14,
+  };
+}
+
+export function homeCardGridItemStyle(narrow: boolean): React.CSSProperties {
+  return {
+    gridColumn: "span 1",
+    minWidth: 0,
+    minHeight: 220,
+    aspectRatio: narrow ? "auto" : "3 / 2",
+    height: "100%",
+  };
+}
+
+export function dashboardWidgetGridStyle(): React.CSSProperties {
+  return {
+    display: "grid",
+    gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+    gridAutoRows: 220,
+    gridAutoFlow: "row dense",
+    alignItems: "stretch",
+    gap: 12,
+  };
+}
+
+export function dashboardWidgetItemStyle(span: DashboardWidgetSpan): React.CSSProperties {
+  return {
+    "--dashboard-widget-span": span,
+    "--dashboard-widget-span-medium": Math.min(span, 2),
+    minWidth: 0,
+    minHeight: 220,
+    height: 220,
+  } as React.CSSProperties;
+}
+
+// ── WidgetFrame — 제목/카드 직접 이동 + ⓘ 툴팁. 중복 CTA·접기 컨트롤 없음. ──
+export function WidgetFrame({ title, info, onDeepLink, editing, span, widgetType, widgetTypes, onSpanChange, onTypeChange, onEdit, onRemove, children }: {
+  title: string; info?: string; onDeepLink?: () => void;
+  editing?: boolean;
+  span?: DashboardWidgetSpan;
+  widgetType?: string;
+  widgetTypes?: { id: string; title: string }[];
+  onSpanChange?: (span: DashboardWidgetSpan) => void;
+  onTypeChange?: (type: string) => void;
+  onEdit?: () => void;
+  onRemove?: () => void;
   children: React.ReactNode;
 }) {
   const [tip, setTip] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLSpanElement>(null);
+  const hasMenu = !!(onSpanChange || onTypeChange || onEdit || onRemove);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const close = (event: MouseEvent) => {
+      if (!menuRef.current?.contains(event.target as Node)) setMenuOpen(false);
+    };
+    const escape = (event: KeyboardEvent) => { if (event.key === "Escape") setMenuOpen(false); };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [menuOpen]);
+  const navigable = onDeepLink !== undefined && !editing;
+  const onCardClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (!navigable) return;
+    const target = event.target;
+    if (target instanceof Element && target.closest("button, a, input, select, textarea, [role='button'], [role='link']")) return;
+    onDeepLink();
+  };
   return (
     // 편집 = 카드 전체가 드래그 핸들(버튼식 이동 없음) — 파란 점선 보더가 편집 상태 신호
-    <div style={{ background: UI.card, border: editing ? `1.5px dashed ${blueA(0.5)}` : `1px solid ${UI.line}`, borderRadius: 14, padding: "13px 15px", display: "flex", flexDirection: "column", gap: 11, minWidth: 0, position: "relative", transition: "border-color .2s", height: "100%", boxSizing: "border-box" }}>
+    <div onClick={onCardClick} style={{ background: UI.card, border: editing ? `1.5px dashed ${blueA(0.5)}` : `1px solid ${UI.line}`, borderRadius: 14, padding: "13px 15px", display: "flex", flexDirection: "column", gap: 11, minWidth: 0, position: "relative", transition: "border-color .2s", height: "100%", boxSizing: "border-box", cursor: navigable ? "pointer" : editing ? "grab" : undefined }}>
       <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
         {/* 제목은 좁은 폭에서 한글이 글자 단위(세로줄)로 붕괴하지 않도록 nowrap+말줄임으로 잘라낸다.
             (CSS word-break: normal은 CJK를 임의 글자에서 끊으므로 nowrap이 필요하다.) */}
-        <span style={{ fontSize: TYPE.body, fontWeight: 700, letterSpacing: "-0.01em", color: UI.ink, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</span>
+        {navigable ? (
+          <button type="button" onClick={onDeepLink} aria-label={`${title} 화면으로 이동`}
+            style={{ border: "none", background: "transparent", padding: 0, textAlign: "left", cursor: "pointer", fontSize: TYPE.body, fontWeight: 700, letterSpacing: "-0.01em", color: UI.ink, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {title}
+          </button>
+        ) : (
+          <span style={{ fontSize: TYPE.body, fontWeight: 700, letterSpacing: "-0.01em", color: UI.ink, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</span>
+        )}
         {info && (
-          <span style={{ position: "relative", display: "grid", flexShrink: 0 }} onMouseEnter={() => setTip(true)} onMouseLeave={() => setTip(false)}>
+          <span style={{ position: "relative", display: "grid", flexShrink: 0 }} onClick={(event) => event.stopPropagation()} onMouseEnter={() => setTip(true)} onMouseLeave={() => setTip(false)}>
             <Info size={12.5} style={{ color: UI.ink3, cursor: "help" }} />
             {tip && (
               <span style={{ position: "absolute", top: 20, left: -8, zIndex: 30, width: 210, background: inkA(0.92), color: UI.card, fontSize: TYPE.caption, lineHeight: 1.5, borderRadius: 8, padding: "7px 10px", backdropFilter: "blur(8px)" }}>{info}</span>
             )}
           </span>
         )}
-        <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
-          {editing && onRemove && (
-            <button onClick={onRemove} title="위젯 숨기기"
-              style={{ width: 22, height: 22, borderRadius: 999, border: "none", background: critA(0.12), color: HP.crit, cursor: "pointer", fontSize: TYPE.body, lineHeight: 1, fontWeight: 700 }}>×</button>
-          )}
-          {onToggle && (
-            <button onClick={onToggle} title={collapsed ? "펼치기" : "접기"} className="gnav"
-              style={{ width: 22, height: 22, borderRadius: 999, border: "none", background: inkA(0.05), color: UI.ink3, cursor: "pointer", display: "grid", placeItems: "center" }}>
-              <ChevronDown size={13} style={{ transform: collapsed ? "rotate(-90deg)" : "none", transition: "transform .18s" }} />
+        <span ref={menuRef} style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 4, flexShrink: 0, position: "relative" }} onClick={(event) => event.stopPropagation()}>
+          {hasMenu && (
+            <button type="button" aria-label={`${title} 위젯 메뉴`} aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}
+              style={{ width: 26, height: 26, display: "grid", placeItems: "center", borderRadius: 7, border: "none", background: menuOpen ? inkA(0.06) : "transparent", color: UI.ink3, cursor: "pointer" }}>
+              <EllipsisVertical size={15} />
             </button>
           )}
-          {onDeepLink && (
-            <button onClick={onDeepLink} className="gnav" title={deepLabel}
-              style={{ display: "flex", alignItems: "center", gap: 2, border: "none", background: "transparent", color: BLUE, fontSize: TYPE.caption2, fontWeight: 700, cursor: "pointer", padding: "2px 4px", borderRadius: 6 }}>
-              {deepLabel}<ChevronRight size={12} />
-            </button>
+          {menuOpen && (
+            <span role="menu" aria-label={`${title} 위젯 설정`} style={{ position: "absolute", top: 30, right: 0, zIndex: 45, width: 214, display: "flex", flexDirection: "column", gap: 8, padding: 9, borderRadius: 11, border: `1px solid ${UI.line}`, background: UI.card, boxShadow: `0 16px 40px -18px ${inkA(0.35)}` }}>
+              {onSpanChange && (
+                <span style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                  <span style={{ fontSize: TYPE.micro, fontWeight: 700, color: UI.ink3 }}>너비</span>
+                  <span style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 4 }}>
+                    {([1, 2, 3, 4] as const).map((nextSpan) => (
+                      <button key={nextSpan} type="button" aria-label={`${title} 너비 ${nextSpan}/4`} aria-pressed={span === nextSpan}
+                        onClick={() => { onSpanChange(nextSpan); setMenuOpen(false); }}
+                        style={{ border: `1px solid ${span === nextSpan ? blueA(0.5) : UI.line}`, borderRadius: 7, background: span === nextSpan ? blueA(0.08) : UI.card, color: span === nextSpan ? BLUE : UI.ink2, padding: "5px 0", fontSize: TYPE.caption2, fontWeight: 700, cursor: "pointer" }}>{nextSpan}/4</button>
+                    ))}
+                  </span>
+                </span>
+              )}
+              {onTypeChange && widgetTypes && widgetTypes.length > 0 && (
+                <label style={{ display: "flex", flexDirection: "column", gap: 5, fontSize: TYPE.micro, fontWeight: 700, color: UI.ink3 }}>
+                  위젯 유형
+                  <select aria-label={`${title} 위젯 유형`} value={widgetType} onChange={(event) => { onTypeChange(event.target.value); setMenuOpen(false); }}
+                    style={{ minWidth: 0, width: "100%", border: `1px solid ${UI.line}`, borderRadius: 7, background: UI.card, color: UI.ink, padding: "6px 8px", fontSize: TYPE.caption2 }}>
+                    {widgetTypes.map((type) => <option key={type.id} value={type.id}>{type.title}</option>)}
+                  </select>
+                </label>
+              )}
+              {(onEdit || onRemove) && <span style={{ height: 1, background: UI.line2 }} />}
+              {onEdit && (
+                <button type="button" role="menuitem" onClick={() => { onEdit(); setMenuOpen(false); }}
+                  style={{ display: "flex", alignItems: "center", gap: 7, border: "none", borderRadius: 7, background: "transparent", color: UI.ink2, padding: "6px 7px", textAlign: "left", fontSize: TYPE.caption2, fontWeight: 600, cursor: "pointer" }}><Pencil size={13} />레이아웃 편집</button>
+              )}
+              {onRemove && (
+                <button type="button" role="menuitem" onClick={() => { onRemove(); setMenuOpen(false); }}
+                  style={{ display: "flex", alignItems: "center", gap: 7, border: "none", borderRadius: 7, background: "transparent", color: HP.crit, padding: "6px 7px", textAlign: "left", fontSize: TYPE.caption2, fontWeight: 600, cursor: "pointer" }}><Trash2 size={13} />위젯 삭제</button>
+              )}
+            </span>
           )}
         </span>
       </div>
-      {!collapsed && <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", minHeight: 0 }}>{children}</div>}
+      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", minHeight: 0 }}>{children}</div>
     </div>
   );
 }
@@ -128,23 +236,23 @@ export function Donut({ items, onPick }: { items: { label: string; value: number
     };
   });
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-      <svg width={88} height={88} viewBox="0 0 88 88" style={{ flexShrink: 0, transform: "rotate(-90deg)" }}>
+    <div data-donut-layout="responsive" style={{ display: "grid", gridTemplateColumns: "minmax(64px, 80px) minmax(0, 1fr)", alignItems: "center", gap: "clamp(8px, 3vw, 14px)", width: "100%", minWidth: 0 }}>
+      <svg width={80} height={80} viewBox="0 0 88 88" style={{ display: "block", width: "100%", maxWidth: 80, height: "auto", minWidth: 0, transform: "rotate(-90deg)" }}>
         {segments.map(({ it, i, dash, off }) => {
           return <motion.circle key={it.label} cx={44} cy={44} r={R} fill="none" strokeWidth={11} strokeLinecap="round"
             stroke={DONUT_COLORS[i % DONUT_COLORS.length]} initial={{ strokeDasharray: `0 ${C}` }} animate={{ strokeDasharray: dash }} transition={{ duration: DUR.draw, ease: "easeInOut", delay: i * 0.08 }} strokeDashoffset={off} />;
         })}
       </svg>
-      <div style={{ display: "flex", flexDirection: "column", gap: 5, minWidth: 0, flex: 1 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 5, minWidth: 0, width: "100%" }}>
         {items.map((it, i) => {
           const pickable = !!onPick && it.pick !== false;
           return (
           <button key={it.label} onClick={pickable ? () => onPick!(it.label) : undefined} disabled={!pickable} className={pickable ? "rrow" : undefined}
-            style={{ display: "flex", alignItems: "center", gap: 7, fontSize: TYPE.label, color: UI.ink2, border: "none", background: "transparent", padding: "1px 4px", borderRadius: 6, cursor: pickable ? "pointer" : "default", textAlign: "left", minWidth: 0 }}>
+            style={{ display: "flex", alignItems: "center", gap: 7, width: "100%", maxWidth: "100%", fontSize: TYPE.label, color: UI.ink2, border: "none", background: "transparent", padding: "1px 4px", borderRadius: 6, cursor: pickable ? "pointer" : "default", textAlign: "left", minWidth: 0 }}>
             <span style={{ width: 8, height: 8, borderRadius: 999, background: DONUT_COLORS[i % DONUT_COLORS.length], flexShrink: 0 }} />
-            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.label}</span>
-            <b style={{ marginLeft: "auto", fontFamily: MONO, color: UI.ink, fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{it.value}</b>
-            <span style={{ fontFamily: MONO, fontSize: TYPE.caption, color: UI.ink3, width: 34, textAlign: "right", flexShrink: 0 }}>{Math.round((it.value / total) * 100)}%</span>
+            <span title={it.label} style={{ flex: "1 1 auto", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.label}</span>
+            <b style={{ width: 44, marginLeft: "auto", textAlign: "right", fontFamily: MONO, color: UI.ink, fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{it.value}</b>
+            <span style={{ fontFamily: MONO, fontSize: TYPE.caption, color: UI.ink3, width: 38, textAlign: "right", flexShrink: 0 }}>{Math.round((it.value / total) * 100)}%</span>
           </button>
           );
         })}
@@ -159,7 +267,7 @@ export function RankList({ rows, onPick }: {
   onPick?: (id: string) => void;
 }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+    <div data-rank-list-layout="contained" style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minHeight: 0, maxHeight: "100%", overflowY: "auto", overscrollBehavior: "contain", scrollbarGutter: "stable" }}>
       {rows.map((r, i) => (
         <motion.button key={r.id} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} transition={{ ...SOFT, delay: i * 0.05 }}
           onClick={onPick ? () => onPick(r.id) : undefined} disabled={!onPick} className={onPick ? "rrow" : undefined}
