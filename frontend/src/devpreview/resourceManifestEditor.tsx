@@ -17,7 +17,7 @@ import { BLUE, HP, MONO, TINT, TYPE, UI, inkA } from "./theme";
 
 type Phase = "loading" | "ready" | "previewing" | "submitting" | "failed";
 
-export function LiveResourceManifestEditor({ resourceId }: { resourceId: string }) {
+export function LiveResourceManifestEditor({ resourceId, resolving = false }: { resourceId: string; resolving?: boolean }) {
   const [phase, setPhase] = useState<Phase>("loading");
   const [source, setSource] = useState<ResourceManifestSourceEndpoint | null>(null);
   const [applicationId, setApplicationId] = useState("");
@@ -55,6 +55,7 @@ export function LiveResourceManifestEditor({ resourceId }: { resourceId: string 
 
   useEffect(() => {
     controller.current?.abort();
+    if (!resourceId) return;
     const next = new AbortController();
     controller.current = next;
     void (async () => {
@@ -144,6 +145,9 @@ export function LiveResourceManifestEditor({ resourceId }: { resourceId: string 
     }
   };
 
+  if (!resourceId && resolving) {
+    return <ManifestNotice title="YAML 정체성 확인 중">서버가 발급한 inventory key를 정확한 리소스 정체성으로 조회하고 있습니다.</ManifestNotice>;
+  }
   if (!resourceId) {
     return <ManifestNotice tone="warn" title="YAML 정체성 확인 불가">이 행에는 서버가 발급한 inventory key가 없습니다.</ManifestNotice>;
   }

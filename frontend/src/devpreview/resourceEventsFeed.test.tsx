@@ -18,7 +18,7 @@ describe("resource events feed", () => {
 
   it("loads involved-object events from resource-detail", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
-      cluster_id: "game-server", identity: {}, resource: { ...resource, kind: "Pod", resource_type: "pod", name: "checkout-1" }, related: {}, events: [resource],
+      cluster_id: "game-server", identity: {}, resource: { ...resource, kind: "Pod", resource_type: "pod", name: "checkout-1" }, provider_detail: null, access: null, related: {}, events: [resource],
     }), { status: 200, headers: { "content-type": "application/json" } }));
     const rendered = renderHook(() => useResourceEvents("game-server", "Pod", "shop", "checkout-1"));
     await waitFor(() => expect(rendered.result.current.status).toBe("ready"));

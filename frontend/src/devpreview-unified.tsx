@@ -34,6 +34,7 @@ import { useResourceUsageSeries } from "./devpreview/resourceUsageFeed";
 import { useResourceAccess } from "./devpreview/resourceAccessFeed";
 import { ResourceAccessPanel } from "./devpreview/resourceAccessPanel";
 import { useResourceEvents } from "./devpreview/resourceEventsFeed";
+import { useResourceIdentity } from "./devpreview/resourceIdentityFeed";
 import { useNarrowViewport } from "./devpreview/useNarrowViewport";
 import { operationalMessageLabel, reasonLabel, statusLabel, isCriticalStatus } from "./devpreview/statusLabel";
 import { LiveResourceManifestEditor } from "./devpreview/resourceManifestEditor";
@@ -462,7 +463,16 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
   const phase = row.status != null && String(row.status) ? statusLabel(String(row.status)) : "관측 안 됨";
   const healthVal = row.health != null && String(row.health) ? statusLabel(String(row.health)) : "관측 안 됨";
   const clusterVal = row.cluster != null && String(row.cluster) ? String(row.cluster) : "관측 안 됨";
-  const resourceId = row._key != null ? String(row._key) : "";
+  const observedResourceId = row._key != null ? String(row._key) : "";
+  const resolvedIdentity = useResourceIdentity(
+    observedResourceId === "",
+    row.cluster != null && String(row.cluster) ? String(row.cluster) : null,
+    row.resource_type != null && String(row.resource_type) ? String(row.resource_type) : kindToResourceType(kind.id),
+    kind.id,
+    row.ns != null && String(row.ns) ? String(row.ns) : null,
+    name,
+  );
+  const resourceId = observedResourceId || resolvedIdentity.resourceId;
   // M13: 워크로드 상세는 `GET /api/workloads/{kind}/{ns}/{name}`로 실제 replicas·health·
   // labels·pods를 관측한다(이전 "계약 없음" 오판 교정). 미지원 kind/빈 스코프는 idle이라
   // 기존 honest 일반 뷰가 그대로 유지된다.
@@ -755,7 +765,7 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
           )}
 
           {tab === "yaml" && (
-            <LiveResourceManifestEditor resourceId={resourceId} />
+            <LiveResourceManifestEditor resourceId={resourceId} resolving={observedResourceId === "" && resolvedIdentity.status === "loading"} />
           )}
 
 
@@ -1435,7 +1445,12 @@ function App() {
     if (!resourceKind) return;
     setDetail({
       kind: resourceKind,
-      row: { _key: node.id, cluster: node.clusterId, name: node.name, ns: node.namespace ?? undefined },
+      row: {
+        cluster: node.clusterId,
+        name: node.name,
+        ns: node.namespace ?? undefined,
+        resource_type: node.resourceType,
+      },
     });
   };
   // 버스 구독은 마운트 1회만 — 최신 openRef를 ref로 참조해 재구독 없이 호출한다.

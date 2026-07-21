@@ -27,6 +27,9 @@ export function ResourceAccessPanel({ view }: { view: ResourceAccessView }) {
     return <button type="button" onClick={view.retry} style={{ alignItems: "center", background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 8, color: BLUE, cursor: "pointer", display: "inline-flex", fontSize: TYPE.label2, fontWeight: 700, gap: 7, padding: "7px 11px" }}><RefreshCw size={12} />권한 다시 불러오기</button>;
   }
   const data = view.data;
+  if (data.type === "unavailable") {
+    return <div style={{ color: UI.ink3, fontSize: TYPE.label }}>권한 인벤토리를 확인할 수 없습니다 · {data.reason_codes.join(", ")}</div>;
+  }
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
       <div style={{ alignItems: "center", color: UI.ink2, display: "flex", fontSize: TYPE.label2, gap: 7, marginBottom: 2 }}>

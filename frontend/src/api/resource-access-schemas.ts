@@ -75,10 +75,21 @@ export const kubernetesNamespaceAccessResponseSchema = z.strictObject({
   service_account_count: z.number().int().nonnegative(),
 });
 
+export const kubernetesAccessUnavailableResponseSchema = z.strictObject({
+  type: z.literal("unavailable"),
+  reason_codes: z.array(nonEmpty).min(1),
+});
+
+/** Exact runtime discriminator for `ResourceAccessDetail`. */
+export const kubernetesResourceAccessResponseSchema = z.discriminatedUnion("type", [
+  kubernetesSubjectAccessResponseSchema,
+  kubernetesRoleAccessResponseSchema,
+  kubernetesNamespaceAccessResponseSchema,
+  kubernetesAccessUnavailableResponseSchema,
+]);
+
 export type KubernetesSubjectAccessResponse = z.infer<typeof kubernetesSubjectAccessResponseSchema>;
 export type KubernetesRoleAccessResponse = z.infer<typeof kubernetesRoleAccessResponseSchema>;
 export type KubernetesNamespaceAccessResponse = z.infer<typeof kubernetesNamespaceAccessResponseSchema>;
-export type KubernetesResourceAccessResponse =
-  | KubernetesSubjectAccessResponse
-  | KubernetesRoleAccessResponse
-  | KubernetesNamespaceAccessResponse;
+export type KubernetesAccessUnavailableResponse = z.infer<typeof kubernetesAccessUnavailableResponseSchema>;
+export type KubernetesResourceAccessResponse = z.infer<typeof kubernetesResourceAccessResponseSchema>;

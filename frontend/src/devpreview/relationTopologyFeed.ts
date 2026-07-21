@@ -30,6 +30,7 @@ export interface RelationNodeView {
   clusterId: string;
   name: string;
   kind: string;
+  resourceType: string;
   namespace: string | null;
   category: RelationNodeCategory;
   status: string;
@@ -108,6 +109,7 @@ export function toRelationTopologyView(
     clusterId: node.identity.cluster_id,
     name: node.identity.name,
     kind: node.identity.kind,
+    resourceType: node.identity.resource_type,
     namespace: node.identity.namespace,
     category: node.category,
     status: node.status,

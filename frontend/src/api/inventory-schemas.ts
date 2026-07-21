@@ -1,7 +1,29 @@
 import { z } from "zod";
 
+import { kubernetesResourceAccessResponseSchema } from "./resource-access-schemas";
+
 const nullableStringSchema = z.string().nullable();
 const unknownRecordSchema = z.record(z.string(), z.unknown());
+
+const resourceProviderTypeSchema = z.enum([
+  "aws-machine", "aws-managed-cluster", "aws-managed-control-plane", "aws-managed-machine-pool",
+  "azure-machine", "azure-managed-control-plane", "azure-managed-machine-pool",
+  "capi-cluster", "capi-kubeadm-control-plane", "capi-machine", "capi-machine-deployment",
+  "capi-machine-health-check", "capi-machine-pool", "capi-machine-set", "certificate",
+  "certificate-request", "cluster-compliance-report", "cron-workflow", "crossplane-composite",
+  "crossplane-managed-resource", "external-secret", "gateway-class", "gcp-machine",
+  "gcp-managed-control-plane", "gcp-managed-machine-pool", "grpc-route", "http-route", "job",
+  "karpenter-ec2-node-class", "karpenter-node-claim", "karpenter-node-pool", "keda-scaled-job",
+  "keda-scaled-object", "persistent-volume-claim", "prometheus-rule", "sbom-report",
+  "sealed-secret", "secret", "secret-store", "tcp-route", "tls-route", "vulnerability-report",
+  "workflow",
+]);
+
+// Provider별 중첩 projection은 매우 넓지만 최상위 discriminator는 서버 union과 정확히
+// 일치시킨다. 알 수 없는 provider type이나 비객체 payload는 런타임에서 즉시 거부한다.
+const resourceProviderDetailSchema = z.object({
+  type: resourceProviderTypeSchema,
+}).catchall(z.unknown());
 
 /**
  * Runtime contract for `InventoryResourceResponse` from
@@ -45,11 +67,10 @@ export const inventoryResourceDetailSchema = z.strictObject({
   cluster_id: z.string(),
   identity: unknownRecordSchema,
   resource: inventoryResourceSchema,
-  // Gateway detail 계약은 provider별 상세와 접근 제어 projection을 함께 반환한다.
-  // 각 기능 전용 schema가 좁히기 전까지는 opaque payload로 보존하되, strictObject가
-  // 실제 응답의 두 필드를 extra key로 거부하지 않도록 명시한다.
-  provider_detail: z.unknown().nullable().optional(),
-  access: z.unknown().nullable().optional(),
+  // Gateway detail 계약에서 두 필드는 항상 존재하며 값만 nullable이다. provider는
+  // 서버의 discriminator 집합을, access는 네 변형 전체를 런타임에서 검증한다.
+  provider_detail: resourceProviderDetailSchema.nullable(),
+  access: kubernetesResourceAccessResponseSchema.nullable(),
   related: z.record(z.string(), z.array(inventoryResourceSchema)),
   events: z.array(inventoryResourceSchema),
 });

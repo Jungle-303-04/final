@@ -130,6 +130,47 @@ describe("inventory resource API", () => {
     } satisfies Partial<ApiError>);
   });
 
+  it("requires nullable provider/access fields and validates their discriminators", async () => {
+    const base = {
+      cluster_id: "cluster-1",
+      identity: { resource_type: "pod", kind: "Pod", name: "api-abc", namespace: "default" },
+      resource: RESOURCE,
+      provider_detail: null,
+      access: null,
+      related: {},
+      events: [],
+    };
+    const missingProvider = { ...base } as Partial<typeof base>;
+    delete missingProvider.provider_detail;
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(jsonResponse(missingProvider))
+      .mockResolvedValueOnce(jsonResponse({ ...base, provider_detail: { type: "invented-provider" } }))
+      .mockResolvedValueOnce(jsonResponse({ ...base, access: { type: "invented-access" } }));
+
+    const request = () => getInventoryResourceDetail("cluster-1", {
+      resourceType: "pod", kind: "Pod", name: "api-abc", namespace: "default",
+    });
+    await expect(request()).rejects.toMatchObject({ kind: "invalid-payload" });
+    await expect(request()).rejects.toMatchObject({ kind: "invalid-payload" });
+    await expect(request()).rejects.toMatchObject({ kind: "invalid-payload" });
+  });
+
+  it("accepts the explicit unavailable access projection", async () => {
+    const payload = {
+      cluster_id: "cluster-1",
+      identity: { resource_type: "pod", kind: "Pod", name: "api-abc", namespace: "default" },
+      resource: RESOURCE,
+      provider_detail: { type: "aws-machine", instance_id: "i-123" },
+      access: { type: "unavailable", reason_codes: ["rbac_not_observed"] },
+      related: {},
+      events: [],
+    };
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse(payload));
+    await expect(getInventoryResourceDetail("cluster-1", {
+      resourceType: "pod", kind: "Pod", name: "api-abc", namespace: "default",
+    })).resolves.toEqual(payload);
+  });
+
   it("preserves a missing resource response as a not-found API error", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       jsonResponse({ detail: "resource not found" }, 404),
