@@ -238,21 +238,28 @@ export function useClusterConnectionStatus(clusterId: string | null): Connection
 
   useEffect(() => {
     if (!clusterId) return;
-    const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | null = null;
     let cancelled = false;
     // 마지막 관측이 아직 waiting이라 추가 폴링이 필요한지 여부. 백그라운드 탭에서는
     // 폴링을 멈추고(visibility-gate), 화면이 다시 보이면 즉시 1회 재조회해 이어간다.
-    let waiting = false;
+    let waiting = true;
+    let requestInFlight = false;
+    let requestController: AbortController | null = null;
+    let requestRevision = 0;
 
     const schedule = () => {
       if (timer !== null || document.hidden) return;
-      timer = setTimeout(() => { timer = null; poll(); }, POLL_INTERVAL_MS);
+      timer = setTimeout(() => { timer = null; void poll(); }, POLL_INTERVAL_MS);
     };
-    const poll = () => {
-      void getClusterConnectStatus(clusterId, controller.signal)
+    const poll = async () => {
+      if (cancelled || document.hidden || requestInFlight) return;
+      requestInFlight = true;
+      const revision = ++requestRevision;
+      const controller = new AbortController();
+      requestController = controller;
+      await getClusterConnectStatus(clusterId, controller.signal)
         .then((response) => {
-          if (cancelled || controller.signal.aborted) return;
+          if (cancelled || controller.signal.aborted || revision !== requestRevision) return;
           setView({
             status: "ready",
             connection: response.status,
@@ -263,21 +270,34 @@ export function useClusterConnectionStatus(clusterId: string | null): Connection
           if (waiting) schedule();
         })
         .catch((cause: unknown) => {
-          if (cancelled || controller.signal.aborted || isAbortError(cause)) return;
+          if (cancelled || controller.signal.aborted || revision !== requestRevision || isAbortError(cause)) return;
           setView((prev) => ({ ...prev, status: "error" }));
         });
+      if (revision === requestRevision) {
+        requestInFlight = false;
+        requestController = null;
+      }
     };
     const onVisibility = () => {
-      if (!document.hidden && waiting && timer === null) poll();
+      if (document.hidden) {
+        if (timer !== null) { clearTimeout(timer); timer = null; }
+        requestRevision += 1;
+        requestController?.abort();
+        requestController = null;
+        requestInFlight = false;
+        return;
+      }
+      if (waiting && timer === null) void poll();
     };
     document.addEventListener("visibilitychange", onVisibility);
-    poll();
+    void poll();
 
     return () => {
       cancelled = true;
       if (timer) clearTimeout(timer);
       document.removeEventListener("visibilitychange", onVisibility);
-      controller.abort();
+      requestRevision += 1;
+      requestController?.abort();
     };
   }, [clusterId]);
 

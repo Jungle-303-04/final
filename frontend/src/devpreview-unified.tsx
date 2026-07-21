@@ -33,6 +33,7 @@ import { useWorkloadDetail } from "./devpreview/workloadDetailFeed";
 import { useResourceUsageSeries } from "./devpreview/resourceUsageFeed";
 import { useResourceAccess } from "./devpreview/resourceAccessFeed";
 import { ResourceAccessPanel } from "./devpreview/resourceAccessPanel";
+import { useResourceEvents } from "./devpreview/resourceEventsFeed";
 import { useNarrowViewport } from "./devpreview/useNarrowViewport";
 import { operationalMessageLabel, reasonLabel, statusLabel, isCriticalStatus } from "./devpreview/statusLabel";
 import { LiveResourceManifestEditor } from "./devpreview/resourceManifestEditor";
@@ -485,6 +486,12 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
     row.ns != null && String(row.ns) ? String(row.ns) : null,
     name,
   );
+  const resourceEvents = useResourceEvents(
+    tab === "events" && row.cluster != null && String(row.cluster) ? String(row.cluster) : null,
+    kind.id,
+    row.ns != null && String(row.ns) ? String(row.ns) : null,
+    name,
+  );
   // 드로어 폭 — 왼쪽 가장자리 드래그로 조절 (전체 화면일 땐 비활성)
   const [dw, setDw] = useState(560);
   const [dwDragging, setDwDragging] = useState(false);
@@ -751,17 +758,20 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
 
           {tab === "events" && (
             <div style={{ padding: "12px 0" }}>
-              {/* M16: 워크로드 상세 계약의 관측 이벤트를 렌더한다. 미지원 kind는 honest 빈상태. */}
-              {wd.status === "idle" ? <Empty>관측 안 됨 — 이 리소스의 이벤트 계약이 없습니다.</Empty>
-                : wd.status === "loading" ? <Empty>불러오는 중…</Empty>
-                : wd.status === "error" ? <RetryNote onRetry={wd.retry} label="이벤트를 불러오지 못했습니다." />
-                : wd.events.length === 0 ? <Empty>최근 관측된 이벤트가 없습니다.{wd.eventsAvailability === "partial" ? " (부분 관측)" : ""}</Empty>
+              {/* M16: 모든 Events 탭은 resource-detail의 involved-object 이벤트 계약을 사용한다. */}
+              {resourceEvents.status === "idle" ? <Empty>이 리소스의 이벤트 범위를 확인할 수 없습니다.</Empty>
+                : resourceEvents.status === "loading" ? <Empty>불러오는 중…</Empty>
+                : resourceEvents.status === "error" ? <RetryNote onRetry={resourceEvents.retry} label="이벤트를 불러오지 못했습니다." />
+                : resourceEvents.status === "unavailable" ? <Empty>이 리소스는 현재 인벤토리에서 관측되지 않습니다.</Empty>
+                : resourceEvents.items.length === 0 ? <Empty>최근 관측된 이벤트가 없습니다.</Empty>
                 : (<div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-                    {wd.eventsAvailability === "partial" && <div style={{ fontSize: TYPE.caption2, color: UI.ink3, marginBottom: 3 }}>일부 범위만 관측된 부분 이벤트입니다.</div>}
-                    {wd.events.map((e, i) => (
-                      <div key={`${e.reason ?? "ev"}-${i}`} style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, border: `1px solid ${UI.line2}`, background: UI.bg2, borderRadius: 8, padding: "8px 12px" }}>
-                        <span style={{ fontSize: TYPE.label, color: UI.ink }}>{statusLabel(e.reason)}{e.type ? ` · ${statusLabel(e.type)}` : ""}{e.count != null && e.count > 1 ? ` ×${e.count}` : ""}</span>
-                        {e.lastAt && <span style={{ fontSize: TYPE.caption2, color: UI.ink3, flexShrink: 0 }}>{e.lastAt.replace("T", " ").slice(0, 16)}</span>}
+                    {resourceEvents.items.map((event) => (
+                      <div key={event.id} style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, border: `1px solid ${UI.line2}`, background: UI.bg2, borderRadius: 8, padding: "8px 12px" }}>
+                        <span style={{ minWidth: 0 }}>
+                          <span style={{ display: "block", fontSize: TYPE.label, color: UI.ink }}>{statusLabel(event.reason)}{event.type ? ` · ${statusLabel(event.type)}` : ""}{event.count != null && event.count > 1 ? ` ×${event.count}` : ""}</span>
+                          {event.message && <span style={{ color: UI.ink3, display: "block", fontSize: TYPE.caption2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{event.message}</span>}
+                        </span>
+                        {event.lastAt && <span style={{ fontSize: TYPE.caption2, color: UI.ink3, flexShrink: 0 }}>{event.lastAt.replace("T", " ").slice(0, 16)}</span>}
                       </div>
                     ))}
                   </div>)}
