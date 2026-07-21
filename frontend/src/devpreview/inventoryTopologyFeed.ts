@@ -75,6 +75,10 @@ const CACHE_TTL_MS = 60_000;
 const PARTIAL_CACHE_TTL_MS = 60_000;
 const ERROR_CACHE_TTL_MS = 30_000;
 const STRICT_MODE_GRACE_MS = 50;
+// The physical topology projection is materially heavier than node-summary.
+// Bound delta-driven reconciliation to the same cadence as its cache instead
+// of starting another database snapshot every five seconds.
+const LIVE_REVALIDATION_MIN_MS = CACHE_TTL_MS;
 
 const EMPTY_READY: ClusterTopologyView = {
   status: "ready",
@@ -327,8 +331,14 @@ function scheduleClusterRefresh(
  * 실시간 신호 간격보다 길어도 화면이 영원히 loading에 머무르지 않는다.
  */
 function invalidateClusterTopology(clusterId: string): void {
-  cache.delete(clusterId);
+  const hadPublishedView = cache.has(clusterId);
   const channel = channels.get(clusterId);
+  // The initial canonical request is already reading the latest projection.
+  // A WS frame arriving before that first response must not guarantee a second
+  // back-to-back heavy query. The regular one-minute reconciliation covers any
+  // race after the first observed response is published.
+  if (channel !== undefined && channel.controller !== null && !hadPublishedView) return;
+  cache.delete(clusterId);
   if (channel === undefined) return;
   channel.pendingInvalidation = true;
   if (channel.refreshTimer !== null) {
@@ -358,23 +368,34 @@ export function useClusterTopologies(
   const [views, setViews] = useState<Record<string, ClusterTopologyView>>(() => initialViews(ids));
   // 실시간 재검증: **단일 cluster 스코프(드릴)** 에서만 canonical WS를 구독한다. 다중 스코프
   // (홈)는 cluster마다 WS를 열거나 모든 cluster를 매 delta마다 재조회하지 않도록 구독하지
-  // 않는다(60Hz REST 방지). WS delta는 5초 bounded gate로 재검증 key가 되어 그 cluster만
-  // 무효화한다. WS 미가용 시 기존 채널의 60초 안전 폴링이 계속 동작한다.
+  // 않는다(60Hz REST 방지). WS delta는 물리 토폴로지 cache cadence에 맞춘 bounded gate로
+  // 재검증 key가 되어 그 cluster만 무효화한다. WS 미가용 시 기존 채널의 60초 안전 폴링이
+  // 계속 동작한다.
   const liveClusterId = ids.length === 1 ? ids[0] : null;
-  const liveRevalidation = useLiveClusterRevalidation(liveClusterId);
+  // The hook itself performs the initial REST read. Ignore the WS baseline and
+  // only revalidate for later deltas, at most once per topology cache window.
+  const liveRevalidation = useLiveClusterRevalidation(
+    liveClusterId,
+    LIVE_REVALIDATION_MIN_MS,
+    false,
+  );
 
   useEffect(() => {
-    // 실시간 신호가 있을 때 단일 cluster만 재검증한다. 직전 view는 응답 전까지 유지된다.
-    if (liveRevalidation > 0 && liveClusterId !== null) {
-      invalidateClusterTopology(liveClusterId);
-    }
     const unsubscribes = ids.map((id) => subscribeClusterTopology(id, (view) => {
       setViews((previous) => previous[id] === view
         ? previous
         : { ...previous, [id]: view });
     }));
     return () => unsubscribes.forEach((unsubscribe) => unsubscribe());
-  }, [ids, liveRevalidation, liveClusterId]);
+  }, [ids]);
+
+  useEffect(() => {
+    // Delta keys do not tear down and rebuild topology listeners. This avoids
+    // StrictMode disposal timers and subscription work on every live frame.
+    if (liveRevalidation > 0 && liveClusterId !== null) {
+      invalidateClusterTopology(liveClusterId);
+    }
+  }, [liveRevalidation, liveClusterId]);
 
   return Object.fromEntries(ids.map((id) => [
     id,

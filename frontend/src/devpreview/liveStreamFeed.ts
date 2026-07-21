@@ -233,6 +233,7 @@ export function createBoundedRevalidator(
 export function useLiveClusterRevalidation(
   clusterId: string | null,
   minIntervalMs: number = DEFAULT_REVALIDATION_MIN_MS,
+  revalidateOnSnapshot: boolean = true,
 ): number {
   const { workspaceId } = useDevpreviewContracts();
   const [key, setKey] = useState(0);
@@ -244,9 +245,10 @@ export function useLiveClusterRevalidation(
       workspaceKey,
       clusterKey,
       minIntervalMs,
+      revalidateOnSnapshot,
       setKey,
     );
-  }, [workspaceKey, clusterKey, minIntervalMs]);
+  }, [workspaceKey, clusterKey, minIntervalMs, revalidateOnSnapshot]);
   return key;
 }
 
@@ -269,9 +271,10 @@ function subscribeLiveClusterRevalidation(
   workspaceId: string,
   clusterId: string,
   minIntervalMs: number,
+  revalidateOnSnapshot: boolean,
   listener: (key: number) => void,
 ): () => void {
-  const channelKey = `${workspaceId}\u0000${clusterId}\u0000${minIntervalMs}`;
+  const channelKey = `${workspaceId}\u0000${clusterId}\u0000${minIntervalMs}\u0000${revalidateOnSnapshot ? "snapshot" : "delta"}`;
   let channel = liveRevalidationChannels.get(channelKey);
   if (channel === undefined) {
     const listeners = new Set<(key: number) => void>();
@@ -282,7 +285,10 @@ function subscribeLiveClusterRevalidation(
     });
     const handle = createLiveStreamCoalescer({
       subscription: { workspaceId, clusterId },
-      onSnapshot: () => revalidator.request(),
+      // Some consumers already issue a canonical initial snapshot request on
+      // mount. They can ignore the WS baseline and reserve REST revalidation
+      // for subsequent deltas, avoiding a guaranteed duplicate cold read.
+      onSnapshot: () => { if (revalidateOnSnapshot) revalidator.request(); },
       onBatch: () => revalidator.request(),
     });
     Object.assign(created, {

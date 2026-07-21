@@ -124,22 +124,22 @@ describe("useClusterTopology", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it("publishes an in-flight observed response and performs one follow-up after live invalidation", async () => {
-    let resolveStale: ((response: Response) => void) | undefined;
+  it("does not turn a cold in-flight response into a guaranteed duplicate topology read", async () => {
+    let resolveInitial: ((response: Response) => void) | undefined;
     let resolveFresh: ((response: Response) => void) | undefined;
     const fetchMock = vi.spyOn(globalThis, "fetch")
-      .mockImplementationOnce(() => new Promise<Response>((resolve) => { resolveStale = resolve; }))
+      .mockImplementationOnce(() => new Promise<Response>((resolve) => { resolveInitial = resolve; }))
       .mockImplementationOnce(() => new Promise<Response>((resolve) => { resolveFresh = resolve; }));
     const rendered = renderHook(() => useClusterTopology("cluster-a"));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     act(() => invalidateClusterTopologyForTests("cluster-a"));
     await act(async () => {
-      resolveStale?.(new Response(JSON.stringify({
+      resolveInitial?.(new Response(JSON.stringify({
         ...PHYSICAL_TOPOLOGY_ENDPOINT,
         servers: PHYSICAL_TOPOLOGY_ENDPOINT.servers.map((server) => ({
           ...server,
-          name: "stale-worker",
+          name: "initial-worker",
         })),
       }), { status: 200 }));
       await Promise.resolve();
@@ -147,8 +147,13 @@ describe("useClusterTopology", () => {
       await Promise.resolve();
     });
 
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(rendered.result.current.nodes[0]?.name).toBe("stale-worker");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(rendered.result.current.nodes[0]?.name).toBe("initial-worker");
+
+    // Once an observed view exists, a later delta still performs one bounded
+    // refresh and publishes the fresh result.
+    act(() => invalidateClusterTopologyForTests("cluster-a"));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
 
     await act(async () => {
       resolveFresh?.(new Response(JSON.stringify({

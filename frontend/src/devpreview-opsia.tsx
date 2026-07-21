@@ -5,7 +5,7 @@
 // no backfill: 계약이 노출하지 않는 값(CPU/MEM/용량/파드→노드 귀속 등)은 절대
 // 지어내지 않는다. 관측이 없으면 "관측 안 됨"/"관측된 리소스가 없습니다"를 렌더한다.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Activity, AlertTriangle, Box, ChevronLeft, ChevronRight, Clock3, Cpu, EllipsisVertical, ExternalLink, FileCog, Network, Plug, RotateCcw, Server, Settings, Unplug } from "lucide-react";
 import { UI, BLUE, HP, TINT, MONO, TYPE, SOFT, SPRING, PAGE, PRESENT_SCALE, DUR, inkA, blueA, LINE3, INK4, BRAND, cardA } from "./devpreview/theme";
 import { AwsIcon, GithubIcon } from "./devpreview/brandIcons";
@@ -43,6 +43,7 @@ type View = { level: "clusters" } | { level: "nodes"; cluster: string } | { leve
 export type MapScope = View;
 
 type TipData = { x: number; y: number; label: string; status: string; health: string } | null;
+const NODE_METRIC_ANIMATION_SECONDS = 0.28;
 
 // ── 커서 추적 툴팁 정보(노드/파드 공용) ─────────────────────────────
 function HealthChip({ health }: { health: string }) {
@@ -59,25 +60,64 @@ function HealthChip({ health }: { health: string }) {
 function ClusterMiniUsage({ label, value }: { label: string; value: number | null }) {
   // A null usage percentage is an honest "not observed" contract state — the
   // backend returned no `cpu_pct`/`mem_pct` sample. It must never be backfilled.
-  if (value === null) {
-    return (
-      <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-        <span style={{ width: 34, fontSize: TYPE.micro, fontWeight: 600, letterSpacing: "0.05em", color: UI.ink3, flexShrink: 0 }}>{label}</span>
-        <span style={{ flex: 1, height: 5, borderRadius: 999, background: inkA(0.05) }} />
-        <span style={{ textAlign: "right", fontSize: TYPE.micro, fontWeight: 600, color: UI.ink3, flexShrink: 0 }}>관측 안 됨</span>
-      </div>
-    );
-  }
+  // Keep the DOM geometry stable when a summary-backed shell is upgraded with
+  // its CPU/MEM sample. Only the compositor-driven scale changes; no bar width
+  // reflow or loading-to-ready element replacement is required.
+  const reducedMotion = useReducedMotion();
+  const observed = value !== null;
+  const normalized = Math.min(100, Math.max(0, value ?? 0));
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
       <span style={{ width: 34, fontSize: TYPE.micro, fontWeight: 600, letterSpacing: "0.05em", color: UI.ink3, flexShrink: 0 }}>{label}</span>
       <span style={{ flex: 1, height: 5, borderRadius: 999, background: inkA(0.07), overflow: "hidden" }}>
-        <motion.span initial={false} animate={{ width: `${value}%` }} transition={{ duration: DUR.meter, ease: "easeInOut" }}
-          style={{ display: "block", height: "100%", borderRadius: 999, background: value >= 90 ? HP.crit : value >= 75 ? HP.warn : HP.ok }} />
+        <motion.span
+          initial={false}
+          animate={{ scaleX: normalized / 100, opacity: observed ? 1 : 0 }}
+          transition={reducedMotion ? { duration: 0 } : { duration: NODE_METRIC_ANIMATION_SECONDS, ease: "easeOut" }}
+          style={{
+            display: "block", width: "100%", height: "100%", borderRadius: 999, transformOrigin: "left center",
+            background: normalized >= 90 ? HP.crit : normalized >= 75 ? HP.warn : HP.ok,
+          }}
+        />
       </span>
-      <span style={{ width: 38, textAlign: "right", fontSize: TYPE.label2, fontWeight: 700, fontFamily: MONO, color: UI.ink, fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{value}%</span>
+      <span style={{ width: 66, textAlign: "right", fontSize: observed ? TYPE.label2 : TYPE.micro, fontWeight: observed ? 700 : 600, fontFamily: observed ? MONO : undefined, color: observed ? UI.ink : UI.ink3, fontVariantNumeric: "tabular-nums", flexShrink: 0, whiteSpace: "nowrap" }}>
+        <AnimatedPercentageValue value={value} reducedMotion={Boolean(reducedMotion)} />
+      </span>
     </div>
   );
+}
+
+function AnimatedPercentageValue({ value, reducedMotion }: { value: number | null; reducedMotion: boolean }) {
+  const previousObserved = useRef<number | null>(null);
+  const [displayValue, setDisplayValue] = useState(0);
+
+  useEffect(() => {
+    if (value === null) {
+      previousObserved.current = null;
+      return;
+    }
+
+    const target = Math.min(100, Math.max(0, value));
+    const startValue = previousObserved.current ?? 0;
+    previousObserved.current = target;
+    if (reducedMotion || typeof window.requestAnimationFrame !== "function") return;
+
+    let frame = 0;
+    const startedAt = performance.now();
+    const durationMs = NODE_METRIC_ANIMATION_SECONDS * 1_000;
+    const update = (now: number) => {
+      const progress = Math.min(1, (now - startedAt) / durationMs);
+      const eased = 1 - (1 - progress) ** 3;
+      setDisplayValue(startValue + (target - startValue) * eased);
+      if (progress < 1) frame = window.requestAnimationFrame(update);
+    };
+    frame = window.requestAnimationFrame(update);
+    return () => window.cancelAnimationFrame(frame);
+  }, [reducedMotion, value]);
+
+  if (value === null) return <>관측 안 됨</>;
+  const rounded = Math.round((reducedMotion ? value : displayValue) * 10) / 10;
+  return <>{Number.isInteger(rounded) ? rounded.toFixed(0) : rounded.toFixed(1)}%</>;
 }
 
 function ClusterRow({ cl, summary, topology, onOpen }: {
@@ -373,7 +413,7 @@ export function NodeCard({ node, pods, problemPodCount, onOpen, onTip }: {
       onMouseLeave={() => onTip(null)}
       style={{
         display: "flex", flexDirection: "column", gap: 10, width: "100%", height: "100%", textAlign: "left", cursor: "pointer",
-        background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 16, padding: 16, boxShadow: "none", boxSizing: "border-box",
+        background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 16, padding: 16, boxShadow: "none", boxSizing: "border-box", overflow: "hidden", minHeight: 0,
       }}>
       <div style={{ display: "flex", alignItems: "flex-start", gap: 8, minWidth: 0 }}>
         <Server size={13} strokeWidth={2} style={{ color: UI.ink3, flexShrink: 0, marginTop: 2 }} />
@@ -426,20 +466,24 @@ type NodePodSlotState = "occupied" | "critical" | "pending" | "empty";
  * is itself observed evidence. Empty capacity is neutral and never fabricated.
  */
 export function NodePodSlotGrid({ node, pods }: { node: InvNode; pods: readonly InvPod[] }) {
+  const reducedMotion = useReducedMotion();
   const capacity = node.totalPodCount;
   const occupied = node.matchedPodCount;
   if (capacity === null || occupied === null || capacity <= 0) return null;
 
   const safeCapacity = Math.max(0, Math.floor(capacity));
   const safeOccupied = Math.min(safeCapacity, Math.max(0, Math.floor(occupied)));
+  const span = nodeCardColumnSpan(node);
+  const visibleCapacity = Math.min(safeCapacity, span * NODE_SLOT_COUNT_PER_COLUMN, NODE_SLOT_RENDER_LIMIT);
+  const hiddenCapacity = Math.max(0, safeCapacity - visibleCapacity);
   const observedStates = [...pods]
     .sort((left, right) => slotRank(left) - slotRank(right)
       || left.namespace?.localeCompare(right.namespace ?? "")
       || left.name.localeCompare(right.name))
-    .slice(0, safeOccupied)
+    .slice(0, Math.min(safeOccupied, visibleCapacity))
     .map(podSlotState);
-  const columns = slotColumnCount(safeCapacity);
-  const states = Array.from({ length: safeCapacity }, (_, index): NodePodSlotState => {
+  const columns = span * NODE_SLOT_COLUMNS_PER_UNIT;
+  const states = Array.from({ length: visibleCapacity }, (_, index): NodePodSlotState => {
     if (index >= safeOccupied) return "empty";
     return observedStates[index] ?? "occupied";
   });
@@ -447,29 +491,45 @@ export function NodePodSlotGrid({ node, pods }: { node: InvNode; pods: readonly 
   return (
     <div
       role="img"
-      aria-label={`파드 슬롯 ${safeOccupied}/${safeCapacity}`}
-      title={`파드 슬롯 ${safeOccupied}/${safeCapacity} · 실제 관측 상태`}
-      style={{ display: "grid", gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, gap: 4 }}
+      aria-label={`파드 슬롯 ${safeOccupied}/${safeCapacity}${hiddenCapacity > 0 ? `, ${visibleCapacity}개 표시, ${hiddenCapacity}개 더 있음` : ""}`}
+      title={`파드 슬롯 ${safeOccupied}/${safeCapacity} · 실제 관측 상태${hiddenCapacity > 0 ? ` · ${visibleCapacity}개 표시, ${hiddenCapacity}개 생략` : ""}`}
+      data-slot-columns={columns}
+      data-visible-slot-count={visibleCapacity}
+      data-hidden-slot-count={hiddenCapacity}
+      style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}
     >
-      {states.map((state, index) => (
+      <span aria-hidden="true" style={{ display: "grid", gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, gap: 4, flex: 1, minWidth: 0 }}>
+        {states.map((state, index) => (
+          <motion.span
+            data-slot-state={state}
+            key={index}
+            initial={reducedMotion ? false : { opacity: 0, scale: 0.76 }}
+            animate={{ opacity: 1, scale: 1, backgroundColor: state === "empty" ? HP.ghost : slotColor(state) }}
+            transition={reducedMotion ? { duration: 0 } : { duration: 0.1, delay: Math.min(index, NODE_SLOT_RENDER_LIMIT - 1) * 0.0045, ease: "easeOut" }}
+            style={{
+              position: "relative",
+              aspectRatio: "1",
+              minWidth: 0,
+              borderRadius: 3,
+              border: `1px solid ${state === "empty" ? UI.line2 : slotColor(state)}`,
+              background: state === "empty" ? HP.ghost : slotColor(state),
+            }}
+          >
+            {state === "pending" && (
+              <span className="pulsedot" style={{ position: "absolute", inset: "35%", borderRadius: 999, background: UI.ink3 }} />
+            )}
+          </motion.span>
+        ))}
+      </span>
+      {hiddenCapacity > 0 && (
         <span
           aria-hidden="true"
-          data-slot-state={state}
-          key={index}
-          style={{
-            position: "relative",
-            aspectRatio: "1",
-            minHeight: 7,
-            borderRadius: 3,
-            border: `1px solid ${state === "empty" ? UI.line2 : slotColor(state)}`,
-            background: state === "empty" ? HP.ghost : slotColor(state),
-          }}
+          data-slot-overflow={hiddenCapacity}
+          style={{ flexShrink: 0, fontFamily: MONO, fontSize: TYPE.caption, fontWeight: 700, color: UI.ink3, whiteSpace: "nowrap" }}
         >
-          {state === "pending" && (
-            <span className="pulsedot" style={{ position: "absolute", inset: "35%", borderRadius: 999, background: UI.ink3 }} />
-          )}
+          +{hiddenCapacity}
         </span>
-      ))}
+      )}
     </div>
   );
 }
@@ -489,11 +549,19 @@ function slotColor(state: Exclude<NodePodSlotState, "empty">): string {
   return state === "critical" ? HP.crit : state === "pending" ? HP.pending : HP.ok;
 }
 
-function slotColumnCount(capacity: number): number {
-  if (capacity <= 10) return Math.max(1, capacity);
-  if (capacity <= 20) return 10;
-  if (capacity <= 30) return 15;
-  return 20;
+const NODE_SLOT_COUNT_PER_COLUMN = 10;
+const NODE_SLOT_COLUMNS_PER_UNIT = 5;
+const NODE_SLOT_RENDER_LIMIT = 40;
+
+/**
+ * Node cards share the same four-column geometry as dashboard widgets. One
+ * unit represents up to ten observed Pod slots (five squares by two rows).
+ * Larger nodes consume more horizontal units, capped at the full-width four
+ * unit card; capacity beyond forty is summarized instead of expanding the DOM.
+ */
+export function nodeCardColumnSpan(node: Pick<InvNode, "matchedPodCount" | "totalPodCount">): 1 | 2 | 3 | 4 {
+  const observedCount = Math.max(node.totalPodCount ?? 0, node.matchedPodCount ?? 0, 1);
+  return Math.min(4, Math.max(1, Math.ceil(observedCount / NODE_SLOT_COUNT_PER_COLUMN))) as 1 | 2 | 3 | 4;
 }
 
 /**
@@ -593,6 +661,7 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
 } = {}) {
   const { clusters } = useDevpreviewContracts();
   const clusterIds = useMemo(() => clusters.map((cl) => cl.id), [clusters]);
+  const reducedMotion = useReducedMotion();
 
   const [view, setView] = useState<View>(initialCluster ? { level: "nodes", cluster: initialCluster } : { level: "clusters" });
   useEffect(() => { onScopeChange?.(view); }, [view]);
@@ -736,7 +805,10 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
                   animate: { opacity: 1, x: 0, y: 0, scale: 1, filter: "blur(0px)" },
                   exit: (c: { dir: number; mode: string }) => (c.mode === "hero" ? { opacity: 0, scale: c.dir === 1 ? 1.02 : 0.97, transition: { duration: DUR.fade } } : { opacity: 0, x: -42 * c.dir, scale: 0.99, filter: "blur(7px)" }),
                 }}
-                initial="initial" animate="animate" exit="exit" transition={PAGE}>
+                initial={reducedMotion ? false : "initial"}
+                animate="animate"
+                exit={reducedMotion ? undefined : "exit"}
+                transition={reducedMotion ? { duration: 0 } : PAGE}>
 
                 {view.level === "clusters" && (
                   /* 클러스터: 가로 최대 2개 · 카드 폭을 제한해 정사각에 가깝게 */
@@ -765,12 +837,22 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
                         ? "불완전한 스냅샷을 수신했습니다. 다음 라이브 관측을 기다립니다."
                         : "이 클러스터에서 준비된 노드가 아직 관측되지 않았습니다."} />
                   ) : (
-                    /* 노드: 2열 반응형 카드 + 실제 running/capacity 기반 파드 슬롯 격자. */
-                    <div className="node-grid" style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 12 }}>
+                    /* 노드: 대시보드와 같은 4단위 격자. 슬롯 10개마다 카드가 한 칸씩 확장된다. */
+                    <div className="node-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gridAutoFlow: "row dense", gap: 12 }}>
                       {nodes.map((node, i) => {
                         const observedPods = observedPodsForNode(node, topologyNodes, pods);
+                        const span = nodeCardColumnSpan(node);
                         return (
-                          <motion.div key={node.key} style={{ minWidth: 0, maxWidth: "100%" }} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ ...SOFT, delay: i * 0.04 }}>
+                          <motion.div
+                            className="node-card-shell"
+                            data-node-card-span={span}
+                            key={node.key}
+                            style={{ minWidth: 0, maxWidth: "100%", gridColumn: `span ${span}`, aspectRatio: `${span} / 1`, contain: "layout paint" }}
+                            layout={reducedMotion ? false : "position"}
+                            initial={reducedMotion ? false : { opacity: 0, y: 8 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={reducedMotion ? { duration: 0 } : { ...SOFT, delay: Math.min(i, 4) * 0.015 }}
+                          >
                             <NodeCard node={node} pods={observedPods ?? []}
                               problemPodCount={observedPods === null ? null : observedPods.filter((pod) => isBadHealth(pod.health)).length}
                               onOpen={() => go({ level: "pods", cluster: view.cluster, node: node.name }, 1)} onTip={onTip} />
@@ -857,6 +939,7 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
         @media (max-width: 760px) {
           .op .cluster-grid,
           .op .node-grid { grid-template-columns: minmax(0, 1fr) !important; }
+          .op .node-card-shell { grid-column: auto !important; aspect-ratio: auto !important; min-height: 240px; }
           .home-cluster-grid { grid-template-columns: minmax(0, 1fr) !important; }
           .home-cluster-grid > * { grid-column: auto !important; }
         }
@@ -887,18 +970,48 @@ function EmptyState({ icon, label, hint, flush = false }: { icon?: React.ReactNo
   );
 }
 
-// ── 로딩 스켈레톤 — 실데이터 도착 전 레이아웃 자리를 잡아 깜빡임/점프를 줄인다. shimmer는 .op-skel.
-function NodeSkeleton() {
+// ── 로딩 스켈레톤 — cold start에서도 최종 4단위 노드 격자와 동일한 자리를
+// 먼저 점유한다. 요약 응답이 도착하면 summary-backed NodeCard가 이 셸을 대체하고,
+// 무거운 토폴로지는 같은 카드 DOM의 세부 상태만 보강한다. shimmer는 .op-skel.
+export function NodeSkeleton() {
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 12 }}>
-      {Array.from({ length: 8 }).map((_, i) => (
-        <div key={i} style={{ display: "flex", flexDirection: "column", gap: 10, minHeight: 96, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 16, padding: 16, boxSizing: "border-box" }}>
+    <div
+      className="node-grid"
+      data-testid="node-skeleton-grid"
+      data-grid-columns="4"
+      style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gridAutoFlow: "row dense", gap: 12 }}
+    >
+      {Array.from({ length: 4 }).map((_, i) => (
+        <div
+          aria-hidden="true"
+          className="node-card-shell"
+          data-node-skeleton-card="unit"
+          data-node-card-span="1"
+          key={i}
+          style={{ display: "flex", flexDirection: "column", gap: 10, minWidth: 0, gridColumn: "span 1", aspectRatio: "1 / 1", contain: "layout paint", background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 16, padding: 16, boxSizing: "border-box", overflow: "hidden" }}
+        >
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span className="op-skel" style={{ width: 13, height: 13, borderRadius: 4 }} />
             <span className="op-skel" style={{ flex: 1, height: 11, borderRadius: 5 }} />
           </div>
-          <span className="op-skel" style={{ width: "52%", height: 9, borderRadius: 5 }} />
-          <span className="op-skel" style={{ width: 54, height: 17, borderRadius: 6, marginTop: "auto" }} />
+          <span className="op-skel" style={{ width: "52%", height: 12, borderRadius: 5 }} />
+          <div style={{ display: "grid", gap: 6, marginTop: "auto" }}>
+            {[0, 1].map((metric) => (
+              <span key={metric} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span className="op-skel" style={{ width: 34, height: 8, borderRadius: 4, flexShrink: 0 }} />
+                <span className="op-skel" style={{ flex: 1, height: 5, borderRadius: 999 }} />
+                <span className="op-skel" style={{ width: 66, height: 9, borderRadius: 4, flexShrink: 0 }} />
+              </span>
+            ))}
+          </div>
+          <span
+            data-node-skeleton-slots="10"
+            style={{ display: "grid", gridTemplateColumns: `repeat(${NODE_SLOT_COLUMNS_PER_UNIT}, minmax(0, 1fr))`, gap: 4 }}
+          >
+            {Array.from({ length: NODE_SLOT_COUNT_PER_COLUMN }).map((_, slot) => (
+              <span className="op-skel" key={slot} style={{ aspectRatio: "1", minWidth: 0, borderRadius: 3 }} />
+            ))}
+          </span>
         </div>
       ))}
     </div>
