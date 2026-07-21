@@ -1,7 +1,14 @@
 import { useEffect, useState } from "react";
 
-import { getClusterConnectStatus } from "../api/cluster-connect";
-import type { ClusterConnectStatusResponse } from "../api/cluster-connect-schemas";
+import {
+  connectCluster as connectClusterApi,
+  getClusterConnectStatus,
+} from "../api/cluster-connect";
+import type {
+  ClusterConnectProvider,
+  ClusterConnectResponse,
+  ClusterConnectStatusResponse,
+} from "../api/cluster-connect-schemas";
 import { getInventorySummary } from "../api/inventory-summary";
 import { getClusterUsage } from "../api/metrics";
 import {
@@ -65,6 +72,20 @@ export type ConnectFeedStatus = "loading" | "ready" | "unavailable" | "error";
 export type ClusterSummaryView = ClusterSummary;
 export type RepositoryBranchView = RepositoryBranch;
 export type RepositoryManifestCandidateView = RepositoryManifestCandidate;
+
+/**
+ * Explicit-click cluster registration boundary used by the demo shell.
+ * Keeping the mutation here preserves the authenticated API composition rule:
+ * view components never import the low-level product API directly.
+ */
+export type ClusterConnectResponseView = ClusterConnectResponse;
+
+export function connectCluster(
+  input: { name: string; provider?: ClusterConnectProvider },
+  signal?: AbortSignal,
+): Promise<ClusterConnectResponse> {
+  return connectClusterApi(input, signal);
+}
 
 export function connectApplication(
   input: ApplicationConnectInput,

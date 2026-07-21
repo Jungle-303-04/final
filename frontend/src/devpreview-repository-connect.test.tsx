@@ -105,7 +105,7 @@ beforeEach(() => {
     candidates: [
       {
         path: "deploy/gamefleet.yaml",
-        source_type: "kubernetes",
+        source_type: "raw-yaml",
         display_name: "GameFleet",
         reason: "Kubernetes manifest",
       },
@@ -188,13 +188,14 @@ describe("devpreview live repository connection", () => {
         "team/game",
         "release/demo",
         "deploy/gamefleet.yaml",
-        "kubernetes",
+        "raw-yaml",
       );
       expect(connectApplication).toHaveBeenCalledWith({
         name: "game",
         repository: "team/game",
         branch: "release/demo",
         manifestPath: "deploy/gamefleet.yaml",
+        sourceType: "raw-yaml",
         clusterId: "cluster-1",
         namespace: "yaml-demo",
         environment: "development",

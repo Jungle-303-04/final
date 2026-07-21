@@ -36,6 +36,7 @@ const IconBrandDocker = ({ size = 21, style }: BrandIconProps) => (
 import { Spinner } from "./shared/ui/primitives/spinner";
 import { emitAction } from "./devpreview/bus";
 import {
+  connectCluster,
   connectApplication,
   isApiError,
   listClusters,
@@ -44,6 +45,7 @@ import {
   probeRepository,
   validateRepositoryManifest,
   type ClusterSummaryView,
+  type ClusterConnectResponseView,
   type RepositoryBranchView,
   type RepositoryManifestCandidateView,
 } from "./devpreview/connectFeed";
@@ -56,8 +58,6 @@ import {
   type ConnectionStatusView,
   type ProviderAvailability,
 } from "./devpreview/connectFeed";
-import { connectCluster } from "./api/cluster-connect";
-import type { ClusterConnectResponse } from "./api/cluster-connect-schemas";
 import { reasonLabel } from "./devpreview/statusLabel";
 import "./styles/tokens.css";
 import "./styles/foundation.css";
@@ -452,6 +452,7 @@ function RepoTargetStep({ source, context, onBack, onComplete }: {
         repository: repoRef,
         branch: input.branch.trim(),
         manifestPath: input.manifestPath.trim(),
+        sourceType: candidate?.source_type ?? "",
         clusterId: input.clusterId,
         namespace: input.namespace.trim(),
         environment: input.environment,
@@ -650,7 +651,7 @@ function ClusterInstallStep({ platform, name, onBack, onConnected }: { platform:
   const Icon = pf.icon;
 
   const [phase, setPhase] = useState<"idle" | "registering" | "registered" | "error">("idle");
-  const [receipt, setReceipt] = useState<ClusterConnectResponse | null>(null);
+  const [receipt, setReceipt] = useState<ClusterConnectResponseView | null>(null);
   const [errMsg, setErrMsg] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   // 설치 명령 OS 탭 — 로컬 OS 자동 선택(윈도우 → PowerShell), 사용자가 전환 가능.

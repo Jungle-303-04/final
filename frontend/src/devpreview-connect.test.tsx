@@ -4,9 +4,8 @@ import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { connectCluster } from "./api/cluster-connect";
 import { ConnectWizard } from "./devpreview-connect";
-import type { ClusterProvidersView } from "./devpreview/connectFeed";
+import { connectCluster, type ClusterProvidersView } from "./devpreview/connectFeed";
 
 const PROVIDERS: ClusterProvidersView = {
   status: "ready",
@@ -20,15 +19,11 @@ const PROVIDERS: ClusterProvidersView = {
   providerConfigFieldsFor: () => [],
 };
 
-vi.mock("./api/cluster-connect", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("./api/cluster-connect")>();
-  return { ...actual, connectCluster: vi.fn() };
-});
-
 vi.mock("./devpreview/connectFeed", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./devpreview/connectFeed")>();
   return {
     ...actual,
+    connectCluster: vi.fn(),
     useClusterProviders: () => PROVIDERS,
     useClusterConnectionStatus: () => ({
       status: "idle",
