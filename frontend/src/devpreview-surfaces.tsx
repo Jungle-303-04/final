@@ -45,10 +45,33 @@ const LOCAL_STATUS_KO: Record<string, string> = {
   live: "실시간",
   stale: "지연",
   partial: "부분",
+  trusted_proxy: "신뢰 프록시",
+  service_admin: "서비스 관리자",
+  applications: "애플리케이션 목록",
+  changes: "변경 이력",
+  cost_nodes: "비용·노드",
+  cost_summary: "비용 요약",
+  cost_trend: "비용 추이",
+  dashboard: "대시보드",
+  gitops_counts: "GitOps 집계",
+  gitops_rows: "GitOps 항목",
+  helm_detail: "Helm 상세",
+  helm_list: "Helm 목록",
+  issues_audit: "이슈 감사",
+  metrics_kubernetes: "Kubernetes 메트릭",
+  metrics_prometheus: "Prometheus 메트릭",
+  metrics_pvc: "PVC 메트릭",
+  metrics_rightsizing: "리소스 최적화 메트릭",
+  port_sessions: "포트 세션",
+  resource_list: "리소스 목록",
+  resource_list_slow: "느린 리소스 목록",
 };
 function koLabel(raw: string | null | undefined): string {
   const key = raw?.trim().toLowerCase();
   return (key ? LOCAL_STATUS_KO[key] : undefined) ?? statusLabel(raw);
+}
+function refreshPolicyLabel(raw: string): string {
+  return koLabel(raw).replace(/^stale\s/i, "오래됨 ");
 }
 
 // ── reason code 한글화 — 백엔드가 준 원시 스네이크 코드(:cluster 등 콜론 접미사 포함)를
@@ -804,10 +827,10 @@ export function SettingsSurface() {
   const toggleNoise = () => setNoise((v) => { const n = !v; try { sessionStorage.setItem("opsia-demo-toast-crit-only", n ? "1" : "0"); } catch { /* 데모 */ } return n; });
   const workspaceSub = session.status === "loading" ? "세션 확인 중…"
     : session.status === "error" ? "세션을 불러오지 못했습니다"
-    : `${session.workspaceId ?? "—"}${session.authMode ? ` · ${session.authMode}` : ""}`;
+    : `${session.workspaceId ?? "—"}${session.authMode ? ` · ${koLabel(session.authMode)}` : ""}`;
   const accountName = session.displayName ?? session.email ?? session.userId ?? "—";
   const accountSub = session.status !== "ready" ? "—"
-    : session.roles.length ? session.roles.join(", ") : "역할 없음";
+    : session.roles.length ? session.roles.map(koLabel).join(", ") : "역할 없음";
   const prefsReady = prefs.status === "ready";
   const prefsDisabled = !prefsReady || prefs.saving;
   const prefsSub = prefs.status === "loading" ? "환경설정 불러오는 중…"
@@ -875,10 +898,10 @@ export function SettingsSurface() {
             <div style={{ maxHeight: 260, overflowY: "auto" }}>
               {refresh.items.map((p) => (
                 <div key={p.key} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "9px 15px", borderTop: `1px solid ${UI.line2}` }}>
-                  <Mono>{p.key}</Mono>
+                  <Mono>{koLabel(p.key)}</Mono>
                   <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     {p.eventInvalidation && <Pill tone="info" label="이벤트 무효화" />}
-                    <span style={{ fontSize: TYPE.caption2, color: UI.ink3, fontFamily: MONO }}>{p.staleAfterSeconds !== null ? `stale ${p.staleAfterSeconds}s · ` : ""}refresh {p.refreshAfterSeconds}s</span>
+                    <span style={{ fontSize: TYPE.caption2, color: UI.ink3, fontFamily: MONO }}>{p.staleAfterSeconds !== null ? `오래됨 ${p.staleAfterSeconds}초 · ` : ""}갱신 {p.refreshAfterSeconds}초</span>
                   </span>
                 </div>
               ))}
