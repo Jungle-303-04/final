@@ -12,6 +12,7 @@ from domains.checks.events import ChecksSettingsUpdatedBody
 from domains.checks.observation_projection import checks_detail, checks_overview
 from domains.identity.dependencies import require_session, resolve_allowed_cluster_ids
 from domains.inventory_filter.query import parse_facet_values
+from domains.target.cluster_visibility import visible_allowed_cluster_ids
 from packages.contracts.auth import Actor
 from packages.contracts.checks import (
     ChecksSettingsPolicy,
@@ -212,8 +213,16 @@ async def _authorized_scope(
     requested_scope_clusters = set(requested_clusters) | {
         cluster_id for cluster_id, _namespace in requested_namespaces
     }
+    # 인가 검증은 전체 allowed로 유지(보안 불변). 다만 명시 요청이 없을 때의 기본 scope는
+    # /clusters 목록과 동일하게 blocked-test 클러스터를 숨겨 scope count 불일치를 없앤다.
     _require_requested_clusters(requested_scope_clusters, allowed_clusters)
-    selected_cluster_ids = tuple(sorted(requested_scope_clusters or allowed_clusters))
+    if requested_scope_clusters:
+        selected_cluster_ids = tuple(sorted(requested_scope_clusters))
+    else:
+        visible_clusters = await asyncio.to_thread(
+            visible_allowed_cluster_ids, db, workspace_id, allowed_clusters
+        )
+        selected_cluster_ids = tuple(sorted(visible_clusters))
     contexts, snapshots, persisted_settings = await asyncio.gather(
         asyncio.to_thread(
             db.filter_snapshot_contexts,

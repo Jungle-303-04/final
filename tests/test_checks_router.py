@@ -391,3 +391,52 @@ def test_checks_settings_write_requires_server_owned_owner_authority() -> None:
     assert readable.status_code == 200
     assert readable.json()["can_edit"] is False
     assert denied.status_code == 403
+
+
+class ChecksDbWithBlockedTestCluster(ChecksDb):
+    """default scope에 blocked-test 클러스터가 authorized로 섞인 저장소 double."""
+
+    def accessible_resource_ids(
+        self,
+        _user_id: str,
+        workspace_id: str,
+        resource_type: str,
+        permission: str,
+    ) -> set[str]:
+        base = super().accessible_resource_ids(_user_id, workspace_id, resource_type, permission)
+        if base:
+            return base | {"bruno-api-test"}
+        return base
+
+    def list_cluster_registrations(
+        self,
+        workspace_id: str,
+        *,
+        cluster_ids: set[str] | None = None,
+        limit: int = 100,
+    ) -> list[dict[str, object]]:
+        assert workspace_id == "workspace-a"
+        names = {
+            "cluster-a": "Primary cluster",
+            "cluster-b": "Secondary cluster",
+            "bruno-api-test": "bruno api test",
+        }
+        selected = cluster_ids or set(names)
+        return [
+            {"cluster_id": cluster_id, "name": names[cluster_id]}
+            for cluster_id in selected
+            if cluster_id in names
+        ][:limit]
+
+
+def test_checks_default_scope_hides_blocked_test_clusters_like_cluster_list() -> None:
+    # 명시 cluster 요청 없이 overview를 부르면 기본 scope는 /clusters 목록과 동일하게
+    # blocked-test 클러스터를 제외해야 한다(scope count 불일치 방지, QA #3).
+    response = _client(db=ChecksDbWithBlockedTestCluster()).get("/checks/overview")
+
+    assert response.status_code == 200
+    scope_cluster_ids = {
+        scope["cluster_id"] for scope in response.json()["scope_coverage"]["scopes"]
+    }
+    assert scope_cluster_ids == {"cluster-a", "cluster-b"}
+    assert "bruno-api-test" not in scope_cluster_ids

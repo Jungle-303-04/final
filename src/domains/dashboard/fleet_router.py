@@ -55,9 +55,8 @@ from domains.inventory.observed_metrics import inventory_usage_pct, usage_pct
 from domains.inventory_filter.cursor import FilterCursorCodec, authorization_revision
 from domains.inventory_filter.graph import build_resource_graph
 from domains.inventory_filter.query import filter_fingerprint, parse_resource_filters
+from domains.target.cluster_visibility import is_blocked_test_cluster
 from domains.target.router import (
-    BLOCKED_TEST_CLUSTER_IDS,
-    BLOCKED_TEST_CLUSTER_NAME_PARTS,
     cluster_connection_status,
 )
 from domains.traffic.observation_projection import traffic_overview
@@ -1710,11 +1709,10 @@ def _optional_text(value: object) -> str | None:
 
 
 def _is_blocked_test_cluster(cluster: JsonObject) -> bool:
-    """/clusters 목록과 같은 테스트 클러스터 숨김 기준(target 라우터와 단일 소스)."""
-    if cluster.get("cluster_id") in BLOCKED_TEST_CLUSTER_IDS:
-        return True
-    name = str(cluster.get("name") or "").lower()
-    return any(marker in name for marker in BLOCKED_TEST_CLUSTER_NAME_PARTS)
+    """/clusters 목록과 같은 테스트 클러스터 숨김 기준(cluster_visibility 단일 소스)."""
+    return is_blocked_test_cluster(
+        str(cluster.get("cluster_id") or ""), str(cluster.get("name") or "")
+    )
 
 
 def _int_or_zero(value: Any) -> int:

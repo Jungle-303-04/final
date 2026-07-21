@@ -31,6 +31,7 @@ from domains.inventory.kubernetes_snapshot import kubernetes_evidence_to_invento
 from domains.inventory.snapshot_evidence import snapshot_source_summary
 from domains.providers.catalog import ProviderCategory, require_available_provider
 from domains.rca.events import ClusterEvidenceReceivedBody, compact_cluster_evidence_payload
+from domains.target.cluster_visibility import is_blocked_test_cluster
 from domains.target.connectivity import (
     AGENT_STATUS_NEVER_CONNECTED,
     AGENT_STATUS_ONLINE,
@@ -180,8 +181,8 @@ OPSIA_ACCESS_MODE_ENV = "OPSIA_ACCESS_MODE"
 OPSIA_EXTERNAL_URL_ENV = "OPSIA_EXTERNAL_URL"
 SUPPORTED_ACCESS_MODES = frozenset({"portforward", "loadbalancer", "ingress", "nodeport"})
 LOCAL_PLACEHOLDER_IMAGES = {"", "service:local", "kubeheal-service:latest"}
-BLOCKED_TEST_CLUSTER_IDS = {"bruno-api-test"}
-BLOCKED_TEST_CLUSTER_NAME_PARTS = ("bruno api test",)
+# blocked test-cluster 규칙은 domains.target.cluster_visibility.is_blocked_test_cluster로 공유한다
+# (list_clusters·등록 거부·checks scope 투영이 단일 predicate 사용).
 CLUSTER_ID_PATTERN = re.compile(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$")
 AGENT_STATUS_NOT_REGISTERED = "not_registered"
 AGENT_STATUS_PENDING_INSTALL = ClusterRegistrationStatus.PENDING_INSTALL.value
@@ -417,10 +418,7 @@ def resolve_target_cluster_id(payload: TargetRegisterRequest, workspace_id: str,
 
 
 def reject_test_target(payload: TargetRegisterRequest) -> None:
-    name = payload.name.lower()
-    if (payload.cluster_id or "") in BLOCKED_TEST_CLUSTER_IDS or any(
-        marker in name for marker in BLOCKED_TEST_CLUSTER_NAME_PARTS
-    ):
+    if is_blocked_test_cluster(payload.cluster_id or "", payload.name):
         raise HTTPException(status_code=422, detail="test target registrations are not allowed")
     if payload.image.strip() in LOCAL_PLACEHOLDER_IMAGES:
         raise HTTPException(status_code=422, detail="target agent image is not configured")
@@ -1119,7 +1117,7 @@ async def target_registration_preflight(
         errors.append("cluster_id is required")
     elif not CLUSTER_ID_PATTERN.match(cluster_id):
         errors.append("cluster_id must use lowercase letters, numbers, and hyphens")
-    if cluster_id in BLOCKED_TEST_CLUSTER_IDS:
+    if is_blocked_test_cluster(cluster_id):
         errors.append("test target registrations are not allowed")
 
     provider_ready, provider_errors, provider_warnings, selected, kube_context_allowed = (
@@ -1553,10 +1551,7 @@ async def list_clusters(
             latest_snapshot=latest_snapshots.get(cluster["cluster_id"]),
         )
         for cluster in clusters
-        if cluster["cluster_id"] not in BLOCKED_TEST_CLUSTER_IDS
-        and not any(
-            marker in str(cluster["name"]).lower() for marker in BLOCKED_TEST_CLUSTER_NAME_PARTS
-        )
+        if not is_blocked_test_cluster(cluster["cluster_id"], str(cluster["name"]))
     ]
     for summary in summaries:
         if resource_counts is None:
