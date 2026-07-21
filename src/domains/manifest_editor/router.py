@@ -11,6 +11,7 @@ from copy import deepcopy
 from dataclasses import asdict
 from typing import Annotated, Any
 
+import yaml
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 
 from domains.command.events import CommandRequestedBody
@@ -67,6 +68,7 @@ from packages.contracts.gateway.responses import (
     ResourceManifestApproveResponse,
     ResourceManifestCreateCapabilityResource,
     ResourceManifestCreateCapabilityResponse,
+    ResourceManifestEditTarget,
     ResourceManifestImpact,
     ResourceManifestPreviewResponse,
     ResourceManifestSourceChoice,
@@ -89,6 +91,9 @@ SAFE_PR_MANIFEST_EDIT_KIND = "safe_pr_manifest_edit"
 UNSUPPORTED_SOURCE = "Only a single raw YAML GitHub source can be edited safely."
 STALE_SOURCE = "The Git source changed after it was loaded. Reload before approving."
 SOURCE_NOT_FOUND = "No exact GitOps source binding was found for this live resource."
+OWNER_SOURCE_NOT_FOUND = (
+    "No exact Deployment, StatefulSet, or DaemonSet owner was observed for this Pod."
+)
 DIRECT_APPLY_AGENT_UNAVAILABLE = "agent_unavailable"
 DIRECT_APPLY_UID_UNAVAILABLE = "resource_uid_unavailable"
 DIRECT_APPLY_NAMESPACE_UNRESOLVED = "namespace_unresolved"
@@ -114,6 +119,15 @@ async def get_resource_manifest_source(
     fallback_service: RepositoryDiscoveryService = Depends(discovery_service),
 ) -> ResourceManifestSourceResponse:
     context = resource_context(db, current, resource_id, write=False)
+    projection = manifest_source_projection(context)
+    if context["edit_unavailable_reason"] is not None:
+        return ResourceManifestSourceResponse(
+            resource_id=resource_id,
+            status="unsupported",
+            choices=[],
+            reason=str(context["edit_unavailable_reason"]),
+            **projection,
+        )
     sources = authorized_sources(db, current, context, application_id=application_id)
     choices = [source_choice(source) for source in sources]
     if not sources:
@@ -122,6 +136,7 @@ async def get_resource_manifest_source(
             status="unsupported",
             choices=[],
             reason=SOURCE_NOT_FOUND,
+            **projection,
         )
     if application_id is None and len(sources) > 1:
         return ResourceManifestSourceResponse(
@@ -129,6 +144,7 @@ async def get_resource_manifest_source(
             status="ambiguous",
             choices=choices,
             reason="Choose the application source that owns this resource.",
+            **projection,
         )
     source = sources[0]
     if not editable_source(source):
@@ -138,6 +154,7 @@ async def get_resource_manifest_source(
             choices=choices,
             selected=source_choice(source),
             reason=UNSUPPORTED_SOURCE,
+            **projection,
         )
     base_sha, content = await read_pinned_source(db, current, source, fallback_service)
     safety_errors = validate_manifest_source(
@@ -151,6 +168,7 @@ async def get_resource_manifest_source(
             choices=choices,
             selected=source_choice(source),
             reason=safety_errors[0],
+            **projection,
         )
     return ResourceManifestSourceResponse(
         resource_id=resource_id,
@@ -160,6 +178,7 @@ async def get_resource_manifest_source(
         base_sha=base_sha,
         source_sha256=manifest_sha256(content),
         content=content,
+        **projection,
     )
 
 
@@ -1190,17 +1209,41 @@ def resource_context(db: Any, current: Any, resource_id: str, *, write: bool) ->
             cluster_id,
             Permission.DEPLOY_RUN.value,
         )
+    edit_resource = resource
+    edit_relationship = "self"
+    edit_unavailable_reason: str | None = None
+    if str(resource.get("kind") or "").casefold() == "pod":
+        resolver = getattr(db, "resolve_manifest_controller_owner", None)
+        owner = (
+            resolver(
+                workspace_id=workspace_id,
+                cluster_id=cluster_id,
+                resource=resource,
+            )
+            if callable(resolver)
+            else None
+        )
+        if not isinstance(owner, Mapping):
+            edit_unavailable_reason = OWNER_SOURCE_NOT_FOUND
+        else:
+            edit_resource = dict(owner)
+            edit_relationship = "owner"
     return {
         "workspace_id": workspace_id,
         "cluster_id": cluster_id,
-        "resource": resource,
+        "resource": edit_resource,
+        "observed_resource": resource,
+        "edit_relationship": edit_relationship,
+        "edit_unavailable_reason": edit_unavailable_reason,
         "identity": ManifestIdentity(
-            api_version=str(resource["api_version"]),
-            kind=str(resource["kind"]),
+            api_version=str(edit_resource["api_version"]),
+            kind=str(edit_resource["kind"]),
             namespace=(
-                str(resource["namespace"]) if resource.get("namespace") is not None else None
+                str(edit_resource["namespace"])
+                if edit_resource.get("namespace") is not None
+                else None
             ),
-            name=str(resource["name"]),
+            name=str(edit_resource["name"]),
         ),
     }
 
@@ -1212,6 +1255,8 @@ def authorized_sources(
     *,
     application_id: str | None,
 ) -> list[dict[str, Any]]:
+    if context.get("edit_unavailable_reason") is not None:
+        return []
     rows = db.list_resource_manifest_sources(
         workspace_id=context["workspace_id"],
         resource_id=str(context["resource"]["inventory_key"]),
@@ -1245,6 +1290,8 @@ def exact_source(
     context: dict[str, Any],
     application_id: str,
 ) -> dict[str, Any]:
+    if context.get("edit_unavailable_reason") is not None:
+        raise HTTPException(status_code=409, detail=str(context["edit_unavailable_reason"]))
     sources = authorized_sources(db, current, context, application_id=application_id)
     if len(sources) != 1:
         raise HTTPException(status_code=409, detail=SOURCE_NOT_FOUND)
@@ -1281,6 +1328,50 @@ def source_choice(source: dict[str, Any]) -> ResourceManifestSourceChoice:
         manifest_path=str(source["manifest_path"]),
         environment=str(source["environment"]),
     )
+
+
+def manifest_source_projection(context: Mapping[str, Any]) -> dict[str, Any]:
+    observed = context["observed_resource"]
+    raw = observed.get("raw")
+    live_yaml: str | None = None
+    live_reason: str | None = None
+    if not isinstance(raw, Mapping):
+        live_reason = "The retained live inventory snapshot does not include this manifest."
+    else:
+        document = deepcopy(dict(raw))
+        safety_errors = secret_safety_errors([document])
+        if safety_errors:
+            live_reason = "The live manifest contains sensitive inline values and cannot be shown."
+        else:
+            live_yaml = yaml.safe_dump(
+                document,
+                allow_unicode=True,
+                default_flow_style=False,
+                sort_keys=False,
+            )
+    observed_at = observed.get("observed_at")
+    if observed_at is not None and hasattr(observed_at, "isoformat"):
+        observed_at = observed_at.isoformat()
+    elif observed_at is not None:
+        observed_at = str(observed_at)
+    edit_target = None
+    if context.get("edit_unavailable_reason") is None:
+        resource = context["resource"]
+        edit_target = ResourceManifestEditTarget(
+            resource_id=str(resource["inventory_key"]),
+            relationship=str(context["edit_relationship"]),
+            kind=str(resource["kind"]),
+            namespace=(
+                str(resource["namespace"]) if resource.get("namespace") is not None else None
+            ),
+            name=str(resource["name"]),
+        )
+    return {
+        "live_yaml": live_yaml,
+        "live_observed_at": observed_at,
+        "live_reason": live_reason,
+        "edit_target": edit_target,
+    }
 
 
 async def read_pinned_source(

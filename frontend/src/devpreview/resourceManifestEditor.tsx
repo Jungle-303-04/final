@@ -26,6 +26,7 @@ export function LiveResourceManifestEditor({ resourceId, resolving = false }: { 
   const [reason, setReason] = useState("");
   const [confirmed, setConfirmed] = useState(false);
   const [approval, setApproval] = useState<ResourceManifestApproveEndpoint | null>(null);
+  const [emergencyApproval, setEmergencyApproval] = useState<ResourceManifestApproveEndpoint | null>(null);
   const [applyReceipt, setApplyReceipt] = useState<ResourceManifestApplyEndpoint | null>(null);
   const [error, setError] = useState<string | null>(null);
   const controller = useRef<AbortController | null>(null);
@@ -38,6 +39,7 @@ export function LiveResourceManifestEditor({ resourceId, resolving = false }: { 
     setError(null);
     setPreview(null);
     setApproval(null);
+    setEmergencyApproval(null);
     setApplyReceipt(null);
     try {
       const loaded = await getResourceManifestSource(resourceId, selectedApplicationId, next.signal);
@@ -67,6 +69,7 @@ export function LiveResourceManifestEditor({ resourceId, resolving = false }: { 
         setYaml(loaded.content ?? "");
         setPreview(null);
         setApproval(null);
+        setEmergencyApproval(null);
         setApplyReceipt(null);
         setError(null);
         setPhase("ready");
@@ -131,6 +134,12 @@ export function LiveResourceManifestEditor({ resourceId, resolving = false }: { 
     setPhase("submitting");
     setError(null);
     try {
+      const recorded = emergencyApproval ?? await approveResourceManifestEdit(resourceId, {
+        ...editInput,
+        confirmed: true,
+        reason: reason.trim(),
+      });
+      setEmergencyApproval(recorded);
       setApplyReceipt(await applyResourceManifestEdit(resourceId, {
         ...editInput,
         expectedDesiredSha256: preview.desired_sha256,
@@ -157,6 +166,7 @@ export function LiveResourceManifestEditor({ resourceId, resolving = false }: { 
   if (source?.status === "ambiguous") {
     return (
       <div style={{ padding: "18px 0", display: "grid", gap: 10 }}>
+        <LiveManifestPanel source={source} />
         <ManifestNotice tone="warn" title="애플리케이션 소스를 선택하세요">동일 리소스를 소유한 실제 Git 소스가 여러 개입니다.</ManifestNotice>
         <select aria-label="YAML 애플리케이션 소스" value={applicationId}
           onChange={(event) => { const id = event.currentTarget.value; setApplicationId(id); if (id) void load(id); }}
@@ -174,6 +184,7 @@ export function LiveResourceManifestEditor({ resourceId, resolving = false }: { 
   if (!source || source.status !== "available" || !source.selected || !source.content) {
     return (
       <div style={{ padding: "18px 0", display: "grid", gap: 10 }}>
+        {source && <LiveManifestPanel source={source} />}
         <ManifestNotice tone="warn" title="편집 가능한 Git YAML 없음">
           {source?.reason ? reasonLabel(source.reason) : error ?? "이 리소스에 연결된 현재 YAML 원본을 찾지 못했습니다."}
         </ManifestNotice>
@@ -186,12 +197,22 @@ export function LiveResourceManifestEditor({ resourceId, resolving = false }: { 
 
   return (
     <div style={{ padding: "16px 0 24px", display: "grid", gap: 12 }}>
+      <LiveManifestPanel source={source} />
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+        <b style={{ color: UI.ink, fontSize: TYPE.bodyStrong }}>Git 원본 · IDE 편집</b>
+        {source.edit_target && (
+          <span style={{ color: UI.ink3, fontSize: TYPE.caption2 }}>
+            {source.edit_target.relationship === "owner" ? "Owner " : ""}
+            {source.edit_target.kind}/{source.edit_target.name}
+          </span>
+        )}
+      </div>
       <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap", fontSize: TYPE.caption2, color: UI.ink2 }}>
         <Pill>{source.selected.repository_ref}</Pill><Pill>{source.selected.branch}</Pill>
         <span style={{ fontFamily: MONO }}>{source.selected.manifest_path}</span>
         <span style={{ marginLeft: "auto", fontFamily: MONO, color: UI.ink3 }}>{source.base_sha?.slice(0, 12)}</span>
       </div>
-      <textarea aria-label="YAML 매니페스트 편집기" value={yaml} disabled={busy || !!approval || !!applyReceipt}
+      <textarea aria-label="Git YAML 원본 편집기" value={yaml} disabled={busy || !!approval || !!emergencyApproval || !!applyReceipt}
         onChange={(event) => { setYaml(event.currentTarget.value); setPreview(null); setConfirmed(false); }} spellCheck={false}
         style={{ width: "100%", minHeight: 360, resize: "vertical", boxSizing: "border-box", border: `1px solid ${UI.line}`, borderRadius: 12, padding: 14, background: "#0d1117", color: "#e6edf3", fontFamily: MONO, fontSize: 12, lineHeight: 1.6, outline: "none" }} />
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
@@ -215,22 +236,40 @@ export function LiveResourceManifestEditor({ resourceId, resolving = false }: { 
           {preview.apply_availability === "available" && (
             <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: TYPE.label, color: UI.ink2 }}>
               <input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.currentTarget.checked)} />
-              검증한 변경을 이 클러스터에 즉시 적용하며 감사 이벤트가 기록됨을 확인합니다.
+              동일 Git artifact를 Safe PR로 먼저 기록한 뒤 owner controller에 직접 적용하며 drift/PR pending 상태가 남음을 확인합니다.
             </label>
           )}
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <ActionButton disabled={busy || reason.trim().length < 3} onClick={() => void submitSafePr()}>Safe PR 요청</ActionButton>
+            <ActionButton primary disabled={busy || reason.trim().length < 3} onClick={() => void submitSafePr()}>Safe PR 요청</ActionButton>
             {preview.apply_availability === "available" && (
-              <ActionButton primary disabled={busy || reason.trim().length < 3 || !confirmed} onClick={() => void submitDirectApply()}>
-                즉시 적용
+              <ActionButton disabled={busy || reason.trim().length < 3 || !confirmed} onClick={() => void submitDirectApply()}>
+                {emergencyApproval ? "긴급 적용 재시도" : "Git 기록 후 긴급 적용"}
               </ActionButton>
             )}
           </div>
         </div>
       )}
       {approval && <ManifestNotice tone="ok" title="Safe PR 요청 접수">승인 {approval.approval_id} · 워크플로 {approval.workflow_run_id}</ManifestNotice>}
-      {applyReceipt && <ManifestNotice tone="ok" title="적용 명령 접수">명령 {applyReceipt.command_id} · 감사 이벤트 {applyReceipt.audit_event_id}</ManifestNotice>}
+      {emergencyApproval && <ManifestNotice tone="warn" title="Git artifact 기록 · PR pending">승인 {emergencyApproval.approval_id} · 클러스터 직접 적용 후 PR 병합 전까지 drift 상태로 추적합니다.</ManifestNotice>}
+      {applyReceipt && <ManifestNotice tone="ok" title="Owner controller 적용 명령 접수">명령 {applyReceipt.command_id} · 감사 이벤트 {applyReceipt.audit_event_id}</ManifestNotice>}
     </div>
+  );
+}
+
+function LiveManifestPanel({ source }: { source: ResourceManifestSourceEndpoint }) {
+  return (
+    <section aria-label="Live YAML 읽기 전용" style={{ display: "grid", gap: 8 }}>
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+        <b style={{ color: UI.ink, fontSize: TYPE.bodyStrong }}>Live YAML · 읽기 전용</b>
+        {source.live_observed_at && <span style={{ color: UI.ink3, fontFamily: MONO, fontSize: TYPE.micro }}>관측 {source.live_observed_at}</span>}
+      </div>
+      {source.live_yaml ? (
+        <textarea aria-label="Live YAML" value={source.live_yaml} readOnly spellCheck={false}
+          style={{ width: "100%", minHeight: 190, resize: "vertical", boxSizing: "border-box", border: `1px solid ${UI.line}`, borderRadius: 12, padding: 14, background: UI.bg2, color: UI.ink2, fontFamily: MONO, fontSize: 12, lineHeight: 1.6, outline: "none" }} />
+      ) : (
+        <ManifestNotice tone="warn" title="Live YAML 관측 불가">{source.live_reason ?? "현재 inventory snapshot에 원문이 없습니다."}</ManifestNotice>
+      )}
+    </section>
   );
 }
 

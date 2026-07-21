@@ -1,17 +1,21 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import contextmanager
+from datetime import UTC, datetime
 from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
 
 from domains.gitops.repository_discovery import RepositoryDiscoveryService
+from domains.manifest_editor.repository import ManifestEditorRepository
 from domains.manifest_editor.router import (
     apply_resource_manifest_now,
     approve_resource_manifest_edit,
     edit_workflow_id,
     ensure_source_is_current,
+    get_resource_manifest_source,
 )
 from domains.manifest_editor.validation import (
     ManifestIdentity,
@@ -185,6 +189,71 @@ class ManifestApprovalDb:
         return None
 
 
+class PodOwnerManifestDb(ManifestApprovalDb):
+    def get_inventory_resource_by_key(
+        self, *, workspace_id: str, inventory_key: str
+    ) -> dict[str, object] | None:
+        assert (workspace_id, inventory_key) == ("workspace-1", "pod-1")
+        return {
+            "inventory_key": "pod-1",
+            "snapshot_id": "snapshot-1",
+            "cluster_id": "cluster-1",
+            "api_version": "v1",
+            "kind": "Pod",
+            "namespace": "shop",
+            "name": "checkout-api-7b9",
+            "uid": "pod-uid-1",
+            "summary": {
+                "owner_references_complete": True,
+                "owner_uid": "replicaset-uid-1",
+            },
+            "raw": {
+                "apiVersion": "v1",
+                "kind": "Pod",
+                "metadata": {"name": "checkout-api-7b9", "namespace": "shop"},
+                "spec": {"containers": [{"name": "checkout", "image": "checkout:v2"}]},
+            },
+            "observed_at": datetime(2026, 7, 22, 9, 0, tzinfo=UTC),
+        }
+
+    def resolve_manifest_controller_owner(
+        self,
+        *,
+        workspace_id: str,
+        cluster_id: str,
+        resource: dict[str, object],
+    ) -> dict[str, object] | None:
+        assert (workspace_id, cluster_id, resource["inventory_key"]) == (
+            "workspace-1",
+            "cluster-1",
+            "pod-1",
+        )
+        return {
+            "inventory_key": "deployment-1",
+            "snapshot_id": "snapshot-1",
+            "cluster_id": "cluster-1",
+            "api_version": "apps/v1",
+            "kind": "Deployment",
+            "namespace": "shop",
+            "name": "checkout-api",
+            "uid": "deployment-uid-1",
+        }
+
+    def list_resource_manifest_sources(
+        self, *, workspace_id: str, resource_id: str, cluster_id: str
+    ) -> list[dict[str, object]]:
+        assert (workspace_id, resource_id, cluster_id) == (
+            "workspace-1",
+            "deployment-1",
+            "cluster-1",
+        )
+        return super().list_resource_manifest_sources(
+            workspace_id=workspace_id,
+            resource_id="resource-1",
+            cluster_id=cluster_id,
+        )
+
+
 class ManifestApprovalClient:
     async def branch_sha(self, repo_ref: str, branch: str) -> str:
         assert (repo_ref, branch) == ("project/repo", "main")
@@ -231,6 +300,95 @@ class ManifestOperationEvents:
 
     async def publish(self, **payload: object) -> None:
         self.published.append(payload)
+
+
+def test_pod_source_keeps_live_yaml_read_only_and_edits_exact_owner_controller() -> None:
+    response = asyncio.run(
+        get_resource_manifest_source(
+            "pod-1",
+            None,
+            SimpleNamespace(
+                workspace_id="workspace-1",
+                user_id="operator-1",
+                roles=("release_operator",),
+            ),
+            PodOwnerManifestDb(),
+            RepositoryDiscoveryService(ManifestApprovalClient()),
+        )
+    )
+
+    assert response.status == "available"
+    assert response.live_yaml is not None
+    assert "kind: Pod" in response.live_yaml
+    assert response.live_observed_at == "2026-07-22T09:00:00+00:00"
+    assert response.edit_target is not None
+    assert response.edit_target.relationship == "owner"
+    assert response.edit_target.resource_id == "deployment-1"
+    assert response.edit_target.kind == "Deployment"
+    assert response.edit_target.name == "checkout-api"
+    assert response.content == SOURCE
+
+
+def test_controller_owner_resolution_follows_complete_same_snapshot_uid_chain(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    rows = [
+        {
+            "inventory_key": "replicaset-1",
+            "snapshot_id": "snapshot-1",
+            "kind": "ReplicaSet",
+            "uid": "replicaset-uid-1",
+            "summary": {
+                "owner_references_complete": True,
+                "owner_uid": "deployment-uid-1",
+            },
+        },
+        {
+            "inventory_key": "deployment-1",
+            "snapshot_id": "snapshot-1",
+            "kind": "Deployment",
+            "uid": "deployment-uid-1",
+            "summary": {"owner_references_complete": True},
+        },
+    ]
+
+    class Result:
+        def __init__(self, row: dict[str, object]) -> None:
+            self.row = row
+
+        def mappings(self) -> Result:
+            return self
+
+        def first(self) -> dict[str, object]:
+            return self.row
+
+    class Connection:
+        def execute(self, _statement: object) -> Result:
+            return Result(rows.pop(0))
+
+    @contextmanager
+    def connection() -> object:
+        yield Connection()
+
+    repository = object.__new__(ManifestEditorRepository)
+    monkeypatch.setattr(repository, "connection", connection)
+    owner = repository.resolve_manifest_controller_owner(
+        workspace_id="workspace-1",
+        cluster_id="cluster-1",
+        resource={
+            "inventory_key": "pod-1",
+            "snapshot_id": "snapshot-1",
+            "kind": "Pod",
+            "summary": {
+                "owner_references_complete": True,
+                "owner_uid": "replicaset-uid-1",
+            },
+        },
+    )
+
+    assert owner is not None
+    assert owner["inventory_key"] == "deployment-1"
+    assert rows == []
 
 
 def test_approval_records_exact_authority_before_requesting_safe_pr() -> None:

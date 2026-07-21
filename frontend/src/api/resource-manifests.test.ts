@@ -30,6 +30,16 @@ const SOURCE = {
   source_sha256: `sha256:${"b".repeat(64)}`,
   content: "apiVersion: v1\nkind: Pod\nmetadata: {name: checkout-api}\n",
   reason: null,
+  live_yaml: "apiVersion: v1\nkind: Pod\nmetadata: {name: checkout-api-7b9}\n",
+  live_observed_at: "2026-07-22T09:00:00+00:00",
+  live_reason: null,
+  edit_target: {
+    resource_id: "deployment:cluster-1/shop/checkout-api",
+    relationship: "owner",
+    kind: "Deployment",
+    namespace: "shop",
+    name: "checkout-api",
+  },
 } as const;
 
 describe("resource manifest API", () => {

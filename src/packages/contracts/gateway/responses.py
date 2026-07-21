@@ -1106,6 +1106,14 @@ class ResourceManifestSourceChoice(StrictModel):
     environment: str
 
 
+class ResourceManifestEditTarget(StrictModel):
+    resource_id: str = Field(min_length=1)
+    relationship: Literal["self", "owner"]
+    kind: str = Field(min_length=1)
+    namespace: str | None = None
+    name: str = Field(min_length=1)
+
+
 class ResourceManifestSourceResponse(StrictModel):
     resource_id: str
     status: Literal["available", "ambiguous", "unsupported"]
@@ -1115,6 +1123,10 @@ class ResourceManifestSourceResponse(StrictModel):
     source_sha256: str | None = None
     content: str | None = None
     reason: str | None = None
+    live_yaml: str | None = None
+    live_observed_at: str | None = None
+    live_reason: str | None = None
+    edit_target: ResourceManifestEditTarget | None = None
 
 
 class ResourceManifestImpact(StrictModel):

@@ -20,6 +20,16 @@ export const resourceManifestSourceSchema = z.strictObject({
   source_sha256: z.string().nullable(),
   content: z.string().nullable(),
   reason: z.string().nullable(),
+  live_yaml: z.string().nullable(),
+  live_observed_at: z.string().nullable(),
+  live_reason: z.string().nullable(),
+  edit_target: z.strictObject({
+    resource_id: z.string().min(1),
+    relationship: z.enum(["self", "owner"]),
+    kind: z.string().min(1),
+    namespace: z.string().nullable(),
+    name: z.string().min(1),
+  }).nullable(),
 });
 
 export const resourceManifestPreviewSchema = z.strictObject({
