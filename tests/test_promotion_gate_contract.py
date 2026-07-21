@@ -6,7 +6,11 @@ import pytest
 
 from domains.gitops.repository import serialize_workflow_run
 from packages.config.constants import CommandStatus
-from packages.contracts.gateway.responses import WorkflowRunListResponse
+from packages.contracts.gateway.responses import (
+    ResourceManifestApproveResponse,
+    ResourceManifestPreviewResponse,
+    WorkflowRunListResponse,
+)
 from packages.contracts.gitops import promotion_gate_from_command_result
 
 
@@ -131,3 +135,114 @@ def test_workflow_run_schema_links_structured_promotion_gate() -> None:
         "applied_not_false",
         "rollout_ready_not_false",
     }
+
+
+@pytest.mark.parametrize(
+    "result",
+    [
+        # Git 감지/manifest validation만 끝나고 K8s apply를 실행하지 않은 명령 결과.
+        {"status": CommandStatus.COMPLETED},
+        {
+            "status": CommandStatus.COMPLETED,
+            "resources": [{"name": "checkout", "status": "completed"}],
+        },
+    ],
+)
+def test_completed_command_without_apply_never_reports_applied_or_rollout(
+    result: dict[str, object],
+) -> None:
+    """검증/감지 완료(COMPLETED)만으로 applied·rollout이 참이 되지 않는다.
+
+    명령이 완료되고 실패 리소스가 없어 ``eligible``/``*_not_false``는 참일 수 있으나,
+    실제 Kubernetes apply·rollout 상태는 '실행 안 됨'을 뜻하는 ``None``으로 정직하게
+    유지되어야 한다(거짓 True 금지). 프론트 표시는 ``eligible``/``command_completed``가
+    아니라 ``applied``/``rollout_ready``를 apply·rollout 상태의 근거로 써야 한다.
+    """
+    gate = promotion_gate_from_command_result(result)
+
+    assert gate["command_completed"] is True
+    assert gate["applied"] is None
+    assert gate["applied"] is not True
+    assert gate["rollout_ready"] is None
+    assert gate["rollout_ready"] is not True
+
+
+def test_applied_state_is_distinct_none_false_true() -> None:
+    """apply 상태 3분리: 미실행(None) / 실패(False) / 성공(True)."""
+    not_run = promotion_gate_from_command_result({"status": CommandStatus.COMPLETED})
+    failed = promotion_gate_from_command_result(
+        {"status": CommandStatus.COMPLETED, "applied": False}
+    )
+    applied = promotion_gate_from_command_result(
+        {"status": CommandStatus.COMPLETED, "applied": True}
+    )
+
+    assert not_run["applied"] is None
+    assert not_run["applied_not_false"] is True  # 미실행은 실패와 다르다
+
+    assert failed["applied"] is False
+    assert failed["applied_not_false"] is False
+    assert failed["eligible"] is False  # apply 실패는 절대 eligible이 아니다
+
+    assert applied["applied"] is True
+    assert applied["applied_not_false"] is True
+
+
+def test_rollout_state_is_distinct_none_false_true() -> None:
+    """rollout 상태 3분리: 미검증(None) / 미완(False) / 완료(True)."""
+    not_verified = promotion_gate_from_command_result(
+        {"status": CommandStatus.COMPLETED, "applied": True}
+    )
+    not_ready = promotion_gate_from_command_result(
+        {"status": CommandStatus.COMPLETED, "applied": True, "rollout": {"ready": False}}
+    )
+    ready = promotion_gate_from_command_result(
+        {"status": CommandStatus.COMPLETED, "applied": True, "rollout": {"ready": True}}
+    )
+
+    assert not_verified["rollout_ready"] is None
+    assert not_verified["rollout_ready_not_false"] is True
+
+    assert not_ready["rollout_ready"] is False
+    assert not_ready["rollout_ready_not_false"] is False
+    assert not_ready["eligible"] is False  # rollout 미완은 절대 eligible이 아니다
+
+    assert ready["rollout_ready"] is True
+    assert ready["eligible"] is True
+
+
+def test_manifest_preview_reports_validation_not_apply_success() -> None:
+    """manifest preview는 validation(valid)·apply 가용성만 노출하고 apply 성공을 주장하지 않는다."""
+    preview = ResourceManifestPreviewResponse(
+        valid=True,
+        changed=True,
+        base_sha="base",
+        source_sha256="source",
+        desired_sha256="desired",
+        diff="--- a\n+++ b\n",
+        apply_availability="available",
+    )
+    dumped = preview.model_dump()
+
+    assert dumped["valid"] is True
+    # apply는 '가능'할 뿐 '적용됨'이 아니다. preview 계약에 applied/rollout 필드가 없다.
+    assert dumped["apply_availability"] == "available"
+    assert "applied" not in dumped
+    assert "rollout_ready" not in dumped
+
+
+def test_manifest_approve_is_pending_safe_pr_not_applied() -> None:
+    """Safe PR approve는 PR 병합 대기 상태이며 apply 성공이 아니다."""
+    approve = ResourceManifestApproveResponse(
+        accepted=True,
+        event_id="event-1",
+        correlation_id="corr-1",
+        workflow_run_id="run-1",
+        approval_id="approval-1",
+    )
+    dumped = approve.model_dump()
+
+    assert dumped["sync_state"] == "awaiting_pr_merge"
+    # 승인(=PR 대기)은 apply/rollout 성공을 뜻하지 않는다.
+    assert "applied" not in dumped
+    assert "rollout_ready" not in dumped
