@@ -1279,6 +1279,7 @@ function App() {
   const [scope, setScope] = useState<{ level: string; cluster?: string; node?: string }>({ level: "clusters" });
   const [ns, setNs] = useState("모든 네임스페이스");
   const [nsOpen, setNsOpen] = useState(false);
+  const [clusterOpen, setClusterOpen] = useState(false);
   // 네임스페이스 셀렉트 — 실 관측 네임스페이스(파드 관측 기반)로 구동. 하드코딩 목록 제거.
   // 계약이 unavailable/빈이면 "모든 네임스페이스"만 남는다.
   const resourcesListActive = surface === "resources" && resView === "list";
@@ -1323,6 +1324,7 @@ function App() {
         setBellOpen(false);
         setMeOpen(false);
         setNsOpen(false);
+        setClusterOpen(false);
       }
     };
     document.addEventListener("pointerdown", onPointerDown, true);
@@ -1534,24 +1536,19 @@ function App() {
         </button>
         {/* 현재 스코프 표시 — 물리 스코프가 실제 적용되는 관점(지도·목록)에서만. 흐름은 서비스 수준 */}
         {surface === "resources" && resView !== "flow" && (
-        <label style={{ display: "flex", alignItems: "center", gap: 7, border: `1px solid ${UI.line}`, borderRadius: 9, padding: "5px 9px", fontSize: TYPE.body, fontWeight: 600, color: UI.ink, background: UI.card }}>
-          <Server size={13} style={{ color: UI.ink3, flexShrink: 0 }} />
-          <select aria-label="클러스터 범위" value={scope.cluster ?? ""}
-            onChange={(event) => {
-              const cluster = event.currentTarget.value;
-              setDetail(null);
-              setDrillCl(cluster || null);
-              setScope(cluster ? { level: "nodes", cluster } : { level: "clusters" });
-            }}
-            style={{ border: "none", outline: "none", background: "transparent", color: UI.ink, fontSize: TYPE.body, fontWeight: 700, cursor: "pointer", width: "min(28vw, 220px)", minWidth: 0, maxWidth: 220 }}>
-            <option value="">전체 클러스터</option>
-            {contract.clusters.map((cluster) => <option key={cluster.id} value={cluster.id}>{cluster.id}</option>)}
-          </select>
-        </label>
+        <span style={{ position: "relative" }}>
+            <button type="button" aria-label="클러스터 범위" aria-haspopup="listbox" aria-expanded={clusterOpen} onClick={() => { setClusterOpen((open) => !open); setNsOpen(false); }}
+            style={{ display: "flex", alignItems: "center", gap: 7, maxWidth: "min(32vw, 260px)", border: `1px solid ${clusterOpen ? BLUE : UI.line}`, borderRadius: 9, padding: "6px 11px", fontSize: TYPE.body, fontWeight: 700, color: UI.ink, background: UI.card, cursor: "pointer" }}>
+            <Server size={13} style={{ color: UI.ink3 }} />{scope.cluster ?? "전체 클러스터"}<ChevronDown size={12} style={{ color: UI.ink3, transform: clusterOpen ? "rotate(180deg)" : "none" }} />
+          </button>
+          <AnimatePresence>{clusterOpen && <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} style={{ position: "absolute", top: 40, left: 0, minWidth: 220, zIndex: 65, background: UI.card, border: `1px solid ${blueA(0.35)}`, borderRadius: 12, boxShadow: `0 18px 50px -18px ${inkA(0.28)}`, padding: 5 }}>
+            {[{ id: "", label: "전체 클러스터" }, ...contract.clusters.map((cluster) => ({ id: cluster.id, label: cluster.id }))].map((item) => <button key={item.id || "all"} type="button" role="option" aria-selected={(scope.cluster ?? "") === item.id} onClick={() => { setDetail(null); setDrillCl(item.id || null); setScope(item.id ? { level: "nodes", cluster: item.id } : { level: "clusters" }); setClusterOpen(false); }}
+              style={{ display: "flex", alignItems: "center", width: "100%", gap: 8, border: "none", borderRadius: 8, padding: "8px 10px", background: (scope.cluster ?? "") === item.id ? blueA(0.1) : "transparent", color: (scope.cluster ?? "") === item.id ? BLUE : UI.ink, fontSize: TYPE.body, fontWeight: (scope.cluster ?? "") === item.id ? 700 : 600, textAlign: "left", cursor: "pointer" }}>{item.label}{(scope.cluster ?? "") === item.id && <Check size={14} style={{ marginLeft: "auto" }} />}</button>)}</motion.div>}</AnimatePresence>
+        </span>
         )}
         {surface === "resources" && resView !== "flow" && (
         <span style={{ position: "relative" }}>
-          <button type="button" aria-label="네임스페이스 범위 선택" aria-haspopup="listbox" aria-expanded={nsOpen} onClick={() => setNsOpen(!nsOpen)}
+          <button type="button" aria-label="네임스페이스 범위 선택" aria-haspopup="listbox" aria-expanded={nsOpen} onClick={() => { setNsOpen((open) => !open); setClusterOpen(false); }}
             style={{ display: "flex", alignItems: "center", gap: 7, maxWidth: "min(32vw, 260px)", overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis", border: `1px solid ${nsOpen ? blueA(0.45) : UI.line}`, background: UI.card, borderRadius: 9, padding: "6px 11px", fontSize: TYPE.body, fontWeight: 600, color: ns === "모든 네임스페이스" ? UI.ink : BLUE, cursor: "pointer" }}>
             <Globe size={13} style={{ color: UI.ink3 }} />{ns}<ChevronDown size={12} style={{ color: UI.ink3, transform: nsOpen ? "rotate(180deg)" : "none", transition: "transform .15s" }} />
           </button>
