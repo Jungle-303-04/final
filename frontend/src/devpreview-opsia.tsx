@@ -264,6 +264,9 @@ function NodeCard({ node, onOpen, onTip }: {
   node: InvNode; onOpen: () => void; onTip: (t: TipData) => void;
 }) {
   const sev = healthSev(node.health);
+  const statusText = node.status ? statusLabel(node.status) : "상태 관측 안 됨";
+  const healthText = statusLabel(node.health);
+  const showStatus = statusText !== healthText;
   return (
     <motion.button transition={SPRING} onClick={onOpen}
       whileHover={{ boxShadow: `0 10px 26px -20px ${inkA(0.16)}`, borderColor: LINE3 }}
@@ -277,8 +280,8 @@ function NodeCard({ node, onOpen, onTip }: {
       <div style={{ display: "flex", alignItems: "flex-start", gap: 8, minWidth: 0 }}>
         <Server size={13} strokeWidth={2} style={{ color: UI.ink3, flexShrink: 0, marginTop: 2 }} />
         <div style={{ minWidth: 0, flex: 1 }}>
-          <div title={node.name} style={{ fontSize: TYPE.body, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink, fontFamily: MONO, overflowWrap: "anywhere", lineHeight: 1.35 }}>{node.name}</div>
-          <div style={{ fontSize: TYPE.caption2, color: UI.ink3, marginTop: 2 }}>{node.status ? statusLabel(node.status) : "상태 관측 안 됨"}</div>
+          <div title={node.name} style={{ fontSize: TYPE.body, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink, fontFamily: MONO, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", lineHeight: 1.35 }}>{node.name}</div>
+          {showStatus && <div style={{ fontSize: TYPE.caption2, color: UI.ink3, marginTop: 2 }}>{statusText}</div>}
         </div>
         <span style={{ width: 8, height: 8, borderRadius: 999, background: sevColor(sev), flexShrink: 0, marginTop: 4 }} />
       </div>
@@ -534,8 +537,11 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
                     <EmptyState icon={<Server size={18} strokeWidth={1.75} />} label="인벤토리 관측 안 됨"
                       hint="에이전트가 아직 이 클러스터의 노드 인벤토리를 보고하지 않았습니다." />
                   ) : nodes.length === 0 ? (
-                    <EmptyState icon={<Cpu size={18} strokeWidth={1.75} />} label="관측된 노드가 없습니다"
-                      hint="이 클러스터에서 준비된 노드가 아직 관측되지 않았습니다." />
+                    <EmptyState icon={<Cpu size={18} strokeWidth={1.75} />}
+                      label={topology.partial ? "노드 관측 갱신 중" : "관측된 노드가 없습니다"}
+                      hint={topology.partial
+                        ? "불완전한 스냅샷을 수신했습니다. 다음 라이브 관측을 기다립니다."
+                        : "이 클러스터에서 준비된 노드가 아직 관측되지 않았습니다."} />
                   ) : (
                     /* 노드: 4칸 그리드. 계약이 주는 정체성·상태만 — 용량 병합/파드 밀도 표기 없음 */
                     <div className="node-grid" style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 12 }}>

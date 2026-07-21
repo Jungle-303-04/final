@@ -3,6 +3,26 @@ import { useEffect, useState } from "react";
 import { getClusterConnectStatus } from "../api/cluster-connect";
 import type { ClusterConnectStatusResponse } from "../api/cluster-connect-schemas";
 import {
+  connectApplication as connectApplicationApi,
+  type ApplicationConnectInput,
+} from "../api/applications";
+import { listClusters as listClustersApi, type ListClustersOptions } from "../api/clusters";
+import type { ClusterSummary } from "../api/cluster-schemas";
+import {
+  listRepositoryBranches as listRepositoryBranchesApi,
+  listRepositoryManifestCandidates as listRepositoryManifestCandidatesApi,
+  probeRepository as probeRepositoryApi,
+  validateRepositoryManifest as validateRepositoryManifestApi,
+} from "../api/repository-discovery";
+import type {
+  RepositoryBranch,
+  RepositoryBranchList,
+  RepositoryManifestCandidate,
+  RepositoryManifestCandidateList,
+  RepositoryManifestValidation,
+  RepositoryProbe,
+} from "../api/repository-discovery-schemas";
+import {
   getProviderCatalog,
   getProviderClusterDiscovery,
   preflightTargetRegistration,
@@ -35,17 +55,60 @@ import type {
 
 export type ConnectFeedStatus = "loading" | "ready" | "unavailable" | "error";
 
-// ── Repository discovery honest gap ─────────────────────────────
-// The `/api/repositories/discovery/*` endpoints were a dev-only module and the
-// front snapshot ships no client for them under `src/api/`. `src/api/**` is
-// read-only for this task, so we cannot add one. The wizard therefore keeps its
-// local URL parser as a pre-check but must present server probe / branch /
-// manifest discovery as an honest "미지원(gap)" state — it must not fabricate
-// detection results.
-export const REPOSITORY_DISCOVERY_SUPPORTED = false as const;
-export const REPOSITORY_DISCOVERY_GAP_REASON =
-  "저장소 서버 디스커버리(probe·branches·manifests) 클라이언트가 이 빌드에 없어 " +
-  "서버 확인은 미지원입니다. 아래는 주소 형식 검증(로컬)만 수행합니다.";
+// ── Repository/application discovery (explicit-click reads/mutation) ────────
+// Keep the view component behind the same authenticated domain adapter as the
+// cluster wizard. Repository registration remains an explicit user mutation.
+
+export type ClusterSummaryView = ClusterSummary;
+export type RepositoryBranchView = RepositoryBranch;
+export type RepositoryManifestCandidateView = RepositoryManifestCandidate;
+
+export function connectApplication(
+  input: ApplicationConnectInput,
+  signal?: AbortSignal,
+) {
+  return connectApplicationApi(input, signal);
+}
+
+export function listClusters(
+  options: ListClustersOptions = {},
+  signal?: AbortSignal,
+) {
+  return listClustersApi(options, signal);
+}
+
+export function probeRepository(
+  repoRef: string,
+  token?: string,
+  signal?: AbortSignal,
+): Promise<RepositoryProbe> {
+  return probeRepositoryApi(repoRef, token, signal);
+}
+
+export function listRepositoryBranches(
+  repoRef: string,
+  signal?: AbortSignal,
+): Promise<RepositoryBranchList> {
+  return listRepositoryBranchesApi(repoRef, signal);
+}
+
+export function listRepositoryManifestCandidates(
+  repoRef: string,
+  branch: string,
+  signal?: AbortSignal,
+): Promise<RepositoryManifestCandidateList> {
+  return listRepositoryManifestCandidatesApi(repoRef, branch, signal);
+}
+
+export function validateRepositoryManifest(
+  repoRef: string,
+  branch: string,
+  manifestPath: string,
+  sourceType = "",
+  signal?: AbortSignal,
+): Promise<RepositoryManifestValidation> {
+  return validateRepositoryManifestApi(repoRef, branch, manifestPath, sourceType, signal);
+}
 
 // ── Provider availability (catalog + cluster discovery) ─────────────────────
 

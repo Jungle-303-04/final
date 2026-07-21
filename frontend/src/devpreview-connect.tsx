@@ -1,8 +1,8 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 // ⚠ 데모 · 환경 연결 마법사. 런처 → (A)Git 저장소 등록 / (B)클러스터 연결(에이전트 설치).
 // UI-PHASE2-001 wiring: 클러스터 연결은 라이브 백엔드(providers 카탈로그/디스커버리,
-// preflight/register, connection 상태)에 연결됨. 저장소 흐름은 서버 디스커버리 클라이언트가
-// 없어 로컬 주소 검증만 수행하고 나머지는 정직한 미지원(gap) 상태로 표시한다.
+// preflight/register, connection 상태)에 연결됨. 저장소 흐름은 주소 형식 사전검사 뒤
+// POST /api/applications/connect에서 리비전·브랜치·매니페스트를 다시 검증하고 등록한다.
 // SAFETY(plan §5): 공유 라이브 백엔드. GET 읽기만 마운트 시 자동 실행. 타깃 등록(POST)은
 // 사용자의 명시적 클릭에서만 호출하며 타이머/마운트 자동 제출은 없다. 토큰은 저장·로그 금지.
 import { useEffect, useRef, useState } from "react";
@@ -35,10 +35,22 @@ const IconBrandDocker = ({ size = 21, style }: BrandIconProps) => (
 );
 import { Spinner } from "./shared/ui/primitives/spinner";
 import { emitAction } from "./devpreview/bus";
-import { isApiError, type TargetInstallResponse, type TargetPreflightResponse } from "./devpreview/connectFeed";
+import {
+  connectApplication,
+  isApiError,
+  listClusters,
+  listRepositoryBranches,
+  listRepositoryManifestCandidates,
+  probeRepository,
+  validateRepositoryManifest,
+  type ClusterSummaryView,
+  type RepositoryBranchView,
+  type RepositoryManifestCandidateView,
+  type TargetInstallResponse,
+  type TargetPreflightResponse,
+} from "./devpreview/connectFeed";
 import {
   PLATFORM_CLOUD_PROVIDER,
-  REPOSITORY_DISCOVERY_GAP_REASON,
   preflightClusterTarget,
   registerClusterTarget,
   useClusterConnectionStatus,
@@ -62,8 +74,7 @@ const swap = {
   transition: { duration: 0.3, ease: EASE },
 };
 
-const PATH = "deploy/prod";
-const REPO_STEPS = ["저장소", "서버 연동"];
+const REPO_STEPS = ["저장소", "배포 대상", "완료"];
 const CLUSTER_STEPS = ["정보", "설치", "연결"];
 const CLUSTER_ENVS = ["prod", "staging", "dev"];
 
@@ -198,17 +209,29 @@ function Steps({ steps, active }: { steps: string[]; active: number }) {
 
 const Body = ({ children }: { children: React.ReactNode }) => <div style={{ padding: "28px 36px 34px" }}><AnimatePresence mode="wait">{children}</AnimatePresence></div>;
 
-// ── A. Git 저장소 등록 (로컬 검증 + 서버 디스커버리 미지원 gap) ─────────────────────────────
-function RepoStep({ providers, onNext }: { providers: ClusterProvidersView; onNext: (v: string) => void }) {
+// ── A. Git 저장소 등록 (로컬 형식 사전검사 + 서버 리비전/매니페스트 검증) ─────────────
+type RepoSource = {
+  repo: Repo;
+  normalizedRepo: string;
+  token: string;
+  branches: RepositoryBranchView[];
+  defaultBranch: string;
+};
+
+function RepoStep({ providers, onNext }: { providers: ClusterProvidersView; onNext: (v: RepoSource) => void }) {
   const [input, setInput] = useState("");
   const [status, setStatus] = useState<"idle" | "detecting" | "found" | "error">("idle");
   const [repo, setRepo] = useState<Repo | null>(null);
   const [token, setToken] = useState(""); // 로컬 상태만 · 저장/로그 금지
+  const [probeStatus, setProbeStatus] = useState<"idle" | "submitting" | "error">("idle");
+  const [failure, setFailure] = useState("");
 
   const handleInputChange = (v: string) => {
     setInput(v);
     setRepo(null);
     setToken("");
+    setProbeStatus("idle");
+    setFailure("");
     setStatus(v.trim() ? "detecting" : "idle");
   };
 
@@ -223,12 +246,33 @@ function RepoStep({ providers, onNext }: { providers: ClusterProvidersView; onNe
   }, [input]);
 
   const ready = status === "found" && repo !== null;
+  const verify = async () => {
+    if (!repo || probeStatus === "submitting") return;
+    setProbeStatus("submitting");
+    setFailure("");
+    try {
+      const probe = await probeRepository(repo.full, token.trim() || undefined);
+      if (!probe.valid || !probe.reachable) {
+        throw new Error(probe.errors[0] || "저장소에 연결할 수 없습니다.");
+      }
+      const branchList = await listRepositoryBranches(probe.normalized_repo_ref);
+      const defaultBranch = branchList.default_branch || probe.default_branch || branchList.branches[0]?.name || "main";
+      onNext({
+        repo: { ...repo, full: probe.normalized_repo_ref, visibility: probe.private ? "private" : "public", branch: defaultBranch },
+        normalizedRepo: probe.normalized_repo_ref,
+        token,
+        branches: branchList.branches,
+        defaultBranch,
+      });
+    } catch (cause: unknown) {
+      setFailure(errorText(cause));
+      setProbeStatus("error");
+    }
+  };
 
   return (
     <motion.div key="repo" {...swap} className="grid gap-5">
-      <p className="text-[14px] leading-[1.55] c-2">Git 저장소 주소를 붙여넣으면 <span className="c-ink font-medium">주소 형식</span>을 로컬에서 확인합니다.</p>
-
-      <GapBanner>{REPOSITORY_DISCOVERY_GAP_REASON}</GapBanner>
+      <p className="text-[14px] leading-[1.55] c-2">Git 저장소 주소를 확인한 뒤 서버가 선택한 브랜치와 매니페스트를 실제 리비전에서 검증합니다.</p>
 
       {providers.status === "ready" && providers.sourceProviders.length > 0 && (
         <div className="grid gap-2">
@@ -239,7 +283,7 @@ function RepoStep({ providers, onNext }: { providers: ClusterProvidersView; onNe
 
       <div className="field flex items-center gap-3 bg-surface" style={{ borderRadius: 14, padding: "15px 16px" }}>
         {status === "detecting" ? <Spin c="size-[18px] c-accent" /> : <Search className="size-[18px] c-3" />}
-        <input autoFocus value={input} onChange={(e) => handleInputChange(e.currentTarget.value)} placeholder="https://github.com/org/repo" className="w-full bg-transparent font-mono text-[14px] c-ink outline-none placeholder:font-sans placeholder:c-3" />
+        <input value={input} onChange={(e) => handleInputChange(e.currentTarget.value)} placeholder="https://github.com/org/repo" className="w-full bg-transparent font-mono text-[14px] c-ink outline-none placeholder:font-sans placeholder:c-3" />
       </div>
 
       <AnimatePresence mode="popLayout">
@@ -263,70 +307,244 @@ function RepoStep({ providers, onNext }: { providers: ClusterProvidersView; onNe
                 <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
                   <span className="truncate text-[15px] font-semibold tracking-[-0.015em] c-ink">{repo.full}</span>
                   {repo.visibility === "private"
-                    ? <span className="inline-flex items-center gap-1 rounded-full orange-bg px-2 py-[3px] text-[11px] font-semibold c-orange"><Lock className="size-3" strokeWidth={2.5} />비공개(추정)</span>
-                    : <span className="inline-flex items-center gap-1 rounded-full green-bg px-2 py-[3px] text-[11px] font-semibold c-green"><Globe className="size-3" strokeWidth={2.5} />공개(추정)</span>}
+                    ? <span className="inline-flex items-center gap-1 rounded-full orange-bg px-2 py-[3px] text-[11px] font-semibold c-orange"><Lock className="size-3" strokeWidth={2.5} />인증 선택</span>
+                    : <span className="inline-flex items-center gap-1 rounded-full green-bg px-2 py-[3px] text-[11px] font-semibold c-green"><Globe className="size-3" strokeWidth={2.5} />공개 주소</span>}
                 </div>
                 <div className="mt-1.5 flex items-center gap-1.5 text-[12.5px] c-2">
-                  <GitBranch className="size-3.5 c-3" /><span className="font-mono">형식만 확인됨</span><span className="c-3">·</span><span>서버 확인 안 됨</span>
+                  <GitBranch className="size-3.5 c-3" /><span className="font-mono">{repo.full}</span><span className="c-3">·</span><span>다음 단계에서 서버 검증</span>
                 </div>
               </div>
             </div>
 
-            {repo.visibility === "private" && (
-              <div className="grid gap-2.5 pt-1">
-                <span className="px-0.5 text-[12.5px] font-medium c-2">비공개로 추정돼요 · 토큰은 화면에만 보관되며 저장·전송되지 않습니다</span>
-                <div className="field flex items-center gap-3 bg-surface" style={{ borderRadius: 14, padding: "15px 16px" }}>
-                  <Lock className="size-[18px] c-3" />
-                  <input value={token} onChange={(e) => setToken(e.currentTarget.value)} placeholder="ghp_••••••••••••••••" className="w-full bg-transparent font-mono text-[14px] c-ink outline-none placeholder:c-3" />
-                </div>
-                <span className="px-0.5 text-[11.5px] c-3">서버 토큰 검증은 미지원이라 여기서 확인할 수 없습니다.</span>
+            <div className="grid gap-2.5 pt-1">
+              <span className="px-0.5 text-[12.5px] font-medium c-2">비공개 저장소만 액세스 토큰을 입력하세요</span>
+              <div className="field flex items-center gap-3 bg-surface" style={{ borderRadius: 14, padding: "15px 16px" }}>
+                <Lock className="size-[18px] c-3" />
+                <input value={token} onChange={(e) => setToken(e.currentTarget.value)} placeholder="선택 사항 · ghp_••••••••••••••••" type="password" autoComplete="new-password" className="w-full bg-transparent font-mono text-[14px] c-ink outline-none placeholder:c-3" />
               </div>
-            )}
+              <span className="px-0.5 text-[11.5px] c-3">토큰은 브라우저 저장소에 남기지 않으며, 연결 성공 시 서버의 암호화된 저장소 자격증명으로 보관됩니다.</span>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      <NextButton show={ready} label="다음" onClick={() => repo && onNext(repo.full)} />
+      {failure && (
+        <div role="alert" className="flex items-start gap-3.5 err-bg" style={{ borderRadius: 16, padding: "14px 16px" }}>
+          <AlertCircle className="mt-0.5 size-5 shrink-0 c-red" />
+          <div><div className="text-[13.5px] font-semibold c-ink">저장소 연결 확인 실패</div><div className="mt-1 break-words text-[12.5px] leading-[1.5] c-2">{failure}</div></div>
+        </div>
+      )}
+      {ready && (
+        <button disabled={probeStatus === "submitting"} onClick={() => void verify()} className="btn-primary flex w-full items-center justify-center gap-2 rounded-[14px] py-3.5 text-[15px] font-semibold disabled:cursor-not-allowed disabled:opacity-60">
+          {probeStatus === "submitting" ? <><Spin c="size-4 text-white" /> 저장소·브랜치 확인 중…</> : <>저장소 확인 · 배포 대상 선택 <ArrowRight className="size-[17px]" /></>}
+        </button>
+      )}
     </motion.div>
   );
 }
 
-function RepoGapStep({ repo, onBack }: { repo: string; onBack: () => void }) {
+type RepoTargetInput = {
+  name: string;
+  branch: string;
+  manifestPath: string;
+  clusterId: string;
+  namespace: string;
+  environment: string;
+};
+
+function RepoTargetStep({ source, onBack, onComplete }: {
+  source: RepoSource;
+  onBack: () => void;
+  onComplete: (repo: string) => void;
+}) {
+  const repoRef = source.normalizedRepo || source.repo.full;
+  const repoSegments = repoRef.split("/");
+  const defaultName = repoSegments[repoSegments.length - 1] || "application";
+  const [input, setInput] = useState<RepoTargetInput>({
+    name: defaultName,
+    branch: source.defaultBranch,
+    manifestPath: "",
+    clusterId: "",
+    namespace: "sandbox",
+    environment: "development",
+  });
+  const [clusters, setClusters] = useState<ClusterSummaryView[]>([]);
+  const [clusterStatus, setClusterStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [submitStatus, setSubmitStatus] = useState<"idle" | "submitting" | "error">("idle");
+  const [failure, setFailure] = useState("");
+  const [manifests, setManifests] = useState<RepositoryManifestCandidateView[]>([]);
+  const [manifestStatus, setManifestStatus] = useState<"loading" | "ready" | "error">("loading");
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void listClusters({}, controller.signal)
+      .then((response) => {
+        if (controller.signal.aborted) return;
+        const connected = response.clusters.filter((cluster) => ["online", "connected"].includes(cluster.connection_status.toLowerCase()));
+        setClusters(connected);
+        setInput((current) => ({ ...current, clusterId: current.clusterId || connected[0]?.cluster_id || "" }));
+        setClusterStatus("ready");
+      })
+      .catch((cause: unknown) => {
+        if (controller.signal.aborted || isAbortError(cause)) return;
+        setClusterStatus("error");
+      });
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void listRepositoryManifestCandidates(repoRef, input.branch, controller.signal)
+      .then((response) => {
+        if (controller.signal.aborted) return;
+        setManifests(response.candidates);
+        setInput((current) => ({
+          ...current,
+          manifestPath: response.candidates.some((candidate) => candidate.path === current.manifestPath)
+            ? current.manifestPath
+            : response.candidates[0]?.path || "",
+        }));
+        setManifestStatus("ready");
+      })
+      .catch((cause: unknown) => {
+        if (controller.signal.aborted || isAbortError(cause)) return;
+        setManifests([]);
+        setFailure(errorText(cause));
+        setManifestStatus("error");
+      });
+    return () => controller.abort();
+  }, [input.branch, repoRef]);
+
+  const update = (key: keyof RepoTargetInput, value: string) => {
+    setInput((current) => ({ ...current, [key]: value }));
+    if (key === "branch") {
+      setManifestStatus("loading");
+      setManifests([]);
+    }
+    setFailure("");
+    setSubmitStatus("idle");
+  };
+  const complete = Object.values(input).every((value) => value.trim() !== "") && clusterStatus === "ready" && manifestStatus === "ready";
+  const submit = async () => {
+    if (!complete || submitStatus === "submitting") return;
+    setSubmitStatus("submitting");
+    setFailure("");
+    try {
+      const candidate = manifests.find((item) => item.path === input.manifestPath);
+      const validation = await validateRepositoryManifest(
+        repoRef,
+        input.branch.trim(),
+        input.manifestPath.trim(),
+        candidate?.source_type ?? "",
+      );
+      if (!validation.valid) throw new Error(validation.errors[0] || "매니페스트 검증에 실패했습니다.");
+      await connectApplication({
+        name: input.name.trim(),
+        repository: repoRef,
+        branch: input.branch.trim(),
+        manifestPath: input.manifestPath.trim(),
+        clusterId: input.clusterId,
+        namespace: input.namespace.trim(),
+        environment: input.environment,
+        ...(source.token.trim() ? { token: source.token.trim() } : {}),
+      });
+      onComplete(repoRef);
+    } catch (cause: unknown) {
+      setFailure(errorText(cause));
+      setSubmitStatus("error");
+    }
+  };
+
   return (
-    <motion.div key="repogap" {...swap} className="grid gap-5">
+    <motion.div key="repotarget" {...swap} className="grid gap-5">
       <div className="flex items-center gap-4 bg-soft" style={{ borderRadius: 16, padding: "16px 18px" }}>
         <span className="grid size-11 shrink-0 place-items-center bg-surface" style={{ borderRadius: 13, boxShadow: "0 1px 3px rgba(0,0,0,0.08)" }}><Folder className="size-[22px] c-2" /></span>
         <div className="min-w-0 flex-1">
-          <div className="truncate text-[15px] font-semibold tracking-[-0.015em] c-ink">{repo}</div>
-          <div className="mt-1 flex items-center gap-1.5 text-[12.5px] c-2"><Folder className="size-3.5 c-3" /><span className="font-mono">{PATH}</span></div>
+          <div className="truncate text-[15px] font-semibold tracking-[-0.015em] c-ink">{repoRef}</div>
+          <div className="mt-1 text-[12.5px] c-2">서버가 Git 리비전과 매니페스트를 검증한 뒤 배포 대상을 등록합니다.</div>
         </div>
       </div>
 
-      <div className="flex items-start gap-3.5 err-bg" style={{ borderRadius: 16, padding: "16px 18px" }}>
-        <span className="grid size-9 shrink-0 place-items-center rounded-full err-ic-bg"><AlertCircle className="size-5 c-orange" /></span>
-        <div className="min-w-0 flex-1">
-          <div className="text-[13.5px] font-semibold c-ink">저장소 서버 연동은 미지원(gap)입니다</div>
-          <div className="mt-1 text-[12.5px] leading-[1.55] c-2">
-            매니페스트 자동 탐색·브랜치 조회·배포 동기화는 <span className="font-mono">/api/repositories/discovery/*</span> 클라이언트가
-            이 빌드에 없어 실제로 수행할 수 없습니다. 관측되지 않은 값을 지어내지 않기 위해 이 단계는 결과를 표시하지 않습니다.
-            클러스터 연결 흐름은 라이브로 동작합니다.
-          </div>
-        </div>
+      <div className="grid grid-cols-2 gap-3">
+        {([
+          ["애플리케이션 이름", "name", input.name],
+          ["네임스페이스", "namespace", input.namespace],
+        ] as const).map(([label, key, value]) => (
+          <label key={key} className="grid gap-1.5 text-[12px] font-semibold c-2">
+            {label}
+            <input value={value} onChange={(event) => update(key, event.currentTarget.value)} className="field min-w-0 rounded-xl px-3.5 py-3 font-mono text-[13px] font-normal c-ink outline-none" />
+          </label>
+        ))}
+        <label className="grid gap-1.5 text-[12px] font-semibold c-2">
+          브랜치
+          <select aria-label="브랜치" value={input.branch} onChange={(event) => update("branch", event.currentTarget.value)} className="field min-w-0 rounded-xl px-3.5 py-3 font-mono text-[13px] font-normal c-ink outline-none">
+            {(source.branches.length ? source.branches : [{ name: source.defaultBranch, protected: false, default: true }]).map((branch) => <option key={branch.name} value={branch.name}>{branch.name}{branch.default ? " · 기본" : ""}{branch.protected ? " · 보호" : ""}</option>)}
+          </select>
+        </label>
+        <label className="grid gap-1.5 text-[12px] font-semibold c-2">
+          매니페스트
+          <select aria-label="매니페스트" value={input.manifestPath} disabled={manifestStatus !== "ready" || manifests.length === 0} onChange={(event) => update("manifestPath", event.currentTarget.value)} className="field min-w-0 rounded-xl px-3.5 py-3 font-mono text-[13px] font-normal c-ink outline-none">
+            {manifestStatus === "loading" && <option value="">매니페스트 탐색 중…</option>}
+            {manifestStatus === "error" && <option value="">매니페스트를 불러오지 못함</option>}
+            {manifestStatus === "ready" && manifests.length === 0 && <option value="">발견된 매니페스트 없음</option>}
+            {manifests.map((candidate) => <option key={candidate.path} value={candidate.path}>{candidate.display_name || candidate.path} · {candidate.path}</option>)}
+          </select>
+        </label>
+        <label className="grid gap-1.5 text-[12px] font-semibold c-2">
+          연결된 클러스터
+          <select aria-label="연결된 클러스터" value={input.clusterId} disabled={clusterStatus !== "ready" || clusters.length === 0} onChange={(event) => update("clusterId", event.currentTarget.value)} className="field min-w-0 rounded-xl px-3.5 py-3 text-[13px] font-normal c-ink outline-none">
+            {clusterStatus === "loading" && <option value="">클러스터 확인 중…</option>}
+            {clusterStatus === "error" && <option value="">클러스터를 불러오지 못함</option>}
+            {clusterStatus === "ready" && clusters.length === 0 && <option value="">연결된 클러스터 없음</option>}
+            {clusters.map((cluster) => <option key={cluster.cluster_id} value={cluster.cluster_id}>{cluster.name} · {cluster.environment}</option>)}
+          </select>
+        </label>
+        <label className="grid gap-1.5 text-[12px] font-semibold c-2">
+          환경
+          <select aria-label="환경" value={input.environment} onChange={(event) => update("environment", event.currentTarget.value)} className="field min-w-0 rounded-xl px-3.5 py-3 text-[13px] font-normal c-ink outline-none">
+            <option value="development">개발</option><option value="staging">스테이징</option><option value="production">운영</option>
+          </select>
+        </label>
       </div>
 
-      <div className="flex"><BackBtn onClick={onBack} /></div>
+      {clusterStatus === "error" && <GapBanner>연결된 클러스터를 불러오지 못했습니다. 서버 연결을 확인한 뒤 다시 열어주세요.</GapBanner>}
+      {clusterStatus === "ready" && clusters.length === 0 && <GapBanner>먼저 클러스터를 연결해야 저장소 배포 대상을 등록할 수 있습니다.</GapBanner>}
+      {manifestStatus === "ready" && manifests.length === 0 && <GapBanner>선택한 브랜치에서 배포 가능한 Kubernetes 매니페스트를 찾지 못했습니다.</GapBanner>}
+      {failure && (
+        <div role="alert" className="flex items-start gap-3.5 err-bg" style={{ borderRadius: 16, padding: "14px 16px" }}>
+          <AlertCircle className="mt-0.5 size-5 shrink-0 c-red" />
+          <div><div className="text-[13.5px] font-semibold c-ink">저장소 검증 실패</div><div className="mt-1 break-words text-[12.5px] leading-[1.5] c-2">{failure}</div></div>
+        </div>
+      )}
+      <div className="flex gap-3">
+        <BackBtn onClick={onBack} />
+        <button disabled={!complete || submitStatus === "submitting"} onClick={() => void submit()} className="btn-primary flex min-w-0 flex-1 items-center justify-center gap-2 rounded-[14px] text-[15px] font-semibold disabled:cursor-not-allowed disabled:opacity-45">
+          {submitStatus === "submitting" ? <><Spin c="size-4 text-white" /> 서버 검증·등록 중…</> : <>서버 검증 후 연결 <ArrowRight className="size-[17px]" /></>}
+        </button>
+      </div>
     </motion.div>
   );
 }
 
-function RepoWizard({ providers, onClose }: { providers: ClusterProvidersView; onClose: () => void }) {
+function RepoDoneStep({ repo, onDone }: { repo: string; onDone: () => void }) {
+  return (
+    <motion.div key="repodone" {...swap} className="grid gap-5 text-center">
+      <span className="mx-auto grid size-16 place-items-center rounded-full green-bg"><Check className="size-8 c-green" strokeWidth={2.6} /></span>
+      <div><h2 className="text-[18px] font-semibold c-ink">저장소 연결 완료</h2><p className="mt-2 text-[13px] c-2"><span className="font-mono c-ink">{repo}</span>의 검증된 배포 대상이 등록되었습니다.</p></div>
+      <button onClick={onDone} className="btn-primary rounded-[14px] py-3.5 text-[15px] font-semibold">GitOps에서 확인</button>
+    </motion.div>
+  );
+}
+
+function RepoWizard({ providers, onClose, onComplete }: { providers: ClusterProvidersView; onClose: () => void; onComplete: (repo: string) => void }) {
   const [step, setStep] = useState(0);
-  const [repo, setRepo] = useState("");
+  const [source, setSource] = useState<RepoSource | null>(null);
   const el = {
-    0: <RepoStep key="s0" providers={providers} onNext={(v) => { setRepo(v); setStep(1); }} />,
-    1: <RepoGapStep key="s1" repo={repo} onBack={() => setStep(0)} />,
+    0: <RepoStep key="s0" providers={providers} onNext={(value) => { setSource(value); setStep(1); }} />,
+    1: source ? <RepoTargetStep key="s1" source={source} onBack={() => setStep(0)} onComplete={() => setStep(2)} /> : null,
+    2: source ? <RepoDoneStep key="s2" repo={source.normalizedRepo} onDone={() => onComplete(source.normalizedRepo)} /> : null,
   }[step];
-  return (<><ShellHeader icon={GitBranch} title="Git 저장소 연결" sub="주소 형식은 로컬에서 확인 · 서버 디스커버리는 미지원" onClose={onClose} /><Steps steps={REPO_STEPS} active={step} /><Body>{el}</Body></>);
+  return (<><ShellHeader icon={GitBranch} title="Git 저장소 연결" sub="Git 원문 검증 · 배포 대상 등록 · Safe PR 준비" onClose={onClose} /><Steps steps={REPO_STEPS} active={step} /><Body>{el}</Body></>);
 }
 
 // ── B. 클러스터 연결 (에이전트 설치 · 라이브) ─────────────────────────────
@@ -398,7 +616,7 @@ function ClusterInfoStep({
         <span className="px-0.5 text-[12.5px] font-semibold c-2">클러스터 이름</span>
         <div className="field flex items-center gap-3 bg-surface" style={{ borderRadius: 14, padding: "15px 16px" }}>
           <Server className="size-[18px] c-3" />
-          <input autoFocus value={name} onChange={(e) => setName(e.currentTarget.value)} placeholder="game-server-apne2" className="w-full bg-transparent font-mono text-[14px] c-ink outline-none placeholder:font-sans placeholder:c-3" />
+          <input value={name} onChange={(e) => setName(e.currentTarget.value)} placeholder="game-server-apne2" className="w-full bg-transparent font-mono text-[14px] c-ink outline-none placeholder:font-sans placeholder:c-3" />
         </div>
       </div>
       <div className="grid gap-2.5">
@@ -617,7 +835,7 @@ function ClusterWizard({ providers, onClose, onComplete }: { providers: ClusterP
 // ── 런처 ─────────────────────────────
 function Launcher({ onPick }: { onPick: (v: "repo" | "cluster") => void }) {
   const items = [
-    { id: "repo" as const, icon: GitBranch, title: "Git 저장소 연결", sub: "레포 주소 형식 확인 · 서버 디스커버리는 미지원" },
+    { id: "repo" as const, icon: GitBranch, title: "Git 저장소 연결", sub: "브랜치·매니페스트 검증 후 배포 대상 등록" },
     { id: "cluster" as const, icon: Server, title: "클러스터 연결", sub: "에이전트를 설치해 클러스터를 등록·관측 (라이브)" },
   ];
   return (
@@ -662,6 +880,10 @@ export function ConnectWizard({ embedded = false, initialView = null, onDismiss 
     emitAction({ kind: "connect", title: "클러스터 연결됨", body: `${name} · 메트릭 수집 시작`, scope: "cluster", ref: name });
     closeView();
   };
+  const completeRepo = (repo: string) => {
+    emitAction({ kind: "connect", title: "저장소 연결됨", body: `${repo} · GitOps 대상 등록 완료`, scope: "repo", ref: repo });
+    closeView();
+  };
 
   return (
     <div className={`opsia-connect ${embedded ? "absolute" : "fixed"} inset-0`}>
@@ -679,10 +901,11 @@ export function ConnectWizard({ embedded = false, initialView = null, onDismiss 
             {/* 바깥(배경) 클릭 시 닫기 · 모달 컨텐츠 클릭은 stopPropagation으로 전파 차단 */}
             <div className="absolute inset-0 overflow-y-auto" onClick={closeView}>
               <div className="flex min-h-full justify-center px-6" style={{ paddingTop: "6vh", paddingBottom: "6vh" }}>
-                <motion.div key={view} onClick={(e) => e.stopPropagation()} initial={{ opacity: 0, y: 22, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 16, scale: 0.98 }} transition={{ type: "spring", visualDuration: 0.42, bounce: 0.2 }}
+                <motion.div key={view} role="dialog" aria-modal="true" aria-label={view === "repo" ? "Git 저장소 연결" : "클러스터 연결"}
+                  tabIndex={-1} autoFocus onClick={(e) => e.stopPropagation()} initial={{ opacity: 0, y: 22, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 16, scale: 0.98 }} transition={{ type: "spring", visualDuration: 0.42, bounce: 0.2 }}
                   style={{ width: 580, maxWidth: "100%", borderRadius: 26, alignSelf: "flex-start", boxShadow: "0 44px 100px -30px rgba(0,0,0,0.4), 0 8px 24px -12px rgba(0,0,0,0.15)" }} className="modal-surface overflow-hidden">
                   {view === "repo"
-                    ? <RepoWizard providers={providers} onClose={closeView} />
+                    ? <RepoWizard providers={providers} onClose={closeView} onComplete={completeRepo} />
                     : <ClusterWizard providers={providers} onClose={closeView} onComplete={completeCluster} />}
                 </motion.div>
               </div>

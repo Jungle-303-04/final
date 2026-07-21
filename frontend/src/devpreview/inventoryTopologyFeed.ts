@@ -56,8 +56,9 @@ export interface ClusterTopologyView {
 
 type TopologyListener = (view: ClusterTopologyView) => void;
 
-const CACHE_TTL_MS = 30_000;
-const ERROR_CACHE_TTL_MS = 5_000;
+const CACHE_TTL_MS = 10_000;
+const PARTIAL_CACHE_TTL_MS = 2_000;
+const ERROR_CACHE_TTL_MS = 2_000;
 
 const EMPTY_READY: ClusterTopologyView = {
   status: "ready",
@@ -177,7 +178,10 @@ function subscribeClusterTopology(clusterId: string, listener: TopologyListener)
       .then((topology) => {
         if (active.controller.signal.aborted) return;
         const view = toClusterTopologyView(topology);
-        cache.set(clusterId, { view, expiresAt: Date.now() + CACHE_TTL_MS });
+        cache.set(clusterId, {
+          view,
+          expiresAt: Date.now() + (view.partial ? PARTIAL_CACHE_TTL_MS : CACHE_TTL_MS),
+        });
         active.listeners.forEach((notify) => notify(view));
       })
       .catch((cause: unknown) => {
@@ -211,6 +215,7 @@ export function useClusterTopologies(
   const key = Array.from(new Set(clusterIds)).sort().join("\u0000");
   const ids = useMemo(() => (key ? key.split("\u0000") : []), [key]);
   const [views, setViews] = useState<Record<string, ClusterTopologyView>>(() => initialViews(ids));
+  const [refreshEpoch, setRefreshEpoch] = useState(0);
 
   useEffect(() => {
     const unsubscribes = ids.map((id) => subscribeClusterTopology(id, (view) => {
@@ -218,8 +223,19 @@ export function useClusterTopologies(
         ? previous
         : { ...previous, [id]: view });
     }));
-    return () => unsubscribes.forEach((unsubscribe) => unsubscribe());
-  }, [ids]);
+    const now = Date.now();
+    const refreshDelay = ids.length === 0 ? null : Math.min(...ids.map((id) => {
+      const entry = cache.get(id);
+      return entry === undefined ? 1_000 : Math.max(250, entry.expiresAt - now + 25);
+    }));
+    const refreshTimer = refreshDelay === null
+      ? null
+      : window.setTimeout(() => setRefreshEpoch((value) => value + 1), refreshDelay);
+    return () => {
+      unsubscribes.forEach((unsubscribe) => unsubscribe());
+      if (refreshTimer !== null) window.clearTimeout(refreshTimer);
+    };
+  }, [ids, refreshEpoch]);
 
   return Object.fromEntries(ids.map((id) => [
     id,
