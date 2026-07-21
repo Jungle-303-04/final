@@ -588,34 +588,140 @@ def test_global_facets_remove_only_their_own_axis_and_compile_scoped_sql(
     assert applied[4] == selected
     assert all(item.query is None and item.include_deleted is False for item in applied)
 
-    # Every candidate group is a real PostgreSQL-compilable statement. The common
-    # temporal source keeps tenant, cluster authorization, and cursor boundaries in
-    # all five queries; application candidates also retain application authorization.
-    assert len(connection.statements) == 6
-    sql_by_group = [_sql(statement) for statement in connection.statements]
-    for sql in sql_by_group:
-        assert "workspace_id = 'workspace-a'" in sql
-        assert "cluster_id in ('cluster-a', 'cluster-b')" in sql
-        assert "revision_id <= 42" in sql
-        assert "valid_from_revision <= 42" in sql
-        assert "valid_to_revision > 42" in sql
-    assert "applications.application_id in ('app-a', 'app-b')" in sql_by_group[2]
+    # Every candidate group is a real PostgreSQL-compilable statement. Global filter
+    # suggestions are always latest-only, so all axes use the active-row partial-index
+    # predicate instead of replaying immutable history. Tenant, cluster, and
+    # application authorization remain present in every applicable query.
+    assert len(connection.statements) == 1
+    combined_sql = _sql(connection.statements[0])
+    assert "workspace_id = 'workspace-a'" in combined_sql
+    assert "cluster_id in ('cluster-a', 'cluster-b')" in combined_sql
+    assert "valid_to_revision is null" in combined_sql
+    assert "inventory_filter_revisions" not in combined_sql
+    assert "applications.application_id in ('app-a', 'app-b')" in combined_sql
     assert (
-        "inventory_resource_application_versions.application_id in ('app-a', 'app-b')"
-        in sql_by_group[0]
+        combined_sql.count(
+            "inventory_resource_application_versions.application_id in ('app-a', 'app-b')"
+        )
+        == 5
     )
-    assert (
-        "inventory_resource_application_versions.application_id in ('app-a', 'app-b')"
-        in sql_by_group[1]
+    assert combined_sql.count("union all") == 5
+
+
+def test_global_facets_without_a_projection_revision_are_empty() -> None:
+    repository = object.__new__(InventoryFilterRepository)
+
+    def unexpected_connection() -> None:
+        raise AssertionError("a missing projection must not query facet tables")
+
+    repository.connection = unexpected_connection  # type: ignore[method-assign]
+
+    result = repository.list_global_filter_facets(
+        workspace_id="workspace-a",
+        allowed_cluster_ids={"cluster-a"},
+        allowed_application_ids={"app-a"},
+        filters=_filters(query=None),
+        snapshot_revision=0,
+        query=None,
+        limit=20,
     )
-    assert (
-        "inventory_resource_application_versions.application_id in ('app-a', 'app-b')"
-        in sql_by_group[3]
+
+    assert result == {
+        "clusters": [],
+        "namespaces": [],
+        "applications": [],
+        "resource_types": [],
+        "labels": [],
+        "resources": [],
+    }
+
+
+def test_global_facets_split_the_single_union_result_without_losing_group_fields() -> None:
+    rows = [
+        {
+            "facet_group": "clusters",
+            "id": "cluster-a",
+            "label": "Cluster A",
+            "cluster_id": None,
+            "kind": None,
+            "label_key": None,
+            "label_value": None,
+            "count": 4,
+        },
+        {
+            "facet_group": "namespaces",
+            "id": "cluster-a/shop",
+            "label": "shop",
+            "cluster_id": "cluster-a",
+            "kind": None,
+            "label_key": None,
+            "label_value": None,
+            "count": 3,
+        },
+        {
+            "facet_group": "labels",
+            "id": None,
+            "label": None,
+            "cluster_id": None,
+            "kind": None,
+            "label_key": "team",
+            "label_value": "checkout",
+            "count": 2,
+        },
+        {
+            "facet_group": "resources",
+            "id": "cluster-a:pod:checkout-1",
+            "label": "checkout-1",
+            "cluster_id": None,
+            "kind": "Pod",
+            "label_key": None,
+            "label_value": None,
+            "count": 1,
+        },
+    ]
+
+    @contextmanager
+    def connection() -> Iterator[_RecordingConnection]:
+        class Connection(_RecordingConnection):
+            def execute(self, statement: Any) -> _MappedResult:
+                self.statements.append(statement)
+                return _MappedResult(rows)
+
+        yield Connection()
+
+    repository = object.__new__(InventoryFilterRepository)
+    repository.connection = connection  # type: ignore[method-assign]
+    result = repository.list_global_filter_facets(
+        workspace_id="workspace-a",
+        allowed_cluster_ids={"cluster-a"},
+        allowed_application_ids={"app-a"},
+        filters=_filters(
+            clusters=None,
+            namespaces=None,
+            applications=None,
+            resource_types=None,
+            health=None,
+            labels=None,
+            query=None,
+        ),
+        snapshot_revision=42,
+        query="check",
+        limit=20,
     )
-    assert (
-        "inventory_resource_application_versions.application_id in ('app-a', 'app-b')"
-        in sql_by_group[4]
-    )
+
+    assert result["clusters"] == [{"id": "cluster-a", "label": "Cluster A", "count": 4}]
+    assert result["namespaces"] == [
+        {"id": "cluster-a/shop", "label": "shop", "count": 3, "cluster_id": "cluster-a"}
+    ]
+    assert result["labels"] == [{"key": "team", "value": "checkout", "count": 2}]
+    assert result["resources"] == [
+        {
+            "id": "cluster-a:pod:checkout-1",
+            "label": "checkout-1",
+            "count": 1,
+            "kind": "Pod",
+        }
+    ]
 
 
 def test_resource_identity_search_is_snapshot_scoped_bounded_and_uid_backed() -> None:

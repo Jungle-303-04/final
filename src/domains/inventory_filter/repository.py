@@ -840,16 +840,25 @@ class InventoryFilterRepository(DatabaseConnection):
         """Return bounded, server-counted suggestions for the product-wide filter bar."""
         cluster_ids = _ids(allowed_cluster_ids)
         application_ids = _ids(allowed_application_ids)
-        if not workspace_id or not cluster_ids:
+        if not workspace_id or not cluster_ids or snapshot_revision <= 0:
             return _empty_global_filter_facets()
         effective_limit = max(1, min(limit, 20))
         normalized_query = (query or "").strip().casefold()
         pattern = f"%{_escape_like(normalized_query)}%"
-        current = _current_versions(
-            workspace_id,
-            cluster_ids,
-            snapshot_revision,
-            include_deleted=False,
+        # This endpoint has no temporal cursor: the router always supplies the latest
+        # snapshot context and the suggestions are explicitly the current filter bar.
+        # Starting from the active-row partial index avoids replaying millions of
+        # immutable history rows once per facet axis.  Cursor-pinned Resources APIs
+        # continue to use ``_current_versions`` and retain their historical semantics.
+        version = InventoryResourceVersion.__table__
+        current = (
+            select(version, literal(1).label("rank"))
+            .where(
+                version.c.workspace_id == workspace_id,
+                version.c.cluster_id.in_(cluster_ids),
+                version.c.valid_to_revision.is_(None),
+            )
+            .cte("global_filter_active_versions")
         )
         base = select(current).where(current.c.rank == 1).cte("global_filter_base")
 
@@ -1037,21 +1046,86 @@ class InventoryFilterRepository(DatabaseConnection):
             .limit(effective_limit)
         )
 
+        null_text = cast(literal(None), Text)
+
+        def facet_branch(
+            group: str,
+            statement: Select[Any],
+            *,
+            cluster_column: str | None = None,
+            kind_column: str | None = None,
+            key_column: str | None = None,
+            value_column: str | None = None,
+        ) -> Select[Any]:
+            source = statement.subquery(f"global_{group}_facets")
+            return select(
+                literal(group).label("facet_group"),
+                cast(source.c.id, Text).label("id") if "id" in source.c else null_text.label("id"),
+                (
+                    cast(source.c.label, Text).label("label")
+                    if "label" in source.c
+                    else null_text.label("label")
+                ),
+                (
+                    cast(source.c[cluster_column], Text).label("cluster_id")
+                    if cluster_column
+                    else null_text.label("cluster_id")
+                ),
+                (
+                    cast(source.c[kind_column], Text).label("kind")
+                    if kind_column
+                    else null_text.label("kind")
+                ),
+                (
+                    cast(source.c[key_column], Text).label("label_key")
+                    if key_column
+                    else null_text.label("label_key")
+                ),
+                (
+                    cast(source.c[value_column], Text).label("label_value")
+                    if value_column
+                    else null_text.label("label_value")
+                ),
+                source.c.count,
+            )
+
+        branches = [
+            facet_branch("clusters", cluster_statement),
+            facet_branch(
+                "namespaces",
+                namespace_statement,
+                cluster_column="cluster_id",
+            ),
+            facet_branch("applications", application_statement),
+            facet_branch("resource_types", resource_type_statement),
+        ]
+        if normalized_query:
+            branches.extend(
+                (
+                    facet_branch(
+                        "labels",
+                        label_statement,
+                        key_column="key",
+                        value_column="value",
+                    ),
+                    facet_branch("resources", resource_statement, kind_column="kind"),
+                )
+            )
+
+        # One statement makes PostgreSQL materialize the shared active projection once
+        # and removes five serial network round trips.  Each branch still drops only
+        # its own selected axis, so disjunctive-facet counts retain their meaning.
         with self.connection() as conn:
-            clusters = [dict(row) for row in conn.execute(cluster_statement).mappings()]
-            namespaces = [dict(row) for row in conn.execute(namespace_statement).mappings()]
-            applications = [dict(row) for row in conn.execute(application_statement).mappings()]
-            resource_types = [dict(row) for row in conn.execute(resource_type_statement).mappings()]
-            labels = (
-                [dict(row) for row in conn.execute(label_statement).mappings()]
-                if normalized_query
-                else []
-            )
-            resources = (
-                [dict(row) for row in conn.execute(resource_statement).mappings()]
-                if normalized_query
-                else []
-            )
+            rows = [dict(row) for row in conn.execute(union_all(*branches)).mappings()]
+        grouped: dict[str, list[JsonObject]] = defaultdict(list)
+        for row in rows:
+            grouped[str(row.pop("facet_group"))].append(row)
+        clusters = grouped["clusters"]
+        namespaces = grouped["namespaces"]
+        applications = grouped["applications"]
+        resource_types = grouped["resource_types"]
+        labels = grouped["labels"]
+        resources = grouped["resources"]
         return {
             "clusters": _serialize_global_facets(clusters),
             "namespaces": _serialize_global_facets(namespaces),
@@ -1065,7 +1139,11 @@ class InventoryFilterRepository(DatabaseConnection):
                 for row in resource_types
             ],
             "labels": [
-                {"key": str(row["key"]), "value": str(row["value"]), "count": int(row["count"])}
+                {
+                    "key": str(row["label_key"]),
+                    "value": str(row["label_value"]),
+                    "count": int(row["count"]),
+                }
                 for row in labels
             ],
             "resources": _serialize_global_facets(resources),
