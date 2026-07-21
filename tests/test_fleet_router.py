@@ -1174,6 +1174,8 @@ def test_nodes_summary_aggregates_node_tiles_from_inventory() -> None:
             "pods_capacity": 110,
             "cpu_pct": 42.0,
             "mem_pct": 73.4,
+            "metrics_observed_at": None,
+            "metrics_stale": False,
             "restarts_recent": 3,
             "conditions": ["MemoryPressure"],
             "kubernetes_version": "v1.30.7",
@@ -1310,6 +1312,8 @@ def test_nodes_summary_uses_compact_snapshot_without_loading_pod_manifests() -> 
         "pods_capacity": 40,
         "cpu_pct": 18.2,
         "mem_pct": 34.1,
+        "metrics_observed_at": None,
+        "metrics_stale": False,
         "restarts_recent": 0,
         "conditions": [],
     }
@@ -1641,3 +1645,65 @@ def test_node_pods_summary_returns_404_for_missing_node() -> None:
 
     assert response.status_code == 404
     assert response.json()["detail"] == "node not found"
+
+
+def test_node_summary_keeps_last_real_metrics_beyond_freshness_window_as_stale() -> None:
+    """freshness 창(20s)을 넘긴 실측은 null 로 지우지 않고 값+stale=true 로 정직 노출한다.
+
+    첫 손실 재현: metrics.k8s.io 원천 타임스탬프 granularity(실측 34~37s)가 창보다 커
+    management 노드 CPU/MEM 이 실측이 있는데도 '관측 안 됨'으로 오표시되던 P0.
+    """
+    from datetime import UTC, datetime, timedelta
+
+    from domains.dashboard.fleet_router import node_summary_item
+
+    old_observed = (datetime.now(UTC) - timedelta(seconds=35)).isoformat()
+    node = {
+        "name": "ip-192-168-91-21.internal",
+        "status": "Ready",
+        "health": "healthy",
+        "summary": {
+            "ready": True,
+            "cpu_ratio": 0.75,
+            "mem_ratio": 0.74,
+            "metrics_observed_at": old_observed,
+            "allocatable": {"pods": "58"},
+        },
+    }
+
+    item = node_summary_item(node, [], {})
+
+    assert item.cpu_pct == 75.0
+    assert item.mem_pct == 74.0
+    assert item.metrics_stale is True
+    assert item.metrics_observed_at == old_observed
+
+    # 실측 자체가 없으면 그대로 null(합성 금지) + stale 아님.
+    empty = node_summary_item(
+        {"name": "n2", "status": "Ready", "health": "unknown", "summary": {"ready": True}},
+        [],
+        {},
+    )
+    assert empty.cpu_pct is None
+    assert empty.metrics_observed_at is None
+    assert empty.metrics_stale is False
+
+    # 창 안(신선) 실측은 기존 경로 그대로 stale=False.
+    fresh_observed = datetime.now(UTC).isoformat()
+    fresh = node_summary_item(
+        {
+            "name": "n3",
+            "status": "Ready",
+            "health": "healthy",
+            "summary": {
+                "ready": True,
+                "cpu_ratio": 0.1,
+                "mem_ratio": 0.2,
+                "metrics_observed_at": fresh_observed,
+            },
+        },
+        [],
+        {},
+    )
+    assert fresh.cpu_pct == 10.0
+    assert fresh.metrics_stale is False

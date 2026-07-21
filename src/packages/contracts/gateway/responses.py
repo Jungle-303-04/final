@@ -2606,6 +2606,12 @@ class NodeSummaryItem(StrictModel):
     pods_capacity: int = 0
     cpu_pct: float | None = None
     mem_pct: float | None = None
+    # 마지막 실측 시각과 신선도 — freshness 창(metrics_kubernetes.stale_after)을 넘긴
+    # '실측'은 버리지 않고 마지막 값 + stale=true 로 정직하게 노출한다(합성 금지).
+    # metrics-server 원천 타임스탬프 granularity(15~60s)가 창(20s)보다 클 수 있어,
+    # null 로 지우면 실제 관측이 있는데도 '관측 안 됨'으로 오표시된다.
+    metrics_observed_at: str | None = None
+    metrics_stale: bool = False
     restarts_recent: int = 0
     conditions: list[str] = Field(default_factory=list)
 

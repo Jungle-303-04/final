@@ -52,6 +52,7 @@ from domains.identity.dependencies import (
 )
 from domains.inventory.certificate_expiry import certificate_expiry_summary
 from domains.inventory.observed_metrics import (
+    inventory_metrics_are_fresh,
     inventory_metrics_observed_at,
     inventory_usage_pct,
     usage_pct,
@@ -1531,6 +1532,27 @@ def node_summary_item(
         ("mem_pct", "memory_pct"),
         ("mem_ratio", "memory_ratio"),
     )
+    # 첫 손실 지점 수정: freshness 창(metrics_kubernetes 20s)이 metrics.k8s.io 원천
+    # 타임스탬프 granularity(실측 34~37s)보다 좁아, 실측이 있는데도 null(관측 안 됨)로
+    # 오표시됐다. 실측은 버리지 않는다 — 창을 넘긴 마지막 실측은 값 + stale=true 로
+    # 정직하게 노출하고, 실측 자체가 없을 때만 null 을 유지한다(합성 없음).
+    metrics_observed_at = _optional_text(
+        node.get("metrics_observed_at") or summary.get("metrics_observed_at")
+    )
+    metrics_fresh = inventory_metrics_are_fresh(metrics_observed_at)
+    if cpu_pct is None:
+        cpu_pct = inventory_usage_pct(node, ("cpu_pct", "cpu_percent"), ("cpu_ratio",))
+    if mem_pct is None:
+        mem_pct = inventory_usage_pct(
+            node, ("mem_pct", "memory_pct"), ("mem_ratio", "memory_ratio")
+        )
+    metrics_stale = False
+    if (cpu_pct is None or mem_pct is None) and metrics_observed_at and not metrics_fresh:
+        if cpu_pct is None:
+            cpu_pct = usage_pct(summary, ("cpu_pct", "cpu_percent"), ("cpu_ratio",))
+        if mem_pct is None:
+            mem_pct = usage_pct(summary, ("mem_pct", "memory_pct"), ("mem_ratio", "memory_ratio"))
+        metrics_stale = cpu_pct is not None or mem_pct is not None
     return NodeSummaryItem(
         name=name,
         ready=bool(summary.get("ready")) or str(node.get("status") or "") == "Ready",
@@ -1540,16 +1562,10 @@ def node_summary_item(
         ),
         pods_running=running,
         pods_capacity=pod_capacity(summary),
-        cpu_pct=cpu_pct
-        if cpu_pct is not None
-        else inventory_usage_pct(node, ("cpu_pct", "cpu_percent"), ("cpu_ratio",)),
-        mem_pct=mem_pct
-        if mem_pct is not None
-        else inventory_usage_pct(
-            node,
-            ("mem_pct", "memory_pct"),
-            ("mem_ratio", "memory_ratio"),
-        ),
+        cpu_pct=cpu_pct,
+        mem_pct=mem_pct,
+        metrics_observed_at=metrics_observed_at,
+        metrics_stale=metrics_stale,
         restarts_recent=sum(pod_restarts(pod) for pod in pods),
         conditions=true_node_conditions(summary),
     )
