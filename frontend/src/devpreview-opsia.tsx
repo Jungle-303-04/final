@@ -110,12 +110,12 @@ function ClusterOverview({ cl, meta, topology, onKind }: {
           {cl?.connectionStatus === "online" ? "연결됨" : "연결 상태 관측 대기"}
         </span>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, auto)", gap: "5px 18px", alignContent: "center" }}>
+      <div style={{ flex: "1 1 280px", minWidth: 0, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(112px, 100%), 1fr))", gap: "5px 12px", alignContent: "center" }}>
         {KIND_LINKS.map(([kid, lb]) => (
-          <span key={kid} role="link" className="kindlink" onClick={onKind ? () => onKind(kid) : undefined}
-            style={{ display: "flex", alignItems: "baseline", gap: 5, fontSize: TYPE.label, color: UI.ink2, cursor: onKind ? "pointer" : "default" }}>
+          <button key={kid} type="button" disabled={!onKind} className="kindlink" onClick={onKind ? () => onKind(kid) : undefined}
+            style={{ minWidth: 0, display: "flex", alignItems: "baseline", gap: 5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", border: "none", background: "transparent", padding: 0, textAlign: "left", font: "inherit", fontSize: TYPE.label, color: UI.ink2, cursor: onKind ? "pointer" : "default" }}>
             <b style={{ fontFamily: MONO, fontWeight: 700, color: UI.ink, fontVariantNumeric: "tabular-nums" }}>{hasMeta ? (meta?.[kid] ?? 0) : "—"}</b>{lb}
-          </span>
+          </button>
         ))}
       </div>
     </div>
