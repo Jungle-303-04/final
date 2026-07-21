@@ -127,6 +127,95 @@ describe("useClusterSummaries", () => {
     })["cluster-a"]!;
     expect(disconnected).toMatchObject({ podsRunning: 1, podsTotal: 2, stale: true });
   });
+
+  it("does not let an incomplete zero live summary erase the REST node occupancy", () => {
+    const baseline = {
+      "management-server": {
+        status: "ready" as const,
+        health: null,
+        cpuPct: null,
+        memPct: null,
+        podsRunning: 52,
+        podsTotal: null,
+        nodesReady: 2,
+        nodesTotal: 2,
+        openIncidents: null,
+        nodes: [
+          { name: "worker-a", ready: true, health: "healthy", cpuPct: null, memPct: null, podsRunning: 22, podsCapacity: 58, restartsRecent: 0, conditions: [] },
+          { name: "worker-b", ready: true, health: "healthy", cpuPct: null, memPct: null, podsRunning: 30, podsCapacity: 58, restartsRecent: 0, conditions: [] },
+        ],
+      },
+    };
+    const live: LiveStreamViewState = {
+      status: "connected",
+      observed: true,
+      stale: false,
+      updatedAt: 1,
+      resources: {},
+      summaries: {
+        "management-server": {
+          cluster_id: "management-server",
+          window_ms: 1_000,
+          pods_ready: 0,
+          pods_total: 0,
+          restart_delta: 0,
+          rollout_phase: "idle",
+          hot_pods: [],
+        },
+      },
+    };
+
+    const result = applyLiveClusterSummaries(baseline, ["management-server"], live)["management-server"]!;
+
+    expect(result.podsRunning).toBe(52);
+    expect(result.podsTotal).toBeNull();
+    expect(result.nodes.map((node) => node.podsRunning)).toEqual([22, 30]);
+  });
+
+  it("retains REST occupancy when resource deltas do not cover the live pod total", () => {
+    const baseline = {
+      "cluster-a": {
+        status: "ready" as const,
+        health: null,
+        cpuPct: 20,
+        memPct: 30,
+        podsRunning: 9,
+        podsTotal: null,
+        nodesReady: 1,
+        nodesTotal: 1,
+        openIncidents: null,
+        nodes: [
+          { name: "worker-a", ready: true, health: "healthy", cpuPct: 20, memPct: 30, podsRunning: 9, podsCapacity: 20, restartsRecent: 0, conditions: [] },
+        ],
+      },
+    };
+    const live: LiveStreamViewState = {
+      status: "connected",
+      observed: true,
+      stale: false,
+      updatedAt: 1,
+      resources: {
+        "cluster-a/shop/pod/checkout-0": { phase: "Running", node: "worker-a" },
+      },
+      summaries: {
+        "cluster-a": {
+          cluster_id: "cluster-a",
+          window_ms: 1_000,
+          pods_ready: 9,
+          pods_total: 10,
+          restart_delta: 0,
+          rollout_phase: "idle",
+          hot_pods: [],
+        },
+      },
+    };
+
+    const result = applyLiveClusterSummaries(baseline, ["cluster-a"], live)["cluster-a"]!;
+
+    expect(result.podsRunning).toBe(9);
+    expect(result.nodes[0]?.podsRunning).toBe(9);
+    expect(result.podsTotal).toBe(10);
+  });
 });
 
 function nodeSummary(clusterId: string) {

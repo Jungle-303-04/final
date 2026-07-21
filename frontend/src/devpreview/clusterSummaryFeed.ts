@@ -166,9 +166,20 @@ export function applyLiveClusterSummaries(
     const summary = current[clusterId];
     if (summary === undefined) continue;
     const liveSummary = live.summaries[clusterId];
-    const facts = podFacts.get(clusterId) ?? (liveSummary?.pods_total === 0
-      ? { running: 0, runningByNode: new Map<string, number>() }
-      : undefined);
+    // A newly connected or partially projected stream can emit a zero summary
+    // before any pod identities arrive. That is not authoritative evidence that
+    // the cluster is empty: replacing the REST node summary here made real
+    // 22/58 and 30/58 occupancy render as 0/58. Only resource.delta pod
+    // identities are precise enough to redistribute occupancy per node.
+    const candidateFacts = podFacts.get(clusterId);
+    // resource.delta is a retained delta set, not necessarily a complete pod
+    // inventory. It is authoritative only when its identity count matches the
+    // summary total from the same retained model.
+    const facts = candidateFacts !== undefined
+      && liveSummary !== undefined
+      && candidateFacts.observed === liveSummary.pods_total
+      ? candidateFacts
+      : undefined;
     const nodes = facts === undefined
       ? summary.nodes
       : summary.nodes.map((node) => ({
@@ -178,7 +189,9 @@ export function applyLiveClusterSummaries(
     const projected: ClusterSummaryView = {
       ...summary,
       podsRunning: facts?.running ?? summary.podsRunning,
-      podsTotal: liveSummary?.pods_total ?? summary.podsTotal,
+      podsTotal: shouldRetainRestPodTotal(summary, liveSummary?.pods_total, facts)
+        ? summary.podsTotal
+        : liveSummary?.pods_total ?? summary.podsTotal,
       nodes,
       stale: live.stale,
       restartDelta: liveSummary?.restart_delta ?? summary.restartDelta ?? null,
@@ -190,7 +203,18 @@ export function applyLiveClusterSummaries(
   return changed ? next : current as Record<string, ClusterSummaryView>;
 }
 
+function shouldRetainRestPodTotal(
+  summary: ClusterSummaryView,
+  livePodsTotal: number | undefined,
+  facts: LivePodFacts | undefined,
+): boolean {
+  return facts === undefined
+    && livePodsTotal === 0
+    && (summary.podsRunning ?? 0) > 0;
+}
+
 interface LivePodFacts {
+  observed: number;
   running: number;
   runningByNode: Map<string, number>;
 }
@@ -206,9 +230,10 @@ function livePodFacts(
     if (identity === null || !wanted.has(identity.clusterId) || !isRecord(value)) continue;
     let facts = result.get(identity.clusterId);
     if (facts === undefined) {
-      facts = { running: 0, runningByNode: new Map() };
+      facts = { observed: 0, running: 0, runningByNode: new Map() };
       result.set(identity.clusterId, facts);
     }
+    facts.observed += 1;
     if (typeof value.phase !== "string" || value.phase.toLowerCase() !== "running") continue;
     facts.running += 1;
     if (typeof value.node === "string" && value.node !== "") {
