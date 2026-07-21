@@ -55,10 +55,17 @@ export interface ClusterTopologyView {
 }
 
 type TopologyListener = (view: ClusterTopologyView) => void;
+interface TopologyChannel {
+  controller: AbortController | null;
+  listeners: Set<TopologyListener>;
+  refreshTimer: number | null;
+  disposeTimer: number | null;
+}
 
-const CACHE_TTL_MS = 10_000;
-const PARTIAL_CACHE_TTL_MS = 2_000;
-const ERROR_CACHE_TTL_MS = 2_000;
+const CACHE_TTL_MS = 30_000;
+const PARTIAL_CACHE_TTL_MS = 15_000;
+const ERROR_CACHE_TTL_MS = 10_000;
+const STRICT_MODE_GRACE_MS = 50;
 
 const EMPTY_READY: ClusterTopologyView = {
   status: "ready",
@@ -92,10 +99,7 @@ const UNAVAILABLE: ClusterTopologyView = {
 };
 
 const cache = new Map<string, { view: ClusterTopologyView; expiresAt: number }>();
-const activeRequests = new Map<string, {
-  controller: AbortController;
-  listeners: Set<TopologyListener>;
-}>();
+const channels = new Map<string, TopologyChannel>();
 
 export function podsForNode(pods: readonly InvPod[], nodeId: string): InvPod[] {
   return pods.filter((pod) => pod.serverId === nodeId);
@@ -164,44 +168,80 @@ function currentCached(clusterId: string): ClusterTopologyView | undefined {
 }
 
 function subscribeClusterTopology(clusterId: string, listener: TopologyListener): () => void {
-  const cached = currentCached(clusterId);
-  if (cached !== undefined) {
-    return () => undefined;
+  let channel = channels.get(clusterId);
+  if (channel === undefined) {
+    channel = { controller: null, listeners: new Set(), refreshTimer: null, disposeTimer: null };
+    channels.set(clusterId, channel);
+  }
+  if (channel.disposeTimer !== null) {
+    window.clearTimeout(channel.disposeTimer);
+    channel.disposeTimer = null;
+  }
+  channel.listeners.add(listener);
+  const entry = cache.get(clusterId);
+  if (entry !== undefined && entry.expiresAt > Date.now()) {
+    scheduleClusterRefresh(clusterId, channel, entry.expiresAt - Date.now() + 25);
+  } else {
+    cache.delete(clusterId);
+    loadClusterTopology(clusterId, channel);
   }
 
-  let request = activeRequests.get(clusterId);
-  if (request === undefined) {
-    request = { controller: new AbortController(), listeners: new Set() };
-    activeRequests.set(clusterId, request);
-    const active = request;
-    void getPhysicalTopology({ clusters: [clusterId] }, active.controller.signal)
-      .then((topology) => {
-        if (active.controller.signal.aborted) return;
-        const view = toClusterTopologyView(topology);
-        cache.set(clusterId, {
-          view,
-          expiresAt: Date.now() + (view.partial ? PARTIAL_CACHE_TTL_MS : CACHE_TTL_MS),
-        });
-        active.listeners.forEach((notify) => notify(view));
-      })
-      .catch((cause: unknown) => {
-        if (isAbortError(cause) || active.controller.signal.aborted) return;
-        cache.set(clusterId, { view: UNAVAILABLE, expiresAt: Date.now() + ERROR_CACHE_TTL_MS });
-        active.listeners.forEach((notify) => notify(UNAVAILABLE));
-      })
-      .finally(() => {
-        if (activeRequests.get(clusterId) === active) activeRequests.delete(clusterId);
-      });
-  }
-
-  request.listeners.add(listener);
-  const active = request;
+  const active = channel;
   return () => {
     active.listeners.delete(listener);
-    if (active.listeners.size > 0 || activeRequests.get(clusterId) !== active) return;
-    active.controller.abort();
-    activeRequests.delete(clusterId);
+    if (active.listeners.size > 0 || channels.get(clusterId) !== active) return;
+    if (active.refreshTimer !== null) {
+      window.clearTimeout(active.refreshTimer);
+      active.refreshTimer = null;
+    }
+    // StrictMode disposes and re-subscribes once during development. Keep the
+    // in-flight request briefly so the second mount cannot duplicate it.
+    active.disposeTimer = window.setTimeout(() => {
+      active.disposeTimer = null;
+      if (active.listeners.size > 0 || channels.get(clusterId) !== active) return;
+      active.controller?.abort();
+      channels.delete(clusterId);
+    }, STRICT_MODE_GRACE_MS);
   };
+}
+
+function loadClusterTopology(clusterId: string, channel: TopologyChannel): void {
+  if (channel.controller !== null || channel.listeners.size === 0) return;
+  const controller = new AbortController();
+  channel.controller = controller;
+  void getPhysicalTopology({ clusters: [clusterId] }, controller.signal)
+    .then((topology) => {
+      if (controller.signal.aborted) return;
+      const view = toClusterTopologyView(topology);
+      const ttl = view.partial ? PARTIAL_CACHE_TTL_MS : CACHE_TTL_MS;
+      cache.set(clusterId, { view, expiresAt: Date.now() + ttl });
+      channel.listeners.forEach((notify) => notify(view));
+      scheduleClusterRefresh(clusterId, channel, ttl);
+    })
+    .catch((cause: unknown) => {
+      if (isAbortError(cause) || controller.signal.aborted) return;
+      cache.set(clusterId, { view: UNAVAILABLE, expiresAt: Date.now() + ERROR_CACHE_TTL_MS });
+      channel.listeners.forEach((notify) => notify(UNAVAILABLE));
+      scheduleClusterRefresh(clusterId, channel, ERROR_CACHE_TTL_MS);
+    })
+    .finally(() => {
+      if (channel.controller === controller) channel.controller = null;
+    });
+}
+
+function scheduleClusterRefresh(
+  clusterId: string,
+  channel: TopologyChannel,
+  delayMs: number,
+): void {
+  if (channel.listeners.size === 0 || channels.get(clusterId) !== channel) return;
+  if (channel.refreshTimer !== null) window.clearTimeout(channel.refreshTimer);
+  channel.refreshTimer = window.setTimeout(() => {
+    channel.refreshTimer = null;
+    if (channel.listeners.size === 0 || channels.get(clusterId) !== channel) return;
+    cache.delete(clusterId);
+    loadClusterTopology(clusterId, channel);
+  }, Math.max(250, delayMs));
 }
 
 /**
@@ -215,7 +255,6 @@ export function useClusterTopologies(
   const key = Array.from(new Set(clusterIds)).sort().join("\u0000");
   const ids = useMemo(() => (key ? key.split("\u0000") : []), [key]);
   const [views, setViews] = useState<Record<string, ClusterTopologyView>>(() => initialViews(ids));
-  const [refreshEpoch, setRefreshEpoch] = useState(0);
 
   useEffect(() => {
     const unsubscribes = ids.map((id) => subscribeClusterTopology(id, (view) => {
@@ -223,19 +262,8 @@ export function useClusterTopologies(
         ? previous
         : { ...previous, [id]: view });
     }));
-    const now = Date.now();
-    const refreshDelay = ids.length === 0 ? null : Math.min(...ids.map((id) => {
-      const entry = cache.get(id);
-      return entry === undefined ? 1_000 : Math.max(250, entry.expiresAt - now + 25);
-    }));
-    const refreshTimer = refreshDelay === null
-      ? null
-      : window.setTimeout(() => setRefreshEpoch((value) => value + 1), refreshDelay);
-    return () => {
-      unsubscribes.forEach((unsubscribe) => unsubscribe());
-      if (refreshTimer !== null) window.clearTimeout(refreshTimer);
-    };
-  }, [ids, refreshEpoch]);
+    return () => unsubscribes.forEach((unsubscribe) => unsubscribe());
+  }, [ids]);
 
   return Object.fromEntries(ids.map((id) => [
     id,
@@ -262,7 +290,11 @@ function isAbortError(error: unknown): boolean {
 
 /** @internal 테스트 격리를 위한 캐시 초기화. */
 export function resetClusterTopologyCacheForTests(): void {
-  activeRequests.forEach((request) => request.controller.abort());
-  activeRequests.clear();
+  channels.forEach((channel) => {
+    channel.controller?.abort();
+    if (channel.refreshTimer !== null) window.clearTimeout(channel.refreshTimer);
+    if (channel.disposeTimer !== null) window.clearTimeout(channel.disposeTimer);
+  });
+  channels.clear();
   cache.clear();
 }

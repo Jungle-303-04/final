@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -15,6 +15,7 @@ import { PHYSICAL_TOPOLOGY_ENDPOINT } from "./inventoryTopologyFeed.testSupport"
 describe("useClusterTopology", () => {
   afterEach(() => {
     resetClusterTopologyCacheForTests();
+    vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
@@ -84,6 +85,29 @@ describe("useClusterTopology", () => {
       "/api/topology?view=physical&clusters=cluster-a&resources.includeDeleted=false",
       "/api/topology?view=physical&clusters=cluster-b&resources.includeDeleted=false",
     ]));
+  });
+
+  it("owns one partial-refresh timer per cluster across card and drill subscribers", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify(PHYSICAL_TOPOLOGY_ENDPOINT), { status: 200 }),
+    );
+    renderHook(() => ({
+      cards: useClusterTopologies(["cluster-a"]),
+      drill: useClusterTopology("cluster-a"),
+    }));
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(15_100);
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("serves a recent topology from cache without issuing another request", async () => {
