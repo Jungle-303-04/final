@@ -1282,6 +1282,8 @@ function App() {
   const [scope, setScope] = useState<{ level: string; cluster?: string; node?: string }>({ level: "clusters" });
   const [ns, setNs] = useState("모든 네임스페이스");
   const [nsOpen, setNsOpen] = useState(false);
+  const [clusterOpen, setClusterOpen] = useState(false);
+  const [bellOpen, setBellOpen] = useState(false);
   // 네임스페이스 셀렉트 — 실 관측 네임스페이스(파드 관측 기반)로 구동. 하드코딩 목록 제거.
   // 계약이 unavailable/빈이면 "모든 네임스페이스"만 남는다.
   const resourcesListActive = surface === "resources" && resView === "list";
@@ -1319,6 +1321,19 @@ function App() {
   const pageScrollRef = useRef<HTMLDivElement>(null);
   // 상단 크롬 높이 — 폰트·확대에 따라 변하므로 실측해서 오버레이 기준으로 쓴다
   const headerRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node) || !headerRef.current?.contains(target)) {
+        setBellOpen(false);
+        setMeOpen(false);
+        setNsOpen(false);
+        setClusterOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    return () => document.removeEventListener("pointerdown", onPointerDown, true);
+  }, []);
   const [topH, setTopH] = useState(TOPBAR_H);
   useEffect(() => {
     const el = headerRef.current; if (!el) return;
@@ -1423,7 +1438,6 @@ function App() {
   };
 
   // 알림 — 인벤토리 파생: 임계 파드(위험) + 예약 중 노드(정보) + OutOfSync 저장소(경고)
-  const [bellOpen, setBellOpen] = useState(false);
   // 실 알림 이벤트(GET /api/... alert-events) — fixture 인벤토리 파생 알림 제거. 관측 안 되면 세션 알림(notes)만.
   const alertEvents = useAlertEvents();
   // 세션 알림 — 위저드 연결·AI 규칙 생성 등 실제 사용자 행동의 결과
@@ -1522,7 +1536,17 @@ function App() {
     <div className="uni" style={{ minHeight: "100vh", background: UI.bg, display: "flex", alignItems: "stretch", zoom: PRESENT_SCALE }}>
       {/* 전역 내비게이션 — 제품 셸의 바깥 틀 */}
       <GlobalNav collapsed={navCollapsed} setCollapsed={setNavCollapsed}
-        surface={surface} onSurface={(sf) => { setSurface(sf); if (sf === "connect") setConnectView(null); }} />
+        surface={surface} onSurface={(sf) => {
+          setRcaIncident(null);
+          setDetail(null);
+          setAiOpen(false);
+          setSurface(sf);
+          setBellOpen(false);
+          setMeOpen(false);
+          setNsOpen(false);
+          setClusterOpen(false);
+          if (sf === "connect") setConnectView(null);
+        }} />
 
       <div ref={pageScrollRef} aria-label="현재 화면 콘텐츠" role="region"
         style={{ flex: 1, minWidth: 0, height: `calc(100vh / ${PRESENT_SCALE})`, overflowY: "auto", overflowX: "hidden", overscrollBehavior: "contain", scrollbarGutter: "stable" }}>
@@ -1542,20 +1566,15 @@ function App() {
         </button>
         {/* 현재 스코프 표시 — 물리 스코프가 실제 적용되는 관점(지도·목록)에서만. 흐름은 서비스 수준 */}
         {surface === "resources" && resView !== "flow" && (
-        <label style={{ display: "flex", alignItems: "center", gap: 7, border: `1px solid ${UI.line}`, borderRadius: 9, padding: "5px 9px", fontSize: TYPE.body, fontWeight: 600, color: UI.ink, background: UI.card }}>
-          <Server size={13} style={{ color: UI.ink3, flexShrink: 0 }} />
-          <select aria-label="클러스터 범위" value={scope.cluster ?? ""}
-            onChange={(event) => {
-              const cluster = event.currentTarget.value;
-              setDetail(null);
-              setDrillCl(cluster || null);
-              setScope(cluster ? { level: "nodes", cluster } : { level: "clusters" });
-            }}
-            style={{ border: "none", outline: "none", background: "transparent", color: UI.ink, fontSize: TYPE.body, fontWeight: 700, cursor: "pointer", width: "min(28vw, 220px)", minWidth: 0, maxWidth: 220 }}>
-            <option value="">전체 클러스터</option>
-            {contract.clusters.map((cluster) => <option key={cluster.id} value={cluster.id}>{cluster.id}</option>)}
-          </select>
-        </label>
+        <span style={{ position: "relative" }}>
+            <button type="button" aria-label="클러스터 범위" aria-haspopup="listbox" aria-expanded={clusterOpen} onClick={() => { setClusterOpen((open) => !open); setNsOpen(false); }}
+            style={{ display: "flex", alignItems: "center", gap: 7, maxWidth: "min(32vw, 260px)", border: `1px solid ${clusterOpen ? BLUE : UI.line}`, borderRadius: 9, padding: "6px 11px", fontSize: TYPE.body, fontWeight: 700, color: UI.ink, background: UI.card, cursor: "pointer" }}>
+            <Server size={13} style={{ color: UI.ink3 }} />{scope.cluster ?? "전체 클러스터"}<ChevronDown size={12} style={{ color: UI.ink3, transform: clusterOpen ? "rotate(180deg)" : "none" }} />
+          </button>
+          <AnimatePresence>{clusterOpen && <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} style={{ position: "absolute", top: 40, left: 0, minWidth: 220, zIndex: 65, background: UI.card, border: `1px solid ${blueA(0.35)}`, borderRadius: 12, boxShadow: `0 18px 50px -18px ${inkA(0.28)}`, padding: 5 }}>
+            {[{ id: "", label: "전체 클러스터" }, ...contract.clusters.map((cluster) => ({ id: cluster.id, label: cluster.id }))].map((item) => <button key={item.id || "all"} type="button" role="option" aria-selected={(scope.cluster ?? "") === item.id} onClick={() => { setDetail(null); setDrillCl(item.id || null); setScope(item.id ? { level: "nodes", cluster: item.id } : { level: "clusters" }); setClusterOpen(false); }}
+              style={{ display: "flex", alignItems: "center", width: "100%", gap: 8, border: "none", borderRadius: 8, padding: "8px 10px", background: (scope.cluster ?? "") === item.id ? blueA(0.1) : "transparent", color: (scope.cluster ?? "") === item.id ? BLUE : UI.ink, fontSize: TYPE.body, fontWeight: (scope.cluster ?? "") === item.id ? 700 : 600, textAlign: "left", cursor: "pointer" }}>{item.label}{(scope.cluster ?? "") === item.id && <Check size={14} style={{ marginLeft: "auto" }} />}</button>)}</motion.div>}</AnimatePresence>
+        </span>
         )}
         {surface === "resources" && resView !== "flow" && (
           <ClusterLifecycleControl
@@ -1575,7 +1594,7 @@ function App() {
         )}
         {surface === "resources" && resView !== "flow" && (
         <span style={{ position: "relative" }}>
-          <button type="button" aria-label="네임스페이스 범위 선택" aria-haspopup="listbox" aria-expanded={nsOpen} onClick={() => setNsOpen(!nsOpen)}
+          <button type="button" aria-label="네임스페이스 범위 선택" aria-haspopup="listbox" aria-expanded={nsOpen} onClick={() => { setNsOpen((open) => !open); setClusterOpen(false); }}
             style={{ display: "flex", alignItems: "center", gap: 7, maxWidth: "min(32vw, 260px)", overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis", border: `1px solid ${nsOpen ? blueA(0.45) : UI.line}`, background: UI.card, borderRadius: 9, padding: "6px 11px", fontSize: TYPE.body, fontWeight: 600, color: ns === "모든 네임스페이스" ? UI.ink : BLUE, cursor: "pointer" }}>
             <Globe size={13} style={{ color: UI.ink3 }} />{ns}<ChevronDown size={12} style={{ color: UI.ink3, transform: nsOpen ? "rotate(180deg)" : "none", transition: "transform .15s" }} />
           </button>
@@ -1610,7 +1629,7 @@ function App() {
         )}
         {/* 알림 벨 — 배지 수는 맵의 장애 수와 같은 인벤토리에서 나온다 */}
         <span style={{ position: "relative" }}>
-          <button type="button" className="gnav" aria-label="알림 센터 열기" aria-expanded={bellOpen} onClick={() => setBellOpen(!bellOpen)}
+          <button type="button" className="gnav" aria-label="알림 센터 열기" aria-expanded={bellOpen} onClick={() => { setBellOpen((open) => !open); setMeOpen(false); }}
             style={{ width: 30, height: 30, borderRadius: 999, border: "none", background: bellOpen ? blueA(0.1) : inkA(0.045), color: bellOpen ? BLUE : UI.ink2, cursor: "pointer", display: "grid", placeItems: "center" }}>
             <Bell size={14} />
           </button>
@@ -1687,7 +1706,7 @@ function App() {
         </span>
         {/* 계정 — 맨 오른쪽(D20). 로그아웃 = 데모 세션 초기화(실동작) */}
         <span style={{ position: "relative" }}>
-          <button type="button" className="gnav" aria-label="계정 메뉴 열기" aria-expanded={meOpen} onClick={() => setMeOpen(!meOpen)}
+          <button type="button" className="gnav" aria-label="계정 메뉴 열기" aria-expanded={meOpen} onClick={() => { setMeOpen((open) => !open); setBellOpen(false); }}
             style={{ width: 30, height: 30, borderRadius: 999, border: meOpen ? `1.5px solid ${BLUE}` : "1.5px solid transparent", background: blueA(0.12), color: BLUE, cursor: "pointer", display: "grid", placeItems: "center", fontSize: TYPE.label, fontWeight: 800 }}>{sessionInitial(session)}</button>
           <AnimatePresence>
             {meOpen && (
@@ -1846,7 +1865,7 @@ function App() {
           <motion.div key="ai" initial={{ x: aiW + 30 }} animate={{ x: 0 }} exit={{ x: aiW + 30 }} transition={{ type: "spring", bounce: 0.06, visualDuration: 0.34 }}
             style={{ position: "fixed", top: topH, right: 0, bottom: 0, width: aiW, zIndex: 72, display: "flex", boxShadow: `-28px 0 70px -32px ${inkA(0.3)}` }}>
             <div role="separator" aria-label="AI 패널 폭 조절" aria-orientation="vertical" onPointerDown={onAiHandleDown} title="드래그해서 폭 조절"
-              style={{ width: 5, flexShrink: 0, cursor: "col-resize", background: aiDragging ? blueA(0.35) : "transparent", transition: "background .15s" }} />
+              style={{ width: 1, flexShrink: 0, cursor: "col-resize", background: aiDragging ? blueA(0.35) : UI.line, transition: "background .15s" }} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <AiPanel embedded onClose={() => setAiOpen(false)} contextView={surface === "connect" ? "연결 설정" : surface === "home" ? "홈" : surface === "deploy" ? "배포" : surface === "issues" ? "이슈" : surface === "timeline" ? "타임라인" : surface === "checks" ? "점검" : surface === "cost" ? "비용" : surface === "alerts" ? "알림" : surface === "ai" ? "AI 대화" : surface === "settings" ? "설정" : resView === "flow" ? "트래픽" : resView === "list" ? "쿠버네티스 리소스" : "인프라 지도"} contextScope={scope.cluster ?? "전체 클러스터"} />
             </div>
@@ -1887,7 +1906,7 @@ function App() {
         {rcaIncident && <IssueDetail key={rcaIncident.name} {...rcaIncident} topInset={topH} leftInset={navCollapsed ? 60 : 208}
           onClose={() => setRcaIncident(null)}
           onOpenRef={(k, n) => { setRcaIncident(null); openRef(k, n); }}
-          onAskAi={() => { setRcaIncident(null); setAiOpen(true); }} />}
+          onAskAi={() => { setAiOpen(true); }} rightInset={aiOpen ? aiW : 0} />}
       </AnimatePresence>
 
       {/* 작업 토스트 — 우측 상단 스택 */}
