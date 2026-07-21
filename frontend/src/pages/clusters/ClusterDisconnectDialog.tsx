@@ -243,7 +243,7 @@ export function ClusterDisconnectDialog({
 
           {pending ? <DisconnectProgress phase={phase} t={t} /> : null}
 
-          {receipt ? <DisconnectEvidence phase={phase} receipt={receipt} /> : null}
+          {receipt ? <DisconnectEvidence phase={phase} receipt={receipt} t={t} /> : null}
 
           {phase === "cleanup-required" || phase === "residual-cleanup" ? (
             <CleanupCommand
@@ -360,9 +360,11 @@ function DisconnectProgress({ phase, t }: { phase: DisconnectPhase; t: Translati
 function DisconnectEvidence({
   phase,
   receipt,
+  t,
 }: {
   phase: DisconnectPhase;
   receipt: ClusterDisconnectReceipt;
+  t: TranslationFunction;
 }) {
   const cleanupFinished = receipt.cleanupVerified
     || phase === "residual-cleanup"
@@ -373,35 +375,44 @@ function DisconnectEvidence({
     && receipt.cleanupResources.length === 0;
   const rows = [
     {
-      label: "Deployment · ServiceAccount · RBAC 정리",
+      label: t("clusters.disconnect.evidence.cleanup.label"),
       value: noInstalledAgentResources
-        ? "정리 대상 없음"
+        ? t("clusters.disconnect.evidence.cleanup.none")
         : cleanupFinished
-        ? "서버 완료 증적 확인"
+        ? t("clusters.disconnect.evidence.cleanup.complete")
         : receipt.stage === "agent_cleanup_queued"
-          ? "에이전트 명령 대기"
-          : "확인 필요",
+          ? t("clusters.disconnect.evidence.cleanup.queued")
+          : t("clusters.disconnect.evidence.pending"),
       complete: cleanupFinished || noInstalledAgentResources,
     },
     {
-      label: "에이전트 자격 증명 폐기",
-      value: registrationRevoked ? "폐기 확인" : "관리 DB 응답 대기",
+      label: t("clusters.disconnect.evidence.credentials.label"),
+      value: registrationRevoked
+        ? t("clusters.disconnect.evidence.credentials.revoked")
+        : t("clusters.disconnect.evidence.pending"),
       complete: registrationRevoked,
     },
     {
-      label: "관리 DB 등록 상태",
-      value: registrationRevoked ? "등록 해제 확인" : receipt.stage,
+      label: t("clusters.disconnect.evidence.registration.label"),
+      value: registrationRevoked
+        ? t("clusters.disconnect.evidence.registration.revoked")
+        : t("clusters.disconnect.evidence.pending"),
       complete: registrationRevoked,
     },
     {
-      label: "잔여 리소스",
-      value: `${receipt.residualResources.length}개`,
+      label: t("clusters.disconnect.evidence.residual.label"),
+      value: t("clusters.disconnect.evidence.residual.count", {
+        count: receipt.residualResources.length,
+      }),
       complete: cleanupFinished && receipt.residualResources.length === 0,
     },
   ];
 
   return (
-    <section className="grid gap-2 rounded-xl border bg-muted/20 p-3" aria-label="서버가 보고한 연결 해제 증적">
+    <section
+      className="grid gap-2 rounded-xl border bg-muted/20 p-3"
+      aria-label={t("clusters.disconnect.evidence.aria")}
+    >
       {rows.map((row) => (
         <div className="flex min-w-0 items-center gap-2 text-xs" key={row.label}>
           {row.complete ? (
@@ -415,7 +426,10 @@ function DisconnectEvidence({
       ))}
       {receipt.cleanupResources.length > 0 ? (
         <p className="break-words text-xs text-muted-foreground">
-          서버 보고 정리 대상 {receipt.cleanupResources.length}개 · {receipt.cleanupResources.join(", ")}
+          {t("clusters.disconnect.evidence.targets", {
+            count: receipt.cleanupResources.length,
+            resources: receipt.cleanupResources.join(", "),
+          })}
         </p>
       ) : null}
     </section>
