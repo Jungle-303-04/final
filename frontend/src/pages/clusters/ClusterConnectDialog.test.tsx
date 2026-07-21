@@ -36,6 +36,7 @@ describe("ClusterConnectDialog", () => {
     pending.resolve({
       clusterId: "production-a1b2",
       installCommand: "curl secret-command | kubectl apply -f -",
+      powershellInstallCommand: "curl secret-command | kubectl apply -f -",
       expiresAt: "2026-07-14T06:00:00Z",
     });
     expect(await screen.findByText("curl secret-command | kubectl apply -f -")).toBeTruthy();
@@ -52,7 +53,6 @@ describe("ClusterConnectDialog", () => {
     renderDialog(port);
 
     await user.type(screen.getByRole("textbox", { name: "Cluster name" }), "Production");
-    await user.click(screen.getByRole("button", { name: "AWS EKS" }));
     await user.click(screen.getByRole("button", { name: "Generate install command" }));
 
     const command = "curl secret-command | kubectl apply -f -";
@@ -180,6 +180,7 @@ describe("ClusterConnectDialog", () => {
     vi.mocked(port.reissue).mockResolvedValue({
       clusterId: "production-a1b2",
       installCommand: "curl rotated-command | kubectl apply -f -",
+      powershellInstallCommand: "curl rotated-command | kubectl apply -f -",
       expiresAt: "2026-07-15T07:00:00Z",
     });
     renderDialog(port);
@@ -239,6 +240,7 @@ function waitingPort(): ClustersPort {
     connect: vi.fn(async () => ({
       clusterId: "production-a1b2",
       installCommand: "curl secret-command | kubectl apply -f -",
+      powershellInstallCommand: "curl secret-command | kubectl apply -f -",
       expiresAt: "2026-07-14T06:00:00Z",
     })),
     loadConnection: vi.fn(async () => ({
@@ -250,6 +252,7 @@ function waitingPort(): ClustersPort {
     reissue: vi.fn(async () => ({
       clusterId: "production-a1b2",
       installCommand: "curl rotated-command | kubectl apply -f -",
+      powershellInstallCommand: "curl rotated-command | kubectl apply -f -",
       expiresAt: "2026-07-15T07:00:00Z",
     })),
   };

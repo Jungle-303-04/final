@@ -107,6 +107,8 @@ export const targetInstallResponseSchema = z.strictObject({
   agent_token: z.string(),
   install_command: z.string(),
   bootstrap_command: z.string(),
+  powershell_install_command: z.string(),
+  powershell_bootstrap_command: z.string(),
   bootstrap_steps: z.array(targetBootstrapStepSchema),
   connect_timeout_seconds: z.number().int().nullable(),
   connect_expires_at: z.string().nullable(),

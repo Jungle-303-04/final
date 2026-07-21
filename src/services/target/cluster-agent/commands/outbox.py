@@ -11,6 +11,7 @@ from packages.config.logs import CONTEXT_KEY, get_logger
 from packages.contracts.event_bus.interfaces import JsonObject
 
 COMMAND_RESULT_STATUS_ABANDONED = "abandoned"
+COMMAND_RESULT_STATUS_ACKED_FINALIZATION_PENDING = "acked_finalization_pending"
 COMMAND_RESULT_STATUS_PENDING = "pending"
 LOGGER = get_logger(__name__)
 
@@ -213,19 +214,88 @@ class CommandResultOutbox:
             )
             .fetchone()
         )
-        if row is None:
-            return None
-        result = json.loads(row["result_json"])
-        if not isinstance(result, dict):
-            result = {"raw_result": result}
-        return CommandResultRecord(
-            command_id=str(row["command_id"]),
-            attempt_id=str(row["attempt_id"]),
-            workspace_id=str(row["workspace_id"]),
-            lease_id=str(row["lease_id"]),
-            agent_id=str(row["agent_id"]),
-            result=result,
-            attempt_count=int(row["attempt_count"]),
+        return command_result_record(row)
+
+    def next_finalization(self) -> CommandResultRecord | None:
+        """Return an ACKed uninstall result whose local self-cleanup is pending."""
+
+        row = (
+            self.connection()
+            .execute(
+                """
+            select command_id, attempt_id, workspace_id, lease_id, agent_id, result_json, attempt_count
+            from command_results
+            where status = ?
+            order by updated_at
+            limit 1
+            """,
+                (COMMAND_RESULT_STATUS_ACKED_FINALIZATION_PENDING,),
+            )
+            .fetchone()
+        )
+        return command_result_record(row)
+
+    def mark_acknowledged_for_finalization(
+        self,
+        command_id: str,
+        attempt_id: str | None = None,
+        now: float | None = None,
+    ) -> None:
+        """Durably record the server ACK before destructive local finalization."""
+
+        timestamp = time.time() if now is None else now
+        normalized_attempt_id = attempt_id or f"legacy:{command_id}"
+        conn = self.connection()
+        with conn:
+            cursor = conn.execute(
+                """
+                update command_results
+                set status = ?, last_error = null, updated_at = ?
+                where command_id = ? and attempt_id = ? and status = ?
+                """,
+                (
+                    COMMAND_RESULT_STATUS_ACKED_FINALIZATION_PENDING,
+                    timestamp,
+                    command_id,
+                    normalized_attempt_id,
+                    COMMAND_RESULT_STATUS_PENDING,
+                ),
+            )
+            if cursor.rowcount != 1:
+                raise RuntimeError("command result cannot enter finalization state")
+        LOGGER.info(
+            "agent_command_result_acknowledged_for_finalization",
+            extra={
+                CONTEXT_KEY: {
+                    "command_id": command_id,
+                    "attempt_id": normalized_attempt_id,
+                }
+            },
+        )
+
+    def mark_finalized(self, command_id: str, attempt_id: str | None = None) -> None:
+        normalized_attempt_id = attempt_id or f"legacy:{command_id}"
+        conn = self.connection()
+        with conn:
+            conn.execute(
+                """
+                delete from command_results
+                where command_id = ? and attempt_id = ? and status = ?
+                """,
+                (
+                    command_id,
+                    normalized_attempt_id,
+                    COMMAND_RESULT_STATUS_ACKED_FINALIZATION_PENDING,
+                ),
+            )
+        LOGGER.info(
+            "agent_command_result_finalized",
+            extra={
+                CONTEXT_KEY: {
+                    "command_id": command_id,
+                    "attempt_id": normalized_attempt_id,
+                }
+            },
         )
 
     def mark_sent(self, command_id: str, attempt_id: str | None = None) -> None:
@@ -334,6 +404,34 @@ class CommandResultOutbox:
             .fetchone()
         )
         return 0 if row is None else int(row["count"])
+
+    def finalization_pending_count(self) -> int:
+        row = (
+            self.connection()
+            .execute(
+                "select count(*) as count from command_results where status = ?",
+                (COMMAND_RESULT_STATUS_ACKED_FINALIZATION_PENDING,),
+            )
+            .fetchone()
+        )
+        return 0 if row is None else int(row["count"])
+
+
+def command_result_record(row: sqlite3.Row | None) -> CommandResultRecord | None:
+    if row is None:
+        return None
+    result = json.loads(row["result_json"])
+    if not isinstance(result, dict):
+        result = {"raw_result": result}
+    return CommandResultRecord(
+        command_id=str(row["command_id"]),
+        attempt_id=str(row["attempt_id"]),
+        workspace_id=str(row["workspace_id"]),
+        lease_id=str(row["lease_id"]),
+        agent_id=str(row["agent_id"]),
+        result=result,
+        attempt_count=int(row["attempt_count"]),
+    )
 
 
 def command_result_log_context(

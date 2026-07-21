@@ -15,6 +15,7 @@ from commands import (
     AgentCommandRegistry,
     CommandContext,
     CommandResultOutbox,
+    CommandResultRecord,
     GitOpsResourceCommandPayload,
     KubernetesApiClient,
     KubernetesCronJobPayload,
@@ -1401,6 +1402,10 @@ class TargetClusterAgent:
             await asyncio.sleep(COMMAND_OUTBOX_FLUSH_INTERVAL_SECONDS)
 
     async def flush_command_results_once(self, client: ManagementPlaneClient) -> bool:
+        finalization = self.command_outbox.next_finalization()
+        if finalization is not None:
+            return await self.retry_agent_uninstall_finalization(finalization)
+
         record = self.command_outbox.next_result()
         if record is None:
             return False
@@ -1422,6 +1427,12 @@ class TargetClusterAgent:
                     record.result,
                     record.attempt_id,
                 )
+            if self.is_agent_uninstall_cleanup_result(record.result):
+                self.command_outbox.mark_acknowledged_for_finalization(
+                    record.command_id,
+                    record.attempt_id,
+                )
+                return await self.retry_agent_uninstall_finalization(record)
             self.command_outbox.mark_sent(record.command_id, record.attempt_id)
             LOGGER.info(
                 "command_result_flushed",
@@ -1441,6 +1452,24 @@ class TargetClusterAgent:
             )
             return True
         except Exception as exc:
+            if self.should_finalize_uninstall_after_lost_ack(record, exc):
+                LOGGER.warning(
+                    "agent_uninstall_result_ack_response_lost",
+                    extra={
+                        CONTEXT_KEY: {
+                            Gateway.CLUSTER_ID: self.cluster_id,
+                            Gateway.AGENT_ID: self.agent_id,
+                            Gateway.COMMAND_ID: record.command_id,
+                            "attempt_count": record.attempt_count,
+                            "status_code": exc.response.status_code,
+                        }
+                    },
+                )
+                self.command_outbox.mark_acknowledged_for_finalization(
+                    record.command_id,
+                    record.attempt_id,
+                )
+                return await self.retry_agent_uninstall_finalization(record)
             abandoned = self.command_outbox.record_failure(
                 record.command_id,
                 str(exc),
@@ -1461,6 +1490,66 @@ class TargetClusterAgent:
                 },
             )
             return False
+
+    async def retry_agent_uninstall_finalization(self, record: CommandResultRecord) -> bool:
+        """Retry self-removal only after the result ACK is durable locally."""
+
+        try:
+            await self.finalize_agent_installation_cleanup()
+            self.command_outbox.mark_finalized(record.command_id, record.attempt_id)
+            LOGGER.info(
+                "agent_uninstall_finalized_after_result_ack",
+                extra={
+                    CONTEXT_KEY: {
+                        Gateway.CLUSTER_ID: self.cluster_id,
+                        Gateway.AGENT_ID: self.agent_id,
+                        Gateway.COMMAND_ID: record.command_id,
+                    }
+                },
+            )
+            return True
+        except Exception as exc:
+            LOGGER.warning(
+                "agent_uninstall_finalization_retry_pending",
+                extra={
+                    CONTEXT_KEY: {
+                        Gateway.CLUSTER_ID: self.cluster_id,
+                        Gateway.AGENT_ID: self.agent_id,
+                        Gateway.COMMAND_ID: record.command_id,
+                        "exception_type": type(exc).__name__,
+                    }
+                },
+            )
+            return False
+
+    @staticmethod
+    def is_agent_uninstall_cleanup_result(result: JsonObject) -> bool:
+        return (
+            result.get(Gateway.STATUS) == CommandStatus.COMPLETED
+            and result.get("cleanup_completed") is True
+            and result.get("cleanup_resources") == list(UNINSTALL_CLEANUP_RESOURCE_REFS)
+            and result.get("residual_resources") == []
+        )
+
+    def should_finalize_uninstall_after_lost_ack(
+        self,
+        record: CommandResultRecord,
+        exc: Exception,
+    ) -> bool:
+        """Recognize the narrow replay signal produced by credential revocation.
+
+        A first transport failure is ambiguous: the server may or may not have
+        committed the result.  Only a later authenticated replay rejected as
+        missing/revoked can close that ambiguity, and only for the exact
+        verified uninstall cleanup receipt.
+        """
+
+        return (
+            record.attempt_count > 0
+            and self.is_agent_uninstall_cleanup_result(record.result)
+            and isinstance(exc, httpx.HTTPStatusError)
+            and exc.response.status_code in {401, 404}
+        )
 
     async def execute_command_with_heartbeat(
         self,
@@ -3134,7 +3223,7 @@ class TargetClusterAgent:
         if ctx.payload.contract_version != UNINSTALL_CONTRACT_VERSION:
             return ctx.fail("unsupported agent uninstall contract version")
         await self.prepare_agent_installation_cleanup()
-        await self.finalize_agent_installation_cleanup()
+        await self.arm_agent_installation_cleanup()
         return ctx.ok(
             "allowlisted agent runtime cleanup accepted with no residual resources",
             applied=True,
@@ -3167,14 +3256,11 @@ class TargetClusterAgent:
                 name=item.name,
             )
 
-    async def finalize_agent_installation_cleanup(self) -> None:
-        """Delegate the final credential-bearing resources to Kubernetes GC.
+    async def arm_agent_installation_cleanup(self) -> None:
+        """Attach final resources to the uninstall owner without deleting it.
 
-        The exact uninstall ClusterRole is the cluster-scoped owner.  Once every
-        final resource has that owner reference, deleting the owner with
-        background propagation atomically hands the remaining cleanup to the
-        Kubernetes garbage collector.  No browser-side kubectl escape hatch or
-        broad namespace deletion is involved.
+        The result is not yet ACKed at this point, so the owner ClusterRole and
+        agent Deployment must remain alive while the durable outbox retries.
         """
 
         owner = await self.kubernetes.get_cluster_resource(
@@ -3213,6 +3299,10 @@ class TargetClusterAgent:
                 name=item.name,
                 body=owner_patch,
             )
+
+    async def finalize_agent_installation_cleanup(self) -> None:
+        """Delete the armed owner only after the management plane ACKs result."""
+
         result = await self.kubernetes.delete_cluster_resource(
             api_group=FINAL_UNINSTALL_CLUSTER_ROLE.api_group,
             version=FINAL_UNINSTALL_CLUSTER_ROLE.version,
@@ -3220,7 +3310,7 @@ class TargetClusterAgent:
             name=FINAL_UNINSTALL_CLUSTER_ROLE.name,
             propagation_policy="Background",
         )
-        if result.get("deleted") is not True:
+        if result.get("deleted") is not True and result.get("status_code") != 404:
             raise RuntimeError("uninstall ClusterRole cleanup was not accepted")
 
     def command_payload(self, command: CommandRecord) -> JsonObject:

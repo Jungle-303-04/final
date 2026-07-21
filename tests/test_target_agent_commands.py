@@ -167,6 +167,38 @@ class FailingDeleteKubernetesClient(StubKubernetesClient):
         return await super().delete_namespaced_resource(**kwargs)
 
 
+class FailingFinalDeleteKubernetesClient(StubKubernetesClient):
+    def __init__(self) -> None:
+        super().__init__()
+        self.fail_final_delete_once = True
+
+    async def delete_cluster_resource(self, **kwargs: object) -> dict[str, object]:
+        if kwargs.get("name") == "cluster-agent-uninstall" and self.fail_final_delete_once:
+            self.fail_final_delete_once = False
+            raise RuntimeError("temporary kubernetes api failure")
+        return await super().delete_cluster_resource(**kwargs)
+
+
+class LostUninstallAckClient:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def complete_command(
+        self,
+        _command_id: str,
+        _workspace_id: str,
+        _lease_id: str,
+        _agent_id: str,
+        _result: dict[str, object],
+    ) -> None:
+        self.calls += 1
+        request = httpx.Request("POST", "https://management.test/commands/result")
+        if self.calls == 1:
+            raise httpx.ReadTimeout("result ACK response was lost", request=request)
+        response = httpx.Response(401, request=request)
+        response.raise_for_status()
+
+
 def register_agent_commands(module: object, agent: object) -> None:
     agent.command_registry = module.AgentCommandRegistry.from_instance(
         agent,
@@ -2186,6 +2218,106 @@ def test_command_result_outbox_retries_until_gateway_accepts(tmp_path: Path) -> 
     assert client.completed[0]["command_id"] == "cmd-1"
 
 
+def test_uninstall_self_delete_waits_for_ack_and_recovers_lost_response(tmp_path: Path) -> None:
+    module = load_agent_module()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.agent_id = "agent-1"
+    agent.kubernetes = StubKubernetesClient()
+    agent.command_outbox = module.CommandResultOutbox(str(tmp_path / "command-outbox.db"))
+    agent.command_outbox.enqueue_result(
+        command_id="cmd-uninstall",
+        workspace_id="default",
+        lease_id="lease-1",
+        agent_id="agent-1",
+        result={
+            "status": "completed",
+            "cluster_id": "cluster-1",
+            "applied": True,
+            "cleanup_completed": True,
+            "cleanup_resources": list(module.UNINSTALL_CLEANUP_RESOURCE_REFS),
+            "residual_resources": [],
+        },
+    )
+    client = LostUninstallAckClient()
+
+    assert asyncio.run(agent.flush_command_results_once(client)) is False
+    assert agent.command_outbox.pending_count() == 1
+    assert agent.kubernetes.cluster_deletes == []
+
+    assert asyncio.run(agent.flush_command_results_once(client)) is True
+    assert client.calls == 2
+    assert agent.command_outbox.pending_count() == 0
+    assert agent.command_outbox.finalization_pending_count() == 0
+    assert agent.kubernetes.cluster_deletes == [
+        {
+            "api_group": "rbac.authorization.k8s.io",
+            "version": "v1",
+            "resource": "clusterroles",
+            "name": "cluster-agent-uninstall",
+            "propagation_policy": "Background",
+        }
+    ]
+
+
+def test_lost_ack_recovery_does_not_finalize_an_ordinary_command(tmp_path: Path) -> None:
+    module = load_agent_module()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.agent_id = "agent-1"
+    agent.kubernetes = StubKubernetesClient()
+    agent.command_outbox = module.CommandResultOutbox(str(tmp_path / "command-outbox.db"))
+    agent.command_outbox.enqueue_result(
+        command_id="cmd-scale",
+        workspace_id="default",
+        lease_id="lease-1",
+        agent_id="agent-1",
+        result={"status": "completed", "cluster_id": "cluster-1", "applied": True},
+    )
+    client = LostUninstallAckClient()
+
+    assert asyncio.run(agent.flush_command_results_once(client)) is False
+    assert asyncio.run(agent.flush_command_results_once(client)) is False
+
+    assert client.calls == 2
+    assert agent.command_outbox.pending_count() == 1
+    assert agent.command_outbox.finalization_pending_count() == 0
+    assert agent.kubernetes.cluster_deletes == []
+
+
+def test_uninstall_finalization_retries_without_reposting_acked_result(tmp_path: Path) -> None:
+    module = load_agent_module()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.agent_id = "agent-1"
+    agent.kubernetes = FailingFinalDeleteKubernetesClient()
+    agent.command_outbox = module.CommandResultOutbox(str(tmp_path / "command-outbox.db"))
+    agent.command_outbox.enqueue_result(
+        command_id="cmd-uninstall",
+        workspace_id="default",
+        lease_id="lease-1",
+        agent_id="agent-1",
+        result={
+            "status": "completed",
+            "cluster_id": "cluster-1",
+            "applied": True,
+            "cleanup_completed": True,
+            "cleanup_resources": list(module.UNINSTALL_CLEANUP_RESOURCE_REFS),
+            "residual_resources": [],
+        },
+    )
+    client = StubCommandResultClient()
+
+    assert asyncio.run(agent.flush_command_results_once(client)) is False
+    assert len(client.completed) == 1
+    assert agent.command_outbox.pending_count() == 0
+    assert agent.command_outbox.finalization_pending_count() == 1
+
+    assert asyncio.run(agent.flush_command_results_once(client)) is True
+    assert len(client.completed) == 1
+    assert agent.command_outbox.finalization_pending_count() == 0
+
+
 def test_command_result_outbox_keeps_distinct_logical_command_attempts(tmp_path: Path) -> None:
     module = load_agent_module()
     outbox = module.CommandResultOutbox(str(tmp_path / "command-outbox.db"))
@@ -2351,6 +2483,9 @@ def test_agent_uninstall_cleans_allowlist_before_completed_ack() -> None:
         item.get("name") != "cluster-agent" or item.get("resource") != "deployments"
         for item in agent.kubernetes.namespaced_deletes
     )
+    assert all(
+        item.get("name") != "cluster-agent-uninstall" for item in agent.kubernetes.cluster_deletes
+    )
 
 
 def test_agent_cleanup_never_deletes_namespaces_or_user_workloads() -> None:
@@ -2375,7 +2510,7 @@ def test_agent_final_cleanup_delegates_exact_resources_to_kubernetes_gc() -> Non
     agent.cluster_id = "cluster-1"
     agent.kubernetes = StubKubernetesClient()
 
-    asyncio.run(agent.finalize_agent_installation_cleanup())
+    asyncio.run(agent.arm_agent_installation_cleanup())
 
     assert agent.kubernetes.cluster_gets == [
         {
@@ -2399,6 +2534,10 @@ def test_agent_final_cleanup_delegates_exact_resources_to_kubernetes_gc() -> Non
         "controller": False,
         "blockOwnerDeletion": False,
     }
+    assert agent.kubernetes.cluster_deletes == []
+
+    asyncio.run(agent.finalize_agent_installation_cleanup())
+
     assert agent.kubernetes.cluster_deletes == [
         {
             "api_group": "rbac.authorization.k8s.io",

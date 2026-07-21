@@ -194,16 +194,16 @@ describe("post-deploy route smoke helpers", () => {
     );
   });
 
-  it("requires the nine primary surfaces plus settings", () => {
-    const fixture = Array.from({ length: 10 }, (_, index) => `route-${index} 화면으로 이동`);
-    expect(fixture).toHaveLength(10);
-    expect(new Set(fixture).size).toBe(10);
+  it("requires the eight primary surfaces plus settings", () => {
+    const fixture = Array.from({ length: 9 }, (_, index) => `route-${index} 화면으로 이동`);
+    expect(fixture).toHaveLength(9);
+    expect(new Set(fixture).size).toBe(9);
   });
 
-  it("uses a real DOM fixture: ten GlobalNav buttons, widgets excluded, live labels survive removal", async () => {
+  it("uses a real DOM fixture: nine GlobalNav buttons, widgets excluded, live labels survive removal", async () => {
     const browser = await chromium.launch({ headless: true });
     const page = await browser.newPage();
-    const labels = [...Array(9)].map((_, i) => `표면${i + 1} 화면으로 이동`).concat("설정 화면으로 이동");
+    const labels = [...Array(8)].map((_, i) => `표면${i + 1} 화면으로 이동`).concat("설정 화면으로 이동");
     await page.setContent(`<nav data-slot="global-navigation">${labels.map((label) => `<button aria-label="${label}">${label}</button>`).join("")}</nav><div id="widgets">${Array.from({length: 8}, (_, i) => `<button aria-label="위젯${i} 화면으로 이동">widget</button>`).join("")}</div>`);
     await page.locator('[data-slot="global-navigation"] button').evaluateAll((buttons) => buttons.forEach((button) => button.addEventListener("click", () => {
       buttons.forEach((item) => item.removeAttribute("aria-current"));
@@ -211,7 +211,7 @@ describe("post-deploy route smoke helpers", () => {
       if (button.getAttribute("aria-label") === "설정 화면으로 이동") document.querySelector("#widgets")?.remove();
     })));
     const nav = page.locator('[data-slot="global-navigation"] button[aria-label$=" 화면으로 이동"]');
-    expect(await nav.count()).toBe(10);
+    expect(await nav.count()).toBe(9);
     expect(await page.locator('#widgets button[aria-label$=" 화면으로 이동"]').count()).toBe(8);
     const snapshot = await nav.evaluateAll((items) => items.map((item) => item.getAttribute("aria-label")));
     for (const label of snapshot) await page.locator('[data-slot="global-navigation"]').getByRole("button", { name: label, exact: true }).click();

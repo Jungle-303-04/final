@@ -5,6 +5,7 @@ export const clusterConnectProviderSchema = z.enum(["aws", "gcp", "azure", "onpr
 export const clusterConnectResponseSchema = z.strictObject({
   cluster_id: z.string(),
   install_command: z.string().min(1),
+  powershell_install_command: z.string().min(1),
   expires_at: z.string(),
 });
 

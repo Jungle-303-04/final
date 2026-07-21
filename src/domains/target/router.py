@@ -678,6 +678,10 @@ def bootstrap_command_for(payload: TargetRegisterRequest, agent_token: str) -> s
     cloud_provider = payload.cloud_provider.strip()
     base_install = install_command_for(payload, agent_token)
     if cloud_provider == "eks":
+        if not provider_config_text(payload, "region", "") or not provider_config_text(
+            payload, "eks_cluster_name", ""
+        ):
+            return base_install
         values = require_provider_config(payload, "region", "eks_cluster_name")
         context_alias = provider_config_text(payload, "context_alias", payload.cluster_id or "")
         return (
@@ -742,6 +746,27 @@ def bootstrap_command_for(payload: TargetRegisterRequest, agent_token: str) -> s
     return base_install
 
 
+def powershell_install_command_for(payload: TargetRegisterRequest, agent_token: str) -> str:
+    base = payload.management_base_url.strip().rstrip("/")
+    if not base:
+        return ""
+    path = gateway_routes.INSTALL_MANIFEST_PATH.format(agent_token=agent_token)
+    manifest_url = f"{base}{path}".replace("'", "''")
+    namespace = agent_namespace(payload).replace("'", "''")
+    expected_cluster_id = (payload.cluster_id or "").replace("'", "''")
+    return (
+        "$ErrorActionPreference='Stop'; "
+        f"$existing=(& kubectl -n '{namespace}' get configmap target-runtime-config "
+        "-o 'jsonpath={.data.TARGET_CLUSTER_ID}' 2>$null); "
+        f"if ($existing -and $existing -ne '{expected_cluster_id}') "
+        f'{{ throw "Kyro agent is already registered as $existing; disconnect it before connecting {expected_cluster_id}." }}; '
+        "$tmp=Join-Path ([IO.Path]::GetTempPath()) ('kyro-'+[guid]::NewGuid().ToString()+'.yaml'); "
+        f"try {{ Invoke-WebRequest -UseBasicParsing -Uri '{manifest_url}' -OutFile $tmp; "
+        "& kubectl apply -f $tmp; if ($LASTEXITCODE -ne 0) { throw 'manifest installation failed' } } "
+        "finally { Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue }"
+    )
+
+
 def bootstrap_steps_for(payload: TargetRegisterRequest, command: str) -> list[BootstrapStep]:
     steps = [
         BootstrapStep(label="kubeconfig 확인", command="kubectl config current-context"),
@@ -777,6 +802,8 @@ def install_response(
         agent_token=agent_token,
         install_command=install_command_for(payload, agent_token),
         bootstrap_command=bootstrap_command,
+        powershell_install_command=powershell_install_command_for(payload, agent_token),
+        powershell_bootstrap_command=powershell_install_command_for(payload, agent_token),
         bootstrap_steps=bootstrap_steps_for(payload, bootstrap_command),
         connect_timeout_seconds=connect_timeout_seconds,
         connect_expires_at=connect_expires_at,
@@ -1358,6 +1385,7 @@ async def connect_cluster(
     return ClusterConnectResponse(
         cluster_id=receipt.cluster_id,
         install_command=receipt.install_command,
+        powershell_install_command=receipt.powershell_install_command,
         expires_at=receipt.connect_expires_at,
     )
 
@@ -1436,6 +1464,7 @@ async def reissue_cluster_connect_command(
     return ClusterConnectResponse(
         cluster_id=cluster_id,
         install_command=install_command_for(payload, agent_token),
+        powershell_install_command=powershell_install_command_for(payload, agent_token),
         expires_at=expires_at,
     )
 

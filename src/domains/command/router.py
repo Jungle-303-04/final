@@ -2534,6 +2534,33 @@ async def command_result(
             )
         )
     if completed is None:
+        stored_result = command_row.get("result")
+        replayed_verified_uninstall = (
+            uninstall_result
+            and str(command_row.get("status")) == CommandStatus.COMPLETED
+            and isinstance(stored_result, Mapping)
+            and payload.status == CommandStatus.COMPLETED
+            and payload.cleanup_completed is True
+            and payload.cleanup_resources == list(UNINSTALL_CLEANUP_RESOURCE_REFS)
+            and payload.residual_resources == []
+            and stored_result.get("status") == CommandStatus.COMPLETED
+            and stored_result.get("cleanup_completed") is True
+            and stored_result.get("cleanup_resources") == list(UNINSTALL_CLEANUP_RESOURCE_REFS)
+            and stored_result.get("residual_resources") == []
+        )
+        if replayed_verified_uninstall:
+            unregister = getattr(db, "unregister_target_cluster", None)
+            if not callable(unregister) or not unregister(
+                identity.workspace_id, identity.cluster_id
+            ):
+                raise HTTPException(
+                    status_code=500,
+                    detail="agent uninstall ACK was stored but registration revocation failed",
+                )
+            return EventIdAcceptedResponse(
+                accepted=True,
+                event_id=str(command_row.get("terminal_event_id") or command_id),
+            )
         raise HTTPException(status_code=NOT_FOUND_CODE, detail=NOT_FOUND_MESSAGE)
     if not await announce_staged_operation_event(
         operation_events,

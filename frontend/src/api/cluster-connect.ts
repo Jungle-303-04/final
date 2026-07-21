@@ -9,7 +9,7 @@ import {
 import { encodePathSegment } from "./url";
 
 export function connectCluster(
-  input: { name: string; provider: ClusterConnectProvider },
+  input: { name: string; provider?: ClusterConnectProvider },
   signal?: AbortSignal,
 ): Promise<ClusterConnectResponse> {
   return apiRequest("/api/clusters/connect" as ApiPath, clusterConnectResponseSchema, {
