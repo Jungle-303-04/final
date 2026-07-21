@@ -933,6 +933,10 @@ def build_nodes_summary(
         include_deleted=False,
         limit=NODE_LIMIT,
     )
+    settings = registration.get("settings")
+    include_management_namespace = (
+        isinstance(settings, dict) and settings.get("cluster_role") == "management"
+    )
     pods = observable_workload_pods(
         db.list_inventory_resources(
             workspace_id=workspace_id,
@@ -941,7 +945,8 @@ def build_nodes_summary(
             namespace=None,
             include_deleted=False,
             limit=POD_LIMIT,
-        )
+        ),
+        include_management_namespace=include_management_namespace,
     )
     latest_snapshot = db.latest_inventory_snapshot(workspace_id, cluster_id)
     latest_payload = _summary(latest_snapshot or {})
@@ -963,6 +968,7 @@ def build_nodes_summary(
             cluster_id, []
         )
     )
+    pods = pods_observed_in_latest_usage(pods, latest_usage)
     pod_groups = pods_by_node(pods)
     return ClusterNodesSummaryResponse(
         cluster_id=cluster_id,
@@ -1018,14 +1024,62 @@ def build_node_pods_summary(
     )
 
 
-def observable_workload_pods(pods: list[JsonObject]) -> list[JsonObject]:
-    return [pod for pod in pods if is_observable_workload_pod(pod)]
+def observable_workload_pods(
+    pods: list[JsonObject],
+    *,
+    include_management_namespace: bool = False,
+) -> list[JsonObject]:
+    return [
+        pod
+        for pod in pods
+        if is_observable_workload_pod(
+            pod,
+            include_management_namespace=include_management_namespace,
+        )
+    ]
 
 
-def is_observable_workload_pod(pod: JsonObject) -> bool:
+def pods_observed_in_latest_usage(
+    pods: list[JsonObject],
+    latest_usage: JsonObject,
+) -> list[JsonObject]:
+    """Bound node counts to the latest live pod identities when they are available.
+
+    Partial inventory snapshots deliberately retain older rows whose absence was not
+    proven.  The live usage payload, however, contains the namespaced identities of
+    pods observed in the current metrics cut.  Joining against those identities keeps
+    a node tile from counting stale historical rows while preserving the inventory
+    fallback for agents that do not emit per-pod usage.
+    """
+    usage_pods = latest_usage.get("pods")
+    pod_total = latest_usage.get("pod_total")
+    if (
+        not isinstance(usage_pods, dict)
+        or not isinstance(pod_total, int)
+        or isinstance(pod_total, bool)
+        or pod_total != len(usage_pods)
+    ):
+        return pods
+    observed = {str(key) for key in usage_pods if str(key).strip()}
+    return [pod for pod in pods if pod_identity(pod) in observed]
+
+
+def pod_identity(pod: JsonObject) -> str:
+    summary = _summary(pod)
+    namespace = str(pod.get("namespace") or summary.get("namespace") or "default")
+    return f"{namespace}/{str(pod.get('name') or '')}"
+
+
+def is_observable_workload_pod(
+    pod: JsonObject,
+    *,
+    include_management_namespace: bool = False,
+) -> bool:
     summary = _summary(pod)
     namespace = str(pod.get("namespace") or summary.get("namespace") or "").lower()
-    if namespace in OBSERVABILITY_SYSTEM_NAMESPACES:
+    if namespace in OBSERVABILITY_SYSTEM_NAMESPACES and not (
+        include_management_namespace and namespace == "management"
+    ):
         return False
     values = (
         pod.get("name"),

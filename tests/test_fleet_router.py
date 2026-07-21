@@ -1203,6 +1203,70 @@ def test_nodes_summary_uses_inventory_usage_without_relabeling_scheduled_pods() 
     assert node["mem_pct"] == 61.3
 
 
+def test_nodes_summary_keeps_management_workloads_from_latest_usage_only() -> None:
+    db = FleetApiDb(
+        registrations=[
+            {
+                **_registration(),
+                "environment": "management",
+                "settings": {"cluster_role": "management"},
+            }
+        ],
+        nodes=[
+            {
+                "name": "node-a",
+                "status": "Ready",
+                "health": "healthy",
+                "summary": {"ready": True},
+            }
+        ],
+        pods=[
+            {
+                "name": "api-current",
+                "namespace": "management",
+                "status": "Running",
+                "health": "healthy",
+                "summary": {"node_name": "node-a"},
+            },
+            {
+                "name": "api-stale",
+                "namespace": "management",
+                "status": "Running",
+                "health": "healthy",
+                "summary": {"node_name": "node-a"},
+            },
+            {
+                "name": "cluster-agent-current",
+                "namespace": "management",
+                "status": "Running",
+                "health": "healthy",
+                "summary": {"node_name": "node-a"},
+            },
+        ],
+        usage={
+            CLUSTER_ID: [
+                {
+                    "sampled_at": "2026-07-21T16:30:00+00:00",
+                    "usage": {
+                        "pod_total": 2,
+                        "pods": {
+                            "management/api-current": {"mem_mib": 128.0},
+                            "management/cluster-agent-current": {"mem_mib": 64.0},
+                        },
+                    },
+                }
+            ]
+        },
+    )
+
+    response = make_client(db, session=_session()).get(f"/clusters/{CLUSTER_ID}/nodes/summary")
+
+    assert response.status_code == 200
+    # The management namespace contains product workloads.  Agent-name filtering
+    # still applies, and the latest usage cut prevents stale rows from leaking in.
+    assert response.json()["nodes"][0]["pods_running"] == 1
+
+
 def test_nodes_summary_rejects_inventory_usage_without_freshness_evidence() -> None:
     db = FleetApiDb(
         registrations=[_registration()],
