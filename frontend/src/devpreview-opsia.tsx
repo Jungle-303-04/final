@@ -16,7 +16,6 @@ import { isActiveIncidentCluster } from "./devpreview/rcaIssuesFeed";
 import { useClusterSummaries, type ClusterSummaryView } from "./devpreview/clusterSummaryFeed";
 import {
   podsForNode,
-  useClusterTopologies,
   useClusterTopology,
   type ClusterTopologyView,
   type InvNode,
@@ -128,9 +127,9 @@ function ClusterRow({ cl, summary, topology, onOpen }: {
   topology?: ClusterTopologyView;
   onOpen: () => void;
 }) {
-  // Live: identity/version from `GET /api/clusters`; usage/health/open incidents
-  // from the bounded fleet summary. A drill topology may refine those counts,
-  // but Home does not start five heavy topology projections just to paint cards.
+  // Live: identity/version from `GET /api/clusters`; node readiness and usage
+  // from the bounded node-summary feed. A drill topology may refine those counts,
+  // but Home does not start heavy topology projections just to paint cards.
   const incidentsObserved = isActiveIncidentCluster(cl);
   const incidents = incidentsObserved ? cl.incidentCount ?? summary?.openIncidents ?? 0 : 0;
   const healthy = incidentsObserved && incidents === 0;
@@ -138,7 +137,7 @@ function ClusterRow({ cl, summary, topology, onOpen }: {
   const topologyLoading = topology?.status === "loading";
   const nodesReady = topology?.nodesReady ?? summary?.nodesReady ?? null;
   const nodesTotal = topology?.nodesTotal ?? summary?.nodesTotal ?? null;
-  const podCount = topology?.podsTotal ?? summary?.podsTotal ?? null;
+  const podCount = topology?.podsTotal ?? summary?.podsRunning ?? null;
   const countsLoading = topologyLoading || (topology === undefined && summaryLoading);
   const fmt = (n: number | null) => (countsLoading ? "…" : n ?? "—");
   const cpuPct = summaryLoading ? null : summary?.cpuPct ?? null;
@@ -156,7 +155,7 @@ function ClusterRow({ cl, summary, topology, onOpen }: {
         </span>
         <span style={{ minWidth: 0, flex: 1 }}>
           <span style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
-            <span style={{ fontSize: TYPE.title3, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink, fontFamily: MONO, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cl.id}</span>
+            <span style={{ fontSize: TYPE.title3, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink, fontFamily: MONO, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cl.displayName}</span>
             {cl.environment === "production" && <span style={{ fontSize: TYPE.micro, fontWeight: 600, color: TINT.warn.fg, border: `1px solid ${TINT.warn.bd}`, background: TINT.warn.bg, borderRadius: 5, padding: "1px 6px", flexShrink: 0 }}>prod</span>}
             {cl.readOnly && <span style={{ fontSize: TYPE.micro, fontWeight: 600, color: UI.ink2, border: `1px solid ${UI.line}`, background: UI.bg2, borderRadius: 5, padding: "1px 6px", flexShrink: 0 }}>읽기 전용</span>}
           </span>
@@ -243,7 +242,6 @@ export function HomeClusterSection({ meta: _meta, onOpen, pending = [] }: {
   const { clusters } = useDevpreviewContracts();
   const clusterIds = useMemo(() => clusters.map((cl) => cl.id), [clusters]);
   const summaries = useClusterSummaries(clusterIds);
-  const topologies = useClusterTopologies(clusterIds);
   // priority 14: 홈은 OpsiaMap의 `.op` 스타일 블록(반응형 media query 포함) 밖에서
   // 렌더되므로 그 media query가 적용되지 않는다. 좁은 화면 1열 전환을 인라인으로 보장한다.
   const narrow = useNarrowViewport();
@@ -253,7 +251,7 @@ export function HomeClusterSection({ meta: _meta, onOpen, pending = [] }: {
     <div className="home-cluster-grid" style={{ display: "grid", gridTemplateColumns: narrow ? "minmax(0, 1fr)" : "repeat(4, minmax(0, 1fr))", gridAutoFlow: "row dense", gap: 14 }}>
       {clusters.map((cl) => (
         <div key={cl.id} style={{ gridColumn: span, minWidth: 0 }}>
-          <ClusterRow cl={cl} summary={summaries[cl.id]} topology={topologies[cl.id]} onOpen={() => onOpen(cl.id)} />
+          <ClusterRow cl={cl} summary={summaries[cl.id]} onOpen={() => onOpen(cl.id)} />
         </div>
       ))}
       {pending.map((n, i) => (

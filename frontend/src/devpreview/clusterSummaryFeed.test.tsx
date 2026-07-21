@@ -8,35 +8,42 @@ import { useClusterSummaries } from "./clusterSummaryFeed";
 describe("useClusterSummaries", () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it("loads every visible card through one bounded fleet request", async () => {
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({
-      clusters: [cluster("cluster-a"), cluster("cluster-b", { cpu_pct: null, open_incidents: 2 })],
-      totals: totals(),
-    }));
+  it("loads every visible card from its canonical node summary in parallel", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const clusterId = String(input).includes("cluster-b") ? "cluster-b" : "cluster-a";
+      return jsonResponse(nodeSummary(clusterId));
+    });
 
     const rendered = renderHook(() => useClusterSummaries(["cluster-b", "cluster-a"]));
     await waitFor(() => expect(rendered.result.current["cluster-a"]?.status).toBe("ready"));
 
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(String(fetchMock.mock.calls[0]?.[0])).toBe("/api/fleet/summary");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls.map(([input]) => String(input))).toEqual(expect.arrayContaining([
+      "/api/clusters/cluster-a/nodes/summary",
+      "/api/clusters/cluster-b/nodes/summary",
+    ]));
     expect(rendered.result.current["cluster-b"]).toMatchObject({
       status: "ready",
-      cpuPct: null,
+      cpuPct: 30,
       memPct: 40,
-      openIncidents: 2,
-      nodesReady: 2,
+      podsRunning: 9,
+      podsTotal: null,
+      openIncidents: null,
+      nodesReady: 1,
       nodesTotal: 2,
     });
   });
 
-  it("marks a cluster omitted by the authorized fleet response unavailable", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({
-      clusters: [cluster("cluster-a")],
-      totals: totals(),
-    }));
+  it("keeps a successful cluster when a peer node summary is unavailable", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => (
+      String(input).includes("not-authorized")
+        ? new Response("forbidden", { status: 403 })
+        : jsonResponse(nodeSummary("cluster-a"))
+    ));
 
     const rendered = renderHook(() => useClusterSummaries(["cluster-a", "not-authorized"]));
     await waitFor(() => expect(rendered.result.current["not-authorized"]?.status).toBe("unavailable"));
+    expect(rendered.result.current["cluster-a"]?.status).toBe("ready");
     expect(rendered.result.current["not-authorized"]?.podsTotal).toBeNull();
   });
 
@@ -48,36 +55,35 @@ describe("useClusterSummaries", () => {
   });
 });
 
-function cluster(clusterId: string, overrides: Record<string, unknown> = {}) {
+function nodeSummary(clusterId: string) {
   return {
     cluster_id: clusterId,
-    name: clusterId,
-    health: "healthy",
-    pods_running: 9,
-    pods_total: 10,
-    nodes_ready: 2,
-    nodes_total: 2,
-    open_incidents: 0,
-    restarts_recent: 0,
-    cpu_pct: 25,
-    mem_pct: 40,
-    last_seen_at: "2026-07-21T08:20:00Z",
-    ...overrides,
-  };
-}
-
-function totals() {
-  return {
-    clusters: 2,
-    healthy: 2,
-    warning: 0,
-    critical: 0,
-    stale: 0,
-    unknown: 0,
-    open_incidents: 0,
-    pending_approvals: 0,
-    running_workflows: 0,
-    dead_letters: 0,
+    nodes: [
+      {
+        name: "worker-a",
+        ready: true,
+        health: "healthy",
+        kubernetes_version: "v1.32.0-eks",
+        pods_running: 5,
+        pods_capacity: 20,
+        cpu_pct: 20,
+        mem_pct: null,
+        restarts_recent: 0,
+        conditions: ["Ready"],
+      },
+      {
+        name: "worker-b",
+        ready: false,
+        health: "warning",
+        kubernetes_version: "v1.32.0-eks",
+        pods_running: 4,
+        pods_capacity: 20,
+        cpu_pct: 40,
+        mem_pct: 40,
+        restarts_recent: 1,
+        conditions: ["MemoryPressure"],
+      },
+    ],
   };
 }
 
