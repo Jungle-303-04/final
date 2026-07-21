@@ -1230,6 +1230,56 @@ def test_nodes_summary_rejects_inventory_usage_without_freshness_evidence() -> N
     assert node["mem_pct"] is None
 
 
+def test_nodes_summary_excludes_nodes_absent_from_latest_live_snapshot() -> None:
+    db = FleetApiDb(
+        registrations=[_registration()],
+        nodes=[
+            {
+                "name": "node-current",
+                "status": "Ready",
+                "health": "healthy",
+                "summary": {"ready": True},
+            },
+            {
+                "name": "node-terminated",
+                "status": "NotReady",
+                "health": "degraded",
+                "summary": {"ready": False},
+            },
+        ],
+        pods=[
+            {
+                "name": "current-pod",
+                "namespace": "default",
+                "status": "Running",
+                "health": "healthy",
+                "summary": {"node_name": "node-current"},
+            },
+            {
+                "name": "stale-pod",
+                "namespace": "default",
+                "status": "Running",
+                "health": "degraded",
+                "summary": {"node_name": "node-terminated"},
+            },
+        ],
+        latest_snapshot={
+            "snapshot_id": "snapshot-current",
+            "collected_at": "2026-07-21T14:58:43+00:00",
+            "summary": {
+                "live_inventory": True,
+                "nodes": [{"name": "node-current", "ready": True}],
+            },
+        },
+    )
+
+    response = make_client(db, session=_session()).get(f"/clusters/{CLUSTER_ID}/nodes/summary")
+
+    assert response.status_code == 200
+    assert [node["name"] for node in response.json()["nodes"]] == ["node-current"]
+    assert response.json()["nodes"][0]["pods_running"] == 1
+
+
 def test_node_pods_summary_filters_node_and_links_incident() -> None:
     db = FleetApiDb(
         registrations=[_registration()],

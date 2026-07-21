@@ -943,6 +943,19 @@ def build_nodes_summary(
             limit=POD_LIMIT,
         )
     )
+    latest_snapshot = db.latest_inventory_snapshot(workspace_id, cluster_id)
+    latest_summary = _summary(latest_snapshot or {})
+    snapshot_nodes = latest_summary.get("nodes")
+    if latest_summary.get("live_inventory") is True and isinstance(snapshot_nodes, list):
+        observed_node_names = {
+            str(item.get("name") or "")
+            for item in snapshot_nodes
+            if isinstance(item, dict) and item.get("name")
+        }
+        nodes = [node for node in nodes if str(node.get("name") or "") in observed_node_names]
+        pods = [
+            pod for pod in pods if str(_summary(pod).get("node_name") or "") in observed_node_names
+        ]
     latest_usage = _latest_usage(
         db.latest_cluster_usage_rollups(workspace_id, {cluster_id}, samples_per_cluster=1).get(
             cluster_id, []
