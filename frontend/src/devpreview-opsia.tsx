@@ -9,7 +9,8 @@ import { AnimatePresence, motion } from "motion/react";
 import { Box, ChevronRight, ChevronLeft, Plug, FileCog, Cpu, Activity, Server, Network } from "lucide-react";
 import { UI, BLUE, HP, TINT, MONO, TYPE, SOFT, SPRING, PAGE, PRESENT_SCALE, DUR, inkA, blueA, LINE3, INK4, BRAND, cardA } from "./devpreview/theme";
 import { AwsIcon, GithubIcon } from "./devpreview/brandIcons";
-import { statusLabel } from "./devpreview/statusLabel";
+import { statusLabel, reasonLabel } from "./devpreview/statusLabel";
+import { useNarrowViewport } from "./devpreview/useNarrowViewport";
 import { useDevpreviewContracts, type DevpreviewCluster } from "./devpreview/contracts";
 import { isActiveIncidentCluster } from "./devpreview/rcaIssuesFeed";
 import { useClusterSummaries, type ClusterSummaryView } from "./devpreview/clusterSummaryFeed";
@@ -106,7 +107,7 @@ function ClusterOverview({ cl, meta, topology, onKind }: {
         </span>
         <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: TYPE.caption, color: UI.ink3 }}>
           <span className="pulsedot" style={{ width: 6, height: 6, borderRadius: 999, background: cl?.connectionStatus === "online" ? HP.ok : UI.ink3 }} />
-          {cl?.connectionStatus === "online" ? "연결됨 · 자동 갱신" : "연결 상태 관측 대기"}
+          {cl?.connectionStatus === "online" ? "연결됨" : "연결 상태 관측 대기"}
         </span>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, auto)", gap: "5px 18px", alignContent: "center" }}>
@@ -171,7 +172,7 @@ function ClusterRow({ cl, summary, topology, onOpen }: {
         <span>파드 <b style={{ fontFamily: MONO, color: UI.ink }}>{fmt(podCount)}</b>{incidents > 0 && <b style={{ color: TINT.crit.fg, fontFamily: MONO }}> · 장애 {incidents}</b>}</span>
         <span>네임스페이스 <b style={{ fontFamily: MONO, color: UI.ink }}>{cl.namespaceCount ?? "—"}</b></span>
         {topology?.status === "ready" && topology.partial && (
-          <span title={topology.partialReasonCodes.join(", ") || "부분 관측"}
+          <span title={topology.partialReasonCodes.map(reasonLabel).join(" · ") || "부분 관측"}
             style={{ color: TINT.warn.fg, fontWeight: 700 }}>
             일부 관측{topology.truncatedPodCount > 0 ? ` · ${topology.truncatedPodCount}개 미표시` : ""}
           </span>
@@ -241,16 +242,20 @@ export function HomeClusterSection({ meta: _meta, onOpen, pending = [] }: {
   const clusterIds = useMemo(() => clusters.map((cl) => cl.id), [clusters]);
   const summaries = useClusterSummaries(clusterIds);
   const topologies = useClusterTopologies(clusterIds);
+  // priority 14: 홈은 OpsiaMap의 `.op` 스타일 블록(반응형 media query 포함) 밖에서
+  // 렌더되므로 그 media query가 적용되지 않는다. 좁은 화면 1열 전환을 인라인으로 보장한다.
+  const narrow = useNarrowViewport();
+  const span = narrow ? "span 1" : "span 2";
   return (
-    // 4칸 그리드 — 클러스터 카드 2칸씩, 연결 카드는 가로형 컴팩트 2칸(거대 공백 금지)
-    <div className="home-cluster-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gridAutoFlow: "row dense", gap: 14 }}>
+    // 넓은 화면: 4칸 그리드에 카드 2칸씩(= 2열). 좁은 화면(≤768px): 1열로 스택.
+    <div className="home-cluster-grid" style={{ display: "grid", gridTemplateColumns: narrow ? "minmax(0, 1fr)" : "repeat(4, minmax(0, 1fr))", gridAutoFlow: "row dense", gap: 14 }}>
       {clusters.map((cl) => (
-        <div key={cl.id} style={{ gridColumn: "span 2", minWidth: 0 }}>
+        <div key={cl.id} style={{ gridColumn: span, minWidth: 0 }}>
           <ClusterRow cl={cl} summary={summaries[cl.id]} topology={topologies[cl.id]} onOpen={() => onOpen(cl.id)} />
         </div>
       ))}
       {pending.map((n, i) => (
-        <div key={n} style={{ gridColumn: "span 2", minWidth: 0 }}>
+        <div key={n} style={{ gridColumn: span, minWidth: 0 }}>
           <PendingClusterCard name={n} delay={(clusters.length + i) * 0.05} />
         </div>
       ))}
@@ -441,7 +446,7 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
                 <span style={seg}><Box size={11} style={{ color: UI.ink3 }} />파드 <b style={num}>{observing ? topology.podsTotal ?? "—" : topology.status === "loading" ? "…" : "—"}</b></span>
               )}
               {observing && topology.partial && (
-                <span title={topology.partialReasonCodes.join(", ") || "부분 관측"}
+                <span title={topology.partialReasonCodes.map(reasonLabel).join(" · ") || "부분 관측"}
                   style={{ ...seg, color: TINT.warn.fg, fontWeight: 700 }}>
                   일부 관측{topology.truncatedPodCount > 0 ? ` · ${topology.truncatedPodCount}개 미표시` : ""}
                 </span>
@@ -486,7 +491,7 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
         {/* 브레드크럼 */}
         <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 16, minHeight: 28 }}>
           {view.level !== "clusters" && (
-            <motion.button whileTap={{ scale: 0.92 }} whileHover={{ borderColor: LINE3 }}
+            <motion.button type="button" aria-label={view.level === "pods" ? "노드 목록으로 돌아가기" : "클러스터 목록으로 돌아가기"} title={view.level === "pods" ? "노드 목록으로" : "클러스터 목록으로"} whileTap={{ scale: 0.92 }} whileHover={{ borderColor: LINE3 }}
               onClick={() => go(view.level === "pods" ? { level: "nodes", cluster: view.cluster } : { level: "clusters" }, -1)}
               style={{ width: 26, height: 26, borderRadius: 999, border: `1px solid ${UI.line}`, background: UI.card, cursor: "pointer", display: "grid", placeItems: "center", marginRight: 6 }}>
               <ChevronLeft size={14} style={{ color: UI.ink2 }} />

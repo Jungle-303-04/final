@@ -31,6 +31,7 @@ import { logout as logoutApi } from "./devpreview/sessionFeed";
 import { useInventoryResourcesAcrossClusters, useInventoryKindCounts, kindToResourceType } from "./devpreview/inventoryResourcesFeed";
 import { useWorkloadDetail } from "./devpreview/workloadDetailFeed";
 import { useResourceUsageSeries } from "./devpreview/resourceUsageFeed";
+import { useNarrowViewport } from "./devpreview/useNarrowViewport";
 import { operationalMessageLabel, reasonLabel, statusLabel, isCriticalStatus } from "./devpreview/statusLabel";
 import { LiveResourceManifestEditor } from "./devpreview/resourceManifestEditor";
 import { podsForNode, useClusterTopology } from "./devpreview/inventoryTopologyFeed";
@@ -950,6 +951,9 @@ function HomeSurface({ clusterMeta, incidentClusterIds, onDrillCluster, onConnec
   // W7 비용 위젯 — 실 GET /api/cost/overview. 현 계약은 관측 unavailable(가격 backfill 금지).
   const cost = useCostOverview();
 
+  // priority 14: 좁은 화면(≤768px)에서 클러스터 카드·위젯 보드를 1열로, 상단 컨트롤을
+  // 줄바꿈해 한글이 글자 단위로 세로 붕괴하지 않도록 한다.
+  const narrow = useNarrowViewport();
   const [period, setPeriod] = useState<"오늘" | "7일" | "30일">("오늘");
   const [board, setBoard] = useState<BoardState>(readBoard);
   const [editing, setEditing] = useState(false);
@@ -1133,12 +1137,12 @@ function HomeSurface({ clusterMeta, incidentClusterIds, onDrillCluster, onConnec
 
       {/* ── 위젯 보드 — 4칸 그리드 + 밀집 배치(dense): 숨김·이동으로 생긴 빈칸에 작은 위젯이 위로 올라와 채운다 ── */}
       {/* stretch 정렬 — 같은 행의 위젯은 세로 크기가 동일하다(가장 큰 위젯 기준) */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gridAutoFlow: "row dense", gap: 14 }}>
+      <div style={{ display: "grid", gridTemplateColumns: narrow ? "minmax(0, 1fr)" : "repeat(4, minmax(0, 1fr))", gridAutoFlow: "row dense", gap: 14 }}>
         {visible.map((id) => {
           const def = W_DEFS.find((w) => w.id === id)!;
           return (
             <motion.div key={id} layout transition={SPRING}
-              style={{ gridColumn: `span ${Math.min(def.span, 4)}`, minWidth: 0, height: "100%", opacity: dragId === id ? 0.55 : 1 }}>
+              style={{ gridColumn: narrow ? "span 1" : `span ${Math.min(def.span, 4)}`, minWidth: 0, height: "100%", opacity: dragId === id ? 0.55 : 1 }}>
               {/* 네이티브 드래그는 플레인 래퍼가 담당 — motion의 팬 제스처 onDragStart와 충돌 방지 */}
               <div draggable={editing}
                 onDragStart={editing ? (e: React.DragEvent) => { setDragId(id); e.dataTransfer.effectAllowed = "move"; } : undefined}
@@ -1256,6 +1260,11 @@ function App() {
     window.addEventListener("resize", on);
     return () => { ro.disconnect(); window.removeEventListener("resize", on); };
   }, []);
+  // 반응형 리소스 목록 — 좁은 화면(실뷰포트 ≤768px)에서는 종류 사이드바(248px)가
+  // 표를 덮어 행 클릭이 불가하던 결함을 없앤다. 이 폭에서는 사이드바를 상단 종류
+  // 선택 컨트롤로 접고 표를 전체 폭으로 스택해 행·상세 드로어 도달성을 보장한다.
+  // vwCss는 PRESENT_SCALE(zoom)로 나눈 콘텐츠 좌표라 실뷰포트 기준으로 환산한다.
+  const narrowList = vwCss <= 768 / PRESENT_SCALE;
   // 반응형 — 좁은 화면(200% 확대 등)에서 내비를 자동으로 아이콘만 남긴다
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 1100px)");
@@ -1627,8 +1636,19 @@ function App() {
           )}
 
           {resView === "list" && (
-            /* 목록 — 종류 패널 + 표 전체 높이. 맵 없음 */
-            <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
+            /* 목록 — 종류 패널 + 표 전체 높이. 맵 없음. 좁은 화면은 세로 스택 + 종류 select */
+            <div style={{ display: "flex", flexDirection: narrowList ? "column" : "row", gap: narrowList ? 12 : 16, alignItems: narrowList ? "stretch" : "flex-start" }}>
+              {narrowList && (
+                <label style={{ display: "flex", alignItems: "center", gap: 8, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 12, padding: "8px 12px" }}>
+                  <span style={{ fontSize: TYPE.label, fontWeight: 700, color: UI.ink3, flexShrink: 0 }}>종류</span>
+                  <select aria-label="리소스 종류 선택" value={kindId} onChange={(e) => setKindId(e.currentTarget.value)}
+                    style={{ flex: 1, minWidth: 0, fontSize: TYPE.body, color: UI.ink, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 8, padding: "7px 10px", cursor: "pointer" }}>
+                    {KINDS.map((k) => (
+                      <option key={k.id} value={k.id}>{k.label}{kindCounts[k.id] != null ? ` (${kindCounts[k.id]})` : ""}</option>
+                    ))}
+                  </select>
+                </label>
+              )}
               <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 12 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                   <kind.icon size={15} style={{ color: BLUE }} />
@@ -1660,10 +1680,13 @@ function App() {
                   )}
                 </motion.div>
               </div>
-              {/* 종류 선택 패널 — 지도 관점의 탐색 패널과 같은 KindIndex 하나를 공유(두 번째 구현 금지) */}
+              {/* 종류 선택 패널 — 지도 관점의 탐색 패널과 같은 KindIndex 하나를 공유(두 번째 구현 금지).
+                  좁은 화면에서는 위 종류 select로 대체하고 사이드바를 렌더하지 않아 표를 가리지 않는다. */}
+              {!narrowList && (
               <aside style={{ width: 248, flexShrink: 0, alignSelf: "flex-start", position: "sticky", top: topH + 12, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 14, padding: 10, maxHeight: `calc(100vh / ${PRESENT_SCALE} - ${topH + 60}px)`, overflowY: "auto", scrollbarGutter: "stable" }}>
                 <KindIndex sel={kindId} onPick={(k) => setKindId(k.id)} showEmpty={showEmpty} setShowEmpty={setShowEmpty} pinned={pinned} togglePin={togglePin} filter={q} counts={kindCounts} />
               </aside>
+              )}
             </div>
           )}
 
