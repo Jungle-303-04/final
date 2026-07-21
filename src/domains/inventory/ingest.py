@@ -126,7 +126,7 @@ def _run_with_advisory_lock_retry(
             last = attempt == _ADVISORY_LOCK_RETRY_ATTEMPTS - 1
             if last or not _is_lock_timeout(exc):
                 raise
-            time.sleep(_ADVISORY_LOCK_RETRY_BASE_DELAY_SECONDS * (2 ** attempt))
+            time.sleep(_ADVISORY_LOCK_RETRY_BASE_DELAY_SECONDS * (2**attempt))
     raise RuntimeError("unreachable advisory lock retry")
 
 
