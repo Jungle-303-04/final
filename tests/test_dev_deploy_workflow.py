@@ -909,7 +909,7 @@ def test_console_proxy_uses_runtime_dns_and_does_not_buffer_api_streams() -> Non
     for source in (image_config, live_config):
         assert "resolver kube-dns.kube-system.svc.cluster.local valid=10s" in source
         assert "set $api_upstream http://api-gateway.management.svc.cluster.local:8000" in source
-        assert "proxy_pass $api_upstream/" in source
+        assert "proxy_pass $api_upstream$request_uri" in source
         rest_location = source.split("location /api/ {", 1)[1].split("\n\n", 1)[0]
         assert "proxy_buffering off" in rest_location
         assert "proxy_cache off" in rest_location
