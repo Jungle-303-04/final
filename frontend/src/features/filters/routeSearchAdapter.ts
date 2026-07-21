@@ -41,13 +41,26 @@ export function mergeRouteSearch(
   href: string,
   entries: readonly RouteSearchEntry[],
 ): string {
+  if (entries.length === 0) return href;
+
   const [pathAndSearch, hash = ""] = href.split("#", 2);
   const [pathname, search = ""] = pathAndSearch.split("?", 2);
-  const params = new URLSearchParams(search);
+  const ownedKeys = new Set(entries.map(([key]) => key));
+  const preserved = search.length === 0
+    ? []
+    : search.split("&").filter((entry) => {
+      const [encodedKey = ""] = entry.split("=", 1);
+      try {
+        return !ownedKeys.has(decodeURIComponent(encodedKey.replace(/\+/g, " ")));
+      } catch {
+        return true;
+      }
+    });
   for (const [key, value] of entries) {
-    if (value === null || value === undefined) params.delete(key);
-    else params.set(key, value);
+    if (value !== null && value !== undefined) {
+      preserved.push(`${encodeURIComponent(key)}=${encodeURIComponent(value)}`);
+    }
   }
-  const nextSearch = params.toString();
+  const nextSearch = preserved.join("&");
   return `${pathname}${nextSearch.length === 0 ? "" : `?${nextSearch}`}${hash.length === 0 ? "" : `#${hash}`}`;
 }
