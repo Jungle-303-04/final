@@ -4,11 +4,11 @@
 
 // 표면·잉크 (Geist: background / surface / border, 3단 잉크)
 export const UI = {
-  bg: "#FAFAFC",     // 페이지 배경
-  bg2: "#FBFBFD",    // 표면 안 보조 배경 (표 헤더·인셋)
+  bg: "#F2F3F6",     // 페이지 배경 — 흰 카드와 층위가 보이는 중성 회색
+  bg2: "#F7F8FA",    // 표면 안 보조 배경 (표 헤더·인셋)
   card: "#FFFFFF",   // 표면
-  line: "#E9EAEE",   // 헤어라인 (구분 1순위 — 그림자보다 먼저)
-  line2: "#F1F2F5",  // 보조 헤어라인
+  line: "#E0E3E8",   // 헤어라인 (구분 1순위 — 그림자보다 먼저)
+  line2: "#EBEDF1",  // 보조 헤어라인
   ink: "#111318",    // 본문·제목
   ink2: "#5F6570",   // 보조 텍스트
   ink3: "#9AA0AA",   // 라벨·자리표시
