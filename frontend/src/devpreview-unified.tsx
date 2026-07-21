@@ -33,13 +33,13 @@ import { useWorkloadDetail } from "./devpreview/workloadDetailFeed";
 import { useResourceUsageSeries } from "./devpreview/resourceUsageFeed";
 import { useResourceAccess } from "./devpreview/resourceAccessFeed";
 import { ResourceAccessPanel } from "./devpreview/resourceAccessPanel";
+import { EventMessageText } from "./devpreview/EventMessageText";
 import { useResourceEvents } from "./devpreview/resourceEventsFeed";
 import { useResourceIdentity } from "./devpreview/resourceIdentityFeed";
 import { useNarrowViewport } from "./devpreview/useNarrowViewport";
 import { operationalMessageLabel, reasonLabel, statusLabel, isCriticalStatus } from "./devpreview/statusLabel";
 import { LiveResourceManifestEditor } from "./devpreview/resourceManifestEditor";
 import { podsForNode, useClusterTopology } from "./devpreview/inventoryTopologyFeed";
-import { presentEventMessage } from "./devpreview/eventPresentation";
 import { UI, BLUE, BLUE2, HP, TINT, MONO, TYPE, SOFT, SPRING, PRESENT_SCALE, DUR, inkA, blueA, MARK, cardA, GLASS, critA } from "./devpreview/theme";
 import "./styles/tokens.css";
 import "./styles/foundation.css";
@@ -783,10 +783,14 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
                       <div key={event.id} style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, border: `1px solid ${UI.line2}`, background: UI.bg2, borderRadius: 8, padding: "8px 12px" }}>
                         <span style={{ minWidth: 0 }}>
                           <span style={{ display: "block", fontSize: TYPE.label, color: UI.ink }}>{statusLabel(event.reason)}{event.type ? ` · ${statusLabel(event.type)}` : ""}{event.count != null && event.count > 1 ? ` ×${event.count}` : ""}</span>
-                          {event.message && (() => {
-                            const presented = presentEventMessage(event.message);
-                            return <span title={presented.original || presented.label} aria-label={presented.label} style={{ color: UI.ink3, display: "block", fontSize: TYPE.caption2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{presented.label}</span>;
-                          })()}
+                          {event.message && (
+                            <EventMessageText
+                              color={UI.ink3}
+                              fontSize={TYPE.caption2}
+                              message={event.message}
+                              reasonLabel={statusLabel(event.reason)}
+                            />
+                          )}
                         </span>
                         {event.lastAt && <span style={{ fontSize: TYPE.caption2, color: UI.ink3, flexShrink: 0 }}>{event.lastAt.replace("T", " ").slice(0, 16)}</span>}
                       </div>

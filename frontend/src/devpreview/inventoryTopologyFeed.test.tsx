@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   podsForNode,
+  invalidateClusterTopologyForTests,
   resetClusterTopologyCacheForTests,
   toClusterTopologyView,
   useClusterTopologies,
@@ -121,6 +122,46 @@ describe("useClusterTopology", () => {
     const second = renderHook(() => useClusterTopology("cluster-a"));
     await waitFor(() => expect(second.result.current.status).toBe("ready"));
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("discards an in-flight stale response and performs one follow-up after live invalidation", async () => {
+    let resolveStale: ((response: Response) => void) | undefined;
+    let resolveFresh: ((response: Response) => void) | undefined;
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockImplementationOnce(() => new Promise<Response>((resolve) => { resolveStale = resolve; }))
+      .mockImplementationOnce(() => new Promise<Response>((resolve) => { resolveFresh = resolve; }));
+    const rendered = renderHook(() => useClusterTopology("cluster-a"));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    act(() => invalidateClusterTopologyForTests("cluster-a"));
+    await act(async () => {
+      resolveStale?.(new Response(JSON.stringify({
+        ...PHYSICAL_TOPOLOGY_ENDPOINT,
+        servers: PHYSICAL_TOPOLOGY_ENDPOINT.servers.map((server) => ({
+          ...server,
+          name: "stale-worker",
+        })),
+      }), { status: 200 }));
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(rendered.result.current.nodes).toEqual([]);
+
+    await act(async () => {
+      resolveFresh?.(new Response(JSON.stringify({
+        ...PHYSICAL_TOPOLOGY_ENDPOINT,
+        servers: PHYSICAL_TOPOLOGY_ENDPOINT.servers.map((server) => ({
+          ...server,
+          name: "fresh-worker",
+        })),
+      }), { status: 200 }));
+    });
+    await waitFor(() => expect(rendered.result.current.status).toBe("ready"));
+    expect(rendered.result.current.nodes[0]?.name).toBe("fresh-worker");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("pauses topology work while the page is hidden and resumes on visibility", async () => {

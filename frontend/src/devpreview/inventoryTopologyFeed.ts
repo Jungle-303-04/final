@@ -58,7 +58,9 @@ export interface ClusterTopologyView {
 type TopologyListener = (view: ClusterTopologyView) => void;
 interface TopologyChannel {
   controller: AbortController | null;
+  generation: number;
   listeners: Set<TopologyListener>;
+  pendingInvalidation: boolean;
   refreshTimer: number | null;
   disposeTimer: number | null;
   visibilityCleanup: (() => void) | null;
@@ -178,7 +180,9 @@ function subscribeClusterTopology(clusterId: string, listener: TopologyListener)
   if (channel === undefined) {
     channel = {
       controller: null,
+      generation: 0,
       listeners: new Set(),
+      pendingInvalidation: false,
       refreshTimer: null,
       disposeTimer: null,
       visibilityCleanup: null,
@@ -196,10 +200,15 @@ function subscribeClusterTopology(clusterId: string, listener: TopologyListener)
       }
       if (active.listeners.size === 0 || channels.get(clusterId) !== active) return;
       const cached = cache.get(clusterId);
-      if (cached !== undefined && cached.expiresAt > Date.now()) {
+      if (
+        cached !== undefined
+        && cached.expiresAt > Date.now()
+        && !active.pendingInvalidation
+      ) {
         scheduleClusterRefresh(clusterId, active, cached.expiresAt - Date.now() + 25);
       } else {
         cache.delete(clusterId);
+        active.pendingInvalidation = false;
         loadClusterTopology(clusterId, active);
       }
     };
@@ -246,10 +255,16 @@ function loadClusterTopology(clusterId: string, channel: TopologyChannel): void 
     || document.visibilityState === "hidden"
   ) return;
   const controller = new AbortController();
+  const requestGeneration = channel.generation;
   channel.controller = controller;
+  channel.pendingInvalidation = false;
   void getPhysicalTopology({ clusters: [clusterId] }, controller.signal)
     .then((topology) => {
-      if (controller.signal.aborted) return;
+      if (
+        controller.signal.aborted
+        || channel.generation !== requestGeneration
+        || channels.get(clusterId) !== channel
+      ) return;
       const view = toClusterTopologyView(topology);
       const ttl = view.partial ? PARTIAL_CACHE_TTL_MS : CACHE_TTL_MS;
       cache.set(clusterId, { view, expiresAt: Date.now() + ttl });
@@ -257,13 +272,31 @@ function loadClusterTopology(clusterId: string, channel: TopologyChannel): void 
       scheduleClusterRefresh(clusterId, channel, ttl);
     })
     .catch((cause: unknown) => {
-      if (isAbortError(cause) || controller.signal.aborted) return;
+      if (
+        isAbortError(cause)
+        || controller.signal.aborted
+        || channel.generation !== requestGeneration
+        || channels.get(clusterId) !== channel
+      ) return;
       cache.set(clusterId, { view: UNAVAILABLE, expiresAt: Date.now() + ERROR_CACHE_TTL_MS });
       channel.listeners.forEach((notify) => notify(UNAVAILABLE));
       scheduleClusterRefresh(clusterId, channel, ERROR_CACHE_TTL_MS);
     })
     .finally(() => {
       if (channel.controller === controller) channel.controller = null;
+      if (
+        channel.generation !== requestGeneration
+        || channel.pendingInvalidation
+      ) {
+        if (
+          channel.listeners.size > 0
+          && channels.get(clusterId) === channel
+          && document.visibilityState !== "hidden"
+        ) {
+          channel.pendingInvalidation = false;
+          loadClusterTopology(clusterId, channel);
+        }
+      }
     });
 }
 
@@ -289,17 +322,27 @@ function scheduleClusterRefresh(
 /**
  * 실시간 델타가 알려 준 한 클러스터만 다시 검증한다. 기존 화면 값은 React state에
  * 남겨 두고 캐시/다음 예약만 무효화하므로 새 응답 전까지 빈 화면으로 바뀌지 않는다.
- * 진행 중 요청은 중복하지 않고, 이후 스트림 신호 또는 60초 안전 폴링이 최신화를 잇는다.
+ * 진행 중 요청은 중복하지 않는다. 대신 generation을 올려 오래된 응답을 폐기하고,
+ * 요청 완료 직후 누적된 무효화를 한 번의 후속 조회로 합친다.
  */
 function invalidateClusterTopology(clusterId: string): void {
   cache.delete(clusterId);
   const channel = channels.get(clusterId);
   if (channel === undefined) return;
+  channel.generation += 1;
+  channel.pendingInvalidation = true;
   if (channel.refreshTimer !== null) {
     window.clearTimeout(channel.refreshTimer);
     channel.refreshTimer = null;
   }
+  if (channel.controller !== null) return;
+  channel.pendingInvalidation = false;
   loadClusterTopology(clusterId, channel);
+}
+
+/** @internal 실시간 무효화 경쟁 조건 회귀 테스트용 진입점. */
+export function invalidateClusterTopologyForTests(clusterId: string): void {
+  invalidateClusterTopology(clusterId);
 }
 
 /**
