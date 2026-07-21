@@ -52,7 +52,6 @@ describe("ClusterLifecycleControl", () => {
     const onDisconnected = vi.fn();
     const onPhaseChange = vi.fn();
     renderControl({
-      confirmManualCleanup: vi.fn(),
       disconnect,
       loadDisconnect: vi.fn(),
     }, { onDisconnected, onPhaseChange });
@@ -141,7 +140,6 @@ function wrapped(children: ReactNode) {
 
 function noopPort(): ClusterDisconnectPort {
   return {
-    confirmManualCleanup: vi.fn(),
     disconnect: vi.fn(),
     loadDisconnect: vi.fn(),
   };
