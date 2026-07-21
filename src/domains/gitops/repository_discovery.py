@@ -6,9 +6,11 @@ import asyncio
 import base64
 import binascii
 import json
+import logging
 import posixpath
 import re
 import subprocess
+import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -82,12 +84,22 @@ RENDER_PARSE_WARNING = "rendered manifest parse only; Kubernetes server dry-run 
 JsonMap = dict[str, Any]
 _AMBIENT_GITHUB_TOKEN = object()
 
+_LOGGER = logging.getLogger(__name__)
+
 
 class RepositoryDiscoveryError(Exception):
-    def __init__(self, status_code: int, detail: str) -> None:
+    def __init__(
+        self,
+        status_code: int,
+        detail: str,
+        *,
+        observability: Mapping[str, Any] | None = None,
+    ) -> None:
         super().__init__(detail)
         self.status_code = status_code
         self.detail = detail
+        # 서버 로그 전용, secret-free. 응답 스키마에는 노출하지 않는다.
+        self.observability = dict(observability) if observability else None
 
 
 class ManifestRenderValidationError(Exception):
@@ -263,6 +275,7 @@ class GitHubRepositoryClient:
         }
         if self.token:
             headers["Authorization"] = f"Bearer {self.token}"
+        started = time.monotonic()
         async with httpx.AsyncClient(
             base_url=self.api_base,
             timeout=self.timeout,
@@ -271,13 +284,34 @@ class GitHubRepositoryClient:
             try:
                 response = await client.get(path, params=params, headers=headers)
             except httpx.RequestError as exc:
-                raise RepositoryDiscoveryError(502, "github api request failed") from exc
+                observability = {
+                    "error_class": _request_error_class(exc),
+                    "exception_type": type(exc).__name__,
+                    "elapsed_ms": round((time.monotonic() - started) * 1000),
+                }
+                _log_origin_failure(path, observability)
+                raise RepositoryDiscoveryError(
+                    502, "github api request failed", observability=observability
+                ) from exc
+        elapsed_ms = round((time.monotonic() - started) * 1000)
         if response.status_code >= 400:
-            raise github_http_error(response.status_code)
+            error = github_http_error(response.status_code, response.headers)
+            if error.status_code == 502:
+                _log_origin_failure(path, {**(error.observability or {}), "elapsed_ms": elapsed_ms})
+            raise error
         try:
             return response.json()
         except ValueError as exc:
-            raise RepositoryDiscoveryError(502, "github api response was not json") from exc
+            observability = {
+                "error_class": "non_json",
+                "elapsed_ms": elapsed_ms,
+                "upstream_status": response.status_code,
+                "github_request_id": _github_request_id(response.headers),
+            }
+            _log_origin_failure(path, observability)
+            raise RepositoryDiscoveryError(
+                502, "github api response was not json", observability=observability
+            ) from exc
 
 
 class ImmutableRepositorySnapshotClient:
@@ -385,9 +419,13 @@ class RepositoryDiscoveryService:
             warnings=repository_metadata_warnings(metadata),
         )
 
-    async def list_branches(self, repo_ref: str) -> RepositoryBranchListResponse:
+    async def list_branches(
+        self, repo_ref: str, *, metadata: JsonMap | None = None
+    ) -> RepositoryBranchListResponse:
         normalized = normalize_repo_ref(repo_ref)
-        metadata = await self.client.repository(normalized)
+        # 호출부가 직전 probe에서 이미 metadata를 얻었으면 재요청을 생략(cross-request rate 절감).
+        if metadata is None:
+            metadata = await self.client.repository(normalized)
         default_branch = str(metadata.get("default_branch") or DEFAULT_REPO_BRANCH)
         branches = [
             RepositoryBranchItem(
@@ -1305,7 +1343,57 @@ def github_token() -> str:
         return ""
 
 
-def github_http_error(status_code: int) -> RepositoryDiscoveryError:
+def _github_rate_limited(headers: Mapping[str, str] | None) -> bool:
+    """GitHub 미인증 primary rate limit은 403 + x-ratelimit-remaining:0 (429 아님)."""
+    if not headers:
+        return False
+    if str(headers.get("x-ratelimit-remaining", "")).strip() == "0":
+        return True
+    return bool(str(headers.get("retry-after", "")).strip())
+
+
+def _github_request_id(headers: Mapping[str, str] | None) -> str | None:
+    if not headers:
+        return None
+    value = str(headers.get("x-github-request-id", "")).strip()
+    return value or None
+
+
+def _request_error_class(exc: httpx.RequestError) -> str:
+    if isinstance(exc, httpx.ConnectTimeout):
+        return "connect_timeout"
+    if isinstance(exc, httpx.ReadTimeout):
+        return "read_timeout"
+    if isinstance(exc, (httpx.WriteTimeout, httpx.PoolTimeout)):
+        return "io_timeout"
+    if isinstance(exc, httpx.ConnectError):
+        return "connect_error"  # DNS/TLS/refused
+    return "request_error"
+
+
+def _log_origin_failure(path: str, observability: Mapping[str, Any]) -> None:
+    # path=/repos/{owner}/{repo}/... (공개 식별자), observability=secret-free 필드만.
+    # Authorization 헤더·토큰·query 토큰은 절대 로그하지 않는다.
+    _LOGGER.warning(
+        "github_origin_request_failed",
+        extra={"action": "github_origin_request_failed", "path": path, **dict(observability)},
+    )
+
+
+def github_http_error(
+    status_code: int,
+    headers: Mapping[str, str] | None = None,
+) -> RepositoryDiscoveryError:
+    if status_code == 403 and _github_rate_limited(headers):
+        return RepositoryDiscoveryError(
+            429,
+            "github rate limit reached",
+            observability={
+                "error_class": "rate_limited",
+                "upstream_status": 403,
+                "github_request_id": _github_request_id(headers),
+            },
+        )
     if status_code in {401, 403}:
         return RepositoryDiscoveryError(
             403, "github authentication failed or lacks repository access"
@@ -1316,7 +1404,15 @@ def github_http_error(status_code: int) -> RepositoryDiscoveryError:
         return RepositoryDiscoveryError(422, "github rejected the repository discovery request")
     if status_code == 429:
         return RepositoryDiscoveryError(429, "github rate limit reached")
-    return RepositoryDiscoveryError(502, "github api request failed")
+    return RepositoryDiscoveryError(
+        502,
+        "github api request failed",
+        observability={
+            "error_class": "upstream_status",
+            "upstream_status": status_code,
+            "github_request_id": _github_request_id(headers),
+        },
+    )
 
 
 def normalize_repo_ref(value: str) -> str:

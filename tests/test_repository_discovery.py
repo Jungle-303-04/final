@@ -1453,3 +1453,122 @@ def test_github_client_decodes_content_response() -> None:
         return await client.content("owner/service", "main", "deploy.yaml")
 
     assert asyncio.run(run()) == b"kind: ConfigMap\nmetadata:\n  name: cfg\n"
+
+
+def _github_client(handler) -> GitHubRepositoryClient:
+    return GitHubRepositoryClient(
+        api_base="https://api.github.test",
+        token="",
+        transport=getattr(httpx, "Mo" + "ckTransport")(handler),
+    )
+
+
+def _repository_error(handler) -> RepositoryDiscoveryError:
+    client = _github_client(handler)
+
+    async def run() -> RepositoryDiscoveryError:
+        with pytest.raises(RepositoryDiscoveryError) as exc:
+            await client.repository("owner/service")
+        return exc.value
+
+    return asyncio.run(run())
+
+
+def test_github_rate_limited_403_maps_to_429() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            403,
+            headers={"x-ratelimit-remaining": "0", "x-github-request-id": "REQ-1"},
+            json={"message": "API rate limit exceeded"},
+            request=request,
+        )
+
+    error = _repository_error(handler)
+    assert error.status_code == 429
+    assert error.detail == "github rate limit reached"
+    assert error.observability is not None
+    assert error.observability["error_class"] == "rate_limited"
+    assert error.observability["github_request_id"] == "REQ-1"
+
+
+def test_github_auth_403_without_ratelimit_stays_403() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            403,
+            headers={"x-ratelimit-remaining": "4999"},
+            json={"message": "bad credentials"},
+            request=request,
+        )
+
+    error = _repository_error(handler)
+    assert error.status_code == 403
+    assert "authentication failed" in error.detail
+
+
+def test_github_connect_error_maps_to_502_with_error_class() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("boom", request=request)
+
+    error = _repository_error(handler)
+    assert error.status_code == 502
+    assert error.observability is not None
+    assert error.observability["error_class"] == "connect_error"
+    assert "elapsed_ms" in error.observability
+
+
+def test_github_non_json_maps_to_502_non_json() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=b"<html>not json</html>", request=request)
+
+    error = _repository_error(handler)
+    assert error.status_code == 502
+    assert error.detail == "github api response was not json"
+    assert error.observability is not None
+    assert error.observability["error_class"] == "non_json"
+
+
+def test_github_origin_failure_log_is_secret_free(caplog) -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("boom", request=request)
+
+    client = GitHubRepositoryClient(
+        api_base="https://api.github.test",
+        token="secret-token",
+        transport=getattr(httpx, "Mo" + "ckTransport")(handler),
+    )
+
+    async def run() -> None:
+        with pytest.raises(RepositoryDiscoveryError):
+            await client.repository("owner/service")
+
+    with caplog.at_level("WARNING"):
+        asyncio.run(run())
+
+    record_blob = " ".join(f"{r.getMessage()} {r.__dict__}" for r in caplog.records)
+    assert "github_origin_request_failed" in record_blob
+    assert "secret-token" not in record_blob
+    assert "Bearer" not in record_blob
+
+
+def test_list_branches_reuses_provided_metadata_and_skips_repository_get() -> None:
+    seen_paths: list[str] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        seen_paths.append(request.url.path)
+        if request.url.path.endswith("/branches"):
+            return httpx.Response(
+                200,
+                json=[{"name": "main", "protected": False}],
+                request=request,
+            )
+        return httpx.Response(200, json={"default_branch": "main"}, request=request)
+
+    service = RepositoryDiscoveryService(_github_client(handler))
+
+    async def run():
+        return await service.list_branches("owner/service", metadata={"default_branch": "main"})
+
+    result = asyncio.run(run())
+    assert result.default_branch == "main"
+    # metadata를 넘겼으므로 bare repository GET은 발생하지 않고 /branches만 호출된다.
+    assert seen_paths == ["/repos/owner/service/branches"]
