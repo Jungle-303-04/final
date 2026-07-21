@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { execFile } from 'node:child_process'
 import { readdir, readFile } from 'node:fs/promises'
 import {
   dirname,
@@ -10,6 +11,7 @@ import {
   sep,
 } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { promisify } from 'node:util'
 import ts from 'typescript'
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -24,6 +26,14 @@ const protectedBrandAssets = new Set([
 ])
 const motionRoot = resolve(productRoot, 'motion')
 const motionTokenFile = resolve(motionRoot, 'tokens.css')
+const execFileAsync = promisify(execFile)
+
+const cliArguments = process.argv.slice(2)
+const releaseGate = cliArguments.includes('--release-gate')
+const releaseBaseOptionIndex = cliArguments.indexOf('--base')
+const releaseBase = releaseBaseOptionIndex === -1
+  ? process.env.PRODUCT_DESIGN_GUARD_BASE ?? null
+  : cliArguments[releaseBaseOptionIndex + 1] ?? null
 
 export const I18N_LITERAL_ENFORCEMENT_ENV = 'PRODUCT_I18N_LITERAL_ENFORCEMENT'
 
@@ -1069,6 +1079,75 @@ function inspectFileLength(filePath, source, extension) {
   }
 }
 
+function inspectProductSource(filePath, source) {
+  const extension = extname(filePath).toLowerCase()
+
+  inspectFileLength(filePath, source, extension)
+  inspectRawColors(filePath, source)
+  inspectImportant(filePath, source)
+
+  if (scriptExtensions.has(extension)) {
+    inspectScript(filePath, source, extension)
+  } else if (['.css', '.less', '.sass', '.scss'].includes(extension)) {
+    inspectCssImports(filePath, source)
+    inspectMotionCss(filePath, source)
+  }
+}
+
+function violationCounts(items) {
+  const counts = new Map()
+  for (const violation of items) {
+    const key = `${violation.file}\u0000${violation.rule}`
+    counts.set(key, (counts.get(key) ?? 0) + 1)
+  }
+  return counts
+}
+
+async function releaseRegressions(currentViolations) {
+  if (!releaseBase) {
+    throw new Error('--release-gate requires --base <git-revision> or PRODUCT_DESIGN_GUARD_BASE')
+  }
+
+  const repositoryRoot = resolve(projectRoot, '..')
+  const { stdout } = await execFileAsync(
+    'git',
+    ['diff', '--name-only', '--diff-filter=ACMRTUXB', releaseBase, '--', 'frontend/src'],
+    { cwd: repositoryRoot },
+  )
+  const changedRepositoryPaths = stdout.split(/\r?\n/u).filter(Boolean)
+  const changedProductPaths = new Set(changedRepositoryPaths.map((path) => path.replace(/^frontend\//u, '')))
+  const currentChanged = currentViolations.filter((violation) => changedProductPaths.has(violation.file))
+
+  const savedCurrent = [...violations]
+  violations.length = 0
+  for (const repositoryPath of changedRepositoryPaths) {
+    let source
+    try {
+      const result = await execFileAsync('git', ['show', `${releaseBase}:${repositoryPath}`], {
+        cwd: repositoryRoot,
+        maxBuffer: 16 * 1024 * 1024,
+      })
+      source = result.stdout
+    } catch (error) {
+      // A path absent at the base is a newly added file and has a zero baseline.
+      if (error && typeof error === 'object' && error.code === 128) continue
+      throw error
+    }
+    inspectProductSource(resolve(repositoryRoot, repositoryPath), source)
+  }
+  const baseCounts = violationCounts(violations)
+  violations.length = 0
+  violations.push(...savedCurrent)
+
+  const usedCounts = new Map()
+  return currentChanged.filter((violation) => {
+    const key = `${violation.file}\u0000${violation.rule}`
+    const used = (usedCounts.get(key) ?? 0) + 1
+    usedCounts.set(key, used)
+    return used > (baseCounts.get(key) ?? 0)
+  })
+}
+
 async function run() {
   let files
 
@@ -1084,18 +1163,20 @@ async function run() {
   }
 
   for (const filePath of files) {
-    const source = await readFile(filePath, 'utf8')
-    const extension = extname(filePath).toLowerCase()
+    inspectProductSource(filePath, await readFile(filePath, 'utf8'))
+  }
 
-    inspectFileLength(filePath, source, extension)
-    inspectRawColors(filePath, source)
-    inspectImportant(filePath, source)
-
-    if (scriptExtensions.has(extension)) {
-      inspectScript(filePath, source, extension)
-    } else if (['.css', '.less', '.sass', '.scss'].includes(extension)) {
-      inspectCssImports(filePath, source)
-      inspectMotionCss(filePath, source)
+  if (releaseGate) {
+    try {
+      const regressions = await releaseRegressions([...violations])
+      violations.length = 0
+      violations.push(...regressions)
+    } catch (error) {
+      console.error(
+        `Product release design gate failed to inspect its Git baseline: ${error instanceof Error ? error.message : String(error)}`,
+      )
+      process.exitCode = 2
+      return
     }
   }
 
@@ -1107,7 +1188,8 @@ async function run() {
   )
 
   if (violations.length > 0) {
-    console.error(`Product design guard failed (${violations.length} violations):`)
+    const guardName = releaseGate ? 'Product release design gate' : 'Product design guard'
+    console.error(`${guardName} failed (${violations.length} violations):`)
     for (const violation of violations) {
       console.error(
         `  ${violation.file}:${violation.line}:${violation.column} ` +
@@ -1118,7 +1200,8 @@ async function run() {
     return
   }
 
-  console.log(`Product design guard passed (${files.length} files checked).`)
+  const guardName = releaseGate ? 'Product release design gate' : 'Product design guard'
+  console.log(`${guardName} passed (${files.length} files checked).`)
 }
 
 const invokedAsScript = process.argv[1] &&
