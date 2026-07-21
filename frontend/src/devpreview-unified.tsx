@@ -1283,7 +1283,14 @@ function App() {
   const resourcesView = useInventoryResourcesAcrossClusters(resourceClusterIds, kindToResourceType(kindId));
   const allRows = resourcesView.rows;
   const inScope = scope.level !== "clusters" && !!scope.cluster;
-  const scopedTopology = useClusterTopology(scope.cluster ?? null);
+  // 물리 토폴로지는 리소스 맵 드릴에서만 구독한다. 사용자가 목록·홈·이슈 등으로
+  // 이동한 뒤에도 이전 scope가 남아 무거운 60초 reconciliation을 계속하지 않는다.
+  const activeTopologyCluster = surface === "resources"
+    && resView === "map"
+    && scope.level !== "clusters"
+    ? scope.cluster ?? null
+    : null;
+  const scopedTopology = useClusterTopology(activeTopologyCluster);
   const scopedNode = scope.level === "pods"
     ? scopedTopology.nodes.find((node) => node.name === scope.node)
     : undefined;

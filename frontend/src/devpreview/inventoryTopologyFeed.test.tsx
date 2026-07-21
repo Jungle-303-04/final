@@ -123,6 +123,36 @@ describe("useClusterTopology", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it("pauses topology work while the page is hidden and resumes on visibility", async () => {
+    vi.useFakeTimers();
+    let hidden = true;
+    vi.spyOn(document, "visibilityState", "get").mockImplementation(() => (
+      hidden ? "hidden" : "visible"
+    ));
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify(PHYSICAL_TOPOLOGY_ENDPOINT), { status: 200 }),
+    );
+
+    renderHook(() => useClusterTopology("cluster-a"));
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    hidden = false;
+    document.dispatchEvent(new Event("visibilitychange"));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    hidden = true;
+    document.dispatchEvent(new Event("visibilitychange"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_100);
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("aborts an obsolete cluster request when its final subscriber changes scope", async () => {
     let obsoleteSignal: AbortSignal | undefined;
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {

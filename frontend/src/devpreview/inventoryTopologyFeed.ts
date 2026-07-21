@@ -60,6 +60,7 @@ interface TopologyChannel {
   listeners: Set<TopologyListener>;
   refreshTimer: number | null;
   disposeTimer: number | null;
+  visibilityCleanup: (() => void) | null;
 }
 
 // Physical topology is a database-heavy snapshot projection. Its observed
@@ -174,8 +175,35 @@ function currentCached(clusterId: string): ClusterTopologyView | undefined {
 function subscribeClusterTopology(clusterId: string, listener: TopologyListener): () => void {
   let channel = channels.get(clusterId);
   if (channel === undefined) {
-    channel = { controller: null, listeners: new Set(), refreshTimer: null, disposeTimer: null };
+    channel = {
+      controller: null,
+      listeners: new Set(),
+      refreshTimer: null,
+      disposeTimer: null,
+      visibilityCleanup: null,
+    };
     channels.set(clusterId, channel);
+    const active = channel;
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        if (active.refreshTimer !== null) {
+          window.clearTimeout(active.refreshTimer);
+          active.refreshTimer = null;
+        }
+        active.controller?.abort();
+        return;
+      }
+      if (active.listeners.size === 0 || channels.get(clusterId) !== active) return;
+      const cached = cache.get(clusterId);
+      if (cached !== undefined && cached.expiresAt > Date.now()) {
+        scheduleClusterRefresh(clusterId, active, cached.expiresAt - Date.now() + 25);
+      } else {
+        cache.delete(clusterId);
+        loadClusterTopology(clusterId, active);
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    channel.visibilityCleanup = () => document.removeEventListener("visibilitychange", onVisibilityChange);
   }
   if (channel.disposeTimer !== null) {
     window.clearTimeout(channel.disposeTimer);
@@ -204,13 +232,18 @@ function subscribeClusterTopology(clusterId: string, listener: TopologyListener)
       active.disposeTimer = null;
       if (active.listeners.size > 0 || channels.get(clusterId) !== active) return;
       active.controller?.abort();
+      active.visibilityCleanup?.();
       channels.delete(clusterId);
     }, STRICT_MODE_GRACE_MS);
   };
 }
 
 function loadClusterTopology(clusterId: string, channel: TopologyChannel): void {
-  if (channel.controller !== null || channel.listeners.size === 0) return;
+  if (
+    channel.controller !== null
+    || channel.listeners.size === 0
+    || document.visibilityState === "hidden"
+  ) return;
   const controller = new AbortController();
   channel.controller = controller;
   void getPhysicalTopology({ clusters: [clusterId] }, controller.signal)
@@ -238,7 +271,11 @@ function scheduleClusterRefresh(
   channel: TopologyChannel,
   delayMs: number,
 ): void {
-  if (channel.listeners.size === 0 || channels.get(clusterId) !== channel) return;
+  if (
+    channel.listeners.size === 0
+    || channels.get(clusterId) !== channel
+    || document.visibilityState === "hidden"
+  ) return;
   if (channel.refreshTimer !== null) window.clearTimeout(channel.refreshTimer);
   channel.refreshTimer = window.setTimeout(() => {
     channel.refreshTimer = null;
@@ -298,6 +335,7 @@ export function resetClusterTopologyCacheForTests(): void {
     channel.controller?.abort();
     if (channel.refreshTimer !== null) window.clearTimeout(channel.refreshTimer);
     if (channel.disposeTimer !== null) window.clearTimeout(channel.disposeTimer);
+    channel.visibilityCleanup?.();
   });
   channels.clear();
   cache.clear();
