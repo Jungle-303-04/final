@@ -319,9 +319,9 @@
       "destination": "frontend/src/pages/gitops/GitOpsPage.test.tsx",
       "rationale": "Topology node icons must use the shared resource registry and never make the root resource a recursive detail portal."
     },
-    "gitops.provider-assets.provenance": {
-      "destination": "frontend/src/shared/brand/gitOpsProviderAssets.test.ts",
-      "rationale": "The product-owned provider asset registry and copied bytes remain pinned to immutable upstream source hashes without importing the isolated source runtime."
+    "gitops.provider-assets.retirement": {
+      "destination": "frontend/src/shared/brand/providerIdentityBoundary.test.ts",
+      "rationale": "The active product-owned icon system remains present while the unused copied GitOps asset registry and bytes stay deleted."
     },
     "build.entrypoint.baseline": {
       "destination": "frontend/src/ProductApp.test.tsx",
@@ -3698,18 +3698,17 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/shared/brand/gitOpsProviderAssets.ts",
-              "frontend/src/shared/brand/gitOpsProviderAssets.test.ts"
+              "frontend/src/devpreview/brandIcons.tsx"
             ],
             "requiredBackendContracts": [
               "packages.contracts.gitops.detail"
             ],
             "plannedTestIds": [
-              "gitops.provider-assets.provenance"
+              "gitops.provider-assets.retirement"
             ],
-            "state": "in_progress",
-            "blockedReason": null,
-            "rationale": "The canonical shared registry now owns the exact product asset and its provenance test. No GitOps, application, or topology product surface consumes this mark yet, so this evidence records only the completed static-asset boundary and does not claim UI parity."
+            "state": "blocked",
+            "blockedReason": "The copied provider asset and its registry had no runtime, test, build, route, or product consumer and were removed as duplicate orphan implementation in CAN-03.",
+            "rationale": "Provider identity remains owned by the active product icon system. Reintroducing an unused copied asset registry would create a second source of truth."
           }
         }
       ]
@@ -3727,18 +3726,17 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/shared/brand/gitOpsProviderAssets.ts",
-              "frontend/src/shared/brand/gitOpsProviderAssets.test.ts"
+              "frontend/src/devpreview/brandIcons.tsx"
             ],
             "requiredBackendContracts": [
               "packages.contracts.gitops.detail"
             ],
             "plannedTestIds": [
-              "gitops.provider-assets.provenance"
+              "gitops.provider-assets.retirement"
             ],
-            "state": "in_progress",
-            "blockedReason": null,
-            "rationale": "The canonical shared registry now owns the exact product asset and its provenance test. No GitOps, application, or topology product surface consumes this mark yet, so this evidence records only the completed static-asset boundary and does not claim UI parity."
+            "state": "blocked",
+            "blockedReason": "The copied provider asset and its registry had no runtime, test, build, route, or product consumer and were removed as duplicate orphan implementation in CAN-03.",
+            "rationale": "Provider identity remains owned by the active product icon system. Reintroducing an unused copied asset registry would create a second source of truth."
           }
         }
       ]
@@ -9890,8 +9888,7 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/features/resources/createResourcesAdapter.ts",
-              "frontend/src/shared/ui/charts/index.ts"
+              "frontend/src/features/resources/createResourcesAdapter.ts"
             ],
             "requiredBackendContracts": [
               "packages.contracts.parity"
