@@ -51,7 +51,11 @@ from domains.identity.dependencies import (
     resolve_allowed_application_ids,
 )
 from domains.inventory.certificate_expiry import certificate_expiry_summary
-from domains.inventory.observed_metrics import inventory_usage_pct, usage_pct
+from domains.inventory.observed_metrics import (
+    inventory_metrics_observed_at,
+    inventory_usage_pct,
+    usage_pct,
+)
 from domains.inventory_filter.cursor import FilterCursorCodec, authorization_revision
 from domains.inventory_filter.graph import build_resource_graph
 from domains.inventory_filter.query import filter_fingerprint, parse_resource_filters
@@ -968,6 +972,13 @@ def build_nodes_summary(
             cluster_id, []
         )
     )
+    if not latest_usage:
+        # The accepted inventory snapshot is the durable source for the same
+        # per-node/per-pod metrics that are normally copied into
+        # cluster_usage_samples.  Keep the node view useful if that secondary
+        # projection is temporarily missing, but fail closed for every stale or
+        # timestamp-less metric payload.
+        latest_usage = fresh_snapshot_usage(latest_payload)
     pods = pods_observed_in_latest_usage(pods, latest_usage)
     pod_groups = pods_by_node(pods)
     return ClusterNodesSummaryResponse(
@@ -1631,6 +1642,27 @@ def resource_usage_payload(usage: JsonObject, group_key: str, resource_key: str)
             if identity == resource_key or identity == resource_key.split("/")[-1]:
                 return dict(item)
     return {}
+
+
+def fresh_snapshot_usage(snapshot_payload: JsonObject) -> JsonObject:
+    """Extract only fresh per-resource metrics from an accepted snapshot envelope."""
+
+    usage = snapshot_payload.get("usage")
+    if not isinstance(usage, dict):
+        return {}
+    filtered: JsonObject = {}
+    for group_key in ("nodes", "pods"):
+        group = usage.get(group_key)
+        if not isinstance(group, dict):
+            continue
+        fresh_group = {
+            str(resource_key): dict(payload)
+            for resource_key, payload in group.items()
+            if isinstance(payload, dict) and inventory_metrics_observed_at(payload) is not None
+        }
+        if fresh_group:
+            filtered[group_key] = fresh_group
+    return filtered
 
 
 def latest_open_incident_lookup(

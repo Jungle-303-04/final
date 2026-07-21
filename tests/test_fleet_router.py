@@ -1203,6 +1203,90 @@ def test_nodes_summary_uses_inventory_usage_without_relabeling_scheduled_pods() 
     assert node["mem_pct"] == 61.3
 
 
+def test_nodes_summary_falls_back_to_fresh_snapshot_usage() -> None:
+    metrics_observed_at = datetime.now(UTC).isoformat()
+    db = FleetApiDb(
+        registrations=[_registration()],
+        nodes=[
+            {
+                "name": "node-a",
+                "status": "Ready",
+                "health": "healthy",
+                "summary": {"ready": True},
+            }
+        ],
+        usage={},
+        latest_snapshot={
+            "snapshot_id": "snapshot-current",
+            "collected_at": metrics_observed_at,
+            "summary": {
+                "usage": {
+                    "nodes": {
+                        "node-a": {
+                            "cpu_ratio": 0.526,
+                            "mem_ratio": 0.299,
+                            "metrics_observed_at": metrics_observed_at,
+                        }
+                    }
+                },
+                "summary": {
+                    "live_inventory": True,
+                    "nodes": [{"name": "node-a", "ready": True}],
+                },
+            },
+        },
+    )
+
+    response = make_client(db, session=_session()).get(f"/clusters/{CLUSTER_ID}/nodes/summary")
+
+    assert response.status_code == 200
+    node = response.json()["nodes"][0]
+    assert node["cpu_pct"] == 52.6
+    assert node["mem_pct"] == 29.9
+
+
+def test_nodes_summary_rejects_stale_snapshot_usage() -> None:
+    stale_observed_at = (datetime.now(UTC) - timedelta(days=1)).isoformat()
+    db = FleetApiDb(
+        registrations=[_registration()],
+        nodes=[
+            {
+                "name": "node-a",
+                "status": "Ready",
+                "health": "healthy",
+                "summary": {"ready": True},
+            }
+        ],
+        usage={},
+        latest_snapshot={
+            "snapshot_id": "snapshot-current",
+            "collected_at": stale_observed_at,
+            "summary": {
+                "usage": {
+                    "nodes": {
+                        "node-a": {
+                            "cpu_ratio": 0.9,
+                            "mem_ratio": 0.9,
+                            "metrics_observed_at": stale_observed_at,
+                        }
+                    }
+                },
+                "summary": {
+                    "live_inventory": True,
+                    "nodes": [{"name": "node-a", "ready": True}],
+                },
+            },
+        },
+    )
+
+    response = make_client(db, session=_session()).get(f"/clusters/{CLUSTER_ID}/nodes/summary")
+
+    assert response.status_code == 200
+    node = response.json()["nodes"][0]
+    assert node["cpu_pct"] is None
+    assert node["mem_pct"] is None
+
+
 def test_nodes_summary_keeps_management_workloads_from_latest_usage_only() -> None:
     db = FleetApiDb(
         registrations=[
