@@ -462,10 +462,13 @@ async function runUnifiedShellSmoke(page, baseUrl, diagnostics) {
   const navigation = page.locator(UNIFIED_NAVIGATION_SELECTOR);
   const surfaceCount = await navigation.count();
   assert.ok(surfaceCount > 1, "unified navigation must expose multiple surfaces");
-  for (let index = 0; index < surfaceCount; index += 1) {
-    const item = navigation.nth(index);
-    const label = await item.getAttribute("aria-label");
-    diagnostics.failingRoute = label ?? `<surface-${index}>`;
+  const labels = await navigation.evaluateAll((items) => items
+    .map((item) => item.getAttribute("aria-label"))
+    .filter((label) => label));
+  for (const label of labels) {
+    const item = page.locator('[data-slot="global-navigation"]')
+      .getByRole("button", { name: label, exact: true });
+    diagnostics.failingRoute = label;
     await item.click();
     await page.waitForTimeout(250);
     assert.equal(
