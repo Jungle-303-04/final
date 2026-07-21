@@ -1516,7 +1516,17 @@ function App() {
     <div className="uni" style={{ minHeight: "100vh", background: UI.bg, display: "flex", alignItems: "stretch", zoom: PRESENT_SCALE }}>
       {/* 전역 내비게이션 — 제품 셸의 바깥 틀 */}
       <GlobalNav collapsed={navCollapsed} setCollapsed={setNavCollapsed}
-        surface={surface} onSurface={(sf) => { setSurface(sf); if (sf === "connect") setConnectView(null); }} />
+        surface={surface} onSurface={(sf) => {
+          setRcaIncident(null);
+          setDetail(null);
+          setAiOpen(false);
+          setSurface(sf);
+          setBellOpen(false);
+          setMeOpen(false);
+          setNsOpen(false);
+          setClusterOpen(false);
+          if (sf === "connect") setConnectView(null);
+        }} />
 
       <div ref={pageScrollRef} aria-label="현재 화면 콘텐츠" role="region"
         style={{ flex: 1, minWidth: 0, height: `calc(100vh / ${PRESENT_SCALE})`, overflowY: "auto", overflowX: "hidden", overscrollBehavior: "contain", scrollbarGutter: "stable" }}>
