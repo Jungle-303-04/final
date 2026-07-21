@@ -929,34 +929,34 @@ def build_nodes_summary(
     registration = db.get_cluster_registration(workspace_id, cluster_id)
     if registration is None:
         return None
-    nodes = db.list_inventory_resources(
-        workspace_id=workspace_id,
-        cluster_id=cluster_id,
-        resource_type="node",
-        namespace=None,
-        include_deleted=False,
-        limit=NODE_LIMIT,
+    compact_reader = getattr(db, "node_summary_read_model", None)
+    compact = (
+        compact_reader(workspace_id, cluster_id, limit=NODE_LIMIT)
+        if callable(compact_reader)
+        else None
     )
-    settings = registration.get("settings")
-    include_management_namespace = (
-        isinstance(settings, dict) and settings.get("cluster_role") == "management"
-    )
-    pods = observable_workload_pods(
-        db.list_inventory_resources(
+    nodes = (
+        [dict(node) for node in compact.get("nodes", []) if isinstance(node, dict)]
+        if isinstance(compact, dict)
+        else db.list_inventory_resources(
             workspace_id=workspace_id,
             cluster_id=cluster_id,
-            resource_type="pod",
+            resource_type="node",
             namespace=None,
             include_deleted=False,
-            limit=POD_LIMIT,
-        ),
-        include_management_namespace=include_management_namespace,
+            limit=NODE_LIMIT,
+        )
     )
-    latest_snapshot = db.latest_inventory_snapshot(workspace_id, cluster_id)
+    latest_snapshot = (
+        compact.get("snapshot")
+        if isinstance(compact, dict) and isinstance(compact.get("snapshot"), dict)
+        else db.latest_inventory_snapshot(workspace_id, cluster_id)
+    )
     latest_payload = _summary(latest_snapshot or {})
     nested_summary = latest_payload.get("summary")
     latest_summary = dict(nested_summary) if isinstance(nested_summary, dict) else latest_payload
     snapshot_nodes = latest_summary.get("nodes")
+    snapshot_pod_counts = snapshot_node_pod_counts(latest_summary)
     if latest_summary.get("live_inventory") is True and isinstance(snapshot_nodes, list):
         observed_node_names = {
             str(item.get("name") or "")
@@ -964,27 +964,59 @@ def build_nodes_summary(
             if isinstance(item, dict) and item.get("name")
         }
         nodes = [node for node in nodes if str(node.get("name") or "") in observed_node_names]
-        pods = [
-            pod for pod in pods if str(_summary(pod).get("node_name") or "") in observed_node_names
-        ]
-    latest_usage = _latest_usage(
-        db.latest_cluster_usage_rollups(workspace_id, {cluster_id}, samples_per_cluster=1).get(
-            cluster_id, []
-        )
+    # The compact read model deliberately omits every Pod manifest.  A complete
+    # accepted snapshot already carries the exact assigned-Pod count per node,
+    # which is the first-paint occupancy contract.  Older agents without that
+    # field retain the compatibility path below.
+    has_snapshot_pod_counts = bool(nodes) and all(
+        str(node.get("name") or "") in snapshot_pod_counts for node in nodes
     )
+    if isinstance(compact, dict) and has_snapshot_pod_counts:
+        pods: list[JsonObject] = []
+    else:
+        settings = registration.get("settings")
+        include_management_namespace = (
+            isinstance(settings, dict) and settings.get("cluster_role") == "management"
+        )
+        pods = observable_workload_pods(
+            db.list_inventory_resources(
+                workspace_id=workspace_id,
+                cluster_id=cluster_id,
+                resource_type="pod",
+                namespace=None,
+                include_deleted=False,
+                limit=POD_LIMIT,
+            ),
+            include_management_namespace=include_management_namespace,
+        )
+        if latest_summary.get("live_inventory") is True and isinstance(snapshot_nodes, list):
+            pods = [
+                pod
+                for pod in pods
+                if str(_summary(pod).get("node_name") or "") in observed_node_names
+            ]
+
+    # The accepted snapshot is normally the newest observation and already has
+    # the node-only metric slice.  Consult the secondary rollup only when that
+    # evidence is absent; this removes another hot-path DB round trip.
+    latest_usage = fresh_snapshot_usage(latest_payload)
     if not latest_usage:
-        # The accepted inventory snapshot is the durable source for the same
-        # per-node/per-pod metrics that are normally copied into
-        # cluster_usage_samples.  Keep the node view useful if that secondary
-        # projection is temporarily missing, but fail closed for every stale or
-        # timestamp-less metric payload.
-        latest_usage = fresh_snapshot_usage(latest_payload)
+        latest_usage = _latest_usage(
+            db.latest_cluster_usage_rollups(workspace_id, {cluster_id}, samples_per_cluster=1).get(
+                cluster_id, []
+            )
+        )
     pods = pods_observed_in_latest_usage(pods, latest_usage)
     pod_groups = pods_by_node(pods)
     return ClusterNodesSummaryResponse(
         cluster_id=cluster_id,
         nodes=[
-            node_summary_item(node, pod_groups.get(str(node.get("name") or ""), []), latest_usage)
+            node_summary_item(
+                node,
+                pod_groups.get(str(node.get("name") or ""), []),
+                latest_usage,
+                pods_running_override=snapshot_pod_counts.get(str(node.get("name") or "")),
+            )
             for node in nodes
         ],
     )
@@ -1478,11 +1510,17 @@ def node_summary_item(
     node: JsonObject,
     pods: list[JsonObject],
     latest_usage: JsonObject,
+    *,
+    pods_running_override: int | None = None,
 ) -> NodeSummaryItem:
     summary = _summary(node)
     node_info = summary.get("node_info")
     name = str(node.get("name") or "")
-    running = sum(1 for pod in pods if str(pod.get("status") or "") == "Running")
+    running = (
+        pods_running_override
+        if pods_running_override is not None
+        else sum(1 for pod in pods if str(pod.get("status") or "") == "Running")
+    )
     cpu_pct = resource_usage_pct(
         latest_usage, "nodes", name, ("cpu_pct", "cpu_percent"), ("cpu_ratio",)
     )
@@ -1515,6 +1553,29 @@ def node_summary_item(
         restarts_recent=sum(pod_restarts(pod) for pod in pods),
         conditions=true_node_conditions(summary),
     )
+
+
+def snapshot_node_pod_counts(summary: JsonObject) -> dict[str, int]:
+    """Return only explicit, non-negative node occupancy observations."""
+
+    raw_nodes = summary.get("nodes")
+    if not isinstance(raw_nodes, list):
+        return {}
+    counts: dict[str, int] = {}
+    for item in raw_nodes:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("name") or "").strip()
+        value = item.get("pod_count")
+        if not name or isinstance(value, bool):
+            continue
+        try:
+            count = int(value)
+        except (TypeError, ValueError):
+            continue
+        if count >= 0:
+            counts[name] = count
+    return counts
 
 
 def pod_summary_item(

@@ -2390,6 +2390,118 @@ class InventoryRepository(DatabaseConnection):
             row = conn.execute(statement).mappings().first()
         return self.serialize_inventory_snapshot(dict(row)) if row else None
 
+    def node_summary_read_model(
+        self,
+        workspace_id: str,
+        cluster_id: str,
+        *,
+        limit: int = 1000,
+    ) -> JsonObject | None:
+        """Return the compact first-paint node projection in one database round trip.
+
+        ``latest_inventory_snapshot`` contains every per-Pod metric and can exceed
+        hundreds of KiB.  The node rail only needs the accepted snapshot's small
+        ``summary.nodes``/``usage.nodes`` fragments plus the Node rows.  Projecting
+        those JSONB paths in PostgreSQL avoids decoding the full snapshot or any raw
+        Pod manifests while preserving the exact observation and freshness evidence.
+        """
+
+        resources = ClusterInventoryResourceRecord.__table__
+        snapshots = ClusterInventorySnapshotRecord.__table__
+        latest = (
+            select(
+                snapshots.c.snapshot_id,
+                snapshots.c.collected_at,
+                func.jsonb_build_object(
+                    "live_inventory",
+                    snapshots.c.summary["summary"]["live_inventory"],
+                    "nodes",
+                    snapshots.c.summary["summary"]["nodes"],
+                ).label("inventory_summary"),
+                snapshots.c.summary["usage"]["nodes"].label("node_usage"),
+            )
+            .where(
+                snapshots.c.workspace_id == workspace_id,
+                snapshots.c.cluster_id == cluster_id,
+                live_inventory_snapshot_clause(snapshots),
+            )
+            .order_by(snapshots.c.created_at.desc())
+            .limit(1)
+            .subquery("latest_node_summary_snapshot")
+        )
+        node_rows = (
+            select(
+                resources.c.name,
+                resources.c.status,
+                resources.c.health,
+                resources.c.summary,
+            )
+            .where(
+                resources.c.workspace_id == workspace_id,
+                resources.c.cluster_id == cluster_id,
+                resources.c.resource_type == NODE_RESOURCE_TYPE,
+                resources.c.deleted_at.is_(None),
+            )
+            .order_by(resources.c.name)
+            .limit(max(1, min(limit, 1000)))
+            .subquery("node_summary_resources")
+        )
+        node_json = func.jsonb_build_object(
+            "name",
+            node_rows.c.name,
+            "status",
+            node_rows.c.status,
+            "health",
+            node_rows.c.health,
+            "summary",
+            node_rows.c.summary,
+        )
+        nodes = func.coalesce(
+            func.jsonb_agg(node_json).filter(node_rows.c.name.is_not(None)),
+            func.jsonb_build_array(),
+        ).label("nodes")
+        statement = (
+            select(
+                latest.c.snapshot_id,
+                latest.c.collected_at,
+                latest.c.inventory_summary,
+                latest.c.node_usage,
+                nodes,
+            )
+            .select_from(latest.outerjoin(node_rows, true()))
+            .group_by(
+                latest.c.snapshot_id,
+                latest.c.collected_at,
+                latest.c.inventory_summary,
+                latest.c.node_usage,
+            )
+        )
+        with self.connection() as conn:
+            row = conn.execute(statement).mappings().first()
+        if row is None:
+            return None
+
+        inventory_summary = row.get("inventory_summary")
+        node_usage = row.get("node_usage")
+        raw_nodes = row.get("nodes")
+        compact_nodes = [
+            dict(node)
+            for node in (raw_nodes if isinstance(raw_nodes, list) else [])
+            if isinstance(node, dict) and node.get("name")
+        ]
+        compact_nodes.sort(key=lambda node: str(node.get("name") or ""))
+        return {
+            "snapshot_id": str(row["snapshot_id"]),
+            "collected_at": iso_or_none(row["collected_at"]),
+            "nodes": compact_nodes,
+            "snapshot": {
+                "summary": {
+                    "usage": {"nodes": dict(node_usage or {})},
+                    "summary": dict(inventory_summary or {}),
+                }
+            },
+        }
+
     def latest_inventory_snapshots(
         self,
         workspace_id: str,

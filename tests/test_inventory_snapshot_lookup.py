@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-from contextlib import redirect_stdout
+from contextlib import contextmanager, redirect_stdout
+from datetime import UTC, datetime
 from io import StringIO
 from pathlib import Path
+from typing import Any
 
 from alembic.config import Config
 from alembic.script import ScriptDirectory
@@ -14,6 +16,7 @@ from sqlalchemy.schema import CreateIndex
 from alembic import command
 from domains.inventory.models import ClusterInventorySnapshotRecord
 from domains.inventory.repository import (
+    InventoryRepository,
     _inventory_resource_counts_by_cluster_statement,
     _latest_inventory_snapshots_statement,
 )
@@ -94,6 +97,97 @@ def test_cluster_resource_counts_use_one_grouped_live_query() -> None:
     assert "deleted_at is null" in sql
     assert "group by cluster_inventory_resources.cluster_id" in sql
     assert sql.count("from cluster_inventory_resources") == 1
+
+
+def test_node_summary_read_model_projects_compact_snapshot_in_one_query(monkeypatch) -> None:
+    captured: dict[str, Any] = {}
+    observed_at = datetime.now(UTC)
+
+    class Result:
+        def mappings(self) -> Result:
+            return self
+
+        def first(self) -> dict[str, Any]:
+            return {
+                "snapshot_id": "snapshot-a",
+                "collected_at": observed_at,
+                "inventory_summary": {
+                    "live_inventory": True,
+                    "nodes": [{"name": "node-a", "pod_count": 7}],
+                },
+                "node_usage": {
+                    "node-a": {
+                        "cpu_pct": 18.2,
+                        "metrics_observed_at": observed_at.isoformat(),
+                    }
+                },
+                "nodes": [
+                    {
+                        "name": "node-a",
+                        "status": "Ready",
+                        "health": "healthy",
+                        "summary": {"capacity": {"pods": "40"}},
+                    }
+                ],
+            }
+
+    class Connection:
+        def execute(self, statement):
+            captured["statement"] = statement
+            return Result()
+
+    @contextmanager
+    def connection():
+        yield Connection()
+
+    repository = object.__new__(InventoryRepository)
+    monkeypatch.setattr(repository, "connection", connection)
+
+    projection = repository.node_summary_read_model("workspace-a", "cluster-a")
+
+    sql = " ".join(
+        str(
+            captured["statement"].compile(
+                dialect=postgresql.dialect(),
+                compile_kwargs={"literal_binds": True},
+            )
+        )
+        .casefold()
+        .split()
+    )
+    assert sql.count("from cluster_inventory_snapshots") == 1
+    assert sql.count("from cluster_inventory_resources") == 1
+    assert "jsonb_agg" in sql
+    assert "cluster_inventory_resources.raw" not in sql
+    assert "['usage']['nodes']" in sql
+    assert projection == {
+        "snapshot_id": "snapshot-a",
+        "collected_at": observed_at.isoformat(),
+        "nodes": [
+            {
+                "name": "node-a",
+                "status": "Ready",
+                "health": "healthy",
+                "summary": {"capacity": {"pods": "40"}},
+            }
+        ],
+        "snapshot": {
+            "summary": {
+                "usage": {
+                    "nodes": {
+                        "node-a": {
+                            "cpu_pct": 18.2,
+                            "metrics_observed_at": observed_at.isoformat(),
+                        }
+                    }
+                },
+                "summary": {
+                    "live_inventory": True,
+                    "nodes": [{"name": "node-a", "pod_count": 7}],
+                },
+            }
+        },
+    }
 
 
 def test_live_snapshot_index_metadata_matches_lookup_order_and_predicate() -> None:

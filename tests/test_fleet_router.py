@@ -226,6 +226,16 @@ class FleetApiDb:
         self.calls.append(("latest_snapshot", workspace_id, cluster_id))
         return self.latest_snapshot
 
+    def node_summary_read_model(
+        self,
+        workspace_id: str,
+        cluster_id: str,
+        *,
+        limit: int = 1000,
+    ) -> dict[str, Any]:
+        self.calls.append(("node_summary_read_model", workspace_id, cluster_id, limit))
+        return {"nodes": self.nodes[:limit], "snapshot": self.latest_snapshot}
+
     def list_open_rca_incidents(
         self, workspace_id: str, cluster_id: str, *, limit: int = 20
     ) -> list[dict[str, Any]]:
@@ -1243,6 +1253,68 @@ def test_nodes_summary_falls_back_to_fresh_snapshot_usage() -> None:
     node = response.json()["nodes"][0]
     assert node["cpu_pct"] == 52.6
     assert node["mem_pct"] == 29.9
+
+
+def test_nodes_summary_uses_compact_snapshot_without_loading_pod_manifests() -> None:
+    metrics_observed_at = datetime.now(UTC).isoformat()
+    db = FleetApiDb(
+        registrations=[_registration()],
+        nodes=[
+            {
+                "name": "node-a",
+                "status": "Ready",
+                "health": "healthy",
+                "summary": {"ready": True, "capacity": {"pods": "40"}},
+            }
+        ],
+        pods=[
+            {
+                "name": "stale-retained-pod",
+                "namespace": "default",
+                "status": "Running",
+                "health": "healthy",
+                "summary": {"node_name": "node-a"},
+            }
+        ],
+        usage={},
+        latest_snapshot={
+            "snapshot_id": "snapshot-current",
+            "collected_at": metrics_observed_at,
+            "summary": {
+                "usage": {
+                    "nodes": {
+                        "node-a": {
+                            "cpu_pct": 18.2,
+                            "mem_pct": 34.1,
+                            "metrics_observed_at": metrics_observed_at,
+                        }
+                    }
+                },
+                "summary": {
+                    "live_inventory": True,
+                    "nodes": [{"name": "node-a", "ready": True, "pod_count": 7}],
+                },
+            },
+        },
+    )
+
+    response = make_client(db, session=_session()).get(f"/clusters/{CLUSTER_ID}/nodes/summary")
+
+    assert response.status_code == 200
+    assert response.json()["nodes"][0] == {
+        "name": "node-a",
+        "ready": True,
+        "health": "healthy",
+        "kubernetes_version": None,
+        "pods_running": 7,
+        "pods_capacity": 40,
+        "cpu_pct": 18.2,
+        "mem_pct": 34.1,
+        "restarts_recent": 0,
+        "conditions": [],
+    }
+    assert not any(call[:2] == ("inventory", "pod") for call in db.calls)
+    assert not any(call[0] == "usage" for call in db.calls)
 
 
 def test_nodes_summary_rejects_stale_snapshot_usage() -> None:
