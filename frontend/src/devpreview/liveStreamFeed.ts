@@ -161,6 +161,7 @@ export function createLiveStreamCoalescer(config: LiveStreamConfig): LiveStreamH
 
 // 실시간 delta → REST 재검증 사이의 bounded gate 기본 최소 간격(cluster당).
 const DEFAULT_REVALIDATION_MIN_MS = 5_000;
+const LIVE_STRICT_MODE_GRACE_MS = 50;
 
 export interface BoundedRevalidatorRuntime {
   now: () => number;
@@ -239,23 +240,80 @@ export function useLiveClusterRevalidation(
   const clusterKey = clusterId ?? "";
   useEffect(() => {
     if (workspaceKey === "" || clusterKey === "") return undefined;
-    let disposed = false;
+    return subscribeLiveClusterRevalidation(
+      workspaceKey,
+      clusterKey,
+      minIntervalMs,
+      setKey,
+    );
+  }, [workspaceKey, clusterKey, minIntervalMs]);
+  return key;
+}
+
+interface SharedLiveRevalidationChannel {
+  key: number;
+  listeners: Set<(key: number) => void>;
+  handle: LiveStreamHandle;
+  revalidator: { request: () => void; dispose: () => void };
+  disposeTimer: ReturnType<typeof setTimeout> | null;
+}
+
+const liveRevalidationChannels = new Map<string, SharedLiveRevalidationChannel>();
+
+/**
+ * React StrictMode의 effect 재마운트에서도 같은 workspace/cluster 소켓을 공유한다.
+ * 마지막 구독자가 사라진 뒤 50ms 동안 채널을 보존해 개발 모드의 open→close→open 중복을
+ * 없애고, 실제 화면 전환에서는 유예 뒤 소켓과 throttle timer를 모두 정리한다.
+ */
+function subscribeLiveClusterRevalidation(
+  workspaceId: string,
+  clusterId: string,
+  minIntervalMs: number,
+  listener: (key: number) => void,
+): () => void {
+  const channelKey = `${workspaceId}\u0000${clusterId}\u0000${minIntervalMs}`;
+  let channel = liveRevalidationChannels.get(channelKey);
+  if (channel === undefined) {
+    const listeners = new Set<(key: number) => void>();
+    const created = {} as SharedLiveRevalidationChannel;
     const revalidator = createBoundedRevalidator(minIntervalMs, () => {
-      if (!disposed) setKey((current) => current + 1);
+      created.key += 1;
+      created.listeners.forEach((notify) => notify(created.key));
     });
-    // leading+trailing throttle: 첫 신호는 즉시(직전 emit이 min 이상 지났으면), 이후 폭주는
-    // 하나의 trailing emit으로 합쳐 minIntervalMs에 최대 1회로 REST 재조회 상한을 만든다.
     const handle = createLiveStreamCoalescer({
-      subscription: { workspaceId: workspaceKey, clusterId: clusterKey },
+      subscription: { workspaceId, clusterId },
       onSnapshot: () => revalidator.request(),
       onBatch: () => revalidator.request(),
     });
+    Object.assign(created, {
+      key: 0,
+      listeners,
+      handle,
+      revalidator,
+      disposeTimer: null,
+    });
+    channel = created;
+    liveRevalidationChannels.set(channelKey, channel);
     handle.start();
-    return () => {
-      disposed = true;
-      revalidator.dispose();
-      handle.stop();
-    };
-  }, [workspaceKey, clusterKey, minIntervalMs]);
-  return key;
+  }
+
+  if (channel.disposeTimer !== null) {
+    clearTimeout(channel.disposeTimer);
+    channel.disposeTimer = null;
+  }
+  channel.listeners.add(listener);
+  if (channel.key > 0) listener(channel.key);
+
+  const active = channel;
+  return () => {
+    active.listeners.delete(listener);
+    if (active.listeners.size > 0 || active.disposeTimer !== null) return;
+    active.disposeTimer = setTimeout(() => {
+      active.disposeTimer = null;
+      if (active.listeners.size > 0 || liveRevalidationChannels.get(channelKey) !== active) return;
+      active.handle.stop();
+      active.revalidator.dispose();
+      liveRevalidationChannels.delete(channelKey);
+    }, LIVE_STRICT_MODE_GRACE_MS);
+  };
 }
