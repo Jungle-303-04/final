@@ -67,11 +67,19 @@ export const nodeSummaryItemSchema = z.strictObject({
   mem_pct: nullableNumberSchema,
   restarts_recent: z.number().int(),
   conditions: z.array(z.string()),
+  // 노드 단위 freshness(선택) — 응답 레벨과 동일한 rolling 호환 규칙.
+  metrics_observed_at: z.string().nullable().optional(),
+  metrics_stale: z.boolean().optional(),
 });
 
 export const clusterNodesSummarySchema = z.strictObject({
   cluster_id: z.string(),
   nodes: z.array(nodeSummaryItemSchema),
+  // A 계약 확장(rolling 호환): freshness 게이트 개선으로 백엔드가 실측 시각과 stale
+  // 판정을 명시한다. 구버전 응답은 필드를 생략하므로 옵셔널로 수용하고, 값이 오면
+  // 그대로 노출한다(수치 폐기·fabrication 금지 — stale=true 여도 마지막 실측값 유지).
+  metrics_observed_at: z.string().nullable().optional(),
+  metrics_stale: z.boolean().optional(),
 });
 
 export const podSummaryItemSchema = z.strictObject({
