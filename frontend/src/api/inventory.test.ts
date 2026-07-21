@@ -92,6 +92,8 @@ describe("inventory resource API", () => {
       cluster_id: "cluster-1",
       identity: { resource_type: "pod", kind: "Pod", name: "api-abc", namespace: "default" },
       resource: RESOURCE,
+      provider_detail: null,
+      access: null,
       related: { owner: [] },
       events: [],
     };

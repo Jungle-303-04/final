@@ -119,7 +119,10 @@ function edgeVerdictColor(tel: EdgeTelemetry | null, toHealth: RelationNodeHealt
     if (tel.verdict === "forwarded") return BLUE;
     return INK4;
   }
-  return HEALTH_COLOR[toHealth];
+  // 텔레메트리가 없을 때 대상 리소스의 health 색을 호출 상태처럼 사용하지 않는다.
+  // 구조 관계는 중립 회색, 실제 traffic verdict가 있을 때만 색과 흐름을 부여한다.
+  void toHealth;
+  return INK4;
 }
 
 export function TopologyView({ embedded = false, onOpenService, focusId, onFocusService, clusterIds }: {
@@ -253,7 +256,7 @@ export function TopologyView({ embedded = false, onOpenService, focusId, onFocus
           {!embedded && <div style={{ fontSize: TYPE.body, color: UI.ink3 }}>관계 그래프 — {scopeLabel}</div>}
         </div>
 
-        <div style={{ background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 16, padding: 18, position: "relative", minHeight: 240 }}>
+        <div style={{ background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 16, padding: 18, position: "relative" }}>
           {/* TOP-04: 고정된 엣지 상세 — 관계 근거 + 관측 텔레메트리(없으면 관측 안 됨) */}
           {pinEdge && (() => {
             const from = nodeMap.get(pinEdge.from);
@@ -297,6 +300,7 @@ export function TopologyView({ embedded = false, onOpenService, focusId, onFocus
             </div>
           )}
 
+          <div style={{ height: "clamp(420px, calc(100vh - 260px), 720px)", minHeight: 420, overflow: "auto", scrollbarGutter: "stable", paddingTop: banner ? 34 : 0, boxSizing: "border-box" }}>
           {/* P0: 서비스 호출 그래프는 실제 관측된 edge가 있을 때만 렌더한다. edge가 0이면
               관계 없는 노드 구름을 그리지 않고 위 banner의 honest 상태만 보인다. */}
           {topo.status === "ready" && topo.edges.length > 0 && (
@@ -316,7 +320,7 @@ export function TopologyView({ embedded = false, onOpenService, focusId, onFocus
               const flowing = tel !== null && tel.verdict === "forwarded";
               return (
                 <g key={e.id} style={{ opacity: on ? 1 : 0.08, transition: "opacity .18s" }}>
-                  <path d={d} fill="none" stroke={col} strokeWidth={3} strokeOpacity={hovered ? 0.5 : 0.32} strokeLinecap="round" />
+                  <path d={d} fill="none" stroke={col} strokeWidth={tel ? 3 : 2} strokeOpacity={hovered ? 0.55 : tel ? 0.32 : 0.42} strokeLinecap="round" strokeDasharray={tel ? undefined : "5 7"} />
                   {flowing && <path d={d} fill="none" stroke={col} strokeWidth={3} strokeLinecap="round" strokeDasharray="3 11" className="flow" />}
                   <path d={d} fill="none" stroke="transparent" strokeWidth={16} strokeLinecap="round"
                     tabIndex={0} role="button" aria-label={`엣지 ${nodeMap.get(e.from)?.name ?? e.from} → ${to?.name ?? e.to} 상세`}
@@ -353,15 +357,16 @@ export function TopologyView({ embedded = false, onOpenService, focusId, onFocus
             })}
           </svg>
           )}
+          </div>
 
           {/* 레전드 */}
-          <div style={{ marginTop: 6, paddingTop: 14, borderTop: `1px solid ${UI.line}`, display: "flex", gap: 18, flexWrap: "wrap", fontSize: TYPE.label, color: UI.ink2, alignItems: "center" }}>
-            <span style={{ display: "flex", alignItems: "center", gap: 6 }}><svg width="30" height="8"><line x1="0" y1="4" x2="29" y2="4" stroke={INK4} strokeWidth="3" strokeLinecap="round" /></svg>관계 엣지(방향)</span>
-            <span style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ width: 8, height: 8, borderRadius: 999, background: ST.ok }} />정상<span style={{ width: 8, height: 8, borderRadius: 999, background: ST.warn, marginLeft: 6 }} />저하<span style={{ width: 8, height: 8, borderRadius: 999, background: INK4, marginLeft: 6 }} />불명</span>
+          <div style={{ marginTop: 6, paddingTop: 12, borderTop: `1px solid ${UI.line}`, display: "flex", gap: 14, flexWrap: "wrap", fontSize: TYPE.label, color: UI.ink2, alignItems: "center" }}>
+            <span style={{ display: "flex", alignItems: "center", gap: 6 }}><svg width="30" height="8"><line x1="0" y1="4" x2="29" y2="4" stroke={INK4} strokeWidth="2" strokeDasharray="5 5" strokeLinecap="round" /></svg>구조 관계 {topo.edges.length}개</span>
+            {traffic.status === "ready" && <span style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ width: 8, height: 8, borderRadius: 999, background: BLUE }} />정상<span style={{ width: 8, height: 8, borderRadius: 999, background: ST.crit, marginLeft: 6 }} />오류·드롭<span style={{ width: 8, height: 8, borderRadius: 999, background: INK4, marginLeft: 6 }} />불명</span>}
             <span style={{ display: "flex", alignItems: "center", gap: 6, color: UI.ink3 }}>
-              트래픽 {traffic.status === "ready" ? "관측됨" : traffic.status === "loading" ? "관측 중…" : "관측 안 됨"}
+              호출 텔레메트리 {traffic.status === "ready" ? "관측됨" : traffic.status === "loading" ? "관측 중…" : "미관측"}
             </span>
-            {topo.truncated && <span style={{ color: TINT.warn.fg }}>일부 생략됨 · 노드 {topo.omittedNodeCount} · 엣지 {topo.omittedEdgeCount}</span>}
+            {topo.truncated && <span style={{ color: TINT.warn.fg }}>생략: 노드 {topo.omittedNodeCount} · 관계 {topo.omittedEdgeCount}</span>}
           </div>
         </div>
       </div>

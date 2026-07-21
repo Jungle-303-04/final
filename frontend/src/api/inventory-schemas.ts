@@ -45,6 +45,11 @@ export const inventoryResourceDetailSchema = z.strictObject({
   cluster_id: z.string(),
   identity: unknownRecordSchema,
   resource: inventoryResourceSchema,
+  // Gateway detail 계약은 provider별 상세와 접근 제어 projection을 함께 반환한다.
+  // 각 기능 전용 schema가 좁히기 전까지는 opaque payload로 보존하되, strictObject가
+  // 실제 응답의 두 필드를 extra key로 거부하지 않도록 명시한다.
+  provider_detail: z.unknown().nullable().optional(),
+  access: z.unknown().nullable().optional(),
   related: z.record(z.string(), z.array(inventoryResourceSchema)),
   events: z.array(inventoryResourceSchema),
 });

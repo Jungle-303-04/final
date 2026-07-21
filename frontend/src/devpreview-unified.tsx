@@ -247,6 +247,9 @@ const BASE_KINDS: Kind[] = [
 // 사이드바 카운트는 라이브 인벤토리 요약에서 파생(useInventoryKindCounts) —
 // 모듈 로드 시 가짜 count를 만들지 않는다. 렌더 시점에 counts 맵을 주입한다.
 const KINDS: Kind[] = BASE_KINDS;
+export function resolveTrafficResourceKindId(kind: string): string | null {
+  return KINDS.find((item) => item.id.toLowerCase() === kind.toLowerCase())?.id ?? null;
+}
 const GROUP_TOTAL = (g: string, counts: Record<string, number>) =>
   KINDS.filter((k) => k.group === g).reduce((s, k) => s + (counts[k.id] ?? 0), 0);
 
@@ -797,25 +800,26 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
 // ── 종류 탐색 — 우측 패널 '리소스' 탭 내용 (보조 사이드바를 통합·대체) ─────────────────────────────
 
 // ── 트래픽 보조 패널 — 서비스 호출 상태·포커스(D22: 세 관점 모두 같은 자리 보조 패널) ──
-function TrafficPanel({ clusterIds, focus, onFocus, onOpen, stickyTop }: {
+function TrafficPanel({ clusterIds, focus, onFocus, onOpen, stickyTop, stacked = false }: {
   clusterIds: readonly string[]; focus: string | null; onFocus: (id: string | null) => void;
-  onOpen: (node: RelationNodeView) => void; stickyTop: number;
+  onOpen: (node: RelationNodeView) => void; stickyTop: number; stacked?: boolean;
 }) {
-  // 실 관계 토폴로지(GET /api/topology?view=relations)의 서비스 노드 — svcCatalog fixture·합성 RPS 제거.
+  // 실 관계 토폴로지(GET /api/topology?view=relations)의 서비스/워크로드 노드 — svcCatalog fixture·합성 RPS 제거.
   // 계약이 RPS/p99를 노출하지 않으므로 호출량 수치는 표기하지 않는다(관측 안 됨).
   const topo = useRelationTopology(clusterIds);
   // M20: React key·포커스는 cluster 한정 합성 id(n.id)로 — 여러 클러스터의 동일 서비스명이
   // 충돌해 dup key가 나거나 한 행이 다른 클러스터 서비스를 가리키지 않게 한다. 표시·상세
   // 열기는 서비스 이름을 쓴다.
   const rows = useMemo(() => topo.status === "ready"
-    ? topo.nodes.map((n) => ({ node: n, id: n.id, name: n.name || n.id, ns: n.namespace, bad: /error|fail|crit|degrad|down|unhealthy/i.test(n.status) }))
+    ? topo.nodes.map((n) => ({ node: n, id: n.id, name: n.name || n.id, kind: n.kind, ns: n.namespace, cluster: n.clusterId, bad: /error|fail|crit|degrad|down|unhealthy/i.test(n.status) }))
     : [], [topo]);
   const visibleRows = rows.slice(0, 40);
   const hiddenCount = Math.max(0, rows.length - visibleRows.length);
   return (
-    <aside style={{ width: 248, flexShrink: 0, alignSelf: "flex-start", position: "sticky", top: stickyTop, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 14, padding: 12, maxHeight: `calc(100vh / ${PRESENT_SCALE} - ${stickyTop + 48}px)`, overflowY: "auto", scrollbarGutter: "stable", display: "flex", flexDirection: "column", gap: 4 }}>
+    <aside style={{ width: stacked ? "100%" : 248, boxSizing: "border-box", flexShrink: 0, alignSelf: "flex-start", position: stacked ? "relative" : "sticky", top: stacked ? undefined : stickyTop, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 14, padding: 10, maxHeight: stacked ? 300 : `calc(100vh / ${PRESENT_SCALE} - ${stickyTop + 48}px)`, overflowY: "auto", scrollbarGutter: "stable", display: "flex", flexDirection: "column", gap: 2 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "2px 2px 7px" }}>
-        <span style={{ fontSize: TYPE.bodyStrong, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink }}>서비스 호출 상태</span>
+        <span style={{ fontSize: TYPE.bodyStrong, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink }}>관계 노드</span>
+        <span style={{ fontSize: TYPE.caption2, color: UI.ink3 }}>{rows.length}개{topo.omittedNodeCount > 0 ? ` · ${topo.omittedNodeCount}개 생략` : ""}</span>
         {focus && <button type="button" aria-label="서비스 포커스 해제" onClick={() => onFocus(null)} style={{ marginLeft: "auto", border: "none", background: inkA(0.05), color: UI.ink3, borderRadius: 999, padding: "2px 9px", fontSize: TYPE.caption, fontWeight: 700, cursor: "pointer" }}>해제</button>}
       </div>
       {topo.status === "loading" && <span style={{ fontSize: TYPE.caption, color: UI.ink3, padding: "6px 2px" }}>불러오는 중…</span>}
@@ -823,11 +827,12 @@ function TrafficPanel({ clusterIds, focus, onFocus, onOpen, stickyTop }: {
       {topo.status === "ready" && rows.length === 0 && <span style={{ fontSize: TYPE.caption, color: UI.ink3, padding: "6px 2px" }}>관측된 서비스가 없습니다</span>}
       {visibleRows.map((r) => (
         <button type="button" aria-label={`${r.name} 서비스 그래프 포커스`} key={r.id} onClick={() => onFocus(focus === r.id ? null : r.id)} onDoubleClick={() => onOpen(r.node)} className="rrow"
-          style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left", border: `1px solid ${focus === r.id ? TINT.blue.bd : "transparent"}`, background: focus === r.id ? TINT.blue.bg : "transparent", borderRadius: 9, padding: "7px 9px", cursor: "pointer" }}>
+          title={`${r.name} · ${r.kind} · ${r.ns ?? "클러스터 범위"} · ${r.cluster}`}
+          style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", minHeight: 46, textAlign: "left", border: `1px solid ${focus === r.id ? TINT.blue.bd : "transparent"}`, background: focus === r.id ? TINT.blue.bg : "transparent", borderRadius: 8, padding: "5px 8px", cursor: "pointer" }}>
           <span style={{ width: 8, height: 8, borderRadius: 3, background: r.bad ? HP.crit : HP.ok, flexShrink: 0 }} />
           <span style={{ minWidth: 0, flex: 1 }}>
-            <span style={{ display: "block", fontSize: TYPE.label2, fontWeight: 700, fontFamily: MONO, color: UI.ink }}>{r.name}</span>
-            <span style={{ display: "block", fontSize: TYPE.caption, color: UI.ink3 }}>{r.ns ?? "—"}</span>
+            <span style={{ display: "block", fontSize: TYPE.label2, fontWeight: 700, fontFamily: MONO, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name}</span>
+            <span style={{ display: "block", fontSize: TYPE.caption, color: UI.ink3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.kind} · {r.ns ?? "클러스터 범위"}</span>
           </span>
           {r.bad
             ? <span style={{ fontSize: TYPE.caption, fontWeight: 700, color: TINT.crit.fg, background: critA(0.09), border: `1px solid ${critA(0.3)}`, borderRadius: 999, padding: "2px 8px", flexShrink: 0 }}>장애</span>
@@ -839,7 +844,6 @@ function TrafficPanel({ clusterIds, focus, onFocus, onOpen, stickyTop }: {
           현재 범위의 나머지 서비스 {hiddenCount}개는 검색·범위 축소 후 표시됩니다.
         </span>
       )}
-      <span style={{ fontSize: TYPE.caption, color: UI.ink3, padding: "7px 2px 0", lineHeight: 1.5 }}>클릭 = 그래프 포커스 · 더블클릭 = 상세</span>
     </aside>
   );
 }
@@ -1321,6 +1325,7 @@ function App() {
   // 선택 컨트롤로 접고 표를 전체 폭으로 스택해 행·상세 드로어 도달성을 보장한다.
   // vwCss는 PRESENT_SCALE(zoom)로 나눈 콘텐츠 좌표라 실뷰포트 기준으로 환산한다.
   const narrowList = vwCss <= 768 / PRESENT_SCALE;
+  const narrowFlow = vwCss <= 1100 / PRESENT_SCALE;
   // 반응형 — 좁은 화면(200% 확대 등)에서 내비를 자동으로 아이콘만 남긴다
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 1100px)");
@@ -1422,10 +1427,14 @@ function App() {
     setDetail({ kind: k, row: found ?? { name } });
   };
   const openTrafficService = (node: RelationNodeView) => {
-    const serviceKind = KINDS.find((item) => item.id === "Service");
-    if (!serviceKind) return;
+    // 관계 토폴로지는 Service뿐 아니라 Deployment/StatefulSet/ReplicaSet 같은
+    // workload 노드도 반환한다. 상세를 무조건 Service로 열면 그래프의 kind와
+    // 사이드 패널의 API 계약이 어긋나므로 관측된 kind를 그대로 보존한다.
+    const resourceKindId = resolveTrafficResourceKindId(node.kind);
+    const resourceKind = resourceKindId ? KINDS.find((item) => item.id === resourceKindId) : undefined;
+    if (!resourceKind) return;
     setDetail({
-      kind: serviceKind,
+      kind: resourceKind,
       row: { _key: node.id, cluster: node.clusterId, name: node.name, ns: node.namespace ?? undefined },
     });
   };
@@ -1755,11 +1764,11 @@ function App() {
 
           {resView === "flow" && (
             /* 트래픽 — 호출 그래프 + 보조 패널(서비스 상태·포커스, 세 관점 동일 문법). 서비스 클릭 = 상세 시트 */
-            <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
+            <div style={{ display: "flex", flexDirection: narrowFlow ? "column" : "row", gap: 14, alignItems: "flex-start" }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <TopologyView embedded clusterIds={scope.cluster ? [scope.cluster] : clusterIds} focusId={trafficFocus} onFocusService={setTrafficFocus} onOpenService={openTrafficService} />
               </div>
-              <TrafficPanel clusterIds={scope.cluster ? [scope.cluster] : clusterIds} focus={trafficFocus} onFocus={setTrafficFocus} onOpen={openTrafficService} stickyTop={topH + 12} />
+              <TrafficPanel clusterIds={scope.cluster ? [scope.cluster] : clusterIds} focus={trafficFocus} onFocus={setTrafficFocus} onOpen={openTrafficService} stickyTop={topH + 12} stacked={narrowFlow} />
             </div>
           )}
         </main>
@@ -1786,7 +1795,7 @@ function App() {
           <motion.button type="button" aria-label="AI 어시스턴트 열기" key="fab" onClick={() => setAiOpen(true)} whileHover={{ scale: 1.06 }} whileTap={{ scale: 0.93 }}
             initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.5, opacity: 0 }} transition={SOFT}
             title="AI 어시스턴트"
-            style={{ position: "fixed", right: 22, bottom: 22, zIndex: 75, width: 48, height: 48, borderRadius: 999, border: "none", cursor: "pointer",
+            style={{ position: "fixed", right: surface === "resources" && resView === "flow" && !narrowFlow ? 284 : 22, bottom: 22, zIndex: 75, width: 48, height: 48, borderRadius: 999, border: "none", cursor: "pointer",
               background: `linear-gradient(135deg, ${BLUE}, ${BLUE2})`, color: UI.card, display: "grid", placeItems: "center",
               boxShadow: `0 10px 26px -8px ${blueA(0.55)}, 0 2px 8px ${inkA(0.12)}` }}>
             <Sparkles size={20} />
