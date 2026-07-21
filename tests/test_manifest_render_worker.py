@@ -701,6 +701,10 @@ def test_render_exports_kustomize_source_from_github_tree(monkeypatch) -> None:
                 ]
             )
         ),
+        # kustomize 감지 시 상대참조(base) 해석을 위해 저장소 루트 전체를 자료화한다.
+        "https://api.github.test/repos/owner/demo/contents/README.md?ref=kustomize123": content_payload(
+            "# demo"
+        ),
     }
 
     def stub_urlopen(req: object, timeout: float) -> Response:
@@ -758,9 +762,11 @@ def test_render_exports_kustomize_source_from_github_tree(monkeypatch) -> None:
     assert artifact["source_summary"]["source_type"] == "kustomize"
     assert artifact["source_summary"]["source_is_file"] is False
     assert artifact["source_summary"]["source_document_count"] == 1
+    # kustomize 는 상대참조(base) 해석을 위해 저장소 루트 전체를 자료화한다(상한 유지).
     assert calls == [
         "https://api.github.test/repos/owner/demo/commits/kustomize123",
         "https://api.github.test/repos/owner/demo/git/trees/tree123?recursive=1",
+        "https://api.github.test/repos/owner/demo/contents/README.md?ref=kustomize123",
         "https://api.github.test/repos/owner/demo/contents/deploy/k8s/deployment.yaml?ref=kustomize123",
         "https://api.github.test/repos/owner/demo/contents/deploy/k8s/kustomization.yaml?ref=kustomize123",
     ]

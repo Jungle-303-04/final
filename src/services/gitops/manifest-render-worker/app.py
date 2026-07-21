@@ -426,16 +426,32 @@ def export_github_render_source(
     source_dir = render_source_directory(manifest_path, source_type)
     try:
         tree = github_tree(repo_ref, github_commit_tree_sha(repo_ref, commit_sha))
-        source_paths = sorted(
+        blob_paths = sorted(
             {
                 path
                 for item in tree
                 if str(item.get("type") or "") == "blob"
                 for path in [normalize_repository_path(str(item.get("path") or ""))]
-                if path and path_is_under_directory(path, source_dir)
+                if path
             }
         )
-        if not source_paths:
+        # kustomize overlay 는 저장소 상대참조(예: resources: ../../base)를 쓰므로
+        # 다운로드 범위를 manifest 디렉터리로 좁히면 base 가 빠져 렌더가
+        # "evalsymlink failure … no such file or directory" 로 실패한다(live:
+        # workflow 58건 render 고착의 원인). 다운로드 범위만 저장소 루트로 넓히고
+        # — 기존 파일/바이트 상한은 그대로 강제 — build 디렉터리는 source_dir 를
+        # 유지한다. source_type 미지정이어도 source_dir 안에 kustomization 파일이
+        # 보이면 동일하게 취급한다.
+        has_kustomization = any(
+            path_is_under_directory(path, source_dir)
+            and path.rsplit("/", 1)[-1] in KUSTOMIZATION_FILES
+            for path in blob_paths
+        )
+        download_dir = (
+            "." if source_type == SOURCE_TYPE_KUSTOMIZE or has_kustomization else source_dir
+        )
+        source_paths = [path for path in blob_paths if path_is_under_directory(path, download_dir)]
+        if not any(path_is_under_directory(path, source_dir) for path in source_paths):
             raise ManifestSourceError(
                 f"{source_type} render source contains no files under {source_dir}"
             )
