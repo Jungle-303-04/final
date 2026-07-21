@@ -61,6 +61,7 @@ vi.mock("./devpreview/clusterSummaryFeed", () => ({
       nodesReady: 2,
       nodesTotal: 3,
       openIncidents: null,
+      stale: true,
       nodes: [
         { name: "node-a", ready: true, health: "healthy", cpuPct: 25, memPct: 40, podsRunning: 4, podsCapacity: 29, restartsRecent: 0, conditions: [] },
         { name: "node-b", ready: true, health: "healthy", cpuPct: 25, memPct: 40, podsRunning: 5, podsCapacity: 29, restartsRecent: 0, conditions: [] },
@@ -100,6 +101,7 @@ describe("HomeClustersWidget", () => {
     expect(screen.getByText("9/58")).toBeTruthy();
     expect(screen.getByText("25%")).toBeTruthy();
     expect(screen.getByText("40%")).toBeTruthy();
+    expect(screen.getByLabelText("실시간 관측 지연")).toBeTruthy();
     expect(screen.queryByText("정상")).toBeNull();
     expect(screen.queryByText("노드 보기")).toBeNull();
     expect(screen.queryByText("v1.32.0-eks")).toBeNull();

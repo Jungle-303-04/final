@@ -1,7 +1,9 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import { getClusterNodesSummary } from "../api/cluster-summary";
 import type { ClusterNodesSummary } from "../api/cluster-summary-schemas";
+import { useDevpreviewContracts } from "./contracts";
+import { useLiveStreamView, type LiveStreamViewState } from "./liveStreamFeed";
 import { useBoundedPoll } from "./useBoundedPoll";
 
 // 실시간 cadence: 화면이 보일 때만 visible cluster의 node summary를 재조회한다.
@@ -38,6 +40,10 @@ export interface ClusterSummaryView {
   nodesTotal: number | null;
   openIncidents: number | null;
   nodes: ClusterNodeSummaryView[];
+  /** Live transport freshness; last-known-good values remain visible when true. */
+  stale?: boolean;
+  /** Real restart change reported by the latest live summary window. */
+  restartDelta?: number | null;
 }
 
 const UNAVAILABLE: ClusterSummaryView = {
@@ -96,8 +102,18 @@ export function useClusterSummaries(
   clusterIds: readonly string[],
 ): Record<string, ClusterSummaryView> {
   const [summaries, setSummaries] = useState<Record<string, ClusterSummaryView>>({});
+  const { workspaceId } = useDevpreviewContracts();
   const key = Array.from(new Set(clusterIds)).sort().join("\u0000");
-  const ids = key ? key.split("\u0000") : [];
+  const ids = useMemo(() => key ? key.split("\u0000") : [], [key]);
+  const liveSubscription = useMemo(() => {
+    // The authenticated browser contract requires one exact cluster and the
+    // performance budget permits one active socket. Multi-cluster overview
+    // cards therefore retain bounded REST polling; the selected dashboard/drill
+    // receives the 1 Hz direct model.
+    if (workspaceId === null || ids.length !== 1) return null;
+    return { workspaceId, clusterId: ids[0] };
+  }, [ids, workspaceId]);
+  const live = useLiveStreamView(liveSubscription);
   // 공통 bounded-poll: 화면이 보일 때만 visible cluster의 노드 요약을 병렬 조회한다.
   // in-flight dedupe·backpressure로 중복 요청 0, 스코프 변경 시 abort로 stale overwrite 0.
   // 재조회 중 직전 요약 값은 유지하고 한 번의 setSummaries로 전체를 commit한다.
@@ -119,7 +135,98 @@ export function useClusterSummaries(
       ids.map((id) => [id, previous[id] ?? UNAVAILABLE]),
     )),
   });
-  return summaries;
+  return useMemo(
+    () => applyLiveClusterSummaries(summaries, ids, live),
+    [ids, live, summaries],
+  );
+}
+
+/**
+ * Applies only facts present in the retained live protocol model. In
+ * particular, pod request ratios are never relabelled as node CPU/MEM, and
+ * pods_ready is never relabelled as pods_running.
+ */
+export function applyLiveClusterSummaries(
+  current: Readonly<Record<string, ClusterSummaryView>>,
+  clusterIds: readonly string[],
+  live: LiveStreamViewState,
+): Record<string, ClusterSummaryView> {
+  if (!live.observed) {
+    if (!live.stale) return current as Record<string, ClusterSummaryView>;
+    return Object.fromEntries(Object.entries(current).map(([clusterId, summary]) => [
+      clusterId,
+      clusterIds.includes(clusterId) ? { ...summary, stale: true } : summary,
+    ]));
+  }
+  const podFacts = livePodFacts(live.resources, clusterIds);
+  let changed = false;
+  const next = { ...current };
+
+  for (const clusterId of clusterIds) {
+    const summary = current[clusterId];
+    if (summary === undefined) continue;
+    const liveSummary = live.summaries[clusterId];
+    const facts = podFacts.get(clusterId) ?? (liveSummary?.pods_total === 0
+      ? { running: 0, runningByNode: new Map<string, number>() }
+      : undefined);
+    const nodes = facts === undefined
+      ? summary.nodes
+      : summary.nodes.map((node) => ({
+          ...node,
+          podsRunning: facts.runningByNode.get(node.name) ?? 0,
+        }));
+    const projected: ClusterSummaryView = {
+      ...summary,
+      podsRunning: facts?.running ?? summary.podsRunning,
+      podsTotal: liveSummary?.pods_total ?? summary.podsTotal,
+      nodes,
+      stale: live.stale,
+      restartDelta: liveSummary?.restart_delta ?? summary.restartDelta ?? null,
+    };
+    next[clusterId] = projected;
+    changed = true;
+  }
+
+  return changed ? next : current as Record<string, ClusterSummaryView>;
+}
+
+interface LivePodFacts {
+  running: number;
+  runningByNode: Map<string, number>;
+}
+
+function livePodFacts(
+  resources: Readonly<Record<string, unknown>>,
+  clusterIds: readonly string[],
+): Map<string, LivePodFacts> {
+  const wanted = new Set(clusterIds);
+  const result = new Map<string, LivePodFacts>();
+  for (const [key, value] of Object.entries(resources)) {
+    const identity = livePodIdentity(key);
+    if (identity === null || !wanted.has(identity.clusterId) || !isRecord(value)) continue;
+    let facts = result.get(identity.clusterId);
+    if (facts === undefined) {
+      facts = { running: 0, runningByNode: new Map() };
+      result.set(identity.clusterId, facts);
+    }
+    if (typeof value.phase !== "string" || value.phase.toLowerCase() !== "running") continue;
+    facts.running += 1;
+    if (typeof value.node === "string" && value.node !== "") {
+      facts.runningByNode.set(value.node, (facts.runningByNode.get(value.node) ?? 0) + 1);
+    }
+  }
+  return result;
+}
+
+function livePodIdentity(key: string): { clusterId: string } | null {
+  const segments = key.split("/");
+  if (segments.length !== 4 || segments[2]?.toLowerCase() !== "pod") return null;
+  const clusterId = segments[0];
+  return clusterId ? { clusterId } : null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function isAbortError(cause: unknown): boolean {

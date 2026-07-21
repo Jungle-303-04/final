@@ -44,6 +44,7 @@ export type MapScope = View;
 
 type TipData = { x: number; y: number; label: string; status: string; health: string } | null;
 const NODE_METRIC_ANIMATION_SECONDS = 0.28;
+const NODE_METRIC_MAX_FRAMES_PER_SECOND = 60;
 
 // ── 커서 추적 툴팁 정보(노드/파드 공용) ─────────────────────────────
 function HealthChip({ health }: { health: string }) {
@@ -87,28 +88,52 @@ function ClusterMiniUsage({ label, value }: { label: string; value: number | nul
   );
 }
 
-function AnimatedPercentageValue({ value, reducedMotion }: { value: number | null; reducedMotion: boolean }) {
+export function AnimatedPercentageValue({ value, reducedMotion }: { value: number | null; reducedMotion: boolean }) {
   const previousObserved = useRef<number | null>(null);
-  const [displayValue, setDisplayValue] = useState(0);
+  const [presentation, setPresentation] = useState(() => ({
+    observed: value,
+    value: value ?? 0,
+  }));
 
   useEffect(() => {
     if (value === null) {
       previousObserved.current = null;
-      return;
+      const timer = window.setTimeout(() => {
+        setPresentation({ observed: null, value: 0 });
+      }, 0);
+      return () => window.clearTimeout(timer);
     }
 
     const target = Math.min(100, Math.max(0, value));
-    const startValue = previousObserved.current ?? 0;
+    const startValue = previousObserved.current;
     previousObserved.current = target;
-    if (reducedMotion || typeof window.requestAnimationFrame !== "function") return;
+    // The first endpoint is painted exactly as observed. Only a transition
+    // between two real observations is interpolated; zero is never invented as
+    // a synthetic starting measurement.
+    if (startValue === null || reducedMotion || typeof window.requestAnimationFrame !== "function") {
+      const timer = window.setTimeout(() => {
+        setPresentation({ observed: target, value: target });
+      }, 0);
+      return () => window.clearTimeout(timer);
+    }
 
     let frame = 0;
     const startedAt = performance.now();
     const durationMs = NODE_METRIC_ANIMATION_SECONDS * 1_000;
+    const minimumFrameIntervalMs = 1_000 / NODE_METRIC_MAX_FRAMES_PER_SECOND;
+    let lastPaintedAt = startedAt - minimumFrameIntervalMs;
     const update = (now: number) => {
       const progress = Math.min(1, (now - startedAt) / durationMs);
+      if (progress < 1 && now - lastPaintedAt < minimumFrameIntervalMs) {
+        frame = window.requestAnimationFrame(update);
+        return;
+      }
+      lastPaintedAt = now;
       const eased = 1 - (1 - progress) ** 3;
-      setDisplayValue(startValue + (target - startValue) * eased);
+      setPresentation({
+        observed: target,
+        value: startValue + (target - startValue) * eased,
+      });
       if (progress < 1) frame = window.requestAnimationFrame(update);
     };
     frame = window.requestAnimationFrame(update);
@@ -116,7 +141,8 @@ function AnimatedPercentageValue({ value, reducedMotion }: { value: number | nul
   }, [reducedMotion, value]);
 
   if (value === null) return <>관측 안 됨</>;
-  const rounded = Math.round((reducedMotion ? value : displayValue) * 10) / 10;
+  const presented = presentation.observed === null || reducedMotion ? value : presentation.value;
+  const rounded = Math.round(presented * 10) / 10;
   return <>{Number.isInteger(rounded) ? rounded.toFixed(0) : rounded.toFixed(1)}%</>;
 }
 
@@ -136,7 +162,7 @@ function ClusterRow({ cl, summary, topology, onOpen }: {
   const topologyLoading = topology?.status === "loading";
   const nodesReady = topology?.nodesReady ?? summary?.nodesReady ?? null;
   const nodesTotal = topology?.nodesTotal ?? summary?.nodesTotal ?? null;
-  const podCount = topology?.podsTotal ?? summary?.podsRunning ?? null;
+  const podCount = topology?.podsTotal ?? summary?.podsTotal ?? summary?.podsRunning ?? null;
   const countsLoading = topologyLoading || (topology === undefined && summaryLoading);
   const fmt = (n: number | null) => (countsLoading ? "…" : n ?? "—");
   const cpuPct = summaryLoading ? null : summary?.cpuPct ?? null;
@@ -158,7 +184,10 @@ function ClusterRow({ cl, summary, topology, onOpen }: {
             {cl.environment === "production" && <span style={{ fontSize: TYPE.micro, fontWeight: 600, color: TINT.warn.fg, border: `1px solid ${TINT.warn.bd}`, background: TINT.warn.bg, borderRadius: 5, padding: "1px 6px", flexShrink: 0 }}>prod</span>}
             {cl.readOnly && <span style={{ fontSize: TYPE.micro, fontWeight: 600, color: UI.ink2, border: `1px solid ${UI.line}`, background: UI.bg2, borderRadius: 5, padding: "1px 6px", flexShrink: 0 }}>읽기 전용</span>}
           </span>
-          <span style={{ display: "block", fontSize: TYPE.caption2, color: UI.ink3, marginTop: 2, fontFamily: MONO }}>{cl.provider.toUpperCase()} · {cl.kubernetesVersion ?? "—"}</span>
+          <span style={{ display: "block", fontSize: TYPE.caption2, color: UI.ink3, marginTop: 2, fontFamily: MONO }}>
+            {cl.provider.toUpperCase()} · {cl.kubernetesVersion ?? "—"}
+            {summary?.stale === true && <span aria-label="실시간 관측 지연" style={{ color: TINT.warn.fg, fontWeight: 700 }}> · 관측 지연</span>}
+          </span>
         </span>
         {!healthy && (incidentsObserved
             ? <span style={{ fontSize: TYPE.caption, fontWeight: 700, color: UI.card, background: HP.crit, borderRadius: 999, padding: "3px 9px", fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>장애 {incidents}</span>
@@ -230,7 +259,7 @@ function CompactClusterRow({ cl, summary, onOpen, onSettings, onDisconnect }: {
   const summaryLoading = summary === undefined || summary.status === "loading";
   const ready = summary?.nodesReady ?? null;
   const nodes = summary?.nodesTotal ?? null;
-  const pods = summary?.podsRunning ?? null;
+  const pods = summary?.podsTotal ?? summary?.podsRunning ?? null;
   const summaryNodes = summary?.nodes ?? [];
   const slots = summaryNodes.length > 0 ? summaryNodes.reduce((total, node) => total + node.podsCapacity, 0) : null;
   const incidentsObserved = isActiveIncidentCluster(cl);
@@ -255,6 +284,13 @@ function CompactClusterRow({ cl, summary, onOpen, onSettings, onDisconnect }: {
           <span style={{ marginLeft: "auto", flexShrink: 0, fontSize: TYPE.micro, fontWeight: 700, color: HP.crit, background: TINT.crit.bg, borderRadius: 999, padding: "2px 6px" }}>장애 {incidents}</span>
         ) : connectionWarning ? (
           <span style={{ marginLeft: "auto", flexShrink: 0, fontSize: TYPE.micro, fontWeight: 700, color: TINT.warn.fg, background: TINT.warn.bg, borderRadius: 999, padding: "2px 6px" }}>{statusLabel(cl.connectionStage ?? cl.connectionStatus)}</span>
+        ) : summary?.stale === true ? (
+          <span
+            aria-label="실시간 관측 지연"
+            style={{ marginLeft: "auto", flexShrink: 0, fontSize: TYPE.micro, fontWeight: 700, color: TINT.warn.fg }}
+          >
+            <Clock3 size={11} aria-hidden="true" /> 관측 지연
+          </span>
         ) : unavailable ? (
           <span
             aria-label="메트릭 수집 대기: CPU·메모리 최신 샘플 미수신"
@@ -757,7 +793,12 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
                 <span style={seg}><Cpu size={11} style={{ color: UI.ink3 }} />노드 <b style={num}>{observing ? `${nodesReady ?? "—"}/${nodesTotal ?? "—"}` : topology.status === "loading" || activeSummary?.status === "loading" ? "…" : "—"}</b></span>
               )}
               {drilled && (
-                <span style={seg}><Box size={11} style={{ color: UI.ink3 }} />파드 <b style={num}>{observing ? topology.podsTotal ?? "—" : topology.status === "loading" ? "…" : "—"}</b></span>
+                <span style={seg}><Box size={11} style={{ color: UI.ink3 }} />파드 <b style={num}>{observing ? activeSummary?.podsTotal ?? topology.podsTotal ?? "—" : topology.status === "loading" ? "…" : "—"}</b></span>
+              )}
+              {drilled && (topology.stale || activeSummary?.stale === true) && (
+                <span aria-label="실시간 관측 지연" style={{ ...seg, color: TINT.warn.fg, fontWeight: 700 }}>
+                  <Clock3 size={11} />관측 지연
+                </span>
               )}
               {observing && topology.partial && (
                 <span title={topology.partialReasonCodes.map(reasonLabel).join(" · ") || "부분 관측"}

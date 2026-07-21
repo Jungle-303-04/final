@@ -4,6 +4,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  applyLiveResourcesToTopologyView,
   podsForNode,
   invalidateClusterTopologyForTests,
   resetClusterTopologyCacheForTests,
@@ -12,6 +13,7 @@ import {
   useClusterTopology,
 } from "./inventoryTopologyFeed";
 import { PHYSICAL_TOPOLOGY_ENDPOINT } from "./inventoryTopologyFeed.testSupport";
+import type { LiveStreamViewState } from "./liveStreamFeed";
 
 describe("useClusterTopology", () => {
   afterEach(() => {
@@ -59,6 +61,54 @@ describe("useClusterTopology", () => {
     expect(podsForNode(rendered.result.current.pods, rendered.result.current.nodes[0].key))
       .toHaveLength(1);
     expect(podsForNode(rendered.result.current.pods, "node:other")).toEqual([]);
+  });
+
+  it("applies measured pod deltas to the cached shell without a topology refetch", () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+    const baseline = toClusterTopologyView(PHYSICAL_TOPOLOGY_ENDPOINT);
+    const live: LiveStreamViewState = {
+      status: "connected",
+      observed: true,
+      stale: false,
+      updatedAt: 1,
+      resources: {
+        "cluster-a/shop/pod/checkout-0": {
+          phase: "Running",
+          health: "healthy",
+          restarts: 8,
+          cpu_mcores: 240,
+          mem_mib: null,
+          node: "worker-a",
+          cpu_request_pct: 80,
+        },
+      },
+      summaries: {},
+    };
+
+    const projected = applyLiveResourcesToTopologyView(baseline, "cluster-a", live);
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(projected.nodes[0]).toMatchObject({
+      // Pod request ratios never become invented node percentages.
+      cpuPercent: 68,
+      memoryPercent: null,
+      matchedPodCount: 1,
+    });
+    expect(projected.pods[0]).toMatchObject({
+      status: "Running",
+      health: "healthy",
+      restartCount: 8,
+      cpuMillicores: 240,
+      memoryMebibytes: null,
+    });
+
+    const disconnected = applyLiveResourcesToTopologyView(baseline, "cluster-a", {
+      ...live,
+      status: "disconnected",
+      stale: true,
+    });
+    expect(disconnected.stale).toBe(true);
+    expect(disconnected.pods[0]).toMatchObject({ cpuMillicores: 240 });
   });
 
   it("loads every cluster in parallel and deduplicates a simultaneous drill subscription", async () => {

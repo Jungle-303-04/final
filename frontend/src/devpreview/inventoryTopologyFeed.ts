@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 
 import { getPhysicalTopology } from "../api/physical-topology";
 import type { PhysicalTopologyEndpoint } from "../api/physical-topology-schemas";
-import { useLiveClusterRevalidation } from "./liveStreamFeed";
+import { useDevpreviewContracts } from "./contracts";
+import { useLiveStreamView, type LiveStreamViewState } from "./liveStreamFeed";
 
 // UI-PHASE2-001: 물리 토폴로지(노드·파드) 전용 라이브 어댑터.
 // 정본 `GET /api/topology?view=physical&clusters=<exact-one>`만 읽는다.
@@ -75,11 +76,6 @@ const CACHE_TTL_MS = 60_000;
 const PARTIAL_CACHE_TTL_MS = 60_000;
 const ERROR_CACHE_TTL_MS = 30_000;
 const STRICT_MODE_GRACE_MS = 50;
-// The physical topology projection is materially heavier than node-summary.
-// Bound delta-driven reconciliation to the same cadence as its cache instead
-// of starting another database snapshot every five seconds.
-const LIVE_REVALIDATION_MIN_MS = CACHE_TTL_MS;
-
 const EMPTY_READY: ClusterTopologyView = {
   status: "ready",
   nodes: [],
@@ -363,22 +359,17 @@ export function invalidateClusterTopologyForTests(clusterId: string): void {
 export function useClusterTopologies(
   clusterIds: readonly string[],
 ): Record<string, ClusterTopologyView> {
+  const { workspaceId } = useDevpreviewContracts();
   const key = Array.from(new Set(clusterIds)).sort().join("\u0000");
   const ids = useMemo(() => (key ? key.split("\u0000") : []), [key]);
   const [views, setViews] = useState<Record<string, ClusterTopologyView>>(() => initialViews(ids));
-  // 실시간 재검증: **단일 cluster 스코프(드릴)** 에서만 canonical WS를 구독한다. 다중 스코프
-  // (홈)는 cluster마다 WS를 열거나 모든 cluster를 매 delta마다 재조회하지 않도록 구독하지
-  // 않는다(60Hz REST 방지). WS delta는 물리 토폴로지 cache cadence에 맞춘 bounded gate로
-  // 재검증 key가 되어 그 cluster만 무효화한다. WS 미가용 시 기존 채널의 60초 안전 폴링이
-  // 계속 동작한다.
   const liveClusterId = ids.length === 1 ? ids[0] : null;
-  // The hook itself performs the initial REST read. Ignore the WS baseline and
-  // only revalidate for later deltas, at most once per topology cache window.
-  const liveRevalidation = useLiveClusterRevalidation(
-    liveClusterId,
-    LIVE_REVALIDATION_MIN_MS,
-    false,
-  );
+  const liveSubscription = useMemo(() => (
+    workspaceId === null || liveClusterId === null
+      ? null
+      : { workspaceId, clusterId: liveClusterId }
+  ), [liveClusterId, workspaceId]);
+  const live = useLiveStreamView(liveSubscription);
 
   useEffect(() => {
     const unsubscribes = ids.map((id) => subscribeClusterTopology(id, (view) => {
@@ -389,18 +380,116 @@ export function useClusterTopologies(
     return () => unsubscribes.forEach((unsubscribe) => unsubscribe());
   }, [ids]);
 
-  useEffect(() => {
-    // Delta keys do not tear down and rebuild topology listeners. This avoids
-    // StrictMode disposal timers and subscription work on every live frame.
-    if (liveRevalidation > 0 && liveClusterId !== null) {
-      invalidateClusterTopology(liveClusterId);
-    }
-  }, [liveRevalidation, liveClusterId]);
-
   return Object.fromEntries(ids.map((id) => [
     id,
-    currentCached(id) ?? views[id] ?? LOADING,
+    applyLiveResourcesToTopologyView(
+      currentCached(id) ?? views[id] ?? LOADING,
+      id,
+      liveClusterId === id ? live : null,
+    ),
   ]));
+}
+
+/**
+ * Overlays only directly observed pod fields onto the cached topology shell.
+ * Membership/identity and absent values stay on the canonical REST snapshot;
+ * no live request-ratio is converted into a node CPU or memory percentage.
+ */
+export function applyLiveResourcesToTopologyView(
+  current: ClusterTopologyView,
+  clusterId: string,
+  live: LiveStreamViewState | null,
+): ClusterTopologyView {
+  if (live === null || current.status !== "ready") return current;
+  if (!live.observed) return live.stale ? { ...current, stale: true } : current;
+  const measurements = new Map<string, Record<string, unknown>>();
+  const podCountsByNode = new Map<string, number>();
+  let observedClusterPod = false;
+  for (const [key, value] of Object.entries(live.resources)) {
+    const identity = livePodIdentity(key, clusterId);
+    if (identity === null || !isRecord(value)) continue;
+    observedClusterPod = true;
+    measurements.set(`${identity.namespace}\u0000${identity.name}`, value);
+    if (typeof value.node === "string" && value.node !== "") {
+      podCountsByNode.set(value.node, (podCountsByNode.get(value.node) ?? 0) + 1);
+    }
+  }
+  const authoritativeEmpty = live.summaries[clusterId]?.pods_total === 0;
+  const hasPodProjection = observedClusterPod || authoritativeEmpty;
+  return {
+    ...current,
+    stale: current.stale || live.stale,
+    nodes: hasPodProjection
+      ? current.nodes.map((node) => ({
+          ...node,
+          matchedPodCount: podCountsByNode.get(node.name) ?? 0,
+        }))
+      : current.nodes,
+    pods: current.pods.map((pod) => {
+      const value = measurements.get(`${pod.namespace ?? ""}\u0000${pod.name}`);
+      if (value === undefined) return pod;
+      return {
+        ...pod,
+        cpuMillicores: optionalFiniteMetric(value, "cpu_mcores", pod.cpuMillicores),
+        memoryMebibytes: optionalFiniteMetric(value, "mem_mib", pod.memoryMebibytes),
+        restartCount: optionalNonNegativeInteger(value, "restarts", pod.restartCount),
+        status: optionalString(value, "phase", pod.status),
+        health: optionalString(value, "health", pod.health),
+      };
+    }),
+  };
+}
+
+function livePodIdentity(
+  key: string,
+  clusterId: string,
+): { namespace: string; name: string } | null {
+  const segments = key.split("/");
+  if (
+    segments.length !== 4
+    || segments[0] !== clusterId
+    || segments[2]?.toLowerCase() !== "pod"
+  ) return null;
+  const namespace = segments[1];
+  const name = segments[3];
+  return namespace && name ? { namespace, name } : null;
+}
+
+function optionalFiniteMetric(
+  value: Record<string, unknown>,
+  key: string,
+  fallback: number | null,
+): number | null {
+  if (!Object.prototype.hasOwnProperty.call(value, key)) return fallback;
+  const metric = value[key];
+  return metric === null || (typeof metric === "number" && Number.isFinite(metric) && metric >= 0)
+    ? metric
+    : fallback;
+}
+
+function optionalNonNegativeInteger(
+  value: Record<string, unknown>,
+  key: string,
+  fallback: number,
+): number {
+  if (!Object.prototype.hasOwnProperty.call(value, key)) return fallback;
+  const metric = value[key];
+  return typeof metric === "number" && Number.isSafeInteger(metric) && metric >= 0
+    ? metric
+    : fallback;
+}
+
+function optionalString(
+  value: Record<string, unknown>,
+  key: string,
+  fallback: string,
+): string {
+  const observed = value[key];
+  return typeof observed === "string" && observed !== "" ? observed : fallback;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /** 한 클러스터 드릴용 기존 API. 다중 구독 훅과 같은 cache/request를 재사용한다. */

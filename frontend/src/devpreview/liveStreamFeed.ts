@@ -1,8 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { connectRealtime, type RealtimeClient, type RealtimeClientOptions } from "../api/live";
 import { useDevpreviewContracts } from "./contracts";
-import type { LiveSubscription, RealtimeConnectionStatus, RealtimeMessage } from "../api/live-schemas";
+import {
+  liveSummarySchema,
+  type LiveSubscription,
+  type LiveSummary,
+  type RealtimeConnectionStatus,
+  type RealtimeMessage,
+} from "../api/live-schemas";
 import {
   createRafStreamCoalescer,
   type RafStreamCoalescer,
@@ -30,7 +36,10 @@ import {
 export type { RealtimeMessage } from "../api/live-schemas";
 export type { RealtimeClient, RealtimeClientOptions, RealtimeConnectionState } from "../api/live";
 
-export type LiveDeltaMessage = Extract<RealtimeMessage, { seq: number }>;
+export type LiveDeltaMessage = Extract<
+  RealtimeMessage,
+  { type: "live.summary" | "resource.delta" }
+>;
 
 export interface LiveStreamConfig {
   subscription: LiveSubscription;
@@ -157,6 +166,219 @@ export function createLiveStreamCoalescer(config: LiveStreamConfig): LiveStreamH
       disposed = true;
     },
   };
+}
+
+export interface LiveStreamViewState {
+  /** Last transport state. Observed values remain present across reconnects. */
+  status: RealtimeConnectionStatus;
+  /** True after an authoritative snapshot or admitted live frame has arrived. */
+  observed: boolean;
+  /** Transport freshness only; it never replaces or clears last-known-good data. */
+  stale: boolean;
+  resources: Readonly<Record<string, unknown>>;
+  summaries: Readonly<Record<string, LiveSummary>>;
+  updatedAt: number;
+}
+
+const EMPTY_LIVE_STREAM_VIEW: LiveStreamViewState = {
+  status: "idle",
+  observed: false,
+  stale: false,
+  resources: {},
+  summaries: {},
+  updatedAt: 0,
+};
+
+type LiveViewListener = (state: LiveStreamViewState) => void;
+
+interface SharedLiveViewChannel {
+  state: LiveStreamViewState;
+  listeners: Set<LiveViewListener>;
+  handle: LiveStreamHandle;
+  disposeTimer: ReturnType<typeof setTimeout> | null;
+}
+
+const sharedLiveViewChannels = new Map<string, SharedLiveViewChannel>();
+
+/**
+ * One retained read model per canonical live subscription. Dashboard and
+ * topology consumers therefore share one socket and receive one immutable
+ * commit per admitted animation frame. A disconnect changes freshness only:
+ * the last observed resources and summaries stay available as the immediate
+ * shell until the reconnect snapshot replaces them.
+ */
+export function useLiveStreamView(
+  subscription: LiveSubscription | null,
+): LiveStreamViewState {
+  const workspaceId = subscription?.workspaceId ?? null;
+  const clusterId = subscription?.clusterId;
+  const namespace = subscription?.namespace;
+  const app = subscription?.app;
+  const stableSubscription = useMemo<LiveSubscription | null>(() => {
+    if (workspaceId === null) return null;
+    return {
+      workspaceId,
+      ...(clusterId === undefined ? {} : { clusterId }),
+      ...(namespace === undefined ? {} : { namespace }),
+      ...(app === undefined ? {} : { app }),
+    };
+  }, [app, clusterId, namespace, workspaceId]);
+  const subscriptionKey = liveSubscriptionKey(stableSubscription);
+  const [entry, setEntry] = useState<{
+    key: string;
+    state: LiveStreamViewState;
+  }>({ key: "", state: EMPTY_LIVE_STREAM_VIEW });
+
+  useEffect(() => {
+    if (stableSubscription === null) return undefined;
+    return subscribeLiveStreamView(stableSubscription, (state) => {
+      setEntry({ key: subscriptionKey, state });
+    });
+  }, [stableSubscription, subscriptionKey]);
+
+  return entry.key === subscriptionKey ? entry.state : EMPTY_LIVE_STREAM_VIEW;
+}
+
+function subscribeLiveStreamView(
+  subscription: LiveSubscription,
+  listener: LiveViewListener,
+): () => void {
+  const channelKey = liveSubscriptionKey(subscription);
+  let channel = sharedLiveViewChannels.get(channelKey);
+  if (channel === undefined) {
+    const created = {} as SharedLiveViewChannel;
+    const publish = (next: LiveStreamViewState) => {
+      created.state = next;
+      created.listeners.forEach((notify) => notify(next));
+    };
+    const handle = createLiveStreamCoalescer({
+      subscription,
+      onSnapshot: (snapshot) => publish(reduceLiveSnapshot(created.state, snapshot)),
+      onBatch: (messages) => publish(reduceLiveBatch(created.state, messages)),
+      onStatus: (status) => {
+        if (status === created.state.status) return;
+        publish({
+          ...created.state,
+          status,
+          stale: liveStateIsStale(status, created.state.observed),
+        });
+      },
+    });
+    Object.assign(created, {
+      state: { ...EMPTY_LIVE_STREAM_VIEW, status: "connecting" },
+      listeners: new Set<LiveViewListener>(),
+      handle,
+      disposeTimer: null,
+    });
+    channel = created;
+    sharedLiveViewChannels.set(channelKey, channel);
+  }
+
+  if (channel.disposeTimer !== null) {
+    clearTimeout(channel.disposeTimer);
+    channel.disposeTimer = null;
+  }
+  channel.listeners.add(listener);
+  listener(channel.state);
+  if (channel.listeners.size === 1 && channel.state.status === "connecting") {
+    channel.handle.start();
+  }
+
+  const active = channel;
+  return () => {
+    active.listeners.delete(listener);
+    if (active.listeners.size > 0 || active.disposeTimer !== null) return;
+    active.disposeTimer = setTimeout(() => {
+      active.disposeTimer = null;
+      if (
+        active.listeners.size > 0
+        || sharedLiveViewChannels.get(channelKey) !== active
+      ) return;
+      active.handle.stop();
+      sharedLiveViewChannels.delete(channelKey);
+    }, LIVE_STRICT_MODE_GRACE_MS);
+  };
+}
+
+function reduceLiveSnapshot(
+  current: LiveStreamViewState,
+  state: Record<string, unknown>,
+): LiveStreamViewState {
+  const resources = openRecord(state.resources);
+  const clusters = openRecord(state.clusters);
+  const summaries: Record<string, LiveSummary> = {};
+  for (const [clusterId, value] of Object.entries(clusters)) {
+    const parsed = liveSummarySchema.safeParse(value);
+    if (parsed.success) summaries[clusterId] = parsed.data;
+  }
+  return {
+    ...current,
+    observed: true,
+    stale: liveStateIsStale(current.status, true),
+    resources: { ...resources },
+    summaries,
+    updatedAt: Date.now(),
+  };
+}
+
+function reduceLiveBatch(
+  current: LiveStreamViewState,
+  messages: readonly LiveDeltaMessage[],
+): LiveStreamViewState {
+  if (messages.length === 0) return current;
+  let resources: Record<string, unknown> | null = null;
+  let summaries: Record<string, LiveSummary> | null = null;
+  for (const message of messages) {
+    if (message.type === "live.summary") {
+      summaries ??= { ...current.summaries };
+      summaries[message.cluster_id] = message.summary;
+      continue;
+    }
+    resources ??= { ...current.resources };
+    if (message.op === "remove") delete resources[message.key];
+    else resources[message.key] = message.value;
+  }
+  return {
+    ...current,
+    observed: true,
+    stale: liveStateIsStale(current.status, true),
+    resources: resources ?? current.resources,
+    summaries: summaries ?? current.summaries,
+    updatedAt: Date.now(),
+  };
+}
+
+function liveSubscriptionKey(subscription: LiveSubscription | null): string {
+  if (subscription === null) return "";
+  return [
+    subscription.workspaceId,
+    subscription.clusterId ?? "",
+    subscription.namespace ?? "",
+    subscription.app ?? "",
+  ].join("\u0000");
+}
+
+function openRecord(value: unknown): Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+function liveStateIsStale(
+  status: RealtimeConnectionStatus,
+  observed: boolean,
+): boolean {
+  if (observed) return status !== "connected";
+  return status === "reconnecting" || status === "disconnected" || status === "closed";
+}
+
+/** @internal Test isolation for the shared retained live channels. */
+export function resetLiveStreamViewChannelsForTests(): void {
+  sharedLiveViewChannels.forEach((channel) => {
+    if (channel.disposeTimer !== null) clearTimeout(channel.disposeTimer);
+    channel.handle.stop();
+  });
+  sharedLiveViewChannels.clear();
 }
 
 // 실시간 delta → REST 재검증 사이의 bounded gate 기본 최소 간격(cluster당).

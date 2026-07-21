@@ -3,7 +3,8 @@
 import { renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { useClusterSummaries } from "./clusterSummaryFeed";
+import { applyLiveClusterSummaries, useClusterSummaries } from "./clusterSummaryFeed";
+import type { LiveStreamViewState } from "./liveStreamFeed";
 
 describe("useClusterSummaries", () => {
   afterEach(() => vi.restoreAllMocks());
@@ -56,6 +57,75 @@ describe("useClusterSummaries", () => {
     const rendered = renderHook(() => useClusterSummaries([]));
     expect(rendered.result.current).toEqual({});
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("projects resource.delta and live.summary facts without inventing node usage", () => {
+    const baseline = {
+      "cluster-a": {
+        status: "ready" as const,
+        health: null,
+        cpuPct: 30,
+        memPct: 40,
+        podsRunning: 9,
+        podsTotal: null,
+        nodesReady: 1,
+        nodesTotal: 2,
+        openIncidents: null,
+        nodes: [
+          { name: "worker-a", ready: true, health: "healthy", cpuPct: 20, memPct: null, podsRunning: 5, podsCapacity: 20, restartsRecent: 0, conditions: [] },
+          { name: "worker-b", ready: false, health: "warning", cpuPct: 40, memPct: 40, podsRunning: 4, podsCapacity: 20, restartsRecent: 1, conditions: [] },
+        ],
+      },
+    };
+    const live: LiveStreamViewState = {
+      status: "connected",
+      observed: true,
+      stale: false,
+      updatedAt: 1,
+      resources: {
+        "cluster-a/shop/pod/checkout-0": {
+          phase: "Running",
+          node: "worker-a",
+          // Pod request ratios must not become node/dashboard utilization.
+          cpu_request_pct: 99,
+          mem_request_pct: 88,
+        },
+        "cluster-a/shop/pod/checkout-1": { phase: "Pending", node: "worker-a" },
+      },
+      summaries: {
+        "cluster-a": {
+          cluster_id: "cluster-a",
+          window_ms: 1_000,
+          pods_ready: 1,
+          pods_total: 2,
+          restart_delta: 3,
+          rollout_phase: "progressing",
+          hot_pods: [],
+        },
+      },
+    };
+
+    const result = applyLiveClusterSummaries(baseline, ["cluster-a"], live)["cluster-a"]!;
+
+    expect(result).toMatchObject({
+      cpuPct: 30,
+      memPct: 40,
+      podsRunning: 1,
+      podsTotal: 2,
+      restartDelta: 3,
+      stale: false,
+    });
+    expect(result.nodes).toEqual([
+      expect.objectContaining({ name: "worker-a", cpuPct: 20, memPct: null, podsRunning: 1 }),
+      expect.objectContaining({ name: "worker-b", cpuPct: 40, memPct: 40, podsRunning: 0 }),
+    ]);
+
+    const disconnected = applyLiveClusterSummaries(baseline, ["cluster-a"], {
+      ...live,
+      status: "disconnected",
+      stale: true,
+    })["cluster-a"]!;
+    expect(disconnected).toMatchObject({ podsRunning: 1, podsTotal: 2, stale: true });
   });
 });
 

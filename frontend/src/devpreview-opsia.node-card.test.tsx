@@ -1,9 +1,15 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { NodeCard, NodePodSlotGrid, NodeSkeleton, nodeCardColumnSpan } from "./devpreview-opsia";
+import {
+  AnimatedPercentageValue,
+  NodeCard,
+  NodePodSlotGrid,
+  NodeSkeleton,
+  nodeCardColumnSpan,
+} from "./devpreview-opsia";
 import type { InvNode, InvPod } from "./devpreview/inventoryTopologyFeed";
 
 describe("NodeCard observed health details", () => {
@@ -62,6 +68,49 @@ describe("NodeCard observed health details", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /worker-warning/u }));
     expect(onOpen).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("NodeCard metric interpolation", () => {
+  it("paints the first real sample directly, then interpolates from the previous sample at at most 60fps", () => {
+    let now = 100;
+    let nextFrame = 1;
+    const frames: FrameRequestCallback[] = [];
+    vi.spyOn(performance, "now").mockImplementation(() => now);
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      frames.push(callback);
+      return nextFrame++;
+    });
+    vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => undefined);
+
+    const rendered = render(<AnimatedPercentageValue reducedMotion={false} value={20} />);
+    expect(rendered.container.textContent).toBe("20%");
+    expect(frames).toHaveLength(0);
+
+    rendered.rerender(<AnimatedPercentageValue reducedMotion={false} value={80} />);
+    expect(rendered.container.textContent).toBe("20%");
+    expect(frames).toHaveLength(1);
+
+    act(() => {
+      now = 240;
+      frames.shift()?.(now);
+    });
+    const intermediate = Number.parseFloat(rendered.container.textContent ?? "NaN");
+    expect(intermediate).toBeGreaterThan(20);
+    expect(intermediate).toBeLessThan(80);
+
+    act(() => {
+      // A 120 Hz callback arrives inside the 60 Hz paint budget and is skipped.
+      now = 248;
+      frames.shift()?.(now);
+    });
+    expect(Number.parseFloat(rendered.container.textContent ?? "NaN")).toBe(intermediate);
+
+    act(() => {
+      now = 380;
+      frames.shift()?.(now);
+    });
+    expect(rendered.container.textContent).toBe("80%");
   });
 });
 

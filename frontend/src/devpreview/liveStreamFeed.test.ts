@@ -1,9 +1,14 @@
-import { describe, expect, it, vi } from "vitest";
+// @vitest-environment jsdom
+
+import { act, renderHook, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { RafStreamCoalescerRuntime } from "../shared/streaming/rafStreamCoalescer";
 import {
   createBoundedRevalidator,
   createLiveStreamCoalescer,
+  resetLiveStreamViewChannelsForTests,
+  useLiveStreamView,
   type BoundedRevalidatorRuntime,
   type LiveDeltaMessage,
   type RealtimeClient,
@@ -11,6 +16,53 @@ import {
   type RealtimeConnectionState,
   type RealtimeMessage,
 } from "./liveStreamFeed";
+
+class FakeWebSocket extends EventTarget {
+  static readonly CONNECTING = 0;
+  static readonly OPEN = 1;
+  static readonly CLOSING = 2;
+  static readonly CLOSED = 3;
+  static readonly instances: FakeWebSocket[] = [];
+
+  readonly url: string;
+  readyState = FakeWebSocket.CONNECTING;
+
+  constructor(url: string | URL) {
+    super();
+    this.url = String(url);
+    FakeWebSocket.instances.push(this);
+  }
+
+  close(): void {
+    this.readyState = FakeWebSocket.CLOSED;
+    this.dispatchEvent(new Event("close"));
+  }
+
+  open(): void {
+    this.readyState = FakeWebSocket.OPEN;
+    this.dispatchEvent(new Event("open"));
+  }
+
+  receive(message: RealtimeMessage): void {
+    this.dispatchEvent(new MessageEvent("message", { data: JSON.stringify(message) }));
+  }
+
+  disconnect(): void {
+    this.readyState = FakeWebSocket.CLOSED;
+    this.dispatchEvent(new Event("close"));
+  }
+}
+
+beforeEach(() => {
+  FakeWebSocket.instances.length = 0;
+  vi.stubGlobal("WebSocket", FakeWebSocket);
+});
+
+afterEach(() => {
+  resetLiveStreamViewChannelsForTests();
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
 
 // 최소 fake rAF/timer runtime — 프레임 경계와 시간을 수동으로 구동한다.
 class FakeRuntime implements RafStreamCoalescerRuntime {
@@ -42,7 +94,7 @@ function mockConnect() {
   return { connect, fire: (m: RealtimeMessage) => onMessage?.(m), state: (s: RealtimeConnectionState) => onStateChange?.(s), client };
 }
 
-const HELLO = { type: "hello", protocol: {}, stream_policy: { revision: 1, max_frames_per_second: 60, hidden_tab: "coalesce", max_pending_messages: 100_000 } } as unknown as RealtimeMessage;
+const HELLO = { type: "hello", protocol: "realtime.v1", stream_policy: { revision: 1, max_frames_per_second: 60, hidden_tab: "coalesce", max_pending_messages: 100_000 } } as RealtimeMessage;
 const delta = (seq: number): RealtimeMessage => ({ type: "resource.delta", seq, op: "replace", key: `k${seq}`, value: { seq } } as unknown as RealtimeMessage);
 const snapshot = (seq: number): RealtimeMessage => ({ type: "snapshot", seq, state: { baseline: seq } } as unknown as RealtimeMessage);
 
@@ -181,5 +233,81 @@ describe("createLiveStreamCoalescer", () => {
     hidden = false; visListener?.(); // 복귀 → 재연결(resync)
     expect(connectSpy).toHaveBeenCalledTimes(2);
     handle.stop();
+  });
+});
+
+describe("useLiveStreamView", () => {
+  it("shares one socket, applies live frames directly, and retains stale last-known-good data", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    const subscription = { workspaceId: "default", clusterId: "cluster-a" };
+    const first = renderHook(() => useLiveStreamView(subscription));
+    const second = renderHook(() => useLiveStreamView(subscription));
+
+    expect(FakeWebSocket.instances).toHaveLength(1);
+    const socket = FakeWebSocket.instances[0]!;
+    expect(socket.url).toContain("cluster_id=cluster-a");
+
+    act(() => {
+      socket.open();
+      socket.receive(HELLO);
+      socket.receive({
+        type: "snapshot",
+        seq: 1,
+        state: {
+          clusters: {},
+          resources: {
+            "cluster-a/shop/pod/checkout-0": {
+              phase: "Running",
+              cpu_mcores: 120,
+              node: "worker-a",
+            },
+          },
+        },
+      });
+    });
+
+    await waitFor(() => expect(first.result.current.status).toBe("connected"));
+    expect(second.result.current.resources["cluster-a/shop/pod/checkout-0"])
+      .toMatchObject({ cpu_mcores: 120 });
+
+    act(() => {
+      socket.receive({
+        type: "resource.delta",
+        seq: 2,
+        op: "replace",
+        key: "cluster-a/shop/pod/checkout-0",
+        value: { phase: "Running", cpu_mcores: 240, node: "worker-a" },
+      });
+      socket.receive({
+        type: "live.summary",
+        seq: 3,
+        cluster_id: "cluster-a",
+        summary: {
+          cluster_id: "cluster-a",
+          window_ms: 1_000,
+          pods_ready: 1,
+          pods_total: 1,
+          restart_delta: 0,
+          rollout_phase: "idle",
+          hot_pods: [],
+        },
+      });
+    });
+
+    await waitFor(() => expect(
+      first.result.current.resources["cluster-a/shop/pod/checkout-0"],
+    ).toMatchObject({ cpu_mcores: 240 }));
+    expect(first.result.current.summaries["cluster-a"]?.pods_total).toBe(1);
+    expect(fetchSpy).not.toHaveBeenCalled();
+
+    act(() => socket.disconnect());
+    await waitFor(() => expect(first.result.current.stale).toBe(true));
+    expect(first.result.current.resources["cluster-a/shop/pod/checkout-0"])
+      .toMatchObject({ cpu_mcores: 240 });
+    expect(second.result.current.resources["cluster-a/shop/pod/checkout-0"])
+      .toMatchObject({ cpu_mcores: 240 });
+
+    first.unmount();
+    second.unmount();
   });
 });
