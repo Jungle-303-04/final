@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { listInventoryResourcesByType } from "../api/inventory-query";
-import { getSharedInventorySummary } from "./inventorySummaryRequest";
+import { getSharedInventorySummary } from "./inventorySummaryFeed";
 
 // UI-PHASE2-001: typed live adapter for the 통합 리소스 37종 테이블.
 // Reads only `GET /api/clusters/{id}/inventory/resources?resource_type=` and

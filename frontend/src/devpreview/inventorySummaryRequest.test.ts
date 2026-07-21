@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   getSharedInventorySummary,
   resetInventorySummaryRequestsForTests,
-} from "./inventorySummaryRequest";
+} from "./inventorySummaryFeed";
 
 describe("getSharedInventorySummary", () => {
   afterEach(() => {
