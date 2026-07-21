@@ -29,6 +29,7 @@ import { useAlertEvents } from "./devpreview/alertsFeed";
 import { useRelationTopology } from "./devpreview/relationTopologyFeed";
 import { logout as logoutApi } from "./devpreview/sessionFeed";
 import { useInventoryResourcesAcrossClusters, useInventoryKindCounts, kindToResourceType } from "./devpreview/inventoryResourcesFeed";
+import { useWorkloadDetail } from "./devpreview/workloadDetailFeed";
 import { operationalMessageLabel, reasonLabel, statusLabel, isCriticalStatus } from "./devpreview/statusLabel";
 import { LiveResourceManifestEditor } from "./devpreview/resourceManifestEditor";
 import { podsForNode, useClusterTopology } from "./devpreview/inventoryTopologyFeed";
@@ -409,6 +410,15 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
   const healthVal = row.health != null && String(row.health) ? statusLabel(String(row.health)) : "관측 안 됨";
   const clusterVal = row.cluster != null && String(row.cluster) ? String(row.cluster) : "관측 안 됨";
   const resourceId = row._key != null ? String(row._key) : "";
+  // M13: 워크로드 상세는 `GET /api/workloads/{kind}/{ns}/{name}`로 실제 replicas·health·
+  // labels·pods를 관측한다(이전 "계약 없음" 오판 교정). 미지원 kind/빈 스코프는 idle이라
+  // 기존 honest 일반 뷰가 그대로 유지된다.
+  const wd = useWorkloadDetail(
+    row.cluster != null && String(row.cluster) ? String(row.cluster) : null,
+    kind.id,
+    row.ns != null && String(row.ns) ? String(row.ns) : null,
+    name,
+  );
   // 드로어 폭 — 왼쪽 가장자리 드래그로 조절 (전체 화면일 땐 비활성)
   const [dw, setDw] = useState(560);
   const [dwDragging, setDwDragging] = useState(false);
@@ -493,8 +503,30 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
               {/* 상태 */}
               <Sec title="상태" icon={Activity}>
                 {isWorkload
-                  ? ([["목표 복제본", "관측 안 됨"], ["현재 복제본", "관측 안 됨"], ["준비됨", "관측 안 됨"], ["최신 상태", "관측 안 됨"], ["가용", "관측 안 됨"]] as const).map(([k, v]) => <KV key={k} k={k} v={v} mono />)
+                  ? (() => {
+                      // 관측된 값만 표기: loading은 "불러오는 중…", 값 없음/미관측은 "관측 안 됨".
+                      const rep = wd.replicas;
+                      const cell = (v: number | null | undefined) =>
+                        wd.status === "loading" ? "불러오는 중…" : v != null ? String(v) : "관측 안 됨";
+                      const wHealth = wd.status === "loading"
+                        ? "불러오는 중…"
+                        : wd.health != null && String(wd.health) ? statusLabel(String(wd.health)) : healthVal;
+                      return ([
+                        ["헬스", wHealth],
+                        ["클러스터", clusterVal],
+                        ["목표 복제본", cell(rep?.desired)],
+                        ["준비된 복제본", cell(rep?.ready)],
+                        ["가용 복제본", cell(rep?.available)],
+                        ["최신 복제본", cell(rep?.updated)],
+                        ["비가용 복제본", cell(rep?.unavailable)],
+                      ] as const).map(([k, v]) => (
+                        <KV key={k} k={k} v={v} mono tone={k === "헬스" && v !== "관측 안 됨" && v !== "불러오는 중…" ? (bad ? TINT.crit.fg : TINT.ok.fg) : undefined} />
+                      ));
+                    })()
                   : ([["상태", phase], ["헬스", healthVal], ["클러스터", clusterVal], ["노드", "관측 안 됨"], ["파드 IP", "관측 안 됨"], ["호스트 IP", "관측 안 됨"], ["QoS 클래스", "관측 안 됨"], ["ServiceAccount", "관측 안 됨"]] as const).map(([k, v]) => <KV key={k} k={k} v={v} mono tone={k === "상태" ? (bad ? TINT.crit.fg : v === "관측 안 됨" ? undefined : TINT.ok.fg) : undefined} />)}
+                {isWorkload && wd.coverageAvailability === "partial" && (
+                  <div style={{ fontSize: TYPE.caption2, color: UI.ink3, marginTop: 8 }}>일부 범위만 관측된 부분 스냅샷입니다.</div>
+                )}
                 <div style={{ display: "flex", gap: 7, marginTop: 12 }}>
                   {isWorkload && <button onClick={onShowPods ? () => onShowPods(name) : undefined}
                     style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${UI.line}`, background: UI.card, borderRadius: 8, padding: "6px 11px", fontSize: TYPE.label2, fontWeight: 600, color: BLUE, cursor: "pointer" }}><Boxes size={12} />관리 중인 파드 보기</button>}
@@ -563,19 +595,50 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
                 </Sec>
               )}
 
-              {/* 관련 리소스 — 계약이 리소스 간 소유·참조 관계를 노출하지 않는다(합성 관계도 제거) */}
+              {/* 관련 리소스 — 워크로드는 관측된 관리 파드를 표시, 그 외 kind는 계약에 없어 honest 빈상태 */}
               <Sec title="관련 리소스" icon={Copy}>
-                <Empty>관측 안 됨 — 라이브 인벤토리 계약은 리소스 간 소유·참조 관계를 노출하지 않습니다.</Empty>
+                {wd.status === "idle" ? <Empty>관측 안 됨 — 라이브 인벤토리 계약은 리소스 간 소유·참조 관계를 노출하지 않습니다.</Empty>
+                  : wd.status === "loading" ? <Empty>불러오는 중…</Empty>
+                  : wd.status === "unavailable" ? <Empty>관리 파드를 관측하지 못했습니다.</Empty>
+                  : wd.pods.length === 0 ? <Empty>관측된 관리 파드가 없습니다.{wd.podsExcludedCount > 0 ? ` (수집 한도로 ${wd.podsExcludedCount}개 생략)` : ""}</Empty>
+                  : (<div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                      {wd.pods.map((p) => (
+                        <div key={`${p.namespace ?? ""}/${p.name}`} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, border: `1px solid ${UI.line2}`, background: UI.bg2, borderRadius: 8, padding: "7px 11px" }}>
+                          <span style={{ fontSize: TYPE.caption2, fontFamily: MONO, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</span>
+                          <span style={{ fontSize: TYPE.caption2, color: UI.ink3, flexShrink: 0 }}>{statusLabel(p.health)}</span>
+                        </div>
+                      ))}
+                      {wd.podsExcludedCount > 0 && <div style={{ fontSize: TYPE.caption2, color: UI.ink3 }}>수집 한도로 {wd.podsExcludedCount}개 생략됨</div>}
+                    </div>)}
               </Sec>
 
-              {/* 최근 이벤트 — 라이브 인벤토리는 이벤트 스트림을 노출하지 않는다(합성 이벤트 제거) */}
+              {/* 최근 이벤트(M16) — 워크로드는 관측 이벤트를 표시, 그 외 kind는 honest 빈상태 */}
               <Sec title="최근 이벤트" icon={Activity}>
-                <Empty>관측 안 됨 — 이 리소스의 이벤트 계약이 없습니다.</Empty>
+                {wd.status === "idle" ? <Empty>관측 안 됨 — 이 리소스의 이벤트 계약이 없습니다.</Empty>
+                  : wd.status === "loading" ? <Empty>불러오는 중…</Empty>
+                  : wd.status === "unavailable" ? <Empty>이벤트를 관측하지 못했습니다.</Empty>
+                  : wd.events.length === 0 ? <Empty>최근 관측된 이벤트가 없습니다.</Empty>
+                  : (<div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                      {wd.events.map((e, i) => (
+                        <div key={`${e.reason ?? "ev"}-${i}`} style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, border: `1px solid ${UI.line2}`, background: UI.bg2, borderRadius: 8, padding: "7px 11px" }}>
+                          <span style={{ fontSize: TYPE.caption2, color: UI.ink }}>{statusLabel(e.reason)}{e.type ? ` · ${statusLabel(e.type)}` : ""}{e.count != null && e.count > 1 ? ` ×${e.count}` : ""}</span>
+                          {e.lastAt && <span style={{ fontSize: TYPE.caption2, color: UI.ink3, flexShrink: 0 }}>{e.lastAt.replace("T", " ").slice(0, 16)}</span>}
+                        </div>
+                      ))}
+                    </div>)}
               </Sec>
 
-              {/* 레이블 / 어노테이션 / 메타데이터 — 레이블·어노테이션은 계약에 없다 */}
+              {/* 레이블(M13) — 워크로드는 관측 레이블을 표시, 그 외 kind는 계약에 없어 honest 빈상태 */}
               <Sec title="레이블">
-                <Empty>관측 안 됨 — 라이브 인벤토리 계약은 레이블을 노출하지 않습니다.</Empty>
+                {wd.status === "ready" && wd.labels.length > 0
+                  ? (<div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                      {wd.labels.map((l) => (
+                        <span key={l.key} style={{ fontSize: TYPE.micro, fontFamily: MONO, color: UI.ink2, border: `1px solid ${UI.line2}`, background: UI.bg2, borderRadius: 6, padding: "3px 7px" }}>{l.key}{l.value ? `=${l.value}` : ""}</span>
+                      ))}
+                    </div>)
+                  : wd.status === "ready" && wd.labels.length === 0 ? <Empty>관측된 레이블이 없습니다.</Empty>
+                  : wd.status === "loading" ? <Empty>불러오는 중…</Empty>
+                  : <Empty>관측 안 됨 — 라이브 인벤토리 계약은 레이블을 노출하지 않습니다.</Empty>}
               </Sec>
               <Sec title="어노테이션" defaultOpen={false}>
                 <Empty>관측 안 됨 — 라이브 인벤토리 계약은 어노테이션을 노출하지 않습니다.</Empty>
