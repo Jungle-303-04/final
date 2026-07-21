@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { getPhysicalTopology } from "../api/physical-topology";
 import type { PhysicalTopologyEndpoint } from "../api/physical-topology-schemas";
+import { useLiveClusterRevalidation } from "./liveStreamFeed";
 
 // UI-PHASE2-001: 물리 토폴로지(노드·파드) 전용 라이브 어댑터.
 // 정본 `GET /api/topology?view=physical&clusters=<exact-one>`만 읽는다.
@@ -286,6 +287,22 @@ function scheduleClusterRefresh(
 }
 
 /**
+ * 실시간 델타가 알려 준 한 클러스터만 다시 검증한다. 기존 화면 값은 React state에
+ * 남겨 두고 캐시/다음 예약만 무효화하므로 새 응답 전까지 빈 화면으로 바뀌지 않는다.
+ * 진행 중 요청은 중복하지 않고, 이후 스트림 신호 또는 60초 안전 폴링이 최신화를 잇는다.
+ */
+function invalidateClusterTopology(clusterId: string): void {
+  cache.delete(clusterId);
+  const channel = channels.get(clusterId);
+  if (channel === undefined) return;
+  if (channel.refreshTimer !== null) {
+    window.clearTimeout(channel.refreshTimer);
+    channel.refreshTimer = null;
+  }
+  loadClusterTopology(clusterId, channel);
+}
+
+/**
  * 여러 클러스터의 정본 물리 토폴로지를 동시에 읽는다. 모듈 캐시와 진행 중 요청을
  * 공유하므로 홈 카드와 노드 드릴이 같은 클러스터를 구독해도 네트워크 요청은 하나다.
  * 범위가 바뀌면 더 이상 구독자가 없는 요청만 abort한다.
@@ -296,15 +313,25 @@ export function useClusterTopologies(
   const key = Array.from(new Set(clusterIds)).sort().join("\u0000");
   const ids = useMemo(() => (key ? key.split("\u0000") : []), [key]);
   const [views, setViews] = useState<Record<string, ClusterTopologyView>>(() => initialViews(ids));
+  // 실시간 재검증: **단일 cluster 스코프(드릴)** 에서만 canonical WS를 구독한다. 다중 스코프
+  // (홈)는 cluster마다 WS를 열거나 모든 cluster를 매 delta마다 재조회하지 않도록 구독하지
+  // 않는다(60Hz REST 방지). WS delta는 5초 bounded gate로 재검증 key가 되어 그 cluster만
+  // 무효화한다. WS 미가용 시 기존 채널의 60초 안전 폴링이 계속 동작한다.
+  const liveClusterId = ids.length === 1 ? ids[0] : null;
+  const liveRevalidation = useLiveClusterRevalidation(liveClusterId);
 
   useEffect(() => {
+    // 실시간 신호가 있을 때 단일 cluster만 재검증한다. 직전 view는 응답 전까지 유지된다.
+    if (liveRevalidation > 0 && liveClusterId !== null) {
+      invalidateClusterTopology(liveClusterId);
+    }
     const unsubscribes = ids.map((id) => subscribeClusterTopology(id, (view) => {
       setViews((previous) => previous[id] === view
         ? previous
         : { ...previous, [id]: view });
     }));
     return () => unsubscribes.forEach((unsubscribe) => unsubscribe());
-  }, [ids]);
+  }, [ids, liveRevalidation, liveClusterId]);
 
   return Object.fromEntries(ids.map((id) => [
     id,
