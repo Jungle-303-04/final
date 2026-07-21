@@ -355,12 +355,12 @@ function RcaSection({ title, children }: { title: string; children: React.ReactN
     </div>
   );
 }
-export function IssueDetail({ name, symptom, cluster, svc, ns, onClose, onOpenRef, onAskAi, onRecovered: _onRecovered, correlationId, status, severity, rootCause, confidence, supportingEvidence, missingEvidence, situationSummary, recommendedActionSummary, evidenceSummary, evidenceBundleSummary, topInset = 0, leftInset = 0 }: {
+export function IssueDetail({ name, symptom, cluster, svc, ns, onClose, onOpenRef, onAskAi, onRecovered: _onRecovered, correlationId, status, severity, rootCause, confidence, supportingEvidence, missingEvidence, situationSummary, recommendedActionSummary, evidenceSummary, evidenceBundleSummary, topInset = 0, leftInset = 0, rightInset = 0 }: {
   name: string; symptom: string; cluster: string; svc: string; ns: string; onClose: () => void; onOpenRef: (kind: string, n: string) => void; onAskAi: () => void; onRecovered?: (svc: string) => void;
   correlationId?: string; status?: string; severity?: "critical" | "warning" | null;
   rootCause?: string | null; confidence?: number | null; supportingEvidence?: string[]; missingEvidence?: string[];
   situationSummary?: string | null; recommendedActionSummary?: string | null; evidenceSummary?: string | null; evidenceBundleSummary?: string | null;
-  topInset?: number; leftInset?: number;
+  topInset?: number; leftInset?: number; rightInset?: number;
 }) {
   // 복구 후보는 실 계약(GET /api/rca/recovery-plans/by-correlation)에서만. 상관관계
   // id가 없으면(예: 지도 파생 진입) idle로 두고 관측 안 됨을 정직하게 표시한다.
@@ -379,10 +379,10 @@ export function IssueDetail({ name, symptom, cluster, svc, ns, onClose, onOpenRe
     <>
       {/* 스크림 — 사이드바 밖 클릭 시 닫기 */}
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: DUR.fade }}
-        onClick={onClose} style={{ position: "fixed", top: topInset, left: leftInset, right: 0, bottom: 0, background: inkA(0.22), zIndex: 55 }} />
+        onClick={onClose} style={{ position: "fixed", top: topInset, left: leftInset, right: rightInset, bottom: 0, background: inkA(0.22), zIndex: 55 }} />
       {/* RCA 보고서 — 우측 사이드바(드로어). 리소스 상세 시트(DetailOverlay)와 폭·레이아웃 통일(560px) */}
       <motion.div initial={{ x: 580 }} animate={{ x: 0 }} exit={{ x: 580 }} transition={{ type: "spring", bounce: 0.06, visualDuration: 0.34 }}
-        style={{ position: "fixed", top: topInset, right: 0, bottom: 0, width: 560, maxWidth: `calc(100vw / ${PRESENT_SCALE} - ${leftInset}px)`, background: UI.card, borderLeft: `1px solid ${UI.line}`, boxShadow: `-24px 0 60px -30px ${inkA(0.3)}`, zIndex: 56, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+        style={{ position: "fixed", top: topInset, right: rightInset, bottom: 0, width: 560, maxWidth: `calc(100vw / ${PRESENT_SCALE} - ${leftInset + rightInset}px)`, background: UI.card, borderLeft: `1px solid ${UI.line}`, boxShadow: `-24px 0 60px -30px ${inkA(0.3)}`, zIndex: 56, display: "flex", flexDirection: "column", overflow: "hidden", transition: "right .28s cubic-bezier(.32,.72,0,1), max-width .28s cubic-bezier(.32,.72,0,1)" }}>
           {/* 헤더 */}
           <div style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "18px 20px", borderBottom: `1px solid ${UI.line}` }}>
             <span style={{ width: 38, height: 38, borderRadius: 11, background: critA(0.1), display: "grid", placeItems: "center", flexShrink: 0 }}><AlertTriangle size={19} style={{ color: TINT.crit.fg }} /></span>

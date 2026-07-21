@@ -1819,7 +1819,7 @@ function App() {
           <motion.div key="ai" initial={{ x: aiW + 30 }} animate={{ x: 0 }} exit={{ x: aiW + 30 }} transition={{ type: "spring", bounce: 0.06, visualDuration: 0.34 }}
             style={{ position: "fixed", top: topH, right: 0, bottom: 0, width: aiW, zIndex: 72, display: "flex", boxShadow: `-28px 0 70px -32px ${inkA(0.3)}` }}>
             <div role="separator" aria-label="AI 패널 폭 조절" aria-orientation="vertical" onPointerDown={onAiHandleDown} title="드래그해서 폭 조절"
-              style={{ width: 5, flexShrink: 0, cursor: "col-resize", background: aiDragging ? blueA(0.35) : "transparent", transition: "background .15s" }} />
+              style={{ width: 1, flexShrink: 0, cursor: "col-resize", background: aiDragging ? blueA(0.35) : UI.line, transition: "background .15s" }} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <AiPanel embedded onClose={() => setAiOpen(false)} contextView={surface === "connect" ? "연결 설정" : surface === "home" ? "홈" : surface === "deploy" ? "배포" : surface === "issues" ? "이슈" : surface === "timeline" ? "타임라인" : surface === "checks" ? "점검" : surface === "cost" ? "비용" : surface === "alerts" ? "알림" : surface === "ai" ? "AI 대화" : surface === "settings" ? "설정" : resView === "flow" ? "트래픽" : resView === "list" ? "쿠버네티스 리소스" : "인프라 지도"} contextScope={scope.cluster ?? "전체 클러스터"} />
             </div>
@@ -1860,7 +1860,7 @@ function App() {
         {rcaIncident && <IssueDetail key={rcaIncident.name} {...rcaIncident} topInset={topH} leftInset={navCollapsed ? 60 : 208}
           onClose={() => setRcaIncident(null)}
           onOpenRef={(k, n) => { setRcaIncident(null); openRef(k, n); }}
-          onAskAi={() => { setRcaIncident(null); setAiOpen(true); }} />}
+          onAskAi={() => { setAiOpen(true); }} rightInset={aiOpen ? aiW : 0} />}
       </AnimatePresence>
 
       {/* 작업 토스트 — 우측 상단 스택 */}
