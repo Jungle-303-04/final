@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -80,33 +80,21 @@ beforeEach(() => {
 
 async function reachInstallStep(user: ReturnType<typeof userEvent.setup>) {
   render(<ConnectWizard embedded initialView="cluster" />);
-  expect(screen.queryByRole("button", { name: "등록 단계로" })).toBeNull();
-
-  await user.type(screen.getByRole("textbox", { name: "EKS Cluster Name" }), "demo-game-server");
   await user.click(screen.getByRole("button", { name: "등록 단계로" }));
   await user.click(await screen.findByRole("button", { name: "사전검증 실행" }));
 }
 
 describe("devpreview AWS cluster wizard", () => {
-  it("blocks the next step until region, EKS name, and context alias are all present", async () => {
-    const user = userEvent.setup();
+  it("keeps AWS authentication and provider details out of the browser form", () => {
     render(<ConnectWizard embedded initialView="cluster" />);
 
-    const region = screen.getByRole("textbox", { name: "AWS Region" });
-    const clusterName = screen.getByRole("textbox", { name: "EKS Cluster Name" });
-    const contextAlias = screen.getByRole("textbox", { name: "Context Alias" });
-    expect(screen.queryByRole("button", { name: "등록 단계로" })).toBeNull();
-
-    await user.type(clusterName, "demo-game-server");
+    expect(screen.queryByRole("textbox", { name: "AWS Region" })).toBeNull();
+    expect(screen.queryByRole("textbox", { name: "EKS Cluster Name" })).toBeNull();
+    expect(screen.queryByRole("textbox", { name: "Context Alias" })).toBeNull();
     expect(screen.getByRole("button", { name: "등록 단계로" })).toBeTruthy();
-    await user.clear(region);
-    await waitFor(() => expect(screen.queryByRole("button", { name: "등록 단계로" })).toBeNull());
-    await user.type(region, "ap-northeast-2");
-    await user.clear(contextAlias);
-    await waitFor(() => expect(screen.queryByRole("button", { name: "등록 단계로" })).toBeNull());
   });
 
-  it("sends identical complete AWS fields to preflight and registration", async () => {
+  it("sends the same cluster selection to preflight and registration", async () => {
     const user = userEvent.setup();
     await reachInstallStep(user);
 
@@ -118,11 +106,7 @@ describe("devpreview AWS cluster wizard", () => {
       deployProvider: "manual-manifest",
       name: "game-server",
       environment: "prod",
-      providerConfig: {
-        region: "ap-northeast-2",
-        eks_cluster_name: "demo-game-server",
-        context_alias: "game-server",
-      },
+      providerConfig: {},
     };
     expect(preflightClusterTarget).toHaveBeenCalledWith(expectedFields, expect.any(AbortSignal));
     expect(registerClusterTarget).toHaveBeenCalledWith(expectedFields, expect.any(AbortSignal));

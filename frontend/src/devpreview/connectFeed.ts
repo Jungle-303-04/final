@@ -224,6 +224,17 @@ function slugId(name: string): string {
   return name.trim().toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "");
 }
 
+function normalizedProviderConfig(fields: ClusterTargetFields): Record<string, unknown> {
+  if (fields.cloudProvider !== "eks") return fields.providerConfig;
+  const clusterName = fields.name.trim();
+  return {
+    region: "ap-northeast-2",
+    eks_cluster_name: clusterName,
+    context_alias: slugId(clusterName),
+    ...fields.providerConfig,
+  };
+}
+
 function baseSelection(fields: ClusterTargetFields) {
   return {
     clusterRole: "target" as const,
@@ -239,7 +250,7 @@ function baseSelection(fields: ClusterTargetFields) {
     kubeContext: null,
     cloudProvider: fields.cloudProvider,
     deployProvider: fields.deployProvider,
-    providerConfig: fields.providerConfig,
+    providerConfig: normalizedProviderConfig(fields),
   };
 }
 

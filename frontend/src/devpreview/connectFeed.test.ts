@@ -33,6 +33,14 @@ const AWS_FIELDS: ClusterTargetFields = {
   },
 };
 
+const AWS_DEFAULTED_FIELDS: ClusterTargetFields = {
+  cloudProvider: "eks",
+  deployProvider: "manual-manifest",
+  name: "game-server",
+  environment: "prod",
+  providerConfig: {},
+};
+
 describe("devpreview cluster registration adapter", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -67,5 +75,20 @@ describe("devpreview cluster registration adapter", () => {
     const registerInput = vi.mocked(registerTarget).mock.calls[0]?.[0];
     expect(preflightInput?.clusterId).toBe("game-server-apne2");
     expect(registerInput?.clusterId).toBe(preflightInput?.clusterId);
+  });
+
+  it("derives the terminal bootstrap fields without asking for AWS credentials in the browser", () => {
+    void preflightClusterTarget(AWS_DEFAULTED_FIELDS);
+    void registerClusterTarget(AWS_DEFAULTED_FIELDS);
+
+    const expectedProviderConfig = {
+      region: "ap-northeast-2",
+      eks_cluster_name: "game-server",
+      context_alias: "game-server",
+    };
+    expect(vi.mocked(preflightTargetRegistration).mock.calls[0]?.[0].providerConfig)
+      .toEqual(expectedProviderConfig);
+    expect(vi.mocked(registerTarget).mock.calls[0]?.[0].providerConfig)
+      .toEqual(expectedProviderConfig);
   });
 });

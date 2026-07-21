@@ -342,9 +342,7 @@ function PlatformAvailability({ providers, cloud }: { providers: ClusterProvider
 }
 
 function ClusterInfoStep({
-  providers, name, setName, platform, setPlatform, env, setEnv,
-  awsRegion, setAwsRegion, eksClusterName, setEksClusterName,
-  contextAlias, setContextAlias, onNext,
+  providers, name, setName, platform, setPlatform, env, setEnv, onNext,
 }: {
   providers: ClusterProvidersView;
   name: string;
@@ -353,12 +351,6 @@ function ClusterInfoStep({
   setPlatform: (v: PlatformId) => void;
   env: string;
   setEnv: (v: string) => void;
-  awsRegion: string;
-  setAwsRegion: (v: string) => void;
-  eksClusterName: string;
-  setEksClusterName: (v: string) => void;
-  contextAlias: string;
-  setContextAlias: (v: string) => void;
   onNext: () => void;
 }) {
   const cloudFor = (id: PlatformId) => PLATFORM_CLOUD_PROVIDER[id] ?? "";
@@ -409,29 +401,6 @@ function ClusterInfoStep({
           <input autoFocus value={name} onChange={(e) => setName(e.currentTarget.value)} placeholder="game-server-apne2" className="w-full bg-transparent font-mono text-[14px] c-ink outline-none placeholder:font-sans placeholder:c-3" />
         </div>
       </div>
-      {platform === "aws" && (
-        <div className="grid gap-3 rounded-[14px] border border-[var(--line)] bg-[var(--soft)] p-3.5">
-          <div>
-            <div className="text-[12.5px] font-semibold c-ink">AWS EKS 연결 정보</div>
-            <div className="mt-0.5 text-[11.5px] c-3">AWS 로그인 후 실제 EKS 이름과 리전을 입력합니다.</div>
-          </div>
-          <label className="grid gap-1.5 text-[11.5px] font-semibold c-2">
-            AWS Region
-            <input aria-label="AWS Region" value={awsRegion} onChange={(event) => setAwsRegion(event.currentTarget.value)}
-              placeholder="ap-northeast-2" className="field bg-surface px-3 py-2.5 font-mono text-[13px] c-ink outline-none" style={{ borderRadius: 10 }} />
-          </label>
-          <label className="grid gap-1.5 text-[11.5px] font-semibold c-2">
-            EKS Cluster Name
-            <input aria-label="EKS Cluster Name" value={eksClusterName} onChange={(event) => setEksClusterName(event.currentTarget.value)}
-              placeholder="실제 AWS EKS 클러스터 이름" className="field bg-surface px-3 py-2.5 font-mono text-[13px] c-ink outline-none" style={{ borderRadius: 10 }} />
-          </label>
-          <label className="grid gap-1.5 text-[11.5px] font-semibold c-2">
-            Context Alias
-            <input aria-label="Context Alias" value={contextAlias} onChange={(event) => setContextAlias(event.currentTarget.value)}
-              placeholder="game-server" className="field bg-surface px-3 py-2.5 font-mono text-[13px] c-ink outline-none" style={{ borderRadius: 10 }} />
-          </label>
-        </div>
-      )}
       <div className="grid gap-2.5">
         <div className="flex items-center gap-2 px-0.5"><span className="text-[12.5px] font-semibold c-2">환경</span><span className="text-[11.5px] c-3">이 클러스터의 용도 라벨</span></div>
         <div className="seg flex" style={{ borderRadius: 14, padding: 4 }}>
@@ -443,8 +412,7 @@ function ClusterInfoStep({
           ))}
         </div>
       </div>
-      <NextButton show={name.trim().length > 1 && !selectedDisabled
-        && (platform !== "aws" || (awsRegion.trim().length > 0 && eksClusterName.trim().length > 0 && contextAlias.trim().length > 0))}
+      <NextButton show={name.trim().length > 1 && !selectedDisabled}
         label="등록 단계로" onClick={onNext} />
     </motion.div>
   );
@@ -524,6 +492,7 @@ function ClusterInstallStep({ providers, platform, name, env, providerConfig, on
       <p className="text-[14px] leading-[1.55] c-2">
         <span className="c-ink font-medium">{cloud}</span> · <span className="font-mono">{deploy}</span> 대상으로 에이전트를 등록합니다.
         등록은 명시적 클릭에서만 실행되며(<span className="font-mono">apply=false</span>, 비파괴적), 설치 명령은 서버가 생성합니다.
+        {platform === "aws" && <> AWS CLI 로그인 권한이 있는 터미널에서 생성된 명령을 실행해야 합니다.</>}
       </p>
 
       {/* 1단계: 사전검증 */}
@@ -634,18 +603,11 @@ function ClusterWizard({ providers, onClose, onComplete }: { providers: ClusterP
   const [name, setName] = useState("game-server");
   const [platform, setPlatform] = useState<PlatformId>("aws");
   const [env, setEnv] = useState("prod");
-  const [awsRegion, setAwsRegion] = useState("ap-northeast-2");
-  const [eksClusterName, setEksClusterName] = useState("");
-  const [contextAlias, setContextAlias] = useState("game-server");
   const [connection, setConnection] = useState<ConnectionStatusView | null>(null);
-  const providerConfig = platform === "aws"
-    ? { region: awsRegion.trim(), eks_cluster_name: eksClusterName.trim(), context_alias: contextAlias.trim() }
-    : {};
   const el = {
     0: <ClusterInfoStep key="c0" providers={providers} name={name} setName={setName} platform={platform} setPlatform={setPlatform} env={env} setEnv={setEnv}
-      awsRegion={awsRegion} setAwsRegion={setAwsRegion} eksClusterName={eksClusterName} setEksClusterName={setEksClusterName}
-      contextAlias={contextAlias} setContextAlias={setContextAlias} onNext={() => setStep(1)} />,
-    1: <ClusterInstallStep key="c1" providers={providers} platform={platform} name={name} env={env} providerConfig={providerConfig}
+      onNext={() => setStep(1)} />,
+    1: <ClusterInstallStep key="c1" providers={providers} platform={platform} name={name} env={env} providerConfig={{}}
       onBack={() => setStep(0)} onConnected={(info) => { setConnection(info); setStep(2); }} />,
     2: connection ? <ClusterDoneStep key="c2" name={name} env={env} connection={connection} onDone={() => onComplete(name)} /> : null,
   }[step];
