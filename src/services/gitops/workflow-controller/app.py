@@ -114,9 +114,9 @@ def application_name_hint(payload: JsonObject) -> str:
     return ""
 
 
-def gitops_payload(evt: EventBody, app_name: str | None = None) -> JsonObject:
+def gitops_payload(evt: EventBody) -> JsonObject:
     payload = evt.to_body()
-    name = app_name or application_name_hint(payload)
+    name = application_name_hint(payload)
     if name:
         payload["name"] = name
     return normalize_payload(payload)
@@ -129,17 +129,6 @@ def diff_payload(evt: DesiredDesiredDiffDetectedBody | DiffAnalyzedBody) -> Json
     if resource_name:
         payload["name"] = resource_name
     return normalize_payload(payload)
-
-
-def rendered_application_name(evt: ManifestRenderedBody) -> str | None:
-    """Application 이름 후보는 workload manifest에서만 가져옴.
-
-    한 파일에 Service/ConfigMap이 같이 렌더될 때 부속 리소스 이름이 Application.name을
-    덮으면 콘솔에서 앱이 부속 ConfigMap 이름으로 보이는 문제 방지.
-    """
-    if evt.rendered_manifest.kind == "Deployment":
-        return evt.rendered_manifest.metadata.name
-    return None
 
 
 async def ensure_run(
@@ -513,12 +502,12 @@ async def on_git_changed(
 async def on_manifest_rendered(
     evt: ManifestRenderedBody, ctx: EventContext[WorkflowStore]
 ) -> AsyncIterator[EventBody]:
-    application_name = rendered_application_name(evt)
-    payload = gitops_payload(evt, application_name)
-    transition = ensure_run if application_name else transition_run
-    run = await transition(
+    # manifest.rendered is a resource-level event for a workflow that git.changed
+    # already created. A Kustomize source can emit several Deployments, so a
+    # Deployment's metadata.name must never be reused as the Application identity.
+    run = await transition_run(
         ctx,
-        payload,
+        gitops_payload(evt),
         WorkflowRunStatus.DIFFING.value,
         WorkflowStepName.DIFF.value,
         "manifest rendered; calculating desired diff",

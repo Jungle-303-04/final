@@ -3,7 +3,6 @@
 import { renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { PHYSICAL_TOPOLOGY_ENDPOINT } from "../api/physical-topology.testSupport";
 import {
   podsForNode,
   resetClusterTopologyCacheForTests,
@@ -11,6 +10,7 @@ import {
   useClusterTopologies,
   useClusterTopology,
 } from "./inventoryTopologyFeed";
+import { PHYSICAL_TOPOLOGY_ENDPOINT } from "./inventoryTopologyFeed.testSupport";
 
 describe("useClusterTopology", () => {
   afterEach(() => {

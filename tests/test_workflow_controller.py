@@ -353,7 +353,7 @@ def test_workflow_controller_fails_run_when_safe_pr_fails() -> None:
     assert outs[-1].reason == "safe pr creation failed"
 
 
-def test_workflow_controller_uses_deployment_name_as_application_name_on_render() -> None:
+def test_workflow_controller_does_not_upsert_application_from_deployment_manifest() -> None:
     workflow = load_service("gitops/workflow-controller")
     db = workflow_db()
 
@@ -374,9 +374,39 @@ def test_workflow_controller_uses_deployment_name_as_application_name_on_render(
     )
 
     assert subjects_of(outs) == ["workflow.step.recorded"]
-    upserts = [args[0] for name, args in db.calls if name == "upsert_application"]
-    assert upserts[0]["name"] == "checkout-api"
-    assert db.called("start_workflow_run")
+    assert not db.called("upsert_application")
+    assert not db.called("start_workflow_run")
+    assert db.called("update_workflow_run")
+
+
+def test_workflow_controller_keeps_one_application_identity_for_multiple_deployments() -> None:
+    workflow = load_service("gitops/workflow-controller")
+    db = workflow_db()
+
+    for deployment_name in ("checkout-api", "checkout-worker"):
+        outs = run_handler(
+            workflow.on_manifest_rendered,
+            ManifestRenderedBody(
+                rendered_manifest=RenderedManifest(
+                    api_version="apps/v1",
+                    kind="Deployment",
+                    metadata=RenderedMetadata(name=deployment_name, namespace="sandbox"),
+                    spec=RenderedSpec(replicas=2, image=f"{deployment_name}:new"),
+                    manifest={"apiVersion": "apps/v1", "kind": "Deployment"},
+                ),
+                application_id="app-1",
+                workflow_run_id="workflow-1",
+            ),
+            db,
+        )
+        assert subjects_of(outs) == ["workflow.step.recorded"]
+
+    transitions = [args[0] for name, args in db.calls if name == "update_workflow_run"]
+    assert len(transitions) == 2
+    assert {transition["application_id"] for transition in transitions} == {"app-1"}
+    assert {transition["workflow_run_id"] for transition in transitions} == {"workflow-1"}
+    assert not db.called("upsert_application")
+    assert not db.called("start_workflow_run")
 
 
 def test_workflow_controller_does_not_upsert_application_from_auxiliary_manifest() -> None:

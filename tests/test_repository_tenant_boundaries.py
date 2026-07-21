@@ -21,8 +21,12 @@ from sqlalchemy.dialects import postgresql
 
 from domains.applications.router import connect_application, upsert_application
 from domains.gitops.repository import RepoChangeRepository, derive_repository_id
+from domains.gitops.repository_discovery import RepositoryManifestValidationBatch
 from packages.contracts.gateway.requests import ApplicationConnectRequest, ApplicationUpsertRequest
-from packages.contracts.gateway.responses import RepositoryManifestValidationResponse
+from packages.contracts.gateway.responses import (
+    RepositoryManifestResource,
+    RepositoryManifestValidationResponse,
+)
 from packages.security.credentials import encrypt_credential
 
 
@@ -125,6 +129,11 @@ class _ExistingRepositoryRouteDb:
 
 
 class _ValidRepositoryDiscovery:
+    revision = "a" * 40
+
+    async def resolve_branch_revision(self, _repo_ref: str, _branch: str) -> str:
+        return self.revision
+
     async def validate_manifest(self, payload: Any) -> RepositoryManifestValidationResponse:
         return RepositoryManifestValidationResponse(
             repo_ref=str(payload.repo_ref),
@@ -134,9 +143,34 @@ class _ValidRepositoryDiscovery:
             status="valid",
             validation_mode="static-parse",
             resource_count=1,
-            resources=[],
+            resources=[
+                RepositoryManifestResource(
+                    api_version="apps/v1",
+                    kind="Deployment",
+                    namespace="default",
+                    name="tenant-boundary-fixture",
+                )
+            ],
             warnings=[],
             errors=[],
+        )
+
+    async def validate_manifests_at_revision(
+        self,
+        payloads: tuple[Any, ...],
+        *,
+        expected_revision: str,
+    ) -> RepositoryManifestValidationBatch:
+        assert expected_revision == self.revision
+        assert payloads
+        validations = tuple(
+            await asyncio.gather(*(self.validate_manifest(payload) for payload in payloads))
+        )
+        return RepositoryManifestValidationBatch(
+            repo_ref=str(payloads[0].repo_ref),
+            branch=str(payloads[0].branch),
+            revision=self.revision,
+            validations=validations,
         )
 
 
@@ -165,6 +199,9 @@ class _ConnectDb:
         self.repository = deepcopy(repository) if repository is not None else None
         self.credentials = deepcopy(credentials or {})
         self.registered_payload: dict[str, object] | None = None
+        self.workflow_runs: list[dict[str, object]] = []
+        self.workflow_steps: list[dict[str, object]] = []
+        self.manifest_artifacts: list[dict[str, object]] = []
 
     @contextmanager
     def unit_of_work(self):
@@ -257,11 +294,20 @@ class _ConnectDb:
     ) -> dict[str, object] | None:
         return None
 
-    def register_watch_target(self, _payload: dict[str, object]) -> None:
-        return None
+    def register_watch_target(self, payload: dict[str, object]) -> dict[str, object]:
+        return {**payload, "watch_target_id": "watch-tenant-boundary"}
 
-    def register_deployment_binding(self, _payload: dict[str, object]) -> None:
-        return None
+    def register_deployment_binding(self, payload: dict[str, object]) -> dict[str, object]:
+        return {**payload, "binding_id": "binding-tenant-boundary"}
+
+    def start_workflow_run(self, payload: dict[str, object]) -> None:
+        self.workflow_runs.append(dict(payload))
+
+    def record_workflow_step(self, payload: dict[str, object]) -> None:
+        self.workflow_steps.append(dict(payload))
+
+    def record_manifest_artifact(self, payload: dict[str, object]) -> None:
+        self.manifest_artifacts.append(dict(payload))
 
 
 def _attempt_existing_repository_create(db: _ExistingRepositoryRouteDb) -> HTTPException | None:

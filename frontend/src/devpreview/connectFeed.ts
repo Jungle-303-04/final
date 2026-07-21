@@ -7,6 +7,8 @@ import {
   getProviderClusterDiscovery,
   preflightTargetRegistration,
   registerTarget,
+  type TargetPreflightInput,
+  type TargetRegisterInput,
 } from "../api/cluster-registration";
 import type {
   ProviderCatalog,
@@ -262,12 +264,19 @@ export function preflightClusterTarget(
   fields: ClusterTargetFields,
   signal?: AbortSignal,
 ): Promise<TargetPreflightResponse> {
-  return preflightTargetRegistration({
+  return preflightTargetRegistration(buildClusterTargetPreflightInput(fields), signal);
+}
+
+/** Builds the complete immutable request used by both the UI and adapter tests. */
+export function buildClusterTargetPreflightInput(
+  fields: ClusterTargetFields,
+): TargetPreflightInput {
+  return {
     ...baseSelection(fields),
     clusterId: slugId(fields.name),
     name: fields.name,
     environment: fields.environment,
-  }, signal);
+  };
 }
 
 /**
@@ -280,7 +289,14 @@ export function registerClusterTarget(
   fields: ClusterTargetFields,
   signal?: AbortSignal,
 ): Promise<TargetInstallResponse> {
-  return registerTarget({
+  return registerTarget(buildClusterTargetRegisterInput(fields), signal);
+}
+
+/** Keeps registration identity and provider defaults identical to preflight. */
+export function buildClusterTargetRegisterInput(
+  fields: ClusterTargetFields,
+): TargetRegisterInput {
+  return {
     ...baseSelection(fields),
     // Keep the mutation bound to the exact identity that passed preflight.
     // Letting the server generate a suffixed id here would validate one target
@@ -288,7 +304,7 @@ export function registerClusterTarget(
     clusterId: slugId(fields.name),
     name: fields.name,
     environment: fields.environment,
-  }, signal);
+  };
 }
 
 /** Maps a wizard platform id to its live cluster-discovery cloud provider key. */

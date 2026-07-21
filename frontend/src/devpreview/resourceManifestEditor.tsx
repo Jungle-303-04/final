@@ -4,15 +4,14 @@ import {
   applyResourceManifestEdit,
   approveResourceManifestEdit,
   getResourceManifestSource,
+  manifestIdempotencyKey,
   previewResourceManifestEdit,
-} from "../api/resource-manifests";
-import type {
-  ResourceManifestApplyEndpoint,
-  ResourceManifestApproveEndpoint,
-  ResourceManifestPreviewEndpoint,
-  ResourceManifestSourceEndpoint,
-} from "../api/resource-manifests-schemas";
-import { isApiError } from "../api/client";
+  resourceManifestFailureText,
+  type ResourceManifestApplyEndpoint,
+  type ResourceManifestApproveEndpoint,
+  type ResourceManifestPreviewEndpoint,
+  type ResourceManifestSourceEndpoint,
+} from "./resourceManifestFeed";
 import { reasonLabel } from "./statusLabel";
 import { BLUE, HP, MONO, TINT, TYPE, UI, inkA } from "./theme";
 
@@ -49,7 +48,7 @@ export function LiveResourceManifestEditor({ resourceId }: { resourceId: string 
       setPhase("ready");
     } catch (cause) {
       if (next.signal.aborted) return;
-      setError(failureText(cause));
+      setError(resourceManifestFailureText(cause));
       setPhase("failed");
     }
   };
@@ -73,7 +72,7 @@ export function LiveResourceManifestEditor({ resourceId }: { resourceId: string 
       } catch (cause) {
         if (next.signal.aborted) return;
         setSource(null);
-        setError(failureText(cause));
+        setError(resourceManifestFailureText(cause));
         setPhase("failed");
       }
     })();
@@ -101,7 +100,7 @@ export function LiveResourceManifestEditor({ resourceId }: { resourceId: string 
       setPreview(await previewResourceManifestEdit(resourceId, editInput));
       setPhase("ready");
     } catch (cause) {
-      setError(failureText(cause));
+      setError(resourceManifestFailureText(cause));
       setPhase("failed");
     }
   };
@@ -118,7 +117,7 @@ export function LiveResourceManifestEditor({ resourceId }: { resourceId: string 
       }));
       setPhase("ready");
     } catch (cause) {
-      setError(failureText(cause));
+      setError(resourceManifestFailureText(cause));
       setPhase("failed");
     }
   };
@@ -140,7 +139,7 @@ export function LiveResourceManifestEditor({ resourceId }: { resourceId: string 
       }));
       setPhase("ready");
     } catch (cause) {
-      setError(failureText(cause));
+      setError(resourceManifestFailureText(cause));
       setPhase("failed");
     }
   };
@@ -248,14 +247,3 @@ function ActionButton({ primary = false, disabled, onClick, children }: { primar
 }
 
 const selectStyle: React.CSSProperties = { width: "100%", border: `1px solid ${UI.line}`, borderRadius: 9, padding: "8px 10px", background: UI.card, color: UI.ink, fontSize: TYPE.body };
-
-function manifestIdempotencyKey(resourceId: string, desiredSha256: string): string {
-  const safeResource = resourceId.replace(/[^A-Za-z0-9._:-]/g, "-").slice(-40);
-  // 동일 리소스·동일 desired SHA의 재시도는 같은 작업이므로 같은 키를 사용한다.
-  return `manifest-${safeResource}-${desiredSha256.slice(-16)}`;
-}
-
-function failureText(cause: unknown): string {
-  if (isApiError(cause)) return cause.detail ?? cause.code ?? `${cause.kind}${cause.status ? ` (${cause.status})` : ""}`;
-  return cause instanceof Error ? cause.message : "요청을 완료하지 못했습니다.";
-}

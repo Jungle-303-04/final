@@ -1,25 +1,12 @@
 // @vitest-environment jsdom
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 
 import {
-  preflightTargetRegistration,
-  registerTarget,
-} from "../api/cluster-registration";
-import {
-  preflightClusterTarget,
-  registerClusterTarget,
+  buildClusterTargetPreflightInput,
+  buildClusterTargetRegisterInput,
   type ClusterTargetFields,
 } from "./connectFeed";
-
-vi.mock("../api/cluster-registration", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../api/cluster-registration")>();
-  return {
-    ...actual,
-    preflightTargetRegistration: vi.fn(),
-    registerTarget: vi.fn(),
-  };
-});
 
 const AWS_FIELDS: ClusterTargetFields = {
   cloudProvider: "eks",
@@ -43,52 +30,40 @@ const AWS_DEFAULTED_FIELDS: ClusterTargetFields = {
 
 describe("devpreview cluster registration adapter", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     window.history.replaceState({}, "", "/devpreview-unified.html");
   });
 
   it("passes the complete AWS provider config through preflight and registration", () => {
-    void preflightClusterTarget(AWS_FIELDS);
-    void registerClusterTarget(AWS_FIELDS);
+    const preflightInput = buildClusterTargetPreflightInput(AWS_FIELDS);
+    const registerInput = buildClusterTargetRegisterInput(AWS_FIELDS);
 
-    expect(preflightTargetRegistration).toHaveBeenCalledWith(
-      expect.objectContaining({
-        clusterId: "game-server-apne2",
-        providerConfig: AWS_FIELDS.providerConfig,
-      }),
-      undefined,
-    );
-    expect(registerTarget).toHaveBeenCalledWith(
-      expect.objectContaining({
-        clusterId: "game-server-apne2",
-        providerConfig: AWS_FIELDS.providerConfig,
-      }),
-      undefined,
-    );
+    expect(preflightInput).toEqual(expect.objectContaining({
+      clusterId: "game-server-apne2",
+      providerConfig: AWS_FIELDS.providerConfig,
+    }));
+    expect(registerInput).toEqual(expect.objectContaining({
+      clusterId: "game-server-apne2",
+      providerConfig: AWS_FIELDS.providerConfig,
+    }));
   });
 
   it("uses the same normalized cluster identity for preflight and registration", () => {
-    void preflightClusterTarget(AWS_FIELDS);
-    void registerClusterTarget(AWS_FIELDS);
-
-    const preflightInput = vi.mocked(preflightTargetRegistration).mock.calls[0]?.[0];
-    const registerInput = vi.mocked(registerTarget).mock.calls[0]?.[0];
-    expect(preflightInput?.clusterId).toBe("game-server-apne2");
-    expect(registerInput?.clusterId).toBe(preflightInput?.clusterId);
+    const preflightInput = buildClusterTargetPreflightInput(AWS_FIELDS);
+    const registerInput = buildClusterTargetRegisterInput(AWS_FIELDS);
+    expect(preflightInput.clusterId).toBe("game-server-apne2");
+    expect(registerInput.clusterId).toBe(preflightInput.clusterId);
   });
 
   it("derives the terminal bootstrap fields without asking for AWS credentials in the browser", () => {
-    void preflightClusterTarget(AWS_DEFAULTED_FIELDS);
-    void registerClusterTarget(AWS_DEFAULTED_FIELDS);
+    const preflightInput = buildClusterTargetPreflightInput(AWS_DEFAULTED_FIELDS);
+    const registerInput = buildClusterTargetRegisterInput(AWS_DEFAULTED_FIELDS);
 
     const expectedProviderConfig = {
       region: "ap-northeast-2",
       eks_cluster_name: "game-server",
       context_alias: "game-server",
     };
-    expect(vi.mocked(preflightTargetRegistration).mock.calls[0]?.[0].providerConfig)
-      .toEqual(expectedProviderConfig);
-    expect(vi.mocked(registerTarget).mock.calls[0]?.[0].providerConfig)
-      .toEqual(expectedProviderConfig);
+    expect(preflightInput.providerConfig).toEqual(expectedProviderConfig);
+    expect(registerInput.providerConfig).toEqual(expectedProviderConfig);
   });
 });
