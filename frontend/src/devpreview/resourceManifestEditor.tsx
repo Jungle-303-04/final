@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 
-import { getCommandStatus } from "../api/metrics";
-import type { CommandStatus } from "../api/metrics-schemas";
 import {
   applyResourceManifestEdit,
   approveResourceManifestEdit,
+  getCommandStatus,
   getResourceManifestSource,
   manifestIdempotencyKey,
   previewResourceManifestEdit,
   resourceManifestFailureText,
+  type CommandStatus,
   type ResourceManifestApplyEndpoint,
   type ResourceManifestApproveEndpoint,
   type ResourceManifestPreviewEndpoint,

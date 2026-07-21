@@ -1,4 +1,6 @@
 import { isApiError } from "../api/client";
+import { getCommandStatus } from "../api/metrics";
+import type { CommandStatus } from "../api/metrics-schemas";
 import {
   applyResourceManifestEdit,
   approveResourceManifestEdit,
@@ -15,10 +17,12 @@ import type {
 export {
   applyResourceManifestEdit,
   approveResourceManifestEdit,
+  getCommandStatus,
   getResourceManifestSource,
   previewResourceManifestEdit,
 };
 export type {
+  CommandStatus,
   ResourceManifestApplyEndpoint,
   ResourceManifestApproveEndpoint,
   ResourceManifestPreviewEndpoint,
