@@ -798,7 +798,7 @@ function GlobalNav({ collapsed, setCollapsed, surface, onSurface }: {
 const W_DEFS: { id: string; title: string; info: string; span: 1 | 2 | 4 }[] = [
   // 4칸 그리드 스팬 설계 — 1행 [1+1+2] · 2행 [1+2+1] · 3행 [4]: 기본 배치에서 빈칸 0
   { id: "W2", title: "이슈", info: "장애 상태 파드에서 파생된 활성 이슈 상위 3건", span: 1 },
-  { id: "W3", title: "저장소 동기화", info: "Git 저장소 단위 Synced/OutOfSync — 앱 단위 현황은 배포 서피스", span: 1 },
+  { id: "W3", title: "저장소 동기화", info: "Git 저장소 단위 동기화 상태 — 앱 단위 현황은 배포 화면", span: 1 },
   { id: "W4", title: "활동 추이", info: "기간 내 배포·알림·장애 리소스 수의 흐름", span: 2 },
   { id: "W5", title: "네임스페이스 파드 분포", info: "파드 수 상위 네임스페이스 — 항목 클릭 시 리소스 목록으로 필터 이동", span: 1 },
   { id: "W6", title: "장애·주의 리소스", info: "지금 주의가 필요한 리소스 상위 5 — 행 클릭 시 상세", span: 2 },
@@ -966,7 +966,7 @@ function HomeSurface({ clusterMeta, incidentClusterIds, onDrillCluster, onConnec
         {(() => {
           const seg: React.CSSProperties = { display: "flex", alignItems: "center", gap: 5, fontSize: TYPE.label, fontWeight: 600, color: UI.ink2, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 999, padding: "5px 11px", whiteSpace: "nowrap" };
           const num: React.CSSProperties = { fontFamily: MONO, fontWeight: 700, color: UI.ink, fontVariantNumeric: "tabular-nums" };
-          // 실 관측 파생: 장애=RCA 이슈 큐, OutOfSync=애플리케이션 배송 상태. 노드/파드 세분은 계약 미노출이라 클러스터 카드에만.
+          // 실 관측 파생: 장애=RCA 이슈 큐, 동기화 필요=애플리케이션 배송 상태. 노드/파드 세분은 계약 미노출이라 클러스터 카드에만.
           const critCount = issues.status === "ready" ? issues.items.length : 0;
           const firstCrit = issues.items[0]?.clusterId ?? undefined;
           const outSyncCount = apps.status === "ready"
@@ -977,7 +977,7 @@ function HomeSurface({ clusterMeta, incidentClusterIds, onDrillCluster, onConnec
               <span style={seg}><Server size={11} style={{ color: UI.ink3 }} />클러스터 <b style={num}>{clusters.length}</b>{pendingCl.length > 0 && <span style={{ color: TINT.blue.fg }}>· 연결 중 {pendingCl.length}</span>}</span>
               {outSyncCount > 0 && (
                 <span style={{ ...seg, borderColor: TINT.warn.bd, background: TINT.warn.bg, color: TINT.warn.fg }}>
-                  <GithubIcon size={11} />OutOfSync <b style={{ ...num, color: TINT.warn.fg }}>{outSyncCount}</b>
+                  <GithubIcon size={11} />동기화 필요 <b style={{ ...num, color: TINT.warn.fg }}>{outSyncCount}</b>
                 </span>
               )}
               {critCount > 0 && (

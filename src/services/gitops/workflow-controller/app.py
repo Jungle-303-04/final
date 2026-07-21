@@ -379,6 +379,33 @@ async def git_changed_target_is_persisted(
     return application_matches and workflow_matches and binding_matches_application
 
 
+async def workflow_run_identity_is_persisted(
+    ctx: EventContext[WorkflowStore],
+    run: JsonObject,
+) -> bool:
+    """Accept follow-up workflow facts only for the exact stored run.
+
+    Safe PR creation is also used by the standalone manifest editor. Those events
+    intentionally have a workflow-shaped correlation id but no WorkflowRun row, so
+    projecting them as application-workflow steps would create orphan records and
+    needlessly contend on the workspace Timeline cursor.
+    """
+    workflow_run = await ctx.db.get_workflow_run(str(run["workflow_run_id"]))
+    if not isinstance(workflow_run, Mapping):
+        return False
+    expected = {
+        "workspace_id": str(run["workspace_id"]),
+        "workflow_run_id": str(run["workflow_run_id"]),
+        "application_id": str(run["application_id"]),
+        "binding_id": str(run["binding_id"]),
+        "environment": str(run["environment"]),
+    }
+    commit_sha = str(run.get("commit_sha", ""))
+    if commit_sha:
+        expected["commit_sha"] = commit_sha
+    return stored_identity_matches(workflow_run, expected)
+
+
 def stored_identity_matches(record: Mapping[str, object], expected: dict[str, str]) -> bool:
     """Require a complete stored identity rather than trusting an event field."""
     return all(str(record.get(field, "")) == value for field, value in expected.items())
@@ -716,9 +743,12 @@ async def on_diff_analyzed(
 async def on_safe_pr_created(
     evt: SafePrCreatedBody, ctx: EventContext[WorkflowStore]
 ) -> AsyncIterator[EventBody]:
+    run = gitops_payload(evt)
+    if not await workflow_run_identity_is_persisted(ctx, run):
+        return
     step = await record_step(
         ctx,
-        gitops_payload(evt),
+        run,
         WorkflowStepName.SAFE_PR.value,
         WorkflowStepStatus.SUCCEEDED.value,
         "safe PR created",

@@ -99,7 +99,7 @@ function ClusterOverview({ cl, meta, topology, onKind }: {
       <div style={{ minWidth: 0, flex: "1 1 340px", display: "flex", flexDirection: "column", gap: 3, fontFamily: MONO, fontSize: TYPE.caption, color: UI.ink2 }}>
         <span>{cl ? `${cl.provider.toUpperCase()} · Kubernetes ${cl.kubernetesVersion ?? "관측 안 됨"}` : "클러스터 관측 안 됨"}</span>
         <span style={{ color: UI.ink3 }}>
-          노드 {nodesReady}/{nodesTotal} Ready · 파드 {podsTotal} · 네임스페이스 {meta?.Namespace ?? cl?.namespaceCount ?? "—"}
+          노드 {nodesReady}/{nodesTotal} 준비 · 파드 {podsTotal} · 네임스페이스 {meta?.Namespace ?? cl?.namespaceCount ?? "—"}
           {topology?.status === "ready" && topology.partial
             ? ` · 일부 관측${omittedPods > 0 ? ` · ${omittedPods}개 미표시` : ""}`
             : ""}
@@ -160,14 +160,14 @@ function ClusterRow({ cl, summary, topology, onOpen }: {
           <span style={{ display: "block", fontSize: TYPE.caption2, color: UI.ink3, marginTop: 2, fontFamily: MONO }}>{cl.provider.toUpperCase()} · {cl.kubernetesVersion ?? "—"}</span>
         </span>
         {healthy
-          ? <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: TYPE.caption, fontWeight: 700, color: TINT.ok.fg, background: TINT.ok.bg, border: `1px solid ${TINT.ok.bd}`, borderRadius: 999, padding: "3px 9px", flexShrink: 0 }}><span className="pulsedot" style={{ width: 6, height: 6, borderRadius: 999, background: HP.ok }} />Active</span>
+          ? <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: TYPE.caption, fontWeight: 700, color: TINT.ok.fg, background: TINT.ok.bg, border: `1px solid ${TINT.ok.bd}`, borderRadius: 999, padding: "3px 9px", flexShrink: 0 }}><span className="pulsedot" style={{ width: 6, height: 6, borderRadius: 999, background: HP.ok }} />정상</span>
           : incidentsObserved
             ? <span style={{ fontSize: TYPE.caption, fontWeight: 700, color: UI.card, background: HP.crit, borderRadius: 999, padding: "3px 9px", fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>장애 {incidents}</span>
             : <span style={{ fontSize: TYPE.caption, fontWeight: 700, color: UI.ink2, background: UI.bg2, border: `1px solid ${UI.line}`, borderRadius: 999, padding: "3px 9px", flexShrink: 0 }}>{statusLabel(cl.connectionStage ?? cl.connectionStatus)}</span>}
       </div>
 
       <div style={{ display: "flex", gap: 14, fontSize: TYPE.label, color: UI.ink2, fontVariantNumeric: "tabular-nums", flexWrap: "wrap" }}>
-        <span>노드 <b style={{ fontFamily: MONO, color: UI.ink }}>{fmt(nodesReady)}/{fmt(nodesTotal)}</b> ready</span>
+        <span>노드 <b style={{ fontFamily: MONO, color: UI.ink }}>{fmt(nodesReady)}/{fmt(nodesTotal)}</b> 준비</span>
         <span>파드 <b style={{ fontFamily: MONO, color: UI.ink }}>{fmt(podCount)}</b>{incidents > 0 && <b style={{ color: TINT.crit.fg, fontFamily: MONO }}> · 장애 {incidents}</b>}</span>
         <span>네임스페이스 <b style={{ fontFamily: MONO, color: UI.ink }}>{cl.namespaceCount ?? "—"}</b></span>
         {topology?.status === "ready" && topology.partial && (

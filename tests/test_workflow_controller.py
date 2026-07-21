@@ -27,7 +27,7 @@ from domains.gitops.repository import (
     derive_watch_target_id,
     derive_workflow_run_id,
 )
-from domains.scm.events import SafePrFailedBody
+from domains.scm.events import SafePrCreatedBody, SafePrFailedBody
 from domains.timeline.repository import TimelineLedgerAppend
 from packages.config.constants import CommandStatus, Sandbox, Target
 from packages.contracts.gitops import DEFAULT_DEPLOYMENT_BINDING_ID, WorkflowMutation
@@ -351,6 +351,112 @@ def test_workflow_controller_fails_run_when_safe_pr_fails() -> None:
     assert db.called("update_workflow_run")
     assert outs[-1].workflow_run_id == "workflow-1"
     assert outs[-1].reason == "safe pr creation failed"
+
+
+def test_standalone_manifest_safe_pr_does_not_create_orphan_workflow_timeline() -> None:
+    workflow = load_service("gitops/workflow-controller")
+    db = workflow_db(get_workflow_run=None)
+
+    outs = run_handler(
+        workflow.on_safe_pr_created,
+        SafePrCreatedBody(
+            pr_url="https://github.com/project/repo/pull/2",
+            provider="github",
+            mode="github_rest",
+            workspace_id="workspace-1",
+            repository_id="repo-1",
+            binding_id="binding-1",
+            application_id="app-1",
+            workflow_run_id="workflow-manifest-edit-1",
+            environment="prod",
+            manifest_path="deploy/app.yaml",
+            repo_ref="project/repo",
+            base_branch="main",
+            commit_sha="abc123",
+        ),
+        db,
+    )
+
+    assert outs == []
+    assert db.called("get_workflow_run")
+    assert not db.called("record_workflow_step")
+    assert not db.called("append_timeline_event")
+
+
+def test_safe_pr_created_records_step_for_matching_persisted_workflow() -> None:
+    workflow = load_service("gitops/workflow-controller")
+    db = workflow_db(
+        get_workflow_run={
+            "workspace_id": "workspace-1",
+            "workflow_run_id": "workflow-1",
+            "application_id": "app-1",
+            "binding_id": "binding-1",
+            "environment": "prod",
+            "commit_sha": "abc123",
+        }
+    )
+
+    outs = run_handler(
+        workflow.on_safe_pr_created,
+        SafePrCreatedBody(
+            pr_url="https://github.com/project/repo/pull/2",
+            provider="github",
+            mode="github_rest",
+            workspace_id="workspace-1",
+            repository_id="repo-1",
+            binding_id="binding-1",
+            application_id="app-1",
+            workflow_run_id="workflow-1",
+            environment="prod",
+            manifest_path="deploy/app.yaml",
+            repo_ref="project/repo",
+            base_branch="main",
+            commit_sha="abc123",
+        ),
+        db,
+    )
+
+    assert subjects_of(outs) == ["workflow.step.recorded"]
+    assert db.called("record_workflow_step")
+    assert db.called("append_timeline_event")
+
+
+def test_safe_pr_created_rejects_mismatched_persisted_workflow_identity() -> None:
+    workflow = load_service("gitops/workflow-controller")
+    db = workflow_db(
+        get_workflow_run={
+            "workspace_id": "workspace-1",
+            "workflow_run_id": "workflow-1",
+            "application_id": "different-app",
+            "binding_id": "binding-1",
+            "environment": "prod",
+            "commit_sha": "abc123",
+        }
+    )
+
+    outs = run_handler(
+        workflow.on_safe_pr_created,
+        SafePrCreatedBody(
+            pr_url="https://github.com/project/repo/pull/2",
+            provider="github",
+            mode="github_rest",
+            workspace_id="workspace-1",
+            repository_id="repo-1",
+            binding_id="binding-1",
+            application_id="app-1",
+            workflow_run_id="workflow-1",
+            environment="prod",
+            manifest_path="deploy/app.yaml",
+            repo_ref="project/repo",
+            base_branch="main",
+            commit_sha="abc123",
+        ),
+        db,
+    )
+
+    assert outs == []
+    assert not db.called("record_workflow_step")
+    assert not db.called("append_timeline_event")
 
 
 def test_workflow_controller_does_not_upsert_application_from_deployment_manifest() -> None:

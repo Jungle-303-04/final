@@ -24,5 +24,10 @@ describe("devpreview display labels", () => {
   it("localizes known operational messages for Korean presentation mode", () => {
     expect(operationalMessageLabel("git change confirmed; rendering manifest")).toBe("Git 변경 확인 · 매니페스트 반영 중");
     expect(operationalMessageLabel("Pod readiness failure")).toBe("파드 준비 상태 실패");
+    expect(operationalMessageLabel("Readiness probe response failure")).toBe("준비 상태 확인 응답 실패");
+    expect(operationalMessageLabel("Validated 2 repository resources at f6ee1a672ce1; no cluster mutation")).toBe(
+      "저장소 리소스 2개 검증 · f6ee1a672ce1 · 클러스터 변경 없음",
+    );
+    expect(statusLabel("FailedScheduling")).toBe("스케줄링 실패");
   });
 });

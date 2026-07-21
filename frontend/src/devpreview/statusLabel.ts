@@ -23,6 +23,7 @@ const STATUS_KO: Record<string, string> = {
   error: "오류",
   failed: "실패",
   failure: "실패",
+  failedscheduling: "스케줄링 실패",
   unhealthy: "비정상",
   notready: "준비 안 됨",
   "not-ready": "준비 안 됨",
@@ -93,6 +94,7 @@ const REASON_KO: Record<string, string> = {
 const MESSAGE_KO: Record<string, string> = {
   "git change confirmed; rendering manifest": "Git 변경 확인 · 매니페스트 반영 중",
   "pod readiness failure": "파드 준비 상태 실패",
+  "readiness probe response failure": "준비 상태 확인 응답 실패",
 };
 
 /** 상태 토큰(단일 단어/스네이크)을 한글로. 매핑에 없으면 원문 유지. */
@@ -117,7 +119,12 @@ export function reasonLabel(raw: string | null | undefined): string {
 /** 알려진 운영 메시지만 한글로 표시하고, 데이터 원문 자체는 바꾸지 않는다. */
 export function operationalMessageLabel(raw: string | null | undefined): string {
   if (raw === null || raw === undefined || raw.trim() === "") return "관측 메시지 없음";
-  return MESSAGE_KO[raw.trim().toLowerCase()] ?? statusLabel(raw);
+  const trimmed = raw.trim();
+  const validatedRepository = /^validated (\d+) repository resources at ([0-9a-f]+); no cluster mutation$/i.exec(trimmed);
+  if (validatedRepository) {
+    return `저장소 리소스 ${validatedRepository[1]}개 검증 · ${validatedRepository[2]} · 클러스터 변경 없음`;
+  }
+  return MESSAGE_KO[trimmed.toLowerCase()] ?? statusLabel(trimmed);
 }
 
 /** 상태 토큰이 위험/실패 계열인지(색상 판정용, 지어내지 않고 관측값 기반). */
