@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   ROUTE_CRITICAL_API_CONTRACTS,
+  UNIFIED_NAVIGATION_SELECTOR,
   assertRouteReleaseBudget,
   classifyRouteApiRequest,
   createRouteNetworkObserver,
@@ -184,6 +185,12 @@ describe("post-deploy route smoke helpers", () => {
     expect(ROUTE_CRITICAL_API_CONTRACTS["/alerts"]).toEqual([
       "/api/alert-events",
     ]);
+  });
+
+  it("scopes unified traversal to GlobalNav and excludes widget deep links", () => {
+    expect(UNIFIED_NAVIGATION_SELECTOR).toBe(
+      '[data-slot="global-navigation"] button[aria-label$=" 화면으로 이동"]',
+    );
   });
 
   it("preserves DOM order when the current URL is not a released navigation route", () => {

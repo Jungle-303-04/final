@@ -976,6 +976,7 @@ function GlobalNav({ collapsed, setCollapsed, surface, onSurface }: {
   };
   return (
     <motion.nav initial={false} animate={{ width: collapsed ? 60 : 208 }} transition={SOFT}
+      data-slot="global-navigation"
       style={{ flexShrink: 0, background: UI.card, borderRight: `1px solid ${UI.line}`, display: "flex", flexDirection: "column",
         padding: "14px 10px 12px", position: "sticky", top: 0, height: `calc(100vh / ${PRESENT_SCALE})`, overflow: "hidden" }}>
       {/* 브랜드 — Kyro 워드마크 */}

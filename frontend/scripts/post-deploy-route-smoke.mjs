@@ -7,7 +7,7 @@ import { chromium } from "playwright";
 const SIDEBAR_SELECTOR = 'aside[data-slot="sidebar"]';
 const NAVIGATION_LINK_SELECTOR = `${SIDEBAR_SELECTOR} nav a[href]`;
 const UNIFIED_SHELL_SELECTOR = "#root .uni";
-const UNIFIED_NAVIGATION_SELECTOR = 'button[aria-label$=" 화면으로 이동"]';
+export const UNIFIED_NAVIGATION_SELECTOR = '[data-slot="global-navigation"] button[aria-label$=" 화면으로 이동"]';
 const WORKSPACE_HEADER_SELECTOR =
   'header[data-slot="product-header"] [data-slot="product-header-workspace"]';
 const AUTH_BOOTSTRAP_TIMEOUT_MS = 60_000;
