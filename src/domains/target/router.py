@@ -655,7 +655,7 @@ def guarded_kubectl_apply_command(
     expected_cluster_id = payload.cluster_id or ""
     guard = (
         f'existing="$({kubectl} -n {shell_quote(namespace)} get configmap '
-        "target-runtime-config -o jsonpath='{.data.TARGET_CLUSTER_ID}' "
+        "target-runtime-config --ignore-not-found -o jsonpath='{.data.TARGET_CLUSTER_ID}' "
         '2>/dev/null || true)"; '
         f'if [ -n "$existing" ] && [ "$existing" != {shell_quote(expected_cluster_id)} ]; '
         "then printf 'Kyro agent is already registered as %s; disconnect it before connecting "
@@ -760,7 +760,7 @@ def powershell_install_command_for(payload: TargetRegisterRequest, agent_token: 
     return (
         "$ErrorActionPreference='Stop'; "
         f"$existing=(& kubectl -n '{namespace}' get configmap target-runtime-config "
-        "-o 'jsonpath={.data.TARGET_CLUSTER_ID}' 2>$null); "
+        "--ignore-not-found -o 'jsonpath={.data.TARGET_CLUSTER_ID}' 2>$null); "
         f"if ($existing -and $existing -ne '{expected_cluster_id}') "
         f'{{ throw "Kyro agent is already registered as $existing; disconnect it before connecting {expected_cluster_id}." }}; '
         "$tmp=Join-Path ([IO.Path]::GetTempPath()) ('kyro-'+[guid]::NewGuid().ToString()+'.yaml'); "

@@ -4,7 +4,11 @@ import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ConnectWizard, toInteractiveSafePosixCommand } from "./devpreview-connect";
+import {
+  ConnectWizard,
+  toInteractiveSafePosixCommand,
+  toInteractiveSafePowerShellCommand,
+} from "./devpreview-connect";
 import { connectCluster, type ClusterProvidersView } from "./devpreview/connectFeed";
 
 const PROVIDERS: ClusterProvidersView = {
@@ -100,6 +104,14 @@ describe("devpreview name-only cluster wizard", () => {
 
     expect(toInteractiveSafePosixCommand(unsafe)).toBe(`(${unsafe})`);
     expect(toInteractiveSafePosixCommand(`(${unsafe})`)).toBe(`(${unsafe})`);
+  });
+
+  it("allows a first install when the runtime ConfigMap does not exist in PowerShell", () => {
+    const legacy = "$existing=(& kubectl -n 'target' get configmap target-runtime-config -o 'jsonpath={.data.TARGET_CLUSTER_ID}' 2>$null);";
+
+    expect(toInteractiveSafePowerShellCommand(legacy)).toContain(
+      "get configmap target-runtime-config --ignore-not-found -o",
+    );
   });
 
   it("keeps provider lookup failures out of the primary registration flow", () => {

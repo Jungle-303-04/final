@@ -652,6 +652,17 @@ export function toInteractiveSafePosixCommand(command: string): string {
   return `(${trimmed})`;
 }
 
+export function toInteractiveSafePowerShellCommand(command: string): string {
+  const trimmed = command.trim();
+  if (!trimmed) return "";
+  // Older receipts treated the expected first-install NotFound response as a
+  // terminating NativeCommandError under Windows PowerShell.
+  return trimmed.replace(
+    /get configmap target-runtime-config(?! --ignore-not-found)/,
+    "get configmap target-runtime-config --ignore-not-found",
+  );
+}
+
 function ClusterInstallStep({ platform, name, onBack, onConnected }: { platform: PlatformId; name: string; onBack: () => void; onConnected: (info: ConnectionStatusView) => void }) {
   const pf = PLATFORMS.find((p) => p.id === platform)!;
   const Icon = pf.icon;
@@ -693,7 +704,9 @@ function ClusterInstallStep({ platform, name, onBack, onConnected }: { platform:
 
   const posixCmd = toInteractiveSafePosixCommand(receipt?.install_command ?? "");
   const cmd = shell === "powershell"
-    ? receipt?.powershell_install_command ?? toPowerShellCommand(posixCmd)
+    ? toInteractiveSafePowerShellCommand(
+        receipt?.powershell_install_command ?? toPowerShellCommand(posixCmd),
+      )
     : posixCmd;
   const copy = () => { if (!cmd) return; navigator.clipboard?.writeText(cmd).catch(() => {}); setCopied(true); window.setTimeout(() => setCopied(false), 1600); };
   return (
