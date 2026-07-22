@@ -43,6 +43,7 @@ import { getRepositoryConnectionStatus } from "./api/repository-connection";
 import { useNarrowViewport } from "./devpreview/useNarrowViewport";
 import { operationalMessageLabel, reasonLabel, statusLabel, isCriticalStatus } from "./devpreview/statusLabel";
 import { LiveResourceManifestEditor } from "./devpreview/resourceManifestEditor";
+import { groupApplicationsByRepository } from "./devpreview/repositoryRegistry";
 import { podsForNode, useClusterTopology } from "./devpreview/inventoryTopologyFeed";
 import { UI, BLUE, BLUE2, HP, TINT, MONO, TYPE, SOFT, SPRING, PRESENT_SCALE, DUR, inkA, blueA, MARK, cardA, GLASS, critA } from "./devpreview/theme";
 import "./styles/tokens.css";
@@ -586,7 +587,7 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
                   <div style={{ display: "flex", alignItems: "center", gap: 9, border: `1px solid ${TINT.crit.bd}`, background: TINT.crit.bg, borderRadius: 10, padding: "10px 12px" }}>
                     <Badge text={statusLabel("critical")} tone="red" />
                     <span style={{ fontSize: TYPE.body, fontWeight: 700, color: UI.ink }}>{phase}</span>
-                    <span style={{ fontSize: TYPE.label, color: UI.ink2 }}>관측된 상태 · 상세 원인은 이 리소스의 계약에 없습니다</span>
+                    <span style={{ fontSize: TYPE.label, color: UI.ink2 }}>상세 원인 없음</span>
                   </div>
                 </Sec>
               )}
@@ -648,14 +649,14 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
               {/* 환경 변수 (파드 전용) — 계약이 컨테이너 환경 변수를 노출하지 않는다 */}
               {isPod && (
                 <Sec title="환경 변수" defaultOpen={false}>
-                  <Empty>관측 안 됨 — 라이브 인벤토리 계약은 컨테이너 환경 변수를 노출하지 않습니다.</Empty>
+                  <Empty>환경 변수 정보 없음</Empty>
                 </Sec>
               )}
 
               {/* 컨디션 (워크로드·파드) — 계약이 컨디션을 노출하지 않는다 */}
               {wp && (
               <Sec title="컨디션">
-                <Empty>관측 안 됨 — 이 리소스의 컨디션 계약이 없습니다.</Empty>
+                <Empty>컨디션 정보 없음</Empty>
               </Sec>
               )}
 
@@ -678,7 +679,7 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
               <Sec title="메트릭" icon={Activity}>
                 {usage.status === "loading" ? <Empty>불러오는 중…</Empty>
                   : usage.status === "error" ? <RetryNote onRetry={usage.retry} label="메트릭을 불러오지 못했습니다." />
-                  : usage.status === "unavailable" ? <Empty>메트릭 관측 안 됨 — 이 파드의 관측 사용량 표본이 없습니다.</Empty>
+                  : usage.status === "unavailable" ? <Empty>메트릭 없음</Empty>
                   : usage.status === "ready" ? (
                     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                       {usage.hasMemory
@@ -686,27 +687,27 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
                         : <KV k="메모리" v="관측 안 됨" mono />}
                       {usage.hasCpu
                         ? <UsageMiniChart title="CPU" unit="mcores" values={usage.points.map((p) => p.cpuMcores)} observed={usage.cpuObserved} total={usage.sampleCount} />
-                        : <KV k="CPU" v="관측 안 됨 — 이 환경은 실사용 CPU를 표본화하지 않습니다" mono />}
+                        : <KV k="CPU" v="메트릭 없음" mono />}
                     </div>
                   ) : <Empty>메트릭 관측 안 됨</Empty>}
               </Sec>
               )}
               {isWorkload && (
               <Sec title="메트릭" icon={Activity}>
-                <Empty>메트릭은 관리 파드 단위로 관측됩니다 — 위 “관리 중인 파드 보기”에서 개별 파드의 사용량을 확인하세요.</Empty>
+                <Empty>파드별 메트릭에서 확인</Empty>
               </Sec>
               )}
 
               {/* 데이터 (ConfigMap·Secret) — 계약이 데이터 항목을 노출하지 않는다 */}
               {(kind.id === "ConfigMap" || kind.id === "Secret") && (
                 <Sec title="데이터" icon={FileCog}>
-                  <Empty>관측 안 됨 — 라이브 인벤토리 계약은 {kind.id === "Secret" ? "Secret" : "ConfigMap"} 데이터를 노출하지 않습니다.</Empty>
+                  <Empty>데이터 없음</Empty>
                 </Sec>
               )}
 
               {/* 관련 리소스 — 워크로드는 관측된 관리 파드를 표시, 그 외 kind는 계약에 없어 honest 빈상태 */}
               <Sec title="관련 리소스" icon={Copy}>
-                {wd.status === "idle" ? <Empty>관측 안 됨 — 라이브 인벤토리 계약은 리소스 간 소유·참조 관계를 노출하지 않습니다.</Empty>
+                {wd.status === "idle" ? <Empty>관련 리소스 없음</Empty>
                   : wd.status === "loading" ? <Empty>불러오는 중…</Empty>
                   : wd.status === "error" ? <RetryNote onRetry={wd.retry} label="관리 파드를 불러오지 못했습니다." />
                   : wd.status === "unavailable" ? <Empty>관리 파드가 관측되지 않았습니다.</Empty>
@@ -724,7 +725,7 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
 
               {/* 최근 이벤트(M16) — 워크로드는 관측 이벤트를 표시, 그 외 kind는 honest 빈상태 */}
               <Sec title="최근 이벤트" icon={Activity}>
-                {wd.status === "idle" ? <Empty>관측 안 됨 — 이 리소스의 이벤트 계약이 없습니다.</Empty>
+                {wd.status === "idle" ? <Empty>최근 이벤트 없음</Empty>
                   : wd.status === "loading" ? <Empty>불러오는 중…</Empty>
                   : wd.status === "error" ? <RetryNote onRetry={wd.retry} label="이벤트를 불러오지 못했습니다." />
                   : wd.events.length === 0 ? <Empty>최근 관측된 이벤트가 없습니다.</Empty>
@@ -748,10 +749,10 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
                     </div>)
                   : wd.status === "ready" && wd.labels.length === 0 ? <Empty>관측된 레이블이 없습니다.</Empty>
                   : wd.status === "loading" ? <Empty>불러오는 중…</Empty>
-                  : <Empty>관측 안 됨 — 라이브 인벤토리 계약은 레이블을 노출하지 않습니다.</Empty>}
+                  : <Empty>레이블 없음</Empty>}
               </Sec>
               <Sec title="어노테이션" defaultOpen={false}>
-                <Empty>관측 안 됨 — 라이브 인벤토리 계약은 어노테이션을 노출하지 않습니다.</Empty>
+                <Empty>어노테이션 없음</Empty>
               </Sec>
               <Sec title="메타데이터">
                 <KV k="UID" v={row.uid != null && String(row.uid) ? String(row.uid) : "관측 안 됨"} mono />
@@ -763,7 +764,7 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
               {/* 점검 결과 (워크로드·파드) — 점검(audit) 계약이 배선되어 있지 않다 */}
               {wp && (
               <Sec title="점검 결과" icon={ShieldCheck}>
-                <Empty>관측 안 됨 — 이 환경에는 리소스 점검(audit) 계약이 배선되어 있지 않습니다.</Empty>
+                <Empty>점검 결과 없음</Empty>
               </Sec>
               )}
             </div>
@@ -815,7 +816,7 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
 
           {tab === "logs" && (
             <div style={{ padding: "18px 0", fontSize: TYPE.label, color: UI.ink3, lineHeight: 1.6 }}>
-              관측 안 됨 — 이 환경에는 로그 스트림 계약이 배선되어 있지 않습니다.
+              로그 없음
             </div>
           )}
 
@@ -1331,6 +1332,7 @@ function App() {
   const [pinned, setPinned] = useState<string[]>([]);
   const [q, setQ] = useState(""); // 단일 검색 — 종류 인덱스와 표 행을 동시에 필터
   const [surface, setSurface] = useState<Surface>("home"); // 셸 내 서피스 전환 — 홈이 랜딩(D19)
+  const [deployRepositoryFilter, setDeployRepositoryFilter] = useState<string | null>(null);
   const [scope, setScope] = useState<{ level: string; cluster?: string; node?: string }>({ level: "clusters" });
   const [ns, setNs] = useState("모든 네임스페이스");
   const [nsOpen, setNsOpen] = useState(false);
@@ -1360,6 +1362,10 @@ function App() {
   const repositoryApplications = useApplications(manifestRefreshKey);
   const connectedRepos = useMemo(
     () => Array.from(new Set(repositoryApplications.items.map((item) => item.repositoryRef).filter((ref): ref is string => Boolean(ref)))).sort(),
+    [repositoryApplications.items],
+  );
+  const repositoryGroups = useMemo(
+    () => groupApplicationsByRepository(repositoryApplications.items),
     [repositoryApplications.items],
   );
   const addPending = (scope: "cluster" | "repo", ref: string) => {
@@ -1647,6 +1653,7 @@ function App() {
           setMeOpen(false);
           setNsOpen(false);
           setClusterOpen(false);
+          if (sf === "deploy") setDeployRepositoryFilter(null);
           if (sf === "connect") setConnectView(null);
         }} />
 
@@ -1845,7 +1852,8 @@ function App() {
           <ConnectWizard key={connectView ?? "launcher"} embedded initialView={connectView} />
         </div>
       ) : surface === "deploy" ? (
-        <DeploySurface pendingRepos={pendingRepo} onOpenRef={openRef} onAddRepo={() => setConnectModal("repo")} />
+        <DeploySurface pendingRepos={pendingRepo} repositoryFilter={deployRepositoryFilter} onOpenRef={openRef}
+          onOpenIssues={() => setSurface("issues")} onAskAi={() => setAiOpen(true)} onAddRepo={() => setConnectModal("repo")} />
       ) : surface === "issues" ? (
         <IssuesSurface incidentClusterIds={incidentClusterIds} sessionRules={notes.filter((n) => n.icon === "rule").map((n) => n.body.split(" · ")[0])} onOpenRef={openRef} onAskAi={() => setAiOpen(true)} onOpenRca={setRcaIncident} />
       ) : surface === "timeline" ? (
@@ -1866,7 +1874,7 @@ function App() {
           onWidgetDeepLink={(id) => {
             if (id === "W1") { setSurface("resources"); setResView("map"); }
             else if (id === "W2") setSurface("issues");
-            else if (id === "W3") setSurface("deploy");
+            else if (id === "W3") { setDeployRepositoryFilter(null); setSurface("deploy"); }
             else if (id === "W4" || id === "W8") setSurface("timeline");
             else if (id === "W7") setSurface("cost");
             else { setSurface("resources"); setResView("list"); setKindId("Pod"); }
@@ -1899,9 +1907,12 @@ function App() {
             /* 지도 — 드릴 전체 높이. 종류 선택은 목록 관점의 것: 패널·스트립에서 종류를 고르면 목록으로 전환 */
             <>
               <OpsiaMap key={drillCl ?? "root"} initialCluster={drillCl ?? undefined} pendingClusters={pendingCl} pendingRepos={pendingRepo} connectedRepos={connectedRepos}
+                repositoryGroups={repositoryGroups}
+                onRepositoryDisconnected={() => setManifestRefreshKey((key) => key + 1)}
                 embedded onScopeChange={setScope} onOpenResource={openFromMap} onOpenRca={setRcaIncident} lensTab={lensTabFor(kindId)}
                 onAddCluster={() => setConnectModal("cluster")}
                 onAddRepo={() => setConnectModal("repo")}
+                onOpenRepository={(repositoryRef) => { setDeployRepositoryFilter(repositoryRef); setSurface("deploy"); }}
                 stickyTop={topH + 12}
               />
               {/* 종류(kind) 탐색은 쿠버네티스 관점의 본문이 오너 — 인프라 뷰 패널에 같은 목록을 두 번 두지 않는다 */}

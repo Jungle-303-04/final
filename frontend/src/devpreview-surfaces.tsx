@@ -1,7 +1,7 @@
 // ── 데모 서피스: 배포 · 이슈 · 타임라인 · 점검 · 비용 · 설정 (Master Spec 5.7~5.10) ──
 // 원칙: 모든 숫자는 실제 백엔드 계약(어댑터 훅) 파생 — 관측 안 된 값은 채우지 않는다(no backfill).
 // 시각은 공용 부품(KpiValue/MiniBars/RankList/MiniTimeline)과 셸 토큰만 사용. 제품 이식 시 D5 공용 표로 수렴한다.
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "motion/react";
 import {
   Rocket, Package, AlertTriangle, Bell, Clock, ShieldCheck, Coins,
@@ -15,12 +15,21 @@ import { useRcaIssueDetails, useRecoveryPlan, type RcaIssueDetailView } from "./
 import { useSession, sessionInitial } from "./devpreview/sessionFeed";
 import { useAiConversations, useConversationDetail } from "./devpreview/aiFeed";
 import { useAlertEvents, useAlertRules, useAlertChannels } from "./devpreview/alertsFeed";
-import { useApplications, useHelmReleases } from "./devpreview/deployFeed";
+import {
+  useApplicationRuns,
+  useApplications,
+  useHelmReleases,
+  type ApplicationRunView,
+  type WorkflowStepView,
+} from "./devpreview/deployFeed";
 import { useChangeTimeline } from "./devpreview/changeTimelineFeed";
 import { useTimelineBoard } from "./devpreview/timelineFeed";
 import { useUiPreferences, useRefreshPolicies, useSettingsAccess } from "./devpreview/settingsFeed";
 import { MiniTimeline } from "./devpreview/widgets";
 import { statusLabel } from "./devpreview/statusLabel";
+import { RepositoryConnections } from "./devpreview/RepositoryConnections";
+import { groupApplicationsByRepository } from "./devpreview/repositoryRegistry";
+import { selectScenarioRuns } from "./devpreview/scenarioGateSelection";
 
 // ── 상대 시간 포맷 — 서버 타임스탬프(ISO 또는 epoch ms)를 사람이 읽는 근사치로 ──
 function fromNow(input: string | number | null): string {
@@ -216,17 +225,187 @@ function deliveryPill(status: string | null): React.ReactNode {
   return <Pill tone="warn" label={koLabel(status)} />;
 }
 const emptyRow = (msg: string) => <div style={{ padding: "14px 15px", fontSize: TYPE.label2, color: UI.ink3 }}>{msg}</div>;
-export function DeploySurface({ pendingRepos = [], onOpenRef: _onOpenRef, onAddRepo }: {
-  pendingRepos?: string[]; onOpenRef: (kind: string, name: string) => void; onAddRepo: () => void;
+
+function workflowStep(run: ApplicationRunView | null, name: string): WorkflowStepView | null {
+  return run?.steps.find((step) => step.name === name) ?? null;
+}
+
+function detailString(details: Record<string, unknown>, key: string): string | null {
+  const value = details[key];
+  return typeof value === "string" && value.trim() !== "" ? value : null;
+}
+
+function detailEvidence(details: Record<string, unknown>, needles: string[]): string | null {
+  const normalizedNeedles = needles.map((needle) => needle.toLowerCase());
+  const visit = (value: unknown): string | null => {
+    if (typeof value === "string") {
+      const normalized = value.toLowerCase();
+      return normalizedNeedles.some((needle) => normalized.includes(needle)) ? value : null;
+    }
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        const match = visit(item);
+        if (match) return match;
+      }
+      return null;
+    }
+    if (typeof value === "object" && value !== null) {
+      for (const item of Object.values(value)) {
+        const match = visit(item);
+        if (match) return match;
+      }
+    }
+    return null;
+  };
+  return visit(details);
+}
+
+function scenarioRun(runs: ApplicationRunView[], stepName: string): { run: ApplicationRunView; step: WorkflowStepView } | null {
+  for (const run of runs) {
+    const step = workflowStep(run, stepName);
+    if (step) return { run, step };
+  }
+  return null;
+}
+
+function GateStage({ label, state, evidence, href, actionLabel, onAction }: {
+  label: string;
+  state: "done" | "observed" | "pending";
+  evidence: string;
+  href?: string | null;
+  actionLabel?: string | null;
+  onAction?: (() => void) | null;
 }) {
-  const [tab, setTab] = useState("애플리케이션");
-  const appsFeed = useApplications();
+  const tone = state === "done" ? TINT.ok : state === "observed" ? TINT.warn : { fg: UI.ink3, bg: UI.bg2, bd: UI.line };
+  const content = (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0, border: `1px solid ${tone.bd}`, background: tone.bg, borderRadius: 10, padding: "10px 12px" }}>
+      <span style={{ width: 22, height: 22, borderRadius: 999, display: "grid", placeItems: "center", flexShrink: 0, background: state === "done" ? TINT.ok.fg : state === "observed" ? TINT.warn.fg : inkA(0.08), color: UI.card }}>
+        {state === "done" ? <Check size={13} strokeWidth={3} /> : state === "observed" ? <AlertTriangle size={12} /> : <span style={{ width: 6, height: 6, borderRadius: 999, background: UI.ink3 }} />}
+      </span>
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <div style={{ fontSize: TYPE.label2, fontWeight: 750, color: state === "pending" ? UI.ink2 : tone.fg }}>{label}</div>
+        <div title={evidence} style={{ marginTop: 2, fontFamily: MONO, fontSize: TYPE.caption2, color: UI.ink3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{evidence}</div>
+      </div>
+      {actionLabel && onAction ? (
+        <button type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); onAction(); }}
+          style={{ flexShrink: 0, border: `1px solid ${tone.bd}`, background: UI.card, color: tone.fg, borderRadius: 7, padding: "5px 8px", fontSize: TYPE.caption2, fontWeight: 750, cursor: "pointer" }}>
+          {actionLabel}
+        </button>
+      ) : null}
+    </div>
+  );
+  return href ? <a href={href} target="_blank" rel="noreferrer" style={{ textDecoration: "none" }}>{content}</a> : content;
+}
+
+function ScenarioGate({ runs, repositoryRef, status, onRefresh, onOpenRef, onOpenIssues, onAskAi }: {
+  runs: ApplicationRunView[];
+  repositoryRef: string | null;
+  status: "loading" | "ready" | "unavailable";
+  onRefresh: () => void;
+  onOpenRef: (kind: string, name: string) => void;
+  onOpenIssues: () => void;
+  onAskAi: () => void;
+}) {
+  const selection = selectScenarioRuns(runs, repositoryRef);
+  const scopedRuns = selection.runs;
+  const latest = scopedRuns[0] ?? null;
+  const gitRecord = scenarioRun(scopedRuns, "git");
+  const applyRecord = scenarioRun(scopedRuns, "apply");
+  const healthRecord = scenarioRun(scopedRuns, "health");
+  const safePrRecord = scenarioRun(scopedRuns, "safe_pr");
+  const diffRecord = scenarioRun(scopedRuns, "diff");
+  const failureRecord = scopedRuns.flatMap((run) => run.steps.map((step) => ({ run, step }))).find(({ step }) =>
+    detailEvidence(step.details, ["imagepullbackoff", "errimagepull", "image_pull_back_off"]) !== null
+    || step.message?.toLowerCase().includes("imagepullbackoff") === true
+    || step.message?.toLowerCase().includes("errimagepull") === true) ?? null;
+  const blocked = scopedRuns.find((run) =>
+    run.status === "waiting_for_approval"
+    || run.promotionGate?.promotion_blocked === true
+    || run.promotionGate?.blocked === true);
+  const actualImage = diffRecord ? detailString(diffRecord.step.details, "actual_image") : null;
+  const desiredImage = diffRecord ? detailString(diffRecord.step.details, "desired_image") : null;
+  const failureEvidence = failureRecord
+    ? detailEvidence(failureRecord.step.details, ["imagepullbackoff", "errimagepull", "image_pull_back_off"])
+      ?? failureRecord.step.message
+      ?? failureRecord.run.workflowRunId
+    : null;
+  const failureResource = failureRecord
+    ? detailString(failureRecord.step.details, "pod_name")
+      ?? detailString(failureRecord.step.details, "resource_name")
+      ?? detailString(failureRecord.step.details, "name")
+    : null;
+  const failedImageCandidate = failureRecord === null && actualImage !== null
+    ? `배포 diff 이미지 ${actualImage}${desiredImage ? ` → ${desiredImage}` : ""} · 직접 장애 이벤트 없음`
+    : null;
+  const prUrl = safePrRecord ? detailString(safePrRecord.step.details, "pr_url") : null;
+  const repository = latest?.repositoryRef ?? selection.repositoryRef;
+  const commitSha = gitRecord?.run.commitSha ?? null;
+  const commitUrl = commitSha && repository ? `https://github.com/${repository}/commit/${commitSha}` : null;
+  const gitDone = gitRecord?.step.status === "succeeded" && commitSha !== null;
+  const applyDone = applyRecord?.step.status === "succeeded";
+  const safePrDone = safePrRecord?.step.status === "succeeded" && prUrl !== null;
+  const healthStepDone = healthRecord?.step.status === "succeeded";
+  const rolloutRun = scopedRuns.find((run) => run.promotionGate?.rollout_ready === true) ?? null;
+  const rolloutReady = rolloutRun !== null;
+
+  return (
+    <Card pad={12}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 10 }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: TYPE.body, fontWeight: 800, color: UI.ink }}>GitOps 배포 게이트</div>
+          <div style={{ marginTop: 2, fontFamily: MONO, fontSize: TYPE.caption2, color: UI.ink3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {latest?.workflowRunId ?? (status === "loading" ? "실행 기록 확인 중" : "실행 기록 없음")}
+          </div>
+        </div>
+        <button onClick={onRefresh} aria-label="배포 증거 새로고침" style={{ width: 30, height: 30, borderRadius: 8, border: `1px solid ${UI.line}`, background: UI.card, color: UI.ink2, cursor: "pointer", display: "grid", placeItems: "center" }}><RefreshCw size={14} /></button>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8 }}>
+        <GateStage label="Git commit" state={gitDone ? "done" : "pending"} evidence={commitSha ?? "커밋 증거 없음"} href={commitUrl} />
+        <GateStage label="GitOps sync" state={applyDone ? "done" : "pending"} evidence={applyDone ? `${applyRecord?.run.commandId ?? "command"} · ${applyRecord?.step.message ?? "적용 완료"}` : "적용 증거 없음"} />
+        <GateStage label="ImagePullBackOff" state={failureEvidence ? "observed" : "pending"}
+          evidence={failureEvidence ? `실패 관측: ${failureEvidence}` : failedImageCandidate ?? "보존된 장애 이벤트 없음"}
+          actionLabel={failureRecord ? (failureResource ? "게임 로그" : "AI 분석") : null}
+          onAction={failureRecord ? (failureResource ? () => onOpenRef("Pod", failureResource) : onAskAi) : null} />
+        <GateStage label="PromotionBlocked" state={blocked ? "observed" : "pending"} evidence={blocked ? `${blocked.workflowRunId} · 승인 대기` : "차단 증거 없음"}
+          actionLabel={blocked ? "이슈/RCA" : null} onAction={blocked ? onOpenIssues : null} />
+        <GateStage label="Safe PR" state={safePrDone ? "done" : "pending"} evidence={prUrl ?? "PR 증거 없음"} href={prUrl} />
+        <GateStage label="정상 rollout" state={rolloutReady ? "done" : healthStepDone ? "observed" : "pending"} evidence={rolloutReady ? `Ready · ${desiredImage ?? rolloutRun?.workflowRunId ?? "rollout"}` : healthStepDone ? "health 단계 완료 · Ready 직접 증거는 없음" : "rollout 증거 없음"} />
+      </div>
+    </Card>
+  );
+}
+export function DeploySurface({ pendingRepos = [], repositoryFilter = null, onOpenRef, onOpenIssues, onAskAi, onAddRepo }: {
+  pendingRepos?: string[]; repositoryFilter?: string | null; onOpenRef: (kind: string, name: string) => void; onOpenIssues: () => void; onAskAi: () => void; onAddRepo: () => void;
+}) {
+  const [tab, setTab] = useState(repositoryFilter ? "GitOps" : "워크플로우");
+  const [selectedRepository, setSelectedRepository] = useState<string | null>(repositoryFilter);
+  useEffect(() => {
+    if (repositoryFilter) {
+      setSelectedRepository(repositoryFilter);
+      setTab("GitOps");
+    }
+  }, [repositoryFilter]);
+  const [repositoryRefreshKey, setRepositoryRefreshKey] = useState(0);
+  const appsFeed = useApplications(repositoryRefreshKey);
+  const workflowFeed = useApplicationRuns(appsFeed.items, repositoryRefreshKey);
   const helm = useHelmReleases();
   const apps = appsFeed.items;
-  const gitopsApps = apps.filter((a) => a.repositoryRef !== null);
-  const runs = apps.filter((a) => a.workflowRunId !== null);
+  const repositoryGroups = useMemo(() => groupApplicationsByRepository(apps), [apps]);
+  const visibleRepositoryGroups = useMemo(
+    () => selectedRepository
+      ? repositoryGroups.filter((group) => group.repositoryRef.toLowerCase() === selectedRepository.toLowerCase())
+      : repositoryGroups,
+    [selectedRepository, repositoryGroups],
+  );
+  const connectedRepositoryKeys = useMemo(
+    () => new Set(repositoryGroups.map((group) => group.repositoryRef.toLowerCase())),
+    [repositoryGroups],
+  );
+  const pendingOnly = pendingRepos.filter((repositoryRef) => !connectedRepositoryKeys.has(repositoryRef.toLowerCase()));
+  const visibleWorkflowApps = apps.filter((application) =>
+    application.workflowRunId !== null
+    && !application.workflowRunId.startsWith("workflow-connect-validation-"));
   const appCols: [string, string][] = [["앱", "minmax(140px,1.4fr)"], ["환경", "minmax(80px,0.8fr)"], ["저장소", "minmax(150px,1.4fr)"], ["헬스", "minmax(110px,0.9fr)"], ["배포", "minmax(90px,0.8fr)"], ["브랜치", "minmax(70px,0.6fr)"]];
-  const repoCols: [string, string][] = [["저장소", "minmax(180px,1.6fr)"], ["앱", "minmax(120px,1fr)"], ["브랜치", "minmax(90px,0.8fr)"], ["배포", "minmax(110px,1fr)"], ["매니페스트", "minmax(110px,1fr)"]];
   const wfCols: [string, string][] = [["앱", "minmax(140px,1.2fr)"], ["워크플로우 실행", "minmax(200px,1.8fr)"], ["상태", "minmax(90px,0.8fr)"], ["관측 시각", "minmax(80px,0.7fr)"]];
   const helmCols: [string, string][] = [["릴리스", "minmax(120px,1.1fr)"], ["차트", "minmax(150px,1.4fr)"], ["차트 버전", "minmax(80px,0.8fr)"], ["네임스페이스", "minmax(90px,0.9fr)"], ["리비전", "56px"], ["상태", "minmax(90px,0.8fr)"]];
   const loading = appsFeed.status === "loading";
@@ -238,7 +417,7 @@ export function DeploySurface({ pendingRepos = [], onOpenRef: _onOpenRef, onAddR
       <ChipRow chips={[
         { label: "앱", value: appsFeed.status === "ready" ? apps.length : "—" },
         { label: "배포 대기", value: appsFeed.status === "ready" ? apps.filter((a) => a.deliveryStatus === "pending").length : "—" },
-        { label: "저장소", value: appsFeed.status === "ready" ? gitopsApps.length + pendingRepos.length : "—" },
+        { label: "저장소", value: appsFeed.status === "ready" ? repositoryGroups.length + pendingOnly.length : "—" },
         { label: "Helm", value: helm.status === "ready" ? helm.items.length : "—", warn: helm.status === "ready" && helm.coverageAvailability === "unavailable" },
       ]} />
       {tab === "애플리케이션" && (
@@ -260,48 +439,46 @@ export function DeploySurface({ pendingRepos = [], onOpenRef: _onOpenRef, onAddR
         </Card>
       )}
       {tab === "GitOps" && (
-        <Card pad={0}>
-          <THead cols={repoCols} />
+        <Card pad={10}>
           {loading ? emptyRow("불러오는 중…")
             : appsFeed.status === "unavailable" ? emptyRow("GitOps 바인딩을 불러오지 못했습니다.")
-            : (gitopsApps.length === 0 && pendingRepos.length === 0) ? emptyRow("관측된 GitOps 저장소 없음")
+            : (visibleRepositoryGroups.length === 0 && pendingOnly.length === 0) ? emptyRow("연결된 저장소 없음")
             : <>
-              {gitopsApps.map((a, i) => (
-                <TRow key={a.id} cols={repoCols} i={i} cells={[
-                  <span key="n" style={{ display: "flex", alignItems: "center", gap: 8 }}><GithubIcon size={13} style={{ color: BRAND.github, flexShrink: 0 }} /><Mono>{a.repositoryRef}</Mono></span>,
-                  <Mono key="a" dim>{a.name}</Mono>,
-                  <Mono key="b" dim>{a.defaultBranch ?? "—"}</Mono>,
-                  deliveryPill(a.deliveryStatus),
-                  <Mono key="m" dim>{a.manifestPath ?? "—"}</Mono>,
-                ]} />
-              ))}
-              {pendingRepos.map((r, i) => (
-                <TRow key={r} cols={repoCols} i={gitopsApps.length + i} cells={[
-                  <span key="n" style={{ display: "flex", alignItems: "center", gap: 8 }}><GithubIcon size={13} style={{ color: UI.ink3, flexShrink: 0 }} /><Mono>{r}</Mono></span>,
-                  <Mono key="a" dim>—</Mono>,
-                  <Mono key="b" dim>—</Mono>,
-                  <Pill key="s" tone="info" label="연결 중" />,
-                  <Mono key="m" dim>—</Mono>,
-                ]} />
+              <RepositoryConnections
+                groups={visibleRepositoryGroups}
+                onOpenRepository={(repositoryRef) => { setSelectedRepository(repositoryRef); setTab("GitOps"); }}
+                onDisconnected={() => setRepositoryRefreshKey((key) => key + 1)}
+              />
+              {pendingOnly.map((repositoryRef) => (
+                <div key={repositoryRef} style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 8px", color: UI.ink3 }}>
+                  <GithubIcon size={15} style={{ flexShrink: 0 }} />
+                  <Mono>{repositoryRef}</Mono>
+                  <span style={{ marginLeft: "auto" }}><Pill tone="info" label="연결 중" /></span>
+                </div>
               ))}
             </>}
         </Card>
       )}
       {tab === "워크플로우" && (
-        <Card pad={0}>
-          <THead cols={wfCols} />
-          {loading ? emptyRow("불러오는 중…")
-            : appsFeed.status === "unavailable" ? emptyRow("워크플로우 실행을 불러오지 못했습니다.")
-            : runs.length === 0 ? emptyRow("관측된 워크플로우 실행 없음")
-            : runs.map((a, i) => (
-              <TRow key={a.id} cols={wfCols} i={i} cells={[
-                <span key="n" style={{ display: "flex", alignItems: "center", gap: 8 }}><Rocket size={13} style={{ color: BLUE, flexShrink: 0 }} /><Mono>{a.name}</Mono></span>,
-                <Mono key="w" dim>{a.workflowRunId}</Mono>,
-                deliveryPill(a.deliveryStatus),
-                <Mono key="t" dim>{fromNow(a.deliveryObservedAt)}</Mono>,
-              ]} />
-            ))}
-        </Card>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <ScenarioGate runs={workflowFeed.items} repositoryRef={selectedRepository} status={workflowFeed.status}
+            onRefresh={() => setRepositoryRefreshKey((key) => key + 1)}
+            onOpenRef={onOpenRef} onOpenIssues={onOpenIssues} onAskAi={onAskAi} />
+          <Card pad={0}>
+            <THead cols={wfCols} />
+            {loading ? emptyRow("불러오는 중…")
+              : appsFeed.status === "unavailable" ? emptyRow("워크플로우 실행을 불러오지 못했습니다.")
+              : visibleWorkflowApps.length === 0 ? emptyRow("관측된 배포 실행 없음")
+              : visibleWorkflowApps.map((a, i) => (
+                <TRow key={a.id} cols={wfCols} i={i} cells={[
+                  <span key="n" style={{ display: "flex", alignItems: "center", gap: 8 }}><Rocket size={13} style={{ color: BLUE, flexShrink: 0 }} /><Mono>{a.name}</Mono></span>,
+                  <Mono key="w" dim>{a.workflowRunId}</Mono>,
+                  deliveryPill(a.deliveryStatus),
+                  <Mono key="t" dim>{fromNow(a.deliveryObservedAt)}</Mono>,
+                ]} />
+              ))}
+          </Card>
+        </div>
       )}
       {tab === "Helm 릴리스" && (
         <Card pad={0}>
@@ -333,7 +510,7 @@ export function DeploySurface({ pendingRepos = [], onOpenRef: _onOpenRef, onAddR
 // GET /api/rca/recovery-plans/by-correlation) 파생. 원인/확신도/증거/복구 후보는
 // 서버가 준 값만 렌더하고, 없으면 정직한 "관측 안 됨"으로 둔다(no backfill).
 // 실제 복구 실행 경로(capability/CSRF)는 이 데모에 배선되어 있지 않으므로 실행
-// 컨트롤은 비활성 + "서버 실행 미지원(관측 전용)"으로 두고 가짜 성공을 만들지 않는다.
+// 컨트롤은 비활성으로 두고 가짜 성공을 만들지 않는다.
 function severityMeta(severity: "critical" | "warning" | null | undefined): { tone: "crit" | "warn"; label: string } | null {
   if (severity === "critical") return { tone: "crit", label: "장애" };
   if (severity === "warning") return { tone: "warn", label: "주의" };
@@ -414,7 +591,7 @@ export function IssueDetail({ name, symptom, cluster, svc, ns, onClose, onOpenRe
                 )}
                 {rootCause
                   ? <div style={{ fontSize: TYPE.body, color: UI.ink, lineHeight: 1.55 }}>{rootCause}</div>
-                  : <div style={{ fontSize: TYPE.label2, color: UI.ink3 }}>원인 관측 안 됨 — 서버가 근본 원인을 제공하지 않았습니다.</div>}
+                  : <div style={{ fontSize: TYPE.label2, color: UI.ink3 }}>원인 정보 없음</div>}
                 {conf === null && <div style={{ fontSize: TYPE.caption2, color: UI.ink3, marginTop: 6 }}>확신도 관측 안 됨</div>}
               </div>
             </RcaSection>
@@ -422,7 +599,7 @@ export function IssueDetail({ name, symptom, cluster, svc, ns, onClose, onOpenRe
             <RcaSection title="근거 (수집 트레일)">
               <div style={{ border: `1px solid ${UI.line}`, borderRadius: 12, overflow: "hidden" }}>
                 {support.length === 0 && missing.length === 0 && (
-                  <div style={{ padding: "10px 12px", fontSize: TYPE.label2, color: UI.ink3 }}>증거 없음 — 서버가 수집 트레일을 제공하지 않았습니다.</div>
+                  <div style={{ padding: "10px 12px", fontSize: TYPE.label2, color: UI.ink3 }}>수집된 근거 없음</div>
                 )}
                 {support.map((e, i) => (
                   <div key={`s-${i}`} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "9px 12px", borderTop: i > 0 ? `1px solid ${UI.line2}` : "none" }}>
@@ -454,7 +631,7 @@ export function IssueDetail({ name, symptom, cluster, svc, ns, onClose, onOpenRe
             {/* 복구 계획 — 실 계약의 후보만. 실제 실행은 서버 실행(capability/CSRF) 미배선 → 컨트롤 비활성 */}
             <RcaSection title="복구 계획">
               {recovery.status === "idle" ? (
-                <div style={{ fontSize: TYPE.label2, color: UI.ink3 }}>복구 계획 관측 안 됨 — 이 이슈에 연결된 상관관계가 없습니다.</div>
+                <div style={{ fontSize: TYPE.label2, color: UI.ink3 }}>복구 계획 없음</div>
               ) : recovery.status === "loading" ? (
                 <div style={{ fontSize: TYPE.label2, color: UI.ink3 }}>복구 계획 불러오는 중…</div>
               ) : recovery.status === "unavailable" || recovery.plan === null ? (
@@ -485,9 +662,9 @@ export function IssueDetail({ name, symptom, cluster, svc, ns, onClose, onOpenRe
                       {/* 실 복구 실행 경로(capability 게이트 + CSRF)가 이 데모에 배선되어 있지 않다.
                           타이머로 성공을 위조하지 않고 실행 컨트롤을 비활성 + 정직한 미지원 상태로 둔다. */}
                       <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
-                        <button disabled title="서버 실행 미지원(관측 전용)"
+                        <button disabled title="복구 실행 불가"
                           style={{ border: "none", background: inkA(0.1), color: UI.ink3, borderRadius: 9, padding: "7px 14px", fontSize: TYPE.label2, fontWeight: 700, cursor: "not-allowed" }}>복구 실행</button>
-                        <span style={{ fontSize: TYPE.caption2, color: UI.ink3 }}>서버 실행 미지원 · 관측 전용</span>
+                        <span style={{ fontSize: TYPE.caption2, color: UI.ink3 }}>실행 불가</span>
                         {picked && <button onClick={onAskAi} style={{ marginLeft: "auto", border: `1px solid ${blueA(0.4)}`, background: blueA(0.06), color: BLUE, borderRadius: 9, padding: "7px 14px", fontSize: TYPE.label2, fontWeight: 700, cursor: "pointer" }}>AI에게 계속 질문</button>}
                       </div>
                     </div>
@@ -689,7 +866,7 @@ export function TimelineSurface({ onOpenRef: _onOpenRef }: { onOpenRef: (kind: s
         </div>
         {board.pins.status === "loading" ? emptyRow("불러오는 중…")
           : board.pins.status === "unavailable" ? emptyRow("고정 항목을 불러오지 못했습니다.")
-          : board.pins.status === "unsupported" ? emptyRow("이 워크스페이스에서는 고정 기능이 제공되지 않습니다.")
+          : board.pins.status === "unsupported" ? emptyRow("고정 기능 없음")
           : board.pins.items.length === 0 ? emptyRow("고정한 항목 없음")
           : board.pins.items.map((p) => (
             <div key={p.pinId} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 15px", borderTop: `1px solid ${UI.line2}` }}>
@@ -734,7 +911,7 @@ function ChecksContent() {
       <Card>
         <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: "4px 2px" }}>
           <span style={{ fontSize: TYPE.title3, fontWeight: 700, color: UI.ink2 }}>점검 결과 관측 안 됨</span>
-          <span style={{ fontSize: TYPE.label2, color: UI.ink3 }}>에이전트 기반 평가 수집기가 통합되기 전까지 점검 결과·카탈로그를 사용할 수 없습니다.</span>
+          <span style={{ fontSize: TYPE.label2, color: UI.ink3 }}>점검 결과 없음</span>
           <ReasonNotes codes={checks.reasonCodes} />
         </div>
       </Card>
