@@ -4,7 +4,7 @@ import {
   TriangleAlert,
   Unplug,
 } from "lucide-react";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type FormEvent } from "react";
 
 import { useAuthSessionGate } from "../../features/auth/AuthSessionGate";
 import {
@@ -37,6 +37,31 @@ export type DisconnectPhase =
   | "succeeded"
   | "failed";
 
+// 클러스터 연결 위저드(라이트 셸)에서 열리는 다이얼로그가 OS 다크 테마(.dark)의
+// 토큰을 상속해 톤이 어긋나지 않도록, 이 서브트리는 라이트 토큰으로 고정한다.
+// 값은 styles/tokens.css 의 :root 라이트 정의와 동일하다.
+const LIGHT_SURFACE_TOKENS = {
+  colorScheme: "light",
+  "--background": "oklch(1 0 0)",
+  "--foreground": "oklch(0.145 0 0)",
+  "--card": "oklch(1 0 0)",
+  "--card-foreground": "oklch(0.145 0 0)",
+  "--popover": "oklch(1 0 0)",
+  "--popover-foreground": "oklch(0.145 0 0)",
+  "--primary": "oklch(0.205 0 0)",
+  "--primary-foreground": "oklch(0.985 0 0)",
+  "--secondary": "oklch(0.97 0 0)",
+  "--secondary-foreground": "oklch(0.205 0 0)",
+  "--muted": "oklch(0.97 0 0)",
+  "--muted-foreground": "oklch(0.556 0 0)",
+  "--accent": "oklch(0.97 0 0)",
+  "--accent-foreground": "oklch(0.205 0 0)",
+  "--destructive": "oklch(0.577 0.245 27.325)",
+  "--border": "oklch(0.922 0 0)",
+  "--input": "oklch(0.922 0 0)",
+  "--ring": "oklch(0.708 0 0)",
+} as CSSProperties;
+
 const COMMAND_POLL_MS = 1_000;
 // Agent removal includes Kubernetes API propagation and the final cleanup
 // evidence callback. Eight seconds made a healthy uninstall look stalled in
@@ -62,6 +87,7 @@ export function ClusterDisconnectDialog({
   const { t } = useI18n();
   const abort = useRef<AbortController | null>(null);
   const [confirmation, setConfirmation] = useState("");
+  const [nameCopied, setNameCopied] = useState(false);
   const [phase, setPhase] = useState<DisconnectPhase>("confirm");
   const [receipt, setReceipt] = useState<ClusterDisconnectReceipt | null>(null);
 
@@ -170,9 +196,10 @@ export function ClusterDisconnectDialog({
       open={open}
     >
       <DialogContent
-        className="overflow-hidden sm:max-w-xl"
+        className="overflow-hidden rounded-3xl sm:max-w-xl"
         closeLabel={t("common.action.close")}
         showCloseButton={!terminal}
+        style={LIGHT_SURFACE_TOKENS}
       >
         <form className="grid min-w-0 gap-5" onSubmit={(event) => void submit(event)}>
           <DialogHeader>
@@ -198,8 +225,25 @@ export function ClusterDisconnectDialog({
                 spellCheck={false}
                 value={confirmation}
               />
-              <p className="text-xs text-muted-foreground">
-                {t("clusters.disconnect.confirm.hint", { name: cluster.name })}
+              <p className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                <span>{t("clusters.disconnect.confirm.hint", { name: cluster.name })}</span>
+                {/* 이름 클릭 → 클립보드 복사: 안전장치(직접 붙여넣기라는 의도적 행동)는
+                    유지하면서 긴 이름의 오타 입력 부담을 없앤다. */}
+                <button
+                  aria-label="클러스터 이름 클립보드 복사"
+                  className="inline-flex items-center gap-1 rounded-md border border-border bg-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground transition-colors hover:bg-secondary"
+                  onClick={() => {
+                    navigator.clipboard?.writeText(cluster.name).catch(() => {});
+                    setNameCopied(true);
+                    window.setTimeout(() => setNameCopied(false), 1600);
+                  }}
+                  type="button"
+                >
+                  {cluster.name}
+                  {nameCopied
+                    ? <Check aria-hidden="true" className="size-3 text-emerald-600" strokeWidth={3} />
+                    : <span aria-hidden="true" className="text-muted-foreground">복사</span>}
+                </button>
               </p>
             </div>
           ) : null}
