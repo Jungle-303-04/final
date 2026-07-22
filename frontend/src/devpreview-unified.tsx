@@ -39,6 +39,7 @@ import { ResourceAccessPanel } from "./devpreview/resourceAccessPanel";
 import { EventMessageText } from "./devpreview/EventMessageText";
 import { useResourceEvents } from "./devpreview/resourceEventsFeed";
 import { useResourceIdentity } from "./devpreview/resourceIdentityFeed";
+import { getRepositoryConnectionStatus } from "./api/repository-connection";
 import { useNarrowViewport } from "./devpreview/useNarrowViewport";
 import { operationalMessageLabel, reasonLabel, statusLabel, isCriticalStatus } from "./devpreview/statusLabel";
 import { LiveResourceManifestEditor } from "./devpreview/resourceManifestEditor";
@@ -1356,11 +1357,59 @@ function App() {
   // 세션 중 등록한 연결 대기 항목 — 등록의 결과가 목록에 보여야 한다(로그아웃=세션 초기화로 함께 소멸)
   const [pendingCl, setPendingCl] = useState<string[]>(() => { try { return JSON.parse(sessionStorage.getItem("opsia-demo-pending-cl") || "[]"); } catch { return []; } });
   const [pendingRepo, setPendingRepo] = useState<string[]>(() => { try { return JSON.parse(sessionStorage.getItem("opsia-demo-pending-repo") || "[]"); } catch { return []; } });
+  const repositoryApplications = useApplications(manifestRefreshKey);
+  const connectedRepos = useMemo(
+    () => Array.from(new Set(repositoryApplications.items.map((item) => item.repositoryRef).filter((ref): ref is string => Boolean(ref)))).sort(),
+    [repositoryApplications.items],
+  );
   const addPending = (scope: "cluster" | "repo", ref: string) => {
     const key = scope === "cluster" ? "opsia-demo-pending-cl" : "opsia-demo-pending-repo";
     const set = scope === "cluster" ? setPendingCl : setPendingRepo;
     set((xs) => { const nx = xs.includes(ref) ? xs : [...xs, ref]; try { sessionStorage.setItem(key, JSON.stringify(nx)); } catch { /* 데모 */ } return nx; });
   };
+  // 연결 완료는 세션 타이머가 아니라 서버가 소유한 repository 상태로 확정한다.
+  // 이전 구현은 pendingRepo를 추가만 하고 제거하지 않아 active 저장소도 영원히
+  // "초기 동기화 대기"로 남았다. 서버가 ready를 반환하는 즉시 대기 목록과
+  // sessionStorage를 원자적으로 정리하고 Application/GitOps 목록을 다시 읽는다.
+  useEffect(() => {
+    if (pendingRepo.length === 0) return;
+    const controller = new AbortController();
+    let timer: number | undefined;
+    const reconcile = async () => {
+      const statuses = await Promise.all(pendingRepo.map(async (repoRef) => {
+        try {
+          return await getRepositoryConnectionStatus(repoRef, controller.signal);
+        } catch {
+          return null;
+        }
+      }));
+      if (controller.signal.aborted) return;
+      const ready = new Set(
+        statuses
+          .filter((status) => status?.terminal && status.connection_stage === "ready" && status.repository_status === "active")
+          .map((status) => status!.repo_ref),
+      );
+      if (ready.size > 0) {
+        setPendingRepo((current) => {
+          const next = current.filter((repoRef) => !ready.has(repoRef));
+          try { sessionStorage.setItem("opsia-demo-pending-repo", JSON.stringify(next)); } catch { /* 세션 저장 불가 */ }
+          return next;
+        });
+        setManifestRefreshKey((current) => current + 1);
+        return;
+      }
+      const refreshSeconds = statuses.reduce((minimum, status) => {
+        const seconds = status?.refresh_after_seconds;
+        return typeof seconds === "number" ? Math.min(minimum, seconds) : minimum;
+      }, 1);
+      timer = window.setTimeout(() => { void reconcile(); }, refreshSeconds * 1000);
+    };
+    void reconcile();
+    return () => {
+      controller.abort();
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [pendingRepo]);
   const onAiHandleDown = (e: React.PointerEvent) => {
     e.preventDefault(); setAiDragging(true);
     const move = (ev: PointerEvent) => setAiW(Math.min(560, Math.max(380, (document.documentElement.clientWidth - ev.clientX) / PRESENT_SCALE)));
@@ -1849,7 +1898,7 @@ function App() {
           {resView === "map" && (
             /* 지도 — 드릴 전체 높이. 종류 선택은 목록 관점의 것: 패널·스트립에서 종류를 고르면 목록으로 전환 */
             <>
-              <OpsiaMap key={drillCl ?? "root"} initialCluster={drillCl ?? undefined} pendingClusters={pendingCl} pendingRepos={pendingRepo}
+              <OpsiaMap key={drillCl ?? "root"} initialCluster={drillCl ?? undefined} pendingClusters={pendingCl} pendingRepos={pendingRepo} connectedRepos={connectedRepos}
                 embedded onScopeChange={setScope} onOpenResource={openFromMap} onOpenRca={setRcaIncident} lensTab={lensTabFor(kindId)}
                 onAddCluster={() => setConnectModal("cluster")}
                 onAddRepo={() => setConnectModal("repo")}

@@ -6,7 +6,7 @@
 // 지어내지 않는다. 관측이 없으면 "관측 안 됨"/"관측된 리소스가 없습니다"를 렌더한다.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { Activity, AlertTriangle, Box, ChevronLeft, ChevronRight, Clock3, Cpu, EllipsisVertical, ExternalLink, FileCog, Network, Plug, RotateCcw, Server, Settings, Unplug } from "lucide-react";
+import { Activity, AlertTriangle, Box, Check, ChevronLeft, ChevronRight, Clock3, Cpu, EllipsisVertical, ExternalLink, FileCog, Network, Plug, RotateCcw, Server, Settings, Unplug } from "lucide-react";
 import { UI, BLUE, HP, TINT, MONO, TYPE, SOFT, SPRING, PAGE, PRESENT_SCALE, DUR, inkA, blueA, LINE3, INK4, BRAND, cardA } from "./devpreview/theme";
 import { AwsIcon, GithubIcon } from "./devpreview/brandIcons";
 import { statusLabel, reasonLabel } from "./devpreview/statusLabel";
@@ -675,7 +675,7 @@ function PodRow({ pod, onClick, onTip }: {
 
 // ── 앱 ─────────────────────────────
 // embedded: 셸(통합 리소스)에 내장될 때 자체 헤더·내비를 숨기고 스코프 변화를 알림
-export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOpenRca, lensTab, onAddCluster, onAddRepo, stickyTop, initialCluster, pendingClusters, pendingRepos }: {
+export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOpenRca, lensTab, onAddCluster, onAddRepo, stickyTop, initialCluster, pendingClusters, pendingRepos, connectedRepos }: {
   embedded?: boolean;
   onScopeChange?: (v: View) => void;
   /** 임베드 모드: 파드 클릭 시 셸의 통합 상세 오버레이를 연다 (내부 패널 대신) */
@@ -694,6 +694,8 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
   /** 세션 중 등록된 연결 대기 항목 — 목록에 실반영(등록의 결과가 보여야 한다) */
   pendingClusters?: string[];
   pendingRepos?: string[];
+  /** 서버가 active로 확정한 GitOps 저장소. 세션 대기값과 섞지 않는다. */
+  connectedRepos?: string[];
 } = {}) {
   const { clusters } = useDevpreviewContracts();
   const clusterIds = useMemo(() => clusters.map((cl) => cl.id), [clusters]);
@@ -948,7 +950,7 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
             </AnimatePresence>
           </div>
 
-          <SidePanel key={lensTab ?? "default"} forcedTab={lensTab ?? null} scaled={embedded} onAddRepo={onAddRepo} stickyTop={stickyTop} pendingRepos={pendingRepos} />
+          <SidePanel key={lensTab ?? "default"} forcedTab={lensTab ?? null} scaled={embedded} onAddRepo={onAddRepo} stickyTop={stickyTop} pendingRepos={pendingRepos} connectedRepos={connectedRepos} />
         </div>
       </div>
 
@@ -1082,8 +1084,8 @@ function PodSkeleton() {
 // ── 우측 패널 ─────────────────────────────
 // 서비스·구성 관계는 인벤토리 계약(resources/summary)에서 관측되지 않는다 →
 // 정직한 "관측 안 됨". 저장소 탭은 실 세션 값(pendingRepos)과 연결 어포던스만 유지한다.
-function SidePanel({ forcedTab, scaled, onAddRepo, stickyTop, pendingRepos }: {
-  forcedTab?: "svc" | "cfg" | "git" | null; scaled?: boolean; onAddRepo?: () => void; stickyTop?: number; pendingRepos?: string[];
+function SidePanel({ forcedTab, scaled, onAddRepo, stickyTop, pendingRepos, connectedRepos }: {
+  forcedTab?: "svc" | "cfg" | "git" | null; scaled?: boolean; onAddRepo?: () => void; stickyTop?: number; pendingRepos?: string[]; connectedRepos?: string[];
 }) {
   const [tab, setTab] = useState<"svc" | "cfg" | "git">(forcedTab ?? "svc");
   return (
@@ -1121,6 +1123,16 @@ function SidePanel({ forcedTab, scaled, onAddRepo, stickyTop, pendingRepos }: {
 
       {tab === "git" && (
         <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+          {(connectedRepos ?? []).map((r) => (
+            <div key={`connected-${r}`} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", borderRadius: 9, padding: "7px 10px", background: TINT.ok.bg }}>
+              <GithubIcon size={14} style={{ color: UI.ink3, flexShrink: 0 }} />
+              <span style={{ minWidth: 0, flex: 1 }}>
+                <span style={{ display: "block", fontSize: TYPE.label2, fontWeight: 600, fontFamily: MONO, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r}</span>
+                <span style={{ display: "block", fontSize: TYPE.micro, color: TINT.ok.fg, marginTop: 1 }}>연결됨 · GitOps 관리</span>
+              </span>
+              <Check size={13} style={{ color: TINT.ok.fg, flexShrink: 0 }} />
+            </div>
+          ))}
           {(pendingRepos ?? []).map((r) => (
             <div key={r} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", borderRadius: 9, padding: "7px 10px", background: blueA(0.05) }}>
               <GithubIcon size={14} style={{ color: UI.ink3, flexShrink: 0 }} />
@@ -1131,7 +1143,7 @@ function SidePanel({ forcedTab, scaled, onAddRepo, stickyTop, pendingRepos }: {
               <span className="pulsedot" style={{ width: 6, height: 6, borderRadius: 999, background: BLUE, flexShrink: 0 }} />
             </div>
           ))}
-          {(pendingRepos ?? []).length === 0 && (
+          {(pendingRepos ?? []).length === 0 && (connectedRepos ?? []).length === 0 && (
             <div style={{ fontSize: TYPE.caption, color: UI.ink3, padding: "16px 10px 6px" }}>연결된 저장소는 배포 관점에서 관리됩니다.</div>
           )}
           {onAddRepo && (

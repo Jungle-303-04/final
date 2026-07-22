@@ -87,7 +87,7 @@ function toApplicationView(record: Application, index: number): ApplicationView 
  * Reads the live Application list. An empty list is an honest "관측된
  * 애플리케이션 없음"; a load failure is an honest `unavailable`.
  */
-export function useApplications(): ApplicationsFeed {
+export function useApplications(refreshKey: unknown = null): ApplicationsFeed {
   const [feed, setFeed] = useState<ApplicationsFeed>({ status: "loading", items: [] });
   useEffect(() => {
     const controller = new AbortController();
@@ -101,7 +101,7 @@ export function useApplications(): ApplicationsFeed {
         setFeed({ status: "unavailable", items: [] });
       });
     return () => controller.abort();
-  }, []);
+  }, [refreshKey]);
   return feed;
 }
 
