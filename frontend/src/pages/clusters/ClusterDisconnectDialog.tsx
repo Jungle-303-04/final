@@ -203,13 +203,27 @@ export function ClusterDisconnectDialog({
         style={LIGHT_SURFACE_TOKENS}
       >
         <form className="grid min-w-0 gap-5" onSubmit={(event) => void submit(event)}>
-          <DialogHeader>
-            <DialogTitle>{phaseTitle(phase, t)}</DialogTitle>
-            <DialogDescription>
-              {phase === "confirm"
-                ? t("clusters.disconnect.description", { name: cluster.name })
-                : t("clusters.disconnect.progress.description", { name: cluster.name })}
-            </DialogDescription>
+          {/* 연결 위저드(ShellHeader)와 같은 시각 언어 — 48px 그라데이션 아이콘 슬롯 +
+              19px 제목 + 13px 부제 + 헤어라인. 해제는 파괴적 동작이라 아이콘만 빨강 계열. */}
+          <DialogHeader className="gap-0 text-left">
+            <div className="flex items-center gap-4">
+              <span
+                aria-hidden="true"
+                className="grid size-12 shrink-0 place-items-center text-white"
+                style={{ borderRadius: 15, background: "linear-gradient(135deg, #ff5f57, #e0362c)", boxShadow: "0 8px 18px -6px rgba(224, 54, 44, 0.45)" }}
+              >
+                <Unplug className="size-[22px]" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <DialogTitle className="text-[19px] font-semibold tracking-[-0.02em]">{phaseTitle(phase, t)}</DialogTitle>
+                <DialogDescription className="mt-1 text-[13px]">
+                  {phase === "confirm"
+                    ? t("clusters.disconnect.description", { name: cluster.name })
+                    : t("clusters.disconnect.progress.description", { name: cluster.name })}
+                </DialogDescription>
+              </div>
+            </div>
+            <div className="mt-5 h-px w-full bg-border" />
           </DialogHeader>
 
           {phase === "confirm" || phase === "failed" ? (
@@ -220,6 +234,7 @@ export function ClusterDisconnectDialog({
               <Input
                 autoComplete="off"
                 autoFocus
+                className="h-auto rounded-[14px] px-4 py-3.5 font-mono text-[14px]"
                 disabled={pending}
                 id="cluster-disconnect-confirmation"
                 onChange={(event) => setConfirmation(event.currentTarget.value)}
@@ -285,15 +300,27 @@ export function ClusterDisconnectDialog({
                 </Button>
               </div>
             ) : (
-              <>
-                <Button onClick={() => changeOpen(false)} type="button" variant="outline">
+              /* 위저드 하단 행동 라인과 동일한 [보조 ⅓ · 주행동 ⅔] 구성 —
+                 취소는 위저드의 '뒤로'와 같은 회색 채움, 주행동은 파괴적이라 빨강. */
+              <div className="flex w-full items-stretch gap-3">
+                <Button
+                  className="h-auto flex-1 rounded-[14px] bg-secondary py-3.5 text-[14.5px] font-semibold text-secondary-foreground shadow-none hover:bg-muted"
+                  onClick={() => changeOpen(false)}
+                  type="button"
+                  variant="ghost"
+                >
                   {t("common.action.cancel")}
                 </Button>
-                <Button disabled={!confirmed} type="submit" variant="destructive">
+                <Button
+                  className="h-auto flex-[2] rounded-[14px] py-3.5 text-[15px] font-semibold"
+                  disabled={!confirmed}
+                  type="submit"
+                  variant="destructive"
+                >
                   <Unplug aria-hidden="true" />
                   {t("clusters.action.disconnect")}
                 </Button>
-              </>
+              </div>
             )}
           </DialogFooter>
         </form>
