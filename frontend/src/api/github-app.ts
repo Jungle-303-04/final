@@ -50,13 +50,12 @@ export function getGithubAppInstallUrl(
 }
 
 export function getGithubAppManifest(
-  params: { baseUrl: string; state: string; org?: string; name?: string },
+  params: { baseUrl?: string; state: string; org?: string; name?: string },
   signal?: AbortSignal,
 ): Promise<GithubAppManifest> {
-  const entries: [string, string][] = [
-    ["base_url", params.baseUrl],
-    ["state", params.state],
-  ];
+  // base_url 은 서버가 자기 공개 주소로 자동 채우므로 보통 생략한다.
+  const entries: [string, string][] = [["state", params.state]];
+  if (params.baseUrl) entries.push(["base_url", params.baseUrl]);
   if (params.org) entries.push(["org", params.org]);
   if (params.name) entries.push(["name", params.name]);
   return apiRequest(

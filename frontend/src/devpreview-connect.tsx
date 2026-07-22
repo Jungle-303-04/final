@@ -67,6 +67,7 @@ import {
   getGithubAppManifest,
   type GithubAppConfig,
 } from "./api/github-app";
+import { useSession } from "./devpreview/sessionFeed";
 import "./styles/tokens.css";
 import "./styles/foundation.css";
 
@@ -254,34 +255,21 @@ type RepoSource = {
 
 // GitHub App 섹션 — 구성돼 있으면 "App으로 연결"(사용자 원클릭), 아니면
 // "자동 등록"(운영자 1회 · manifest 폼 POST). 토큰 붙여넣기를 대체한다.
-function GithubAppConnect({ repoRef }: { repoRef: string }) {
-  const [config, setConfig] = useState<GithubAppConfig | null>(null);
-  const [baseUrl, setBaseUrl] = useState("");
+function GithubAppConnect({
+  repoRef,
+  config,
+  registerNote,
+}: {
+  repoRef: string;
+  config: GithubAppConfig | null;
+  registerNote: "created" | "error" | null;
+}) {
+  const session = useSession();
+  const isAdmin = session.roles.includes("service_admin");
+  const sessionReady = session.status !== "loading";
   const [busy, setBusy] = useState(false);
-  const [note, setNote] = useState<{ kind: "ok" | "err" | "info"; text: string } | null>(null);
+  const [note, setNote] = useState<string | null>(null);
   const org = repoRef.split("/")[0] ?? "";
-
-  useEffect(() => {
-    let cancelled = false;
-    getGithubAppConfig()
-      .then((c) => { if (!cancelled) setConfig(c); })
-      .catch(() => { if (!cancelled) setConfig({ configured: false, slug: null, install_available: false }); });
-    // 운영자 자동등록 복귀(?github_app_manifest=created) 처리
-    const params = new URLSearchParams(window.location.search);
-    const outcome = params.get("github_app_manifest");
-    if (outcome) {
-      setNote(
-        outcome === "created"
-          ? { kind: "ok", text: "GitHub App 등록 완료 — 이제 원클릭으로 연결됩니다." }
-          : { kind: "err", text: "GitHub App 등록에 실패했습니다. 다시 시도하세요." },
-      );
-      params.delete("github_app_manifest");
-      params.delete("github_app_state");
-      const rest = params.toString();
-      window.history.replaceState({}, "", window.location.pathname + (rest ? `?${rest}` : ""));
-    }
-    return () => { cancelled = true; };
-  }, []);
 
   const connectWithApp = async () => {
     setBusy(true); setNote(null);
@@ -291,22 +279,17 @@ function GithubAppConnect({ repoRef }: { repoRef: string }) {
       const { url } = await getGithubAppInstallUrl(state);
       window.location.href = url;
     } catch {
-      setNote({ kind: "err", text: "설치 URL을 가져오지 못했습니다." });
+      setNote("설치 URL을 가져오지 못했습니다.");
       setBusy(false);
     }
   };
 
   const registerApp = async () => {
-    if (!baseUrl.trim()) { setNote({ kind: "err", text: "공개 백엔드 주소를 입력하세요." }); return; }
     setBusy(true); setNote(null);
     try {
       const state = crypto.randomUUID();
-      const { action_url, manifest } = await getGithubAppManifest({
-        baseUrl: baseUrl.trim(),
-        state,
-        org: org || undefined,
-      });
-      // GitHub 은 manifest 를 폼 POST 로 받는다 — 동적 폼 생성 후 제출(값 미리 채워짐)
+      // base_url 은 서버가 자기 공개 주소로 자동 채운다(입력 불필요).
+      const { action_url, manifest } = await getGithubAppManifest({ state, org: org || undefined });
       const form = document.createElement("form");
       form.method = "post";
       form.action = action_url;
@@ -318,21 +301,23 @@ function GithubAppConnect({ repoRef }: { repoRef: string }) {
       document.body.appendChild(form);
       form.submit();
     } catch {
-      setNote({ kind: "err", text: "등록 준비에 실패했습니다. 주소를 확인하세요." });
+      setNote("등록 준비에 실패했습니다.");
       setBusy(false);
     }
   };
 
-  if (config === null) return null;
+  // 구성·세션 로딩 중엔 조용히(고아 상태 방지).
+  if (config === null || !sessionReady) return null;
 
-  const noteEl = note ? (
-    <span
-      className={`px-0.5 text-[11.5px] ${note.kind === "err" ? "c-red" : note.kind === "ok" ? "c-green" : "c-2"}`}
-    >
-      {note.text}
-    </span>
-  ) : null;
+  const banner =
+    registerNote === "created" ? (
+      <span className="px-0.5 text-[11.5px] c-green">GitHub App 등록 완료 — 이제 원클릭으로 연결됩니다.</span>
+    ) : registerNote === "error" ? (
+      <span className="px-0.5 text-[11.5px] c-red">GitHub App 등록에 실패했습니다. 다시 시도하세요.</span>
+    ) : null;
+  const noteEl = note ? <span className="px-0.5 text-[11.5px] c-red">{note}</span> : null;
 
+  // ① 구성됨 → 누구나 원클릭 연결
   if (config.install_available) {
     return (
       <div className="grid gap-2">
@@ -343,36 +328,41 @@ function GithubAppConnect({ repoRef }: { repoRef: string }) {
         >
           GitHub App으로 연결 <ArrowRight className="size-[17px]" />
         </button>
-        <span className="px-0.5 text-[11.5px] c-3">
-          토큰 없이 GitHub에서 한 번 승인하면 됩니다. 설치 후 이 화면으로 돌아옵니다.
-        </span>
+        <span className="px-0.5 text-[11.5px] c-3">토큰 없이 GitHub에서 한 번 승인하면 됩니다.</span>
+        {banner}
         {noteEl}
       </div>
     );
   }
 
+  // ② 미구성 + 비어드민 → 관리자 설정 필요(등록 카드 숨김)
+  if (!isAdmin) {
+    return (
+      <div className="grid gap-1.5 rounded-[14px] p-3.5" style={{ background: "var(--fill)" }}>
+        <div className="text-[12.5px] font-medium c-2">GitHub App이 아직 설정되지 않았어요</div>
+        <span className="text-[11.5px] c-3">
+          관리자가 GitHub App을 등록하면 토큰 없이 연결됩니다. 지금은 아래 액세스 토큰으로 연결하세요.
+        </span>
+        {banner}
+      </div>
+    );
+  }
+
+  // ③ 미구성 + 어드민 → 원클릭 자동 등록(주소 입력 불필요)
   return (
     <div className="grid gap-2.5 rounded-[14px] p-3.5" style={{ background: "var(--fill)" }}>
       <div className="text-[12.5px] font-medium c-2">GitHub App 미설정 · 운영자 1회 자동 등록</div>
-      <div className="flex items-center gap-3 bg-surface" style={{ borderRadius: 12, padding: "12px 14px" }}>
-        <Globe className="size-[16px] c-3" />
-        <input
-          value={baseUrl}
-          onChange={(e) => setBaseUrl(e.currentTarget.value)}
-          placeholder="공개 백엔드 주소 · https://xxx.trycloudflare.com"
-          className="w-full bg-transparent font-mono text-[13px] c-ink outline-none placeholder:font-sans placeholder:c-3"
-        />
-      </div>
       <button
         onClick={() => void registerApp()}
         disabled={busy}
-        className="btn-ghost flex items-center justify-center gap-2 rounded-[12px] py-2.5 text-[13.5px] font-semibold disabled:opacity-60"
+        className="btn-primary flex items-center justify-center gap-2 rounded-[12px] py-3 text-[14px] font-semibold disabled:opacity-60"
       >
         GitHub에서 자동 등록 <ArrowRight className="size-4" />
       </button>
       <span className="px-0.5 text-[11px] c-3">
-        GitHub 생성 화면이 미리 채워집니다. "Create" 한 번이면 끝 — 자격증명은 서버가 자동 수신·암호화 저장합니다.
+        서버 주소는 자동 인식됩니다. GitHub 생성 화면이 미리 채워지니 "Create" 한 번이면 끝 — 자격증명은 서버가 자동 수신·암호화 저장합니다.
       </span>
+      {banner}
       {noteEl}
     </div>
   );
@@ -390,6 +380,31 @@ function RepoStep({ providers, onNext }: { providers: ClusterProvidersView; onNe
   const [accessProbe, setAccessProbe] = useState<Awaited<ReturnType<typeof probeRepository>> | null>(null);
   const [probeStatus, setProbeStatus] = useState<"idle" | "submitting" | "error">("idle");
   const [failure, setFailure] = useState("");
+  // GitHub App 구성 상태(토큰 숨김·App 우선 판정) + 운영자 자동등록 복귀 배너.
+  const [appConfig, setAppConfig] = useState<GithubAppConfig | null>(null);
+  const [appRegisterNote, setAppRegisterNote] = useState<"created" | "error" | null>(null);
+  const appAvailable = appConfig?.install_available === true;
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = () =>
+      getGithubAppConfig()
+        .then((c) => { if (!cancelled) setAppConfig(c); })
+        .catch(() => { if (!cancelled) setAppConfig({ configured: false, slug: null, install_available: false }); });
+    void load();
+    // 운영자 자동등록 복귀(?github_app_manifest=created|error) — 부모가 일괄 처리(자식 effect 순서 이슈 회피).
+    const params = new URLSearchParams(window.location.search);
+    const outcome = params.get("github_app_manifest");
+    if (outcome === "created" || outcome === "error") {
+      setAppRegisterNote(outcome);
+      if (outcome === "created") void load();
+      params.delete("github_app_manifest");
+      params.delete("github_app_state");
+      const rest = params.toString();
+      window.history.replaceState({}, "", window.location.pathname + (rest ? `?${rest}` : ""));
+    }
+    return () => { cancelled = true; };
+  }, []);
 
   const handleInputChange = (v: string) => {
     setInput(v);
@@ -527,19 +542,24 @@ function RepoStep({ providers, onNext }: { providers: ClusterProvidersView; onNe
             {/* 비공개/접근불가일 때만 토큰창을 띄우고 필수로 강제한다. */}
             {needsToken && (
               <div className="grid gap-3 pt-1">
-                {/* 권장: GitHub App(원클릭) — 미설정이면 운영자 자동등록 */}
-                <GithubAppConnect repoRef={repo.full} />
-                <div className="flex items-center gap-2 px-0.5 text-[11px] c-3">
-                  <span className="h-px flex-1" style={{ background: "rgba(120,120,120,0.22)" }} />또는 액세스 토큰<span className="h-px flex-1" style={{ background: "rgba(120,120,120,0.22)" }} />
-                </div>
-                <div className="grid gap-2.5">
-                  <span className="px-0.5 text-[12.5px] font-medium c-2">비공개 저장소 · 액세스 토큰 <span className="c-red">*</span></span>
-                  <div className="field flex items-center gap-3 bg-surface" style={{ borderRadius: 14, padding: "15px 16px" }}>
-                    <Lock className="size-[18px] c-3" />
-                    <input value={token} onChange={(e) => setToken(e.currentTarget.value)} placeholder="필수 · ghp_••••••••••••••••" type="password" autoComplete="new-password" className="w-full bg-transparent font-mono text-[14px] c-ink outline-none placeholder:c-3" />
-                  </div>
-                  <span className="px-0.5 text-[11.5px] c-3">토큰은 브라우저 저장소에 남기지 않으며, 연결 성공 시 서버의 암호화된 저장소 자격증명으로 보관됩니다.</span>
-                </div>
+                {/* 권장: GitHub App(원클릭) — 미설정이면 어드민 자동등록 / 비어드민 안내 */}
+                <GithubAppConnect repoRef={repo.full} config={appConfig} registerNote={appRegisterNote} />
+                {/* App이 구성되면 토큰 칸을 숨긴다(App 기본). 미구성 시에만 토큰 폴백 노출. */}
+                {!appAvailable && (
+                  <>
+                    <div className="flex items-center gap-2 px-0.5 text-[11px] c-3">
+                      <span className="h-px flex-1" style={{ background: "rgba(120,120,120,0.22)" }} />또는 액세스 토큰<span className="h-px flex-1" style={{ background: "rgba(120,120,120,0.22)" }} />
+                    </div>
+                    <div className="grid gap-2.5">
+                      <span className="px-0.5 text-[12.5px] font-medium c-2">비공개 저장소 · 액세스 토큰 <span className="c-red">*</span></span>
+                      <div className="field flex items-center gap-3 bg-surface" style={{ borderRadius: 14, padding: "15px 16px" }}>
+                        <Lock className="size-[18px] c-3" />
+                        <input value={token} onChange={(e) => setToken(e.currentTarget.value)} placeholder="필수 · ghp_••••••••••••••••" type="password" autoComplete="new-password" className="w-full bg-transparent font-mono text-[14px] c-ink outline-none placeholder:c-3" />
+                      </div>
+                      <span className="px-0.5 text-[11.5px] c-3">토큰은 브라우저 저장소에 남기지 않으며, 연결 성공 시 서버의 암호화된 저장소 자격증명으로 보관됩니다.</span>
+                    </div>
+                  </>
+                )}
               </div>
             )}
             {/* 공개는 토큰 없이 진행하되, 쓰기(PR)엔 이후 자격증명이 필요함을 정직하게 안내한다. */}
@@ -549,7 +569,7 @@ function RepoStep({ providers, onNext }: { providers: ClusterProvidersView; onNe
                   <Globe className="mt-0.5 size-3.5 shrink-0 c-green" />
                   <span>공개 저장소는 토큰 없이 연결·동기화됩니다. 화면에서 YAML을 수정해 PR을 만들려면(쓰기) GitHub App 연결이 필요합니다.</span>
                 </div>
-                <GithubAppConnect repoRef={repo.full} />
+                <GithubAppConnect repoRef={repo.full} config={appConfig} registerNote={appRegisterNote} />
               </div>
             )}
           </motion.div>
@@ -562,8 +582,8 @@ function RepoStep({ providers, onNext }: { providers: ClusterProvidersView; onNe
           <div><div className="text-[13.5px] font-semibold c-ink">저장소 연결 확인 실패</div><div className="mt-1 break-words text-[12.5px] leading-[1.5] c-2">{failure}</div></div>
         </div>
       )}
-      {/* 접근 판정 후에만 버튼 노출. 공개면 즉시 활성, 비공개는 토큰 입력 전까지 비활성. */}
-      {resolved && (
+      {/* 토큰 경로 버튼: 공개는 항상, 비공개는 App 미가용일 때만(App 가용 시 App 버튼이 경로). */}
+      {resolved && (access === "public" || !appAvailable) && (
         <button disabled={!ready || probeStatus === "submitting"} onClick={() => void verify()} className="btn-primary flex w-full items-center justify-center gap-2 rounded-[14px] py-3.5 text-[15px] font-semibold disabled:cursor-not-allowed disabled:opacity-60">
           {probeStatus === "submitting" ? <><Spin c="size-4 text-white" /> 저장소·브랜치 확인 중…</> : <>저장소 확인 · 배포 대상 선택 <ArrowRight className="size-[17px]" /></>}
         </button>

@@ -15,7 +15,7 @@ from typing import Any
 from urllib.parse import urlencode
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 
@@ -109,10 +109,25 @@ class AppManifestResponse(BaseModel):
     manifest: dict[str, Any]
 
 
+def _public_base_url(request: Request, explicit: str | None) -> str:
+    """GitHub 이 웹훅·콜백을 보낼 공개 백엔드 주소.
+
+    명시값 > PUBLIC_BASE_URL env > 요청 base_url(배포 뒤 자기 도메인) 순.
+    배포본은 자기 도메인을 알기에 운영자가 입력할 필요가 없다.
+    """
+    if explicit and explicit.strip():
+        return explicit.strip().rstrip("/")
+    configured = env("PUBLIC_BASE_URL", "").strip()
+    if configured:
+        return configured.rstrip("/")
+    return str(request.base_url).rstrip("/")
+
+
 @router.get("/api/integrations/github/app/manifest", response_model=AppManifestResponse)
 async def github_app_manifest(
-    base_url: str,
+    request: Request,
     state: str,
+    base_url: str | None = None,
     org: str | None = None,
     name: str | None = None,
     current: Any = Depends(require_session),
@@ -120,12 +135,14 @@ async def github_app_manifest(
     """운영자 1회 등록용 manifest + GitHub 생성 URL.
 
     프론트가 이 manifest 를 GitHub 새 App 페이지로 폼 POST 하면 값이 미리 채워진다.
+    base_url 은 서버가 자기 공개 주소로 자동 채운다(운영자 입력 불필요).
     """
-    if not base_url.strip():
-        raise HTTPException(status_code=400, detail="base_url_required")
+    base = _public_base_url(request, base_url)
+    if not base:
+        raise HTTPException(status_code=400, detail="public_base_url_unresolved")
     return AppManifestResponse(
         action_url=new_app_action_url(org=org, state=state),
-        manifest=build_app_manifest(base_url=base_url, name=name),
+        manifest=build_app_manifest(base_url=base, name=name),
     )
 
 
