@@ -19,6 +19,8 @@ from packages.contracts.kubernetes_discovery import ApiResourceDiscoveryObservat
 
 SNAPSHOT_UNAVAILABLE = "inventory_snapshot_evidence_unavailable"
 COLLECTION_PARTIAL = "inventory_collection_partial"
+SOURCE_RESOURCES_INCOMPLETE = "source_resources_incomplete"
+SOURCE_RESOURCES_TRUNCATED = "source_resources_truncated"
 DISCOVERY_UNAVAILABLE = "api_resource_discovery_not_observed"
 DISCOVERY_INVALID = "api_resource_discovery_invalid"
 ACCESS_UNAVAILABLE = "agent_access_evidence_unavailable"
@@ -38,7 +40,13 @@ def project_inventory_resource_counts_evidence(
         )
 
     reasons: set[str] = set()
-    if source.get("resources_complete") is not True:
+    limits = source.get("collection_limits")
+    source_truncated = isinstance(limits, Mapping) and limits.get("truncated") is True
+    if source_truncated:
+        reasons.add(SOURCE_RESOURCES_TRUNCATED)
+        reasons.add(COLLECTION_PARTIAL)
+    elif source.get("resources_complete") is not True:
+        reasons.add(SOURCE_RESOURCES_INCOMPLETE)
         reasons.add(COLLECTION_PARTIAL)
 
     discovery = _discovery(source, reasons)

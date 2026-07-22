@@ -347,6 +347,11 @@ def _scheduled_run_projection(
         reasons.add("run_limit_reached")
     if bool(raw.get("pods_truncated")):
         reasons.add("pod_limit_reached")
+    reasons.update(
+        str(reason)
+        for reason in (raw.get("partial_reason_codes") or ())
+        if isinstance(reason, str) and reason
+    )
 
     runs: list[ScheduledWorkloadRun] = []
     lifecycle: list[ScheduledRunLifecycleEvent] = []
@@ -1024,7 +1029,9 @@ def _same_inventory_generation(
 
 
 def _inventory_resource(db: Any, **identity: Any) -> dict[str, Any] | None:
-    reader = getattr(db, "get_inventory_resource", None)
+    reader = getattr(db, "get_latest_inventory_resource", None)
+    if not callable(reader):
+        reader = getattr(db, "get_inventory_resource", None)
     if not callable(reader):
         return None
     resource = reader(**identity)

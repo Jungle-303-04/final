@@ -33,6 +33,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from domains.gitops.models import Application, DeploymentBinding, ManifestArtifact, WorkflowRun
 from domains.identity.models import ClusterRegistration
 from domains.inventory.change_correlation import INVENTORY_CHANGE_LEDGER_EPOCH
+from domains.inventory.coverage import InventoryDeleteScope, inventory_row_in_deletion_scopes
 from domains.inventory.models import ClusterInventoryResourceRecord, ClusterUsageSampleRecord
 from domains.inventory_filter.models import (
     InventoryFilterRevision,
@@ -116,6 +117,8 @@ def _compute_projection_diff(
     workspace_id: str,
     cluster_id: str,
     snapshot_id: str,
+    resources_complete: bool,
+    deletion_scopes: Sequence[InventoryDeleteScope],
 ) -> _ProjectionDiff:
     """Read cluster state and diff it against the active versions — no workspace lock."""
     version_table = InventoryResourceVersion.__table__
@@ -127,6 +130,7 @@ def _compute_projection_diff(
             select(current_table).where(
                 current_table.c.workspace_id == workspace_id,
                 current_table.c.cluster_id == cluster_id,
+                current_table.c.snapshot_id == snapshot_id,
                 current_table.c.deleted_at.is_(None),
             )
         )
@@ -187,7 +191,12 @@ def _compute_projection_diff(
 
     for inventory_key, active in active_rows.items():
         if inventory_key not in current_keys:
-            close_ids.add(int(active["version_id"]))
+            if _missing_projection_resource_delete_safe(
+                active,
+                resources_complete=resources_complete,
+                deletion_scopes=deletion_scopes,
+            ):
+                close_ids.add(int(active["version_id"]))
 
     return _ProjectionDiff(
         application_binding_complete=application_binding_complete,
@@ -197,6 +206,17 @@ def _compute_projection_diff(
         close_ids=close_ids,
         version_ids_by_inventory_key=version_ids_by_inventory_key,
     )
+
+
+def _missing_projection_resource_delete_safe(
+    row: Mapping[str, Any],
+    *,
+    resources_complete: bool,
+    deletion_scopes: Sequence[InventoryDeleteScope],
+) -> bool:
+    if resources_complete:
+        return True
+    return inventory_row_in_deletion_scopes(row, deletion_scopes)
 
 
 def _write_projection_versions(
@@ -279,6 +299,7 @@ def sync_inventory_filter_projection(
     labels_complete: bool,
     resources_complete: bool,
     partial_reason_codes: Sequence[str],
+    deletion_scopes: Sequence[InventoryDeleteScope] = (),
 ) -> InventoryFilterProjectionMutation:
     """Advance one cluster's immutable filter revision in the snapshot transaction.
 
@@ -319,6 +340,8 @@ def sync_inventory_filter_projection(
             workspace_id=workspace_id,
             cluster_id=cluster_id,
             snapshot_id=snapshot_id,
+            resources_complete=resources_complete,
+            deletion_scopes=deletion_scopes,
         )
         revision_reasons = set(partial_reason_codes)
         if not diff.application_binding_complete:
@@ -350,6 +373,8 @@ def sync_inventory_filter_projection(
         workspace_id=workspace_id,
         cluster_id=cluster_id,
         snapshot_id=snapshot_id,
+        resources_complete=resources_complete,
+        deletion_scopes=deletion_scopes,
     )
     revision_reasons = set(partial_reason_codes)
     if not diff.application_binding_complete:
@@ -2129,9 +2154,22 @@ def _physical_topology_statements(
         filters=filters,
         allowed_application_ids=allowed_application_ids,
     ).cte("physical_topology_filter_matches")
+    current_resources = ClusterInventoryResourceRecord.__table__.alias(
+        "physical_topology_current_resources"
+    )
     current_snapshot_node = and_(
         base.c.resource_type == "node",
-        base.c.source_snapshot_id == base.c.as_of_snapshot_id,
+        select(literal(1))
+        .select_from(current_resources)
+        .where(
+            current_resources.c.workspace_id == base.c.workspace_id,
+            current_resources.c.cluster_id == base.c.cluster_id,
+            current_resources.c.inventory_key == base.c.inventory_key,
+            current_resources.c.resource_type == "node",
+            current_resources.c.snapshot_id == base.c.as_of_snapshot_id,
+            current_resources.c.deleted_at.is_(None),
+        )
+        .exists(),
     )
 
     server_statement = (
