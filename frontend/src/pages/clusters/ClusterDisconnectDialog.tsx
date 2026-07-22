@@ -3,6 +3,7 @@ import {
   CircleCheck,
   TriangleAlert,
   Unplug,
+  X,
 } from "lucide-react";
 import { useEffect, useRef, useState, type CSSProperties, type FormEvent } from "react";
 
@@ -22,7 +23,6 @@ import {
   DialogContent,
   DialogDescription,
   DialogFooter,
-  DialogHeader,
   DialogTitle,
 } from "../../shared/ui/primitives/dialog";
 import { Input } from "../../shared/ui/primitives/input";
@@ -197,35 +197,45 @@ export function ClusterDisconnectDialog({
       open={open}
     >
       <DialogContent
-        className="gap-5 overflow-hidden rounded-[26px] p-7 sm:max-w-[580px]"
+        className="gap-0 overflow-hidden rounded-[26px] p-0 sm:max-w-[580px]"
         closeLabel={t("common.action.close")}
-        showCloseButton={!terminal}
+        showCloseButton={false}
         style={LIGHT_SURFACE_TOKENS}
       >
-        <form className="grid min-w-0 gap-5" onSubmit={(event) => void submit(event)}>
-          {/* 연결 위저드(ShellHeader)와 같은 시각 언어 — 48px 그라데이션 아이콘 슬롯 +
-              19px 제목 + 13px 부제 + 헤어라인. 해제는 파괴적 동작이라 아이콘만 빨강 계열. */}
-          <DialogHeader className="gap-0 text-left">
-            <div className="flex items-center gap-4">
-              <span
-                aria-hidden="true"
-                className="grid size-12 shrink-0 place-items-center text-white"
-                style={{ borderRadius: 15, background: "linear-gradient(135deg, #ff5f57, #e0362c)", boxShadow: "0 8px 18px -6px rgba(224, 54, 44, 0.45)" }}
-              >
-                <Unplug className="size-[22px]" />
-              </span>
-              <div className="min-w-0 flex-1">
-                <DialogTitle className="text-[19px] font-semibold tracking-[-0.02em]">{phaseTitle(phase, t)}</DialogTitle>
-                <DialogDescription className="mt-1 text-[13px]">
-                  {phase === "confirm"
-                    ? t("clusters.disconnect.description", { name: cluster.name })
-                    : t("clusters.disconnect.progress.description", { name: cluster.name })}
-                </DialogDescription>
-              </div>
+        <form className="min-w-0" onSubmit={(event) => void submit(event)}>
+          {/* 연결 위저드 ShellHeader와 동일 골격 — 헤더(30/36/24) → 헤어라인(좌우 36)
+              → 본문(28/36/34). 48px 아이콘 슬롯·19px 제목·13px 부제·원형 X까지
+              같은 수치, 해제는 파괴적 동작이라 아이콘만 빨강 계열. */}
+          <div className="flex items-center gap-4" style={{ padding: "30px 36px 24px" }}>
+            <span
+              aria-hidden="true"
+              className="grid size-12 shrink-0 place-items-center text-white"
+              style={{ borderRadius: 15, background: "linear-gradient(135deg, #ff5f57, #e0362c)", boxShadow: "0 8px 18px -6px rgba(224, 54, 44, 0.45)" }}
+            >
+              <Unplug className="size-[22px]" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <DialogTitle className="text-[19px] font-semibold tracking-[-0.02em]">{phaseTitle(phase, t)}</DialogTitle>
+              <DialogDescription className="mt-1 text-[13px]">
+                {phase === "confirm"
+                  ? t("clusters.disconnect.description", { name: cluster.name })
+                  : t("clusters.disconnect.progress.description", { name: cluster.name })}
+              </DialogDescription>
             </div>
-            <div className="mt-5 h-px w-full bg-border" />
-          </DialogHeader>
-
+            {!terminal ? (
+              <button
+                aria-label={t("common.action.close")}
+                className="grid size-9 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted"
+                onClick={() => changeOpen(false)}
+                style={{ marginTop: -4 }}
+                type="button"
+              >
+                <X className="size-5" />
+              </button>
+            ) : null}
+          </div>
+          <div style={{ padding: "0 36px" }}><div className="h-px w-full bg-border" /></div>
+          <div className="grid min-w-0 gap-5" style={{ padding: "28px 36px 34px" }}>
           {phase === "confirm" || phase === "failed" ? (
             <div className="grid gap-2">
               <Label htmlFor="cluster-disconnect-confirmation">
@@ -325,6 +335,7 @@ export function ClusterDisconnectDialog({
               </div>
             )}
           </DialogFooter>
+          </div>
         </form>
       </DialogContent>
     </Dialog>
