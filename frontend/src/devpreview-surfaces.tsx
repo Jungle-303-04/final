@@ -1,13 +1,13 @@
 // ── 데모 서피스: 배포 · 이슈 · 타임라인 · 점검 · 비용 · 설정 (Master Spec 5.7~5.10) ──
 // 원칙: 모든 숫자는 실제 백엔드 계약(어댑터 훅) 파생 — 관측 안 된 값은 채우지 않는다(no backfill).
 // 시각은 공용 부품(KpiValue/MiniBars/RankList/MiniTimeline)과 셸 토큰만 사용. 제품 이식 시 D5 공용 표로 수렴한다.
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "motion/react";
 import {
   Rocket, Package, AlertTriangle, Bell, Clock, ShieldCheck, Coins,
   Building2, Globe, Check, Sparkles, X, Palette, RefreshCw, Lock, Pin,
 } from "lucide-react";
-import { UI, BLUE, HP, TINT, MONO, TYPE, SOFT, DUR, PRESENT_SCALE, inkA, blueA, critA } from "./devpreview/theme";
+import { UI, BLUE, HP, TINT, MONO, TYPE, SOFT, DUR, PRESENT_SCALE, inkA, blueA, critA, BRAND } from "./devpreview/theme";
 import { GithubIcon } from "./devpreview/brandIcons";
 import { useCostOverview } from "./devpreview/costFeed";
 import { useChecksOverview } from "./devpreview/checksFeed";
@@ -379,6 +379,12 @@ export function DeploySurface({ pendingRepos = [], repositoryFilter = null, onOp
 }) {
   const [tab, setTab] = useState(repositoryFilter ? "GitOps" : "워크플로우");
   const [selectedRepository, setSelectedRepository] = useState<string | null>(repositoryFilter);
+  useEffect(() => {
+    if (repositoryFilter) {
+      setSelectedRepository(repositoryFilter);
+      setTab("GitOps");
+    }
+  }, [repositoryFilter]);
   const [repositoryRefreshKey, setRepositoryRefreshKey] = useState(0);
   const appsFeed = useApplications(repositoryRefreshKey);
   const workflowFeed = useApplicationRuns(appsFeed.items, repositoryRefreshKey);

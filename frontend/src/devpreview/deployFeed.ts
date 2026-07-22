@@ -183,14 +183,10 @@ export function useApplicationRuns(
   useEffect(() => {
     const controller = new AbortController();
     if (applications.length === 0) {
-      queueMicrotask(() => {
-        if (!controller.signal.aborted) setFeed({ status: "ready", items: [] });
-      });
+      setFeed({ status: "ready", items: [] });
       return () => controller.abort();
     }
-    queueMicrotask(() => {
-      if (!controller.signal.aborted) setFeed({ status: "loading", items: [] });
-    });
+    setFeed({ status: "loading", items: [] });
     void Promise.allSettled(applications.map(async (application) => {
       // A single application can accumulate many connect-validation and retry
       // runs before the GitOps recovery flow completes. Read the full bounded

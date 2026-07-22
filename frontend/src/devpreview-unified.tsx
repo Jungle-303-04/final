@@ -1389,15 +1389,12 @@ function App() {
   // 서버 인벤토리에 실 클러스터가 나타나면 부트스트랩 임시 카드는 즉시 승격한다.
   // id/name/displayName 중 어느 식별자로 연결했더라도 중복 카드와 새로고침 재등장을 막는다.
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setPendingCl((current) => {
-        const next = reconcilePendingClusters(current, contract.clusters);
-        if (next === current) return current;
-        try { sessionStorage.setItem(PENDING_CLUSTER_STORAGE_KEY, JSON.stringify(next)); } catch { /* 세션 저장 불가 */ }
-        return next;
-      });
-    }, 0);
-    return () => window.clearTimeout(timer);
+    setPendingCl((current) => {
+      const next = reconcilePendingClusters(current, contract.clusters);
+      if (next === current) return current;
+      try { sessionStorage.setItem(PENDING_CLUSTER_STORAGE_KEY, JSON.stringify(next)); } catch { /* 세션 저장 불가 */ }
+      return next;
+    });
   }, [contract.clusters, pendingCl]);
   // 연결 완료는 세션 타이머가 아니라 서버가 소유한 repository 상태로 확정한다.
   // 이전 구현은 pendingRepo를 추가만 하고 제거하지 않아 active 저장소도 영원히

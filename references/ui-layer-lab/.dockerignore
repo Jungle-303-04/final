@@ -1,6 +1,0 @@
-node_modules
-dist
-output
-.playwright-cli
-tsconfig.tsbuildinfo
-npm-debug.log*
