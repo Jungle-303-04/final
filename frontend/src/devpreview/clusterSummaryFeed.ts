@@ -8,7 +8,10 @@ import { useBoundedPoll } from "./useBoundedPoll";
 
 // 실시간 cadence: 화면이 보일 때만 visible cluster의 node summary를 재조회한다.
 // bounded(초 단위)이며 60Hz가 아니고, 백그라운드 탭에서는 요청하지 않는다.
-const SUMMARY_REFRESH_MS = 20_000;
+// 1초 주기 — 카드 수치가 관측 도착 즉시 반영되고, 표시 계층의 0.5초 보간
+// (useSmoothedValue)과 맞물려 스텝 점프 없이 움직인다. in-flight dedupe 가
+// 있어 응답이 1초보다 느려도 요청이 중첩되지 않는다.
+const SUMMARY_REFRESH_MS = 1_000;
 
 // UI-PHASE2-001 §5.2: a typed live adapter for the Home/cluster cards. Node
 // readiness and usage come from each cluster's canonical node-summary contract.

@@ -8,7 +8,7 @@
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import {
-  AlertCircle, ArrowLeft, ArrowRight, Check, ChevronRight, Copy, Folder, GitBranch, Globe,
+  AlertCircle, ArrowLeft, ArrowRight, Check, ChevronRight, Copy, Folder, GitBranch, Globe, RotateCw,
   Info, Lock, Search, Server, Sparkles, X,
 } from "lucide-react";
 // 브랜드 로고 — 인라인 SVG (Simple Icons). tabler 의존 제거로 데모 안정성 확보.
@@ -37,6 +37,7 @@ import { Spinner } from "./shared/ui/primitives/spinner";
 import { emitAction } from "./devpreview/bus";
 import {
   connectCluster,
+  reissueClusterConnectCommand,
   connectApplication,
   isApiError,
   listClusters,
@@ -56,6 +57,7 @@ import {
   useClusterProviders,
   type ClusterProvidersView,
   type ConnectionStatusView,
+  type ClusterActivationReadinessView,
   type ProviderAvailability,
 } from "./devpreview/connectFeed";
 import { reasonLabel } from "./devpreview/statusLabel";
@@ -159,15 +161,43 @@ function NextButton({ show, label, onClick }: { show: boolean; label: string; on
   );
 }
 
-const BackBtn = ({ onClick }: { onClick: () => void }) => (
-  <button onClick={onClick} aria-label="뒤로" className="btn-ghost grid shrink-0 place-items-center" style={{ borderRadius: 14, width: 50, height: 50 }}><ArrowLeft className="size-[18px] c-2" /></button>
-);
+// 에러는 흐름에 끼워넣지 않고 최상위 레이어에 플로팅으로 띄운 뒤 자동 소멸시킨다.
+// (레이아웃 시프트 0 · "사념파처럼" 나타났다 사라짐)
+function FloatingToast({ message, onDismiss }: { message: string | null; onDismiss: () => void }) {
+  useEffect(() => {
+    if (!message) return;
+    const timer = window.setTimeout(onDismiss, 4200);
+    return () => window.clearTimeout(timer);
+  }, [message, onDismiss]);
+  return (
+    <div className="pointer-events-none fixed inset-x-0 z-[2000] flex justify-center px-4" style={{ top: 22 }}>
+      <AnimatePresence>
+        {message && (
+          <motion.div key={message} role="alert"
+            initial={{ opacity: 0, y: -16, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -16, scale: 0.96 }}
+            transition={{ type: "spring", visualDuration: 0.34, bounce: 0.3 }}
+            className="pointer-events-auto flex max-w-[460px] items-center gap-3"
+            style={{ background: "var(--surface)", border: "1px solid rgba(239,68,68,0.28)", borderRadius: 14, padding: "13px 18px", boxShadow: "0 24px 60px -16px rgba(0,0,0,0.4), 0 6px 16px -6px rgba(0,0,0,0.16)" }}>
+            <span className="grid size-6 shrink-0 place-items-center rounded-full" style={{ background: "rgba(239,68,68,0.12)" }}><AlertCircle className="size-[15px] c-red" strokeWidth={2.4} /></span>
+            <span className="text-[13px] font-medium c-ink">{message}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
 
-function ShellHeader({ icon: Icon, title, sub, onClose }: { icon: typeof Server; title: string; sub: string; onClose: () => void }) {
+function ShellHeader({ icon: Icon, title, sub, onClose, onBack }: { icon: typeof Server; title: string; sub: string; onClose: () => void; onBack?: () => void }) {
   return (
     <>
       <div className="flex items-center gap-4" style={{ padding: "30px 36px 24px" }}>
-        <span className="grid size-12 shrink-0 place-items-center hdr-grad text-white" style={{ borderRadius: 15, boxShadow: "0 8px 18px -6px rgba(47,91,255,0.5)" }}><Icon className="size-[22px]" /></span>
+        {/* 아이콘 슬롯: 하위 스텝에서는 같은 48×48 자리를 뒤로가기 버튼이 대체한다.
+            슬롯 크기가 동일해 제목/부제 위치는 스텝이 바뀌어도 움직이지 않는다. */}
+        {onBack ? (
+          <button onClick={onBack} aria-label="이전 단계" className="grid size-12 shrink-0 place-items-center rounded-[15px] c-2 transition-colors hover:bg-soft" style={{ background: "var(--fill)" }}><ArrowLeft className="size-[22px]" /></button>
+        ) : (
+          <span className="grid size-12 shrink-0 place-items-center hdr-grad text-white" style={{ borderRadius: 15, boxShadow: "0 8px 18px -6px rgba(47,91,255,0.5)" }}><Icon className="size-[22px]" /></span>
+        )}
         <div className="min-w-0 flex-1">
           <h1 className="text-[19px] font-semibold tracking-[-0.02em] c-ink">{title}</h1>
           <p className="mt-1 text-[13px] c-2">{sub}</p>
@@ -205,7 +235,7 @@ function Steps({ steps, active }: { steps: string[]; active: number }) {
   );
 }
 
-const Body = ({ children }: { children: React.ReactNode }) => <div style={{ padding: "28px 36px 34px" }}><AnimatePresence mode="wait">{children}</AnimatePresence></div>;
+const Body = ({ children }: { children: React.ReactNode }) => <div style={{ padding: "28px 36px 34px", flex: "1 1 auto", minHeight: 0, overflowY: "auto" }}><AnimatePresence mode="wait">{children}</AnimatePresence></div>;
 
 // ── A. Git 저장소 등록 (로컬 형식 사전검사 + 서버 리비전/매니페스트 검증) ─────────────
 type RepoSource = {
@@ -355,10 +385,9 @@ export interface RepositoryConnectionContext {
   namespace?: string;
 }
 
-function RepoTargetStep({ source, context, onBack, onComplete }: {
+function RepoTargetStep({ source, context, onComplete }: {
   source: RepoSource;
   context?: RepositoryConnectionContext;
-  onBack: () => void;
   onComplete: (repo: string) => void;
 }) {
   const repoRef = source.normalizedRepo || source.repo.full;
@@ -520,18 +549,10 @@ function RepoTargetStep({ source, context, onBack, onComplete }: {
       {clusterStatus === "error" && <GapBanner>연결된 클러스터를 불러오지 못했습니다. 서버 연결을 확인한 뒤 다시 열어주세요.</GapBanner>}
       {clusterStatus === "ready" && clusters.length === 0 && <GapBanner>먼저 클러스터를 연결해야 저장소 배포 대상을 등록할 수 있습니다.</GapBanner>}
       {manifestStatus === "ready" && manifests.length === 0 && <GapBanner>선택한 브랜치에서 배포 가능한 Kubernetes 매니페스트를 찾지 못했습니다.</GapBanner>}
-      {failure && (
-        <div role="alert" className="flex items-start gap-3.5 err-bg" style={{ borderRadius: 16, padding: "14px 16px" }}>
-          <AlertCircle className="mt-0.5 size-5 shrink-0 c-red" />
-          <div><div className="text-[13.5px] font-semibold c-ink">저장소 검증 실패</div><div className="mt-1 break-words text-[12.5px] leading-[1.5] c-2">{failure}</div></div>
-        </div>
-      )}
-      <div className="flex gap-3">
-        <BackBtn onClick={onBack} />
-        <button disabled={!complete || submitStatus === "submitting"} onClick={() => void submit()} className="btn-primary flex min-w-0 flex-1 items-center justify-center gap-2 rounded-[14px] text-[15px] font-semibold disabled:cursor-not-allowed disabled:opacity-45">
-          {submitStatus === "submitting" ? <><Spin c="size-4 text-white" /> 서버 검증·등록 중…</> : <>서버 검증 후 연결 <ArrowRight className="size-[17px]" /></>}
-        </button>
-      </div>
+      <FloatingToast message={failure || null} onDismiss={() => setFailure("")} />
+      <button disabled={!complete || submitStatus === "submitting"} onClick={() => void submit()} className="btn-primary flex w-full items-center justify-center gap-2 rounded-[14px] text-[15px] font-semibold disabled:cursor-not-allowed disabled:opacity-45">
+        {submitStatus === "submitting" ? <><Spin c="size-4 text-white" /> 서버 검증·등록 중…</> : <>서버 검증 후 연결 <ArrowRight className="size-[17px]" /></>}
+      </button>
     </motion.div>
   );
 }
@@ -551,10 +572,10 @@ function RepoWizard({ providers, context, onClose, onComplete }: { providers: Cl
   const [source, setSource] = useState<RepoSource | null>(null);
   const el = {
     0: <RepoStep key="s0" providers={providers} onNext={(value) => { setSource(value); setStep(1); }} />,
-    1: source ? <RepoTargetStep key="s1" source={source} context={context} onBack={() => setStep(0)} onComplete={() => setStep(2)} /> : null,
+    1: source ? <RepoTargetStep key="s1" source={source} context={context} onComplete={() => setStep(2)} /> : null,
     2: source ? <RepoDoneStep key="s2" repo={source.normalizedRepo} onDone={() => onComplete(source.normalizedRepo)} /> : null,
   }[step];
-  return (<><ShellHeader icon={GitBranch} title="Git 저장소 연결" sub="Git 원문 검증 · 배포 대상 등록 · Safe PR 준비" onClose={onClose} /><Steps steps={REPO_STEPS} active={step} /><Body>{el}</Body></>);
+  return (<><ShellHeader icon={GitBranch} title="Git 저장소 연결" sub="Git 원문 검증 · 배포 대상 등록 · Safe PR 준비" onClose={onClose} onBack={step === 1 ? () => setStep(0) : undefined} /><Steps steps={REPO_STEPS} active={step} /><Body>{el}</Body></>);
 }
 
 // ── B. 클러스터 연결 (에이전트 설치 · 라이브) ─────────────────────────────
@@ -577,14 +598,18 @@ function ClusterInfoStep({
   const selectedDisabled = isDisabled(platform);
   return (
     <motion.div key="cinfo" {...swap} className="grid gap-5">
-      {providers.status === "loading" && (
-        <p className="flex items-center gap-2 px-0.5 text-[13px] c-2"><Spin c="size-3.5 c-accent" /> 제공자 목록 불러오는 중…</p>
-      )}
       {providers.status === "unavailable" && (
         <GapBanner>서버가 등록 가능한 클러스터 제공자를 보고하지 않았습니다.</GapBanner>
       )}
       <div className="grid gap-2.5">
-        <span className="px-0.5 text-[12.5px] font-semibold c-2">플랫폼</span>
+        {/* 로딩 상태는 라벨 행 안에서만 표시한다. 별도 줄로 띄우면 로드 완료 시
+            사라지면서 아래 전체가 위로 밀려(reflow) 줄바꿈처럼 보이는 버그가 된다. */}
+        <div className="flex items-center justify-between px-0.5" style={{ minHeight: 18 }}>
+          <span className="text-[12.5px] font-semibold c-2">플랫폼</span>
+          {providers.status === "loading" && (
+            <span className="flex items-center gap-1.5 text-[11.5px] c-3"><Spin c="size-3 c-accent" /> 확인 중</span>
+          )}
+        </div>
         <div className="grid grid-cols-2 gap-2.5">
           {PLATFORMS.map((p) => {
             const on = platform === p.id;
@@ -668,7 +693,56 @@ export function toInteractiveSafePowerShellCommand(command: string): string {
   );
 }
 
-function ClusterInstallStep({ platform, name, onBack, onConnected }: { platform: PlatformId; name: string; onBack: () => void; onConnected: (info: ConnectionStatusView) => void }) {
+// 설치 진행 표시: "설치 대기" 정적 배지 대신 단계 프로그레스로 진행을 보여주고,
+// 타임아웃(expired)·실패(failed) 시 재설치(토큰 재발급) 버튼을 노출한다.
+function InstallProgress({ conn, activation, reinstalling, onReinstall }: {
+  conn: ConnectionStatusView;
+  activation: ClusterActivationReadinessView;
+  reinstalling: boolean;
+  onReinstall: () => void;
+}) {
+  const failed = conn.connection === "failed";
+  const expired = conn.connection === "expired";
+  const terminal = failed || expired;
+  const ready = activation.status === "ready";
+  const online = conn.connection === "connected";
+  // 1 에이전트 연결 대기 → 2 인벤토리 수집 → 3 준비 완료
+  const step = ready ? 3 : online ? 2 : 1;
+  const pct = terminal ? 100 : (step / 3) * 100;
+  const color = failed ? "var(--red)" : expired ? "var(--orange)" : "var(--blue)";
+  const label = failed ? "설치 실패" : expired ? "설치 시간 초과" : ready ? "준비 완료" : online ? "인벤토리 수집 중" : "에이전트 연결 대기";
+  const sub = failed ? (conn.failureReason === "install_failed" ? "설치가 완료되지 않았어요. 명령을 다시 발급해 재시도하세요." : "에이전트 오류가 감지됐어요. 재설치로 다시 시도하세요.")
+    : expired ? "제한 시간 안에 에이전트가 연결되지 않았어요. 재설치로 새 명령을 발급하세요."
+    : ready ? "곧 완료 화면으로 이동합니다."
+    : online ? "에이전트가 클러스터 상태를 수집하고 있어요."
+    : "터미널에서 위 명령을 실행하면 자동으로 진행됩니다.";
+  return (
+    <div className="inset grid gap-2.5" style={{ padding: "15px 16px" }}>
+      <div className="flex items-center gap-2.5">
+        {terminal ? (
+          <AlertCircle className="size-[18px] shrink-0" style={{ color }} />
+        ) : ready ? (
+          <span className="grid size-[22px] shrink-0 place-items-center rounded-full green-bg"><Check className="size-[14px] c-green" strokeWidth={3} /></span>
+        ) : (
+          <Spin c="size-[18px] c-accent" />
+        )}
+        <span className="flex-1 text-[13.5px] font-semibold c-ink">{label}</span>
+        {!terminal && <span className="text-[12px] font-medium c-3" style={{ fontVariantNumeric: "tabular-nums" }}>{step}/3</span>}
+      </div>
+      <div className="overflow-hidden rounded-full" style={{ height: 6, background: "rgba(17,19,24,0.08)" }}>
+        <motion.div initial={false} animate={{ width: `${pct}%` }} transition={{ type: "spring", visualDuration: 0.5, bounce: 0 }} style={{ height: "100%", borderRadius: 999, background: color }} />
+      </div>
+      <span className="text-[12px] leading-[1.5] c-2">{sub}</span>
+      {terminal && (
+        <button onClick={onReinstall} disabled={reinstalling} className="btn-primary flex w-full items-center justify-center gap-1.5 text-[14px] font-semibold disabled:opacity-50" style={{ borderRadius: 12, paddingTop: 11, paddingBottom: 11, marginTop: 2 }}>
+          {reinstalling ? <><Spin c="size-4 text-white" /> 명령 재발급 중…</> : <><RotateCw className="size-4" /> 재설치</>}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function ClusterInstallStep({ platform, name, onConnected }: { platform: PlatformId; name: string; onConnected: (info: ConnectionStatusView) => void }) {
   const pf = PLATFORMS.find((p) => p.id === platform)!;
   const Icon = pf.icon;
 
@@ -676,6 +750,7 @@ function ClusterInstallStep({ platform, name, onBack, onConnected }: { platform:
   const [receipt, setReceipt] = useState<ClusterConnectResponseView | null>(null);
   const [errMsg, setErrMsg] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [reinstalling, setReinstalling] = useState(false);
   // 설치 명령 OS 탭 — 로컬 OS 자동 선택(윈도우 → PowerShell), 사용자가 전환 가능.
   const [shell, setShell] = useState<InstallShell>(() => detectLocalShell(typeof navigator === "undefined" ? "" : navigator.platform || navigator.userAgent));
   const ctrlRef = useRef<AbortController | null>(null);
@@ -691,6 +766,17 @@ function ClusterInstallStep({ platform, name, onBack, onConnected }: { platform:
   useEffect(() => {
     if (activation.status === "ready") onConnected(conn);
   }, [activation.status, conn, onConnected]);
+
+  // 재설치: 기존 등록에 설치 명령을 재발급(토큰 회전)한다. 새 등록을 만들지 않아
+  // 고아 등록이 남지 않고, connect_expires_at(타임아웃)도 서버에서 초기화된다.
+  const reinstall = () => {
+    if (!receipt || reinstalling) return;
+    setReinstalling(true); setErrMsg(null);
+    void reissueClusterConnectCommand(receipt.cluster_id)
+      .then((fresh) => setReceipt(fresh))
+      .catch((cause: unknown) => { if (!isAbortError(cause)) setErrMsg(errorText(cause)); })
+      .finally(() => setReinstalling(false));
+  };
 
   // 이름 하나로 등록하고 OS별 설치 명령을 발급한다. 실제 대상 클러스터는 사용자가
   // 이미 로그인한 터미널의 현재 kube-context에서 명령을 실행할 때 결정된다.
@@ -722,12 +808,7 @@ function ClusterInstallStep({ platform, name, onBack, onConnected }: { platform:
         </button>
       )}
 
-      {errMsg && (
-        <div className="flex items-center gap-3 err-bg" style={{ borderRadius: 14, padding: "13px 15px" }}>
-          <AlertCircle className="size-[18px] shrink-0 c-red" />
-          <span className="text-[12.5px] c-2">{errMsg}</span>
-        </div>
-      )}
+      <FloatingToast message={errMsg} onDismiss={() => setErrMsg(null)} />
 
       {/* 서버 생성 설치 명령 + 부트스트랩 단계 (토큰 포함 · 저장/로그 안 함) */}
       {receipt && (
@@ -749,28 +830,10 @@ function ClusterInstallStep({ platform, name, onBack, onConnected }: { platform:
             <pre className="max-w-full whitespace-pre-wrap break-words font-mono text-[12.5px] leading-[1.7] c-ink [overflow-wrap:anywhere]" style={{ padding: "14px 16px" }}><code>{cmd}</code></pre>
           </div>
 
-          <div className="inset flex items-center gap-3" style={{ padding: "15px 16px" }}>
-            {conn.connection === "connected" ? (
-              <><span className="grid size-8 shrink-0 place-items-center rounded-full green-bg"><Check className="size-[18px] c-green" strokeWidth={3} /></span><span className="flex-1 text-[13.5px] font-medium c-ink">에이전트 연결됨</span></>
-            ) : conn.connection === "expired" ? (
-              <><AlertCircle className="size-[18px] shrink-0 c-orange" /><span className="flex-1 text-[13.5px] font-medium c-ink">연결 대기 시간이 만료됐어요</span></>
-            ) : conn.status === "error" ? (
-              <><AlertCircle className="size-[18px] shrink-0 c-red" /><span className="flex-1 text-[13.5px] font-medium c-ink">연결 상태를 확인하지 못했어요</span></>
-            ) : (
-              <>
-                <span className="relative grid size-8 shrink-0 place-items-center">
-                  <span className="absolute inline-flex size-8 animate-ping rounded-full ping-g" />
-                  <span className="relative inline-flex size-2.5 rounded-full dot-g" />
-                </span>
-                <span className="flex-1 text-[13.5px] font-medium c-ink">에이전트 연결을 기다리는 중…</span>
-                <Spin c="size-[18px] c-accent" />
-              </>
-            )}
-          </div>
+          <InstallProgress conn={conn} activation={activation} reinstalling={reinstalling} onReinstall={reinstall} />
         </>
       )}
 
-      <div className="flex"><BackBtn onClick={onBack} /></div>
     </motion.div>
   );
 }
@@ -814,10 +877,10 @@ function ClusterWizard({ providers, onClose, onComplete }: { providers: ClusterP
     0: <ClusterInfoStep key="c0" providers={providers} name={name} setName={setName} platform={platform} setPlatform={setPlatform}
       onNext={() => setStep(1)} />,
     1: <ClusterInstallStep key="c1" platform={platform} name={name}
-      onBack={() => setStep(0)} onConnected={(info) => { setConnection(info); setStep(2); }} />,
+      onConnected={(info) => { setConnection(info); setStep(2); }} />,
     2: connection ? <ClusterDoneStep key="c2" name={name} connection={connection} onDone={() => onComplete(name)} /> : null,
   }[step];
-  return (<><ShellHeader icon={Server} title="클러스터 연결" sub="에이전트를 설치하면 클러스터가 안전하게 등록·관측됩니다" onClose={onClose} /><Steps steps={CLUSTER_STEPS} active={step} /><Body>{el}</Body></>);
+  return (<><ShellHeader icon={Server} title="클러스터 연결" sub="에이전트를 설치하면 클러스터가 안전하게 등록·관측됩니다" onClose={onClose} onBack={step === 1 ? () => setStep(0) : undefined} /><Steps steps={CLUSTER_STEPS} active={step} /><Body>{el}</Body></>);
 }
 
 // ── 런처 ─────────────────────────────
@@ -906,7 +969,7 @@ export function ConnectWizard({
               <div className="flex min-h-full justify-center px-6" style={{ paddingTop: "6vh", paddingBottom: "6vh" }}>
                 <motion.div key={view} role="dialog" aria-modal="true" aria-label={view === "repo" ? "Git 저장소 연결" : "클러스터 연결"}
                   tabIndex={-1} autoFocus onClick={(e) => e.stopPropagation()} initial={{ opacity: 0, y: 22, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 16, scale: 0.98 }} transition={{ type: "spring", visualDuration: 0.42, bounce: 0.2 }}
-                  style={{ width: 580, maxWidth: "100%", borderRadius: 26, alignSelf: "flex-start", boxShadow: "0 44px 100px -30px rgba(0,0,0,0.4), 0 8px 24px -12px rgba(0,0,0,0.15)" }} className="modal-surface overflow-hidden">
+                  style={{ width: 580, maxWidth: "100%", maxHeight: "88vh", display: "flex", flexDirection: "column", borderRadius: 26, alignSelf: "flex-start", boxShadow: "0 44px 100px -30px rgba(0,0,0,0.4), 0 8px 24px -12px rgba(0,0,0,0.15)" }} className="modal-surface overflow-hidden">
                   {view === "repo"
                     ? <RepoWizard providers={providers} context={repositoryContext} onClose={closeView} onComplete={completeRepo} />
                     : <ClusterWizard providers={providers} onClose={closeView} onComplete={completeCluster} />}

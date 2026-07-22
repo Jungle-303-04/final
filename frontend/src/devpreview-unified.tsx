@@ -20,6 +20,7 @@ import { TopologyView } from "./devpreview-topology";
 import { GithubIcon } from "./devpreview/brandIcons";
 import { DevpreviewContractProvider, useDevpreviewContracts } from "./devpreview/contracts";
 import { ClusterLifecycleControl } from "./devpreview/ClusterLifecycleControl";
+import { unregisterCluster } from "./api/clusters";
 import {
   PENDING_CLUSTER_STORAGE_KEY,
   reconcilePendingClusters,
@@ -1935,7 +1936,27 @@ function App() {
           }}
           onDrillCluster={(cl) => { setDrillCl(cl); setSurface("resources"); setResView("map"); }}
           onClusterSettings={() => setSurface("settings")}
-          onClusterDisconnect={(cl) => { setDrillCl(cl); setSurface("resources"); setResView("map"); }}
+          onClusterDisconnect={(cl) => {
+            // 리스트 메뉴의 "연결 해제"를 실제 해제 API에 연결한다 — 기존에는 상세
+            // 화면으로 이동만 하는 placeholder 였다. ClusterLifecycleControl 과 같은
+            // unregisterCluster 계약을 사용하고, cleanup_required 면 수동 정리 명령을 안내한다.
+            const target = contract.clusters.find((cluster) => cluster.id === cl);
+            const label = target?.displayName ?? cl;
+            if (!window.confirm(`${label} 클러스터 연결을 해제할까요?\n에이전트 정리가 큐잉되고 목록에서 제거됩니다.`)) return;
+            void (async () => {
+              try {
+                const result = await unregisterCluster(cl);
+                removePendingClusters(cl, target?.name, target?.displayName);
+                if (scope.cluster === cl) { setScope({ level: "clusters" }); setDrillCl(null); }
+                contract.refresh();
+                if (result.status === "cleanup_required" && result.uninstall_command) {
+                  window.alert(`클러스터에 남은 리소스 정리가 필요합니다. 아래 명령을 실행해주세요:\n\n${result.uninstall_command}`);
+                }
+              } catch {
+                window.alert("클러스터 연결 해제에 실패했습니다. 잠시 후 다시 시도해주세요.");
+              }
+            })();
+          }}
           onOpenIssues={() => setSurface("issues")}
           onConnect={() => setConnectModal("cluster")}
           onOpenPod={(name) => openRef("Pod", name)}

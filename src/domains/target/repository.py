@@ -442,34 +442,63 @@ class TargetAgentRepository(DatabaseConnection):
         workspace_id: str,
         payload: JsonObject,
     ) -> None:
-        table = AgentPolicyStatusRecord.__table__
-        statement = pg_insert(table).values(
-            workspace_id=workspace_id,
-            cluster_id=payload["cluster_id"],
-            generation=payload["generation"],
-            status=payload["status"],
-            message=payload.get("message", ""),
-            details=payload.get("details", {}),
+        self._append_agent_status_if_changed(
+            AgentPolicyStatusRecord.__table__, workspace_id, payload
         )
-        with self.connection() as conn:
-            conn.execute(statement)
 
     def save_agent_reconcile_status(
         self,
         workspace_id: str,
         payload: JsonObject,
     ) -> None:
-        table = AgentReconcileStatusRecord.__table__
-        statement = pg_insert(table).values(
-            workspace_id=workspace_id,
-            cluster_id=payload["cluster_id"],
-            generation=payload["generation"],
-            status=payload["status"],
-            message=payload.get("message", ""),
-            details=payload.get("details", {}),
+        self._append_agent_status_if_changed(
+            AgentReconcileStatusRecord.__table__, workspace_id, payload
         )
+
+    def _append_agent_status_if_changed(
+        self,
+        table: Any,
+        workspace_id: str,
+        payload: JsonObject,
+    ) -> None:
+        """무변화 반복 보고의 append 를 생략한다 — 최신 행과 완전 동일하면 skip.
+
+        이 테이블들의 조회는 전부 최신 행 기준(row_number over id desc)이라
+        동일 내용 재기록은 정보를 더하지 않고 저장량만 늘린다(같은 generation·
+        unchanged 가 주기 보고마다 수만 건 누적). 내용이 하나라도 다르면 그대로
+        append 되어 변화 이력은 보존된다.
+        """
+        values = {
+            "workspace_id": workspace_id,
+            "cluster_id": payload["cluster_id"],
+            "generation": payload["generation"],
+            "status": payload["status"],
+            "message": payload.get("message", ""),
+            "details": payload.get("details", {}),
+        }
         with self.connection() as conn:
-            conn.execute(statement)
+            latest = (
+                conn.execute(
+                    select(table.c.generation, table.c.status, table.c.message, table.c.details)
+                    .where(
+                        table.c.workspace_id == workspace_id,
+                        table.c.cluster_id == str(values["cluster_id"]),
+                    )
+                    .order_by(table.c.id.desc())
+                    .limit(1)
+                )
+                .mappings()
+                .first()
+            )
+            if (
+                latest is not None
+                and int(latest["generation"]) == int(values["generation"])
+                and str(latest["status"]) == str(values["status"])
+                and str(latest["message"]) == str(values["message"])
+                and dict(latest["details"] or {}) == dict(values["details"] or {})
+            ):
+                return
+            conn.execute(pg_insert(table).values(**values))
 
     def upsert_target_desired_states(
         self,
@@ -683,6 +712,10 @@ class TargetAgentRepository(DatabaseConnection):
                 table.c.cluster_id == cluster_id,
                 table.c.provider_key == provider_key,
                 available,
+                # 재임대도 attempt 소모다 — 명시적 실패 보고 없이 lease 만 만료되는
+                # 장애(프로세스 사망·hang)가 무한 재임대로 이어지지 않도록 상한을
+                # lease 시점에 강제한다. 소진된 잡은 janitor 가 FAILED 로 종결한다.
+                table.c.attempt_count < table.c.max_attempts,
             )
             .order_by(table.c.created_at)
             .limit(1)
@@ -706,6 +739,42 @@ class TargetAgentRepository(DatabaseConnection):
             )
             row = (await conn.execute(statement)).mappings().first()
         return self.serialize_evidence_job(dict(row)) if row else None
+
+    def fail_exhausted_evidence_jobs(self, *, limit: int = 200) -> list[str]:
+        """attempt 소진 + lease 만료 잡을 FAILED 로 종결하고 evidence_key 를 반환.
+
+        lease 조건에 attempt 상한이 걸리면서, 상한을 소진한 채 lease 가 만료된
+        잡은 어떤 에이전트도 다시 가져가지 못한다. 명시적 실패 보고 없이 죽은
+        경우를 janitor 가 종결해야 window 집계가 failure_policy 에 따라 진행된다.
+        호출자는 반환된 key 마다 집계·발행 시도를 트리거한다.
+        """
+        table = EvidenceJob.__table__
+        exhausted = (
+            select(table.c.job_id)
+            .where(
+                table.c.status == EVIDENCE_JOB_STATUS_LEASED,
+                table.c.leased_until < func.now(),
+                table.c.attempt_count >= table.c.max_attempts,
+            )
+            .order_by(table.c.job_id)
+            .limit(limit)
+            .with_for_update(skip_locked=True)
+            .cte("exhausted_evidence_jobs")
+        )
+        statement = (
+            update(table)
+            .where(table.c.job_id.in_(select(exhausted.c.job_id)))
+            .values(
+                status=EVIDENCE_JOB_STATUS_FAILED,
+                result=None,
+                error="lease expired; retry attempts exhausted",
+                updated_at=func.now(),
+            )
+            .returning(table.c.evidence_key)
+        )
+        with self.connection() as conn:
+            rows = conn.execute(statement).all()
+        return sorted({str(row[0]) for row in rows})
 
     def complete_evidence_job(
         self,
@@ -736,8 +805,11 @@ class TargetAgentRepository(DatabaseConnection):
                         table.c.cluster_id == cluster_id,
                         table.c.lease_id == lease_id,
                         table.c.agent_id == agent_id,
+                        # lease 만료 후에도 아무도 재임대하지 않았다면(같은 lease_id 가
+                        # 그 증거) 성실한 늦은 결과를 받아준다. 재임대가 일어났다면
+                        # lease_id 가 바뀌어 있어 자동 거부되므로 이중 수용은 구조적으로
+                        # 불가능하다 — 시간 초과라는 이유만으로 정상 수집을 버리지 않는다.
                         table.c.status == EVIDENCE_JOB_STATUS_LEASED,
-                        table.c.leased_until >= func.now(),
                     )
                     .with_for_update()
                 )
@@ -996,6 +1068,21 @@ class TargetAgentRepository(DatabaseConnection):
 
             trusted_envelope = replace(event_envelope, workspace_id=workspace_id)
             self.stage_event_envelope(conn, event_table, outbox_table, trusted_envelope)
+            # 집계 payload 가 window 행에 확정된 순간 provider 원문(result)은 더
+            # 이상 읽히지 않는다 — evidence_payload_if_ready 는 window 생성 전
+            # 단계에서만 호출되고, lease/complete/목록 조회는 result 를 반환하지
+            # 않는다. 같은 트랜잭션에서 비워 JSONB/TOAST 중복 보존을 제거한다
+            # (동일 payload 가 window·events·outbox 에 이미 3중 저장됨).
+            job_table = EvidenceJob.__table__
+            conn.execute(
+                update(job_table)
+                .where(
+                    job_table.c.evidence_key == evidence_key,
+                    job_table.c.workspace_id == workspace_id,
+                    job_table.c.result.is_not(None),
+                )
+                .values(result=None, updated_at=func.now())
+            )
         return {"duplicate": False, **dict(inserted)}
 
     def stage_event_envelope(

@@ -74,6 +74,10 @@ K8S_API_RESOURCE_DISCOVERY_KEY = "api_resource_discovery"
 K8S_DYNAMIC_RESOURCE_COLLECTIONS_KEY = "dynamic_resource_collections"
 K8S_CUSTOM_RESOURCES_KEY = "custom_resources"
 K8S_RESOURCE_ACCESS_KEY = "resource_access"
+K8S_COLLECTION_STATUS_KEY = "collection_status"
+K8S_LIST_COLLECTION_STATUS_KEY = "opsia_collection_status"
+K8S_COLLECTION_RBAC_DENIED_REASON = "collection_rbac_denied"
+K8S_COLLECTION_STATUS_REASON_CODES = frozenset((K8S_COLLECTION_RBAC_DENIED_REASON,))
 K8S_CRD_DISCOVERY_PATH = "/apis/apiextensions.k8s.io/v1/customresourcedefinitions"
 
 MAX_KUBERNETES_PODS = 500
@@ -1034,8 +1038,10 @@ class KubernetesSnapshotProvider:
             headers=headers,
             params={"labelSelector": label_selector} if label_selector else None,
         )
-        if allow_not_found and response.status_code in {403, 404}:
+        if allow_not_found and response.status_code == 404:
             return {"items": []}
+        if allow_not_found and response.status_code == 403:
+            return unavailable_collection_list(K8S_COLLECTION_RBAC_DENIED_REASON)
         response.raise_for_status()
         payload = response.json()
         return payload if isinstance(payload, dict) else {"items": []}
@@ -1086,40 +1092,49 @@ class KubernetesSnapshotProvider:
                 "label_selector": telemetry_query.label_selector,
             }
         ]
+        pod_payload = payload.get(K8S_RESOURCE_PODS)
+        event_payload = payload.get(K8S_SNAPSHOT_EVENTS_KEY)
+        node_payload = payload.get(K8S_SNAPSHOT_NODES_KEY)
+        deployment_payload = payload.get(K8S_RESOURCE_DEPLOYMENTS)
+        statefulset_payload = payload.get(K8S_STATEFULSETS_KEY)
+        daemonset_payload = payload.get(K8S_DAEMONSETS_KEY)
+        replicaset_payload = payload.get(K8S_RESOURCE_REPLICASETS)
+        controller_revision_payload = payload.get(K8S_RESOURCE_CONTROLLER_REVISIONS)
+        job_payload = payload.get(K8S_JOBS_KEY)
+        cronjob_payload = payload.get(K8S_CRONJOBS_KEY)
+        service_payload = payload.get(K8S_RESOURCE_SERVICES)
+        endpoint_slice_payload = payload.get(K8S_RESOURCE_ENDPOINT_SLICES)
+        ingress_payload = payload.get(K8S_INGRESSES_KEY)
+        resource_quota_payload = payload.get(K8S_RESOURCE_RESOURCE_QUOTAS)
+
         pod_metrics = pod_metrics_by_key(items(payload.get("pod_metrics")))
         node_metrics = node_metrics_by_name(items(payload.get("node_metrics")))
-        raw_nodes = items(payload.get(K8S_SNAPSHOT_NODES_KEY))
+        raw_nodes = items(node_payload)
         detected_provider = detect_kubernetes_provider(raw_nodes)
         if detected_provider is not None:
             snapshot["detected_provider"] = detected_provider
-        raw_pods = scoped_items(payload.get(K8S_RESOURCE_PODS), telemetry_query.label_selector)
-        raw_replicasets = scoped_items(
-            payload.get(K8S_RESOURCE_REPLICASETS), telemetry_query.label_selector
-        )
+        raw_pods = scoped_items(pod_payload, telemetry_query.label_selector)
+        raw_replicasets = scoped_items(replicaset_payload, telemetry_query.label_selector)
         raw_controller_revisions = scoped_items(
-            payload.get(K8S_RESOURCE_CONTROLLER_REVISIONS), telemetry_query.label_selector
+            controller_revision_payload, telemetry_query.label_selector
         )
         raw_workloads = {
             K8S_KIND_DEPLOYMENT: scoped_items(
-                payload.get(K8S_RESOURCE_DEPLOYMENTS), telemetry_query.label_selector
+                deployment_payload, telemetry_query.label_selector
             ),
             "StatefulSet": scoped_items(
-                payload.get(K8S_STATEFULSETS_KEY), telemetry_query.label_selector
+                statefulset_payload, telemetry_query.label_selector
             ),
             "DaemonSet": scoped_items(
-                payload.get(K8S_DAEMONSETS_KEY), telemetry_query.label_selector
+                daemonset_payload, telemetry_query.label_selector
             ),
             K8S_KIND_REPLICA_SET: active_replicasets(raw_replicasets),
-            "Job": scoped_items(payload.get(K8S_JOBS_KEY), telemetry_query.label_selector),
-            "CronJob": scoped_items(payload.get(K8S_CRONJOBS_KEY), telemetry_query.label_selector),
+            "Job": scoped_items(job_payload, telemetry_query.label_selector),
+            "CronJob": scoped_items(cronjob_payload, telemetry_query.label_selector),
         }
-        raw_services = scoped_items(
-            payload.get(K8S_RESOURCE_SERVICES), telemetry_query.label_selector
-        )
-        raw_ingresses = scoped_items(payload.get(K8S_INGRESSES_KEY), telemetry_query.label_selector)
-        raw_resource_quotas = scoped_items(
-            payload.get(K8S_RESOURCE_RESOURCE_QUOTAS), telemetry_query.label_selector
-        )
+        raw_services = scoped_items(service_payload, telemetry_query.label_selector)
+        raw_ingresses = scoped_items(ingress_payload, telemetry_query.label_selector)
+        raw_resource_quotas = scoped_items(resource_quota_payload, telemetry_query.label_selector)
         selected_names = {
             str(metadata(item).get("name") or "")
             for item in [*raw_pods, *(row for rows in raw_workloads.values() for row in rows)]
@@ -1145,7 +1160,7 @@ class KubernetesSnapshotProvider:
         snapshot[K8S_SNAPSHOT_EVENTS_KEY] = [
             event_summary(item)
             for item in scoped_events(
-                items(payload.get(K8S_SNAPSHOT_EVENTS_KEY)),
+                items(event_payload),
                 selected_names,
                 selected_uids,
                 telemetry_query.label_selector,
@@ -1185,33 +1200,59 @@ class KubernetesSnapshotProvider:
         snapshot[K8S_SNAPSHOT_ENDPOINTS_KEY] = [
             endpoint_slice_summary(item)
             for item in scoped_endpoint_slices(
-                items(payload.get(K8S_RESOURCE_ENDPOINT_SLICES)),
+                items(endpoint_slice_payload),
                 service_names,
                 telemetry_query.label_selector,
             )
         ]
-        snapshot["provider_status"] = {
-            telemetry_query.query_name: {
-                "status": status,
-                "namespace": namespace,
-                "reason": payload.get("reason", ""),
-                "counts": {
-                    K8S_RESOURCE_PODS: len(snapshot[K8S_RESOURCE_PODS]),
-                    K8S_SNAPSHOT_EVENTS_KEY: len(snapshot[K8S_SNAPSHOT_EVENTS_KEY]),
-                    K8S_SNAPSHOT_NODES_KEY: len(snapshot[K8S_SNAPSHOT_NODES_KEY]),
-                    "pod_metrics": len(pod_metrics),
-                    "node_metrics": len(node_metrics),
-                    K8S_SNAPSHOT_WORKLOADS_KEY: len(snapshot[K8S_SNAPSHOT_WORKLOADS_KEY]),
-                    K8S_SNAPSHOT_WORKLOAD_REVISIONS_KEY: len(
-                        snapshot[K8S_SNAPSHOT_WORKLOAD_REVISIONS_KEY]
-                    ),
-                    K8S_RESOURCE_SERVICES: len(snapshot[K8S_RESOURCE_SERVICES]),
-                    K8S_SNAPSHOT_ENDPOINTS_KEY: len(snapshot[K8S_SNAPSHOT_ENDPOINTS_KEY]),
-                    K8S_INGRESSES_KEY: len(snapshot[K8S_INGRESSES_KEY]),
-                    K8S_RESOURCE_RESOURCE_QUOTAS: len(snapshot[K8S_RESOURCE_RESOURCE_QUOTAS]),
-                },
+        collection_status = collection_statuses_from_sources(
+            {
+                K8S_RESOURCE_PODS: (pod_payload,),
+                K8S_SNAPSHOT_EVENTS_KEY: (event_payload,),
+                K8S_SNAPSHOT_NODES_KEY: (node_payload,),
+                K8S_SNAPSHOT_WORKLOADS_KEY: (
+                    deployment_payload,
+                    statefulset_payload,
+                    daemonset_payload,
+                    replicaset_payload,
+                    job_payload,
+                    cronjob_payload,
+                ),
+                K8S_SNAPSHOT_WORKLOAD_REVISIONS_KEY: (
+                    replicaset_payload,
+                    controller_revision_payload,
+                ),
+                K8S_RESOURCE_SERVICES: (service_payload,),
+                K8S_SNAPSHOT_ENDPOINTS_KEY: (endpoint_slice_payload,),
+                K8S_INGRESSES_KEY: (ingress_payload,),
+                K8S_RESOURCE_RESOURCE_QUOTAS: (resource_quota_payload,),
             }
+        )
+        if collection_status:
+            snapshot[K8S_COLLECTION_STATUS_KEY] = collection_status
+        query_status: JsonObject = {
+            "status": "partial" if collection_status and status == "success" else status,
+            "namespace": namespace,
+            "reason": payload.get("reason", ""),
+            "counts": {
+                K8S_RESOURCE_PODS: len(snapshot[K8S_RESOURCE_PODS]),
+                K8S_SNAPSHOT_EVENTS_KEY: len(snapshot[K8S_SNAPSHOT_EVENTS_KEY]),
+                K8S_SNAPSHOT_NODES_KEY: len(snapshot[K8S_SNAPSHOT_NODES_KEY]),
+                "pod_metrics": len(pod_metrics),
+                "node_metrics": len(node_metrics),
+                K8S_SNAPSHOT_WORKLOADS_KEY: len(snapshot[K8S_SNAPSHOT_WORKLOADS_KEY]),
+                K8S_SNAPSHOT_WORKLOAD_REVISIONS_KEY: len(
+                    snapshot[K8S_SNAPSHOT_WORKLOAD_REVISIONS_KEY]
+                ),
+                K8S_RESOURCE_SERVICES: len(snapshot[K8S_RESOURCE_SERVICES]),
+                K8S_SNAPSHOT_ENDPOINTS_KEY: len(snapshot[K8S_SNAPSHOT_ENDPOINTS_KEY]),
+                K8S_INGRESSES_KEY: len(snapshot[K8S_INGRESSES_KEY]),
+                K8S_RESOURCE_RESOURCE_QUOTAS: len(snapshot[K8S_RESOURCE_RESOURCE_QUOTAS]),
+            },
         }
+        if collection_status:
+            query_status[K8S_COLLECTION_STATUS_KEY] = collection_status
+        snapshot["provider_status"] = {telemetry_query.query_name: query_status}
         return snapshot
 
     def normalize_cluster_access_snapshot(
@@ -1491,6 +1532,10 @@ def merge_snapshot(target: JsonObject, source: JsonObject) -> None:
         target["detected_provider"] = source["detected_provider"]
     if isinstance(source.get(K8S_API_RESOURCE_DISCOVERY_KEY), dict):
         target[K8S_API_RESOURCE_DISCOVERY_KEY] = dict(source[K8S_API_RESOURCE_DISCOVERY_KEY])
+    source_collection_status = source.get(K8S_COLLECTION_STATUS_KEY)
+    if isinstance(source_collection_status, dict):
+        target.setdefault(K8S_COLLECTION_STATUS_KEY, {})
+        target[K8S_COLLECTION_STATUS_KEY].update(source_collection_status)
     source_access = source.get(K8S_RESOURCE_ACCESS_KEY)
     if isinstance(source_access, dict) and source_access.get("reason_codes") != ["not_requested"]:
         target[K8S_RESOURCE_ACCESS_KEY] = dict(source_access)
@@ -1916,6 +1961,49 @@ def dynamic_reason_codes(value: object) -> set[str]:
     if not isinstance(value, list):
         return set()
     return {reason for reason in value if isinstance(reason, str) and reason}
+
+
+def unavailable_collection_list(reason: str) -> JsonObject:
+    return {
+        "items": [],
+        K8S_LIST_COLLECTION_STATUS_KEY: {
+            "observed": False,
+            "reason_codes": [reason],
+        },
+    }
+
+
+def collection_statuses_from_sources(
+    sources_by_collection: dict[str, tuple[object, ...]],
+) -> JsonObject:
+    statuses: JsonObject = {}
+    for collection, sources in sources_by_collection.items():
+        observed = True
+        reason_codes: set[str] = set()
+        for source in sources:
+            status = collection_status_from_source(source)
+            if not status:
+                continue
+            if status.get("observed") is False:
+                observed = False
+            reason_codes.update(collection_status_reason_codes(status.get("reason_codes")))
+        if not observed or reason_codes:
+            statuses[collection] = {
+                "observed": observed,
+                "reason_codes": sorted(reason_codes),
+            }
+    return statuses
+
+
+def collection_status_from_source(source: object) -> JsonObject:
+    if not isinstance(source, dict):
+        return {}
+    status = source.get(K8S_LIST_COLLECTION_STATUS_KEY)
+    return status if isinstance(status, dict) else {}
+
+
+def collection_status_reason_codes(value: object) -> set[str]:
+    return dynamic_reason_codes(value) & K8S_COLLECTION_STATUS_REASON_CODES
 
 
 def namespace_group_key(item: object) -> str:

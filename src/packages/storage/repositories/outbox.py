@@ -195,3 +195,57 @@ class OutboxRepository(DatabaseConnection):
         statement = table.delete().where(table.c.id.in_(select(expired.c.id))).returning(table.c.id)
         with self.connection() as conn:
             return len(conn.execute(statement).all())
+
+    def dead_letter_unsent_outbox_older_than(self, cutoff: datetime, *, limit: int = 1000) -> int:
+        """장기 미발행 outbox 를 DLQ 로 이동한다 — 삭제가 아니라 재처리 가능한 격리.
+
+        relay 가 죽었거나 돌지 않는 환경에서 sent_at IS NULL 행은 발행 대상도
+        retention 대상도 아니어서 무한 누적된다. 정상 환경에서는 이 나이까지
+        미발행이 존재하지 않으므로 이 sweep 은 no-op 이다. DLQ 행이 남으므로
+        원인 복구 후 재발행 판단이 가능하다.
+        """
+        outbox_table = OutboxModel.__table__
+        dead_letter_table = EventDeadLetter.__table__
+        stale = (
+            select(
+                outbox_table.c.id,
+                outbox_table.c.event_id,
+                outbox_table.c.subject,
+                outbox_table.c.correlation_id,
+                outbox_table.c.payload,
+            )
+            .where(
+                outbox_table.c.sent_at.is_(None),
+                cast(outbox_table.c.occurred_at, TIMESTAMP(timezone=True)) < cutoff,
+                # 살아있는 relay 가 방금 lease 한 행은 건드리지 않는다.
+                or_(
+                    outbox_table.c.lease_id.is_(None),
+                    outbox_table.c.leased_until < func.now(),
+                ),
+            )
+            .order_by(outbox_table.c.id)
+            .limit(limit)
+        )
+        with self.connection() as conn:
+            rows = conn.execute(stale).mappings().all()
+            if not rows:
+                return 0
+            for row in rows:
+                conn.execute(
+                    pg_insert(dead_letter_table).values(
+                        original_event_id=row["event_id"],
+                        original_subject=row["subject"],
+                        consumer="outbox-relay:retention",
+                        correlation_id=row["correlation_id"],
+                        attempts=1,
+                        error="unsent outbox exceeded retention window",
+                        payload=row["payload"],
+                        status=DEAD_LETTER_STATUS_OPEN,
+                    )
+                )
+            conn.execute(
+                update(outbox_table)
+                .where(outbox_table.c.id.in_([row["id"] for row in rows]))
+                .values(sent_at=func.now(), lease_id=None, leased_until=None)
+            )
+        return len(rows)

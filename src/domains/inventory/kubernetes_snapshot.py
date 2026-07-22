@@ -5,6 +5,12 @@ from __future__ import annotations
 from collections import Counter
 from typing import Any
 
+from domains.inventory.coverage import (
+    COLLECTION_COVERAGE_SUMMARY_KEY,
+    LEGACY_LIVE_INVENTORY_COLLECTIONS,
+    SCOPED_INVENTORY_COLLECTIONS,
+    kubernetes_collection_coverage,
+)
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.kubernetes_provider import normalized_detected_provider
 
@@ -491,7 +497,20 @@ def _summary(kubernetes: JsonObject, *, resources_complete: bool) -> JsonObject:
         for item in _items(kubernetes, key)
     ]
     collection_scopes = _items(kubernetes, "collection_scopes")
-    live_inventory = all(not _text(scope.get("label_selector")) for scope in collection_scopes)
+    has_observed_inventory_collections = any(
+        isinstance(kubernetes.get(key), list) for key in SCOPED_INVENTORY_COLLECTIONS
+    )
+    has_scoped_inventory_observation = (
+        bool(collection_scopes) and has_observed_inventory_collections
+    )
+    has_legacy_live_inventory_resources = (
+        not collection_scopes
+        and any(_items(kubernetes, key) for key in LEGACY_LIVE_INVENTORY_COLLECTIONS)
+    )
+    live_inventory = (
+        (has_scoped_inventory_observation or has_legacy_live_inventory_resources)
+        and all(not _text(scope.get("label_selector")) for scope in collection_scopes)
+    )
     event_capture = _kubernetes_event_capture(kubernetes)
     summary: JsonObject = {
         "namespaces": namespaces,
@@ -515,12 +534,16 @@ def _summary(kubernetes: JsonObject, *, resources_complete: bool) -> JsonObject:
         "kubernetes_event_capture": event_capture,
         "kubernetes_event_facts": _kubernetes_event_facts(kubernetes, event_capture),
         # RCA test/label-selector snapshots are evidence, not authoritative fleet liveness.
-        # Legacy payloads have no scope list and are treated as normal inventory.
+        # Legacy no-scope payloads remain live only when they carry standard inventory rows;
+        # auxiliary discovery/dynamic-resource-only cuts must not replace the fleet view.
         "live_inventory": live_inventory,
     }
     collection_limits = _mapping(kubernetes.get("collection_limits"))
     if collection_limits:
         summary["collection_limits"] = collection_limits
+    collection_coverage = kubernetes_collection_coverage(kubernetes)
+    if collection_coverage:
+        summary[COLLECTION_COVERAGE_SUMMARY_KEY] = collection_coverage
     detected_provider = normalized_detected_provider(kubernetes.get("detected_provider"))
     if detected_provider is not None:
         summary["detected_provider"] = detected_provider

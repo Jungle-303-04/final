@@ -40,7 +40,11 @@ _DEFAULT_POLICIES: dict[RefreshPolicyKey, dict[str, Any]] = {
     },
     "changes": {"stale_after_seconds": 5, "refresh_after_seconds": 15, "event_invalidation": True},
     "metrics_kubernetes": {
-        "stale_after_seconds": 20,
+        # 신선도 창은 수집 파이프라인 주기의 합보다 커야 한다: kubelet 자체 갱신
+        # (~15s) + 에이전트 evidence 주기(15~30s) + 전송 지연. 20s 는 정상 동작
+        # 중에도 주기적으로 초과되어 cpu/mem 이 null 로 떨어지고 화면에
+        # "메트릭 수집 대기"가 플리커했다. 2×주기+여유 = 45s 로 정합시킨다.
+        "stale_after_seconds": 45,
         "refresh_after_seconds": 30,
         "retry_after_seconds": 5,
         "retry_limit": 2,

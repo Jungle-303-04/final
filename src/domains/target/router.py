@@ -1569,14 +1569,11 @@ async def list_clusters(
     cluster_ids = {cluster["cluster_id"] for cluster in clusters}
     snapshot_getter = getattr(db, "latest_inventory_snapshots", None)
     bulk_count_reader = getattr(db, "inventory_resource_counts_by_cluster", None)
-    latest_agents, latest_snapshots, resource_counts = await asyncio.gather(
+    latest_agents, latest_snapshots = await asyncio.gather(
         asyncio.to_thread(db.latest_cluster_agent_statuses, workspace_id, cluster_ids),
         asyncio.to_thread(snapshot_getter, workspace_id, cluster_ids)
         if callable(snapshot_getter)
         else asyncio.sleep(0, result={}),
-        asyncio.to_thread(bulk_count_reader, workspace_id, cluster_ids)
-        if callable(bulk_count_reader)
-        else asyncio.sleep(0, result=None),
     )
     summaries = [
         cluster_summary(
@@ -1587,6 +1584,16 @@ async def list_clusters(
         for cluster in clusters
         if not is_blocked_test_cluster(cluster["cluster_id"], str(cluster["name"]))
     ]
+    count_cluster_ids = {
+        summary.cluster_id
+        for summary in summaries
+        if complete_inventory_snapshot(latest_snapshots.get(summary.cluster_id))
+    }
+    resource_counts = (
+        await asyncio.to_thread(bulk_count_reader, workspace_id, count_cluster_ids)
+        if callable(bulk_count_reader) and count_cluster_ids
+        else None
+    )
     for summary in summaries:
         if resource_counts is None:
             enrich_cluster_inventory_counts(

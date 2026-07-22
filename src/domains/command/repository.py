@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -43,6 +43,9 @@ EXPIRED_COMMAND_GRACE_SECONDS = 300
 EXPIRED_COMMAND_FAILURE_MESSAGE = "command lease expired; no agent completed the command"
 QUEUED_COMMAND_TTL_SECONDS = 1800
 QUEUED_COMMAND_FAILURE_MESSAGE = "command queue expired; no connected agent accepted the command"
+CANCELLING_COMMAND_FAILURE_MESSAGE = (
+    "command lease expired during cancellation; agent did not confirm"
+)
 COMMAND_PRIORITY_HIGH = 100
 
 
@@ -1613,12 +1616,24 @@ class AgentCommandRepository(DatabaseConnection):
         grace_seconds: int = EXPIRED_COMMAND_GRACE_SECONDS,
         *,
         queue_ttl_seconds: int = QUEUED_COMMAND_TTL_SECONDS,
+        source: str = "command-janitor",
     ) -> list[JsonObject]:
-        """미수신 queue와 만료 lease를 FAILED로 종결해 완료 이벤트 발행 대상으로 반환함.
+        """미수신 queue와 만료 lease를 종결하고 CommandCompleted를 outbox에 적재함.
 
         등록이 사라지거나 Agent가 연결을 잃으면 QUEUED 행도 lease 없이 영구 잔존할 수
         있다. 오래된 QUEUED와 lease 유예가 지난 LEASED/RUNNING을 단일 원자
-        UPDATE ... RETURNING으로 닫아 호출자가 CommandCompleted(FAILED)를 흘린다.
+        UPDATE ... RETURNING으로 닫는다.
+
+        완료 이벤트는 상태 변경과 같은 트랜잭션에서 event+outbox 테이블에 적재한다
+        (complete_agent_command 와 동일 패턴) — 호출자가 NATS 로 직접 발행하면
+        커밋과 발행 사이 크래시로 이벤트가 영구 유실되고, 명령은 이미 terminal 이라
+        다음 sweep 에서 재발견되지 않아 대기 워크플로가 영원히 멈추기 때문이다.
+        event_id 는 (command_id, attempt) 기반 결정적 값이라 sweep 재실행에도 멱등이다.
+
+        취소 절차(CANCEL_REQUESTED/CANCELLING) 중 에이전트가 죽으면 확인 응답이
+        영원히 오지 않아 명령이 활성 상태로 잔존한다 — SSE 종료·동시 실행 용량·
+        상위 워크플로가 모두 잠기므로, 같은 유예 기준으로 CANCELLED 종결한다
+        (두 전이 모두 lifecycle 허용 전이에 이미 존재).
         """
         grace_seconds = int(grace_seconds)
         queue_ttl_seconds = int(queue_ttl_seconds)
@@ -1626,6 +1641,18 @@ class AgentCommandRepository(DatabaseConnection):
             raise ValueError("command expiry durations must be positive")
         table = AgentCommand.__table__
         attempts = AgentCommandAttempt.__table__
+        cancelling_states = table.c.status.in_(
+            [CommandStatus.CANCEL_REQUESTED, CommandStatus.CANCELLING]
+        )
+        # RUNNING→CANCEL_REQUESTED 전이는 lease를 보존하지만, 방어적으로 lease가
+        # 비어 있는 비정상 행도 updated_at 기준으로 회수 대상에 포함한다.
+        cancelling_expired = func.coalesce(table.c.leased_until, table.c.updated_at) < (
+            func.now() - text(f"interval '{grace_seconds} seconds'")
+        )
+        terminal_status = case(
+            (cancelling_states, CommandStatus.CANCELLED),
+            else_=CommandStatus.FAILED,
+        )
         statement = (
             update(table)
             .where(
@@ -1644,13 +1671,14 @@ class AgentCommandRepository(DatabaseConnection):
                             < func.now() - text(f"interval '{grace_seconds} seconds'")
                         )
                     ),
+                    cancelling_states & cancelling_expired,
                 )
             )
             .values(
-                status=CommandStatus.FAILED,
+                status=terminal_status,
                 result=func.jsonb_build_object(
                     "status",
-                    CommandStatus.FAILED,
+                    terminal_status,
                     "applied",
                     False,
                     "message",
@@ -1659,6 +1687,7 @@ class AgentCommandRepository(DatabaseConnection):
                             table.c.status == CommandStatus.QUEUED,
                             QUEUED_COMMAND_FAILURE_MESSAGE,
                         ),
+                        (cancelling_states, CANCELLING_COMMAND_FAILURE_MESSAGE),
                         else_=EXPIRED_COMMAND_FAILURE_MESSAGE,
                     ),
                 ),
@@ -1671,9 +1700,13 @@ class AgentCommandRepository(DatabaseConnection):
                 table.c.cluster_id,
                 table.c.correlation_id,
                 table.c.active_attempt_id,
+                table.c.attempt_count,
+                table.c.status,
                 table.c.result,
             )
         )
+        event_table = EventModel.__table__
+        outbox_table = OutboxModel.__table__
         with self.connection() as conn:
             rows = [row_dict(row) for row in conn.execute(statement).mappings().all()]
             for row in rows:
@@ -1694,17 +1727,72 @@ class AgentCommandRepository(DatabaseConnection):
                             updated_at=func.now(),
                         )
                     )
+                final_status = str(row["status"])
                 stage_command_operation_event_in_transaction(
                     conn,
                     workspace_id=str(row["workspace_id"]),
                     command_id=str(row["command_id"]),
-                    kind="failed",
+                    kind=(
+                        "cancelled" if final_status == CommandStatus.CANCELLED else "failed"
+                    ),
                     payload={
                         "cluster_id": str(row["cluster_id"]),
-                        "status": CommandStatus.FAILED,
+                        "status": final_status,
                         "correlation_id": str(row["correlation_id"]),
                         "result": dict(row["result"]),
                     },
+                )
+                command_id = str(row["command_id"])
+                workspace_id = str(row["workspace_id"])
+                body = CommandCompletedBody(command_id=command_id, result=dict(row["result"]))
+                completed = replace(
+                    event(
+                        body.__subject__,
+                        source,
+                        body.to_body(),
+                        str(row["correlation_id"]),
+                        workspace_id=workspace_id,
+                    ),
+                    event_id=str(
+                        uuid.uuid5(
+                            uuid.NAMESPACE_URL,
+                            f"command-expired:{command_id}:{int(row.get('attempt_count') or 0)}",
+                        )
+                    ),
+                )
+                conn.execute(
+                    update(table)
+                    .where(
+                        table.c.command_id == command_id,
+                        table.c.workspace_id == workspace_id,
+                    )
+                    .values(terminal_event_id=completed.event_id)
+                )
+                conn.execute(
+                    pg_insert(event_table)
+                    .values(
+                        event_id=completed.event_id,
+                        subject=completed.subject,
+                        source=completed.source,
+                        correlation_id=completed.correlation_id,
+                        causation_id=completed.causation_id,
+                        payload=completed.payload,
+                    )
+                    .on_conflict_do_nothing(index_elements=[event_table.c.event_id])
+                )
+                conn.execute(
+                    pg_insert(outbox_table)
+                    .values(
+                        event_id=completed.event_id,
+                        subject=completed.subject,
+                        source=completed.source,
+                        correlation_id=completed.correlation_id,
+                        causation_id=completed.causation_id,
+                        workspace_id=completed.workspace_id,
+                        occurred_at=completed.created_at,
+                        payload=completed.payload,
+                    )
+                    .on_conflict_do_nothing(index_elements=[outbox_table.c.event_id])
                 )
         return rows
 

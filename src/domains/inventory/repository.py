@@ -26,6 +26,11 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from domains.inventory.change_correlation import correlate_inventory_timeline_events
+from domains.inventory.coverage import (
+    inventory_delete_scope_predicate,
+    inventory_deletion_scopes,
+    inventory_row_in_deletion_scopes,
+)
 from domains.inventory.kubernetes_events import (
     EVENT_CAPTURE_REASON_COMPLETE,
     EVENT_CAPTURE_SUMMARY_KEY,
@@ -155,6 +160,7 @@ def _latest_inventory_snapshots_statement(
         .where(
             table.c.workspace_id == workspace_id,
             table.c.cluster_id == requested.c.cluster_id,
+            table.c.status != "ignored_stale",
             live_inventory_snapshot_clause(table),
         )
         .order_by(table.c.created_at.desc(), table.c.snapshot_id.desc())
@@ -164,17 +170,47 @@ def _latest_inventory_snapshots_statement(
     return select(latest).select_from(requested.join(latest, true()))
 
 
+def _latest_inventory_snapshot_id_scalar(workspace_id: str, cluster_id: str) -> Any:
+    table = ClusterInventorySnapshotRecord.__table__
+    return (
+        select(table.c.snapshot_id)
+        .where(
+            table.c.workspace_id == workspace_id,
+            table.c.cluster_id == cluster_id,
+            table.c.status != "ignored_stale",
+            live_inventory_snapshot_clause(table),
+        )
+        .order_by(table.c.created_at.desc(), table.c.snapshot_id.desc())
+        .limit(1)
+        .scalar_subquery()
+    )
+
+
 def _inventory_resource_counts_by_cluster_statement(
     workspace_id: str,
     cluster_ids: set[str],
 ) -> Any:
     table = ClusterInventoryResourceRecord.__table__
+    latest = _latest_inventory_snapshots_statement(
+        workspace_id,
+        cluster_ids,
+    ).subquery("latest_inventory_count_snapshots")
     return (
         select(
             table.c.cluster_id,
             table.c.resource_type,
             table.c.health,
             func.count().label("count"),
+        )
+        .select_from(
+            table.join(
+                latest,
+                and_(
+                    latest.c.workspace_id == table.c.workspace_id,
+                    latest.c.cluster_id == table.c.cluster_id,
+                    latest.c.snapshot_id == table.c.snapshot_id,
+                ),
+            )
         )
         .where(
             table.c.workspace_id == workspace_id,
@@ -1059,6 +1095,7 @@ class InventoryRepository(DatabaseConnection):
             partial_reason_codes.append("source_resources_truncated")
         elif not resources_complete:
             partial_reason_codes.append("source_resources_incomplete")
+        scoped_delete_scopes = inventory_deletion_scopes(source_summary)
 
         with self.connection() as conn:
             conn.execute(
@@ -1137,8 +1174,17 @@ class InventoryRepository(DatabaseConnection):
                 previous_event_batch=previous_event_batch,
                 current_event_batch=current_event_batch,
             )
+            previous_rows_for_deletion = (
+                previous_rows
+                if resources_complete
+                else [
+                    row
+                    for row in previous_rows
+                    if inventory_row_in_deletion_scopes(row, scoped_delete_scopes)
+                ]
+            )
             missing_inventory_keys = sorted(
-                {str(row["inventory_key"]) for row in previous_rows}
+                {str(row["inventory_key"]) for row in previous_rows_for_deletion}
                 - {str(row["inventory_key"]) for row in normalized}
             )
             conn.execute(
@@ -1207,16 +1253,21 @@ class InventoryRepository(DatabaseConnection):
                         usage=summary["usage"],
                     )
                 )
-            if resources_complete and missing_inventory_keys:
+            if (resources_complete or scoped_delete_scopes) and missing_inventory_keys:
+                delete_predicates = [
+                    resource_table.c.workspace_id == workspace_id,
+                    resource_table.c.cluster_id == cluster_id,
+                    resource_table.c.snapshot_id != snapshot_id,
+                    resource_table.c.inventory_key.in_(missing_inventory_keys),
+                    resource_table.c.deleted_at.is_(None),
+                ]
+                if not resources_complete:
+                    delete_predicates.append(
+                        inventory_delete_scope_predicate(resource_table, scoped_delete_scopes)
+                    )
                 result = conn.execute(
                     update(resource_table)
-                    .where(
-                        resource_table.c.workspace_id == workspace_id,
-                        resource_table.c.cluster_id == cluster_id,
-                        resource_table.c.snapshot_id != snapshot_id,
-                        resource_table.c.inventory_key.in_(missing_inventory_keys),
-                        resource_table.c.deleted_at.is_(None),
-                    )
+                    .where(*delete_predicates)
                     .values(deleted_at=func.now(), updated_at=func.now())
                 )
                 marked_deleted = int(result.rowcount or 0)
@@ -1230,6 +1281,7 @@ class InventoryRepository(DatabaseConnection):
                 labels_complete=labels_complete,
                 resources_complete=resources_complete,
                 partial_reason_codes=partial_reason_codes,
+                deletion_scopes=scoped_delete_scopes,
             )
             timeline_events = correlate_inventory_timeline_events(
                 timeline_events,
@@ -1269,7 +1321,11 @@ class InventoryRepository(DatabaseConnection):
         if namespace:
             statement = statement.where(table.c.namespace == namespace)
         if not include_deleted:
-            statement = statement.where(table.c.deleted_at.is_(None))
+            statement = statement.where(
+                table.c.deleted_at.is_(None),
+                table.c.snapshot_id
+                == _latest_inventory_snapshot_id_scalar(workspace_id, cluster_id),
+            )
         statement = statement.order_by(
             table.c.resource_type,
             table.c.namespace.nullsfirst(),
@@ -1301,7 +1357,13 @@ class InventoryRepository(DatabaseConnection):
         if namespace:
             predicates.append(table.c.namespace == namespace)
         if not include_deleted:
-            predicates.append(table.c.deleted_at.is_(None))
+            predicates.extend(
+                (
+                    table.c.deleted_at.is_(None),
+                    table.c.snapshot_id
+                    == _latest_inventory_snapshot_id_scalar(workspace_id, cluster_id),
+                )
+            )
         statement = (
             select(table)
             .where(*predicates)
@@ -1449,6 +1511,41 @@ class InventoryRepository(DatabaseConnection):
                 table.c.deleted_at.is_(None),
             )
             .order_by(table.c.last_seen_at.desc())
+            .limit(1)
+        )
+        if namespace is None:
+            statement = statement.where(table.c.namespace.is_(None))
+        else:
+            statement = statement.where(table.c.namespace == namespace)
+        with self.connection() as conn:
+            row = conn.execute(statement).mappings().first()
+        return self.serialize_inventory_resource(dict(row)) if row else None
+
+    def get_latest_inventory_resource(
+        self,
+        *,
+        workspace_id: str,
+        cluster_id: str,
+        resource_type: str,
+        kind: str,
+        name: str,
+        namespace: str | None = None,
+    ) -> JsonObject | None:
+        """Read one resource only from the latest accepted live inventory snapshot."""
+
+        table = ClusterInventoryResourceRecord.__table__
+        statement = (
+            select(table)
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.cluster_id == cluster_id,
+                table.c.resource_type == resource_type.strip().lower(),
+                func.lower(table.c.kind) == kind.strip().lower(),
+                table.c.name == name,
+                table.c.deleted_at.is_(None),
+                table.c.snapshot_id
+                == _latest_inventory_snapshot_id_scalar(workspace_id, cluster_id),
+            )
             .limit(1)
         )
         if namespace is None:
@@ -1752,9 +1849,17 @@ class InventoryRepository(DatabaseConnection):
                 "pods": [],
                 "runs_truncated": False,
                 "pods_truncated": False,
+                "partial_reason_codes": [],
             }
 
         table = ClusterInventoryResourceRecord.__table__
+        snapshot_table = ClusterInventorySnapshotRecord.__table__
+        latest_snapshot_id = _latest_inventory_snapshot_id_scalar(workspace_id, cluster_id)
+        snapshot_summary_statement = select(snapshot_table.c.summary).where(
+            snapshot_table.c.workspace_id == workspace_id,
+            snapshot_table.c.cluster_id == cluster_id,
+            snapshot_table.c.snapshot_id == latest_snapshot_id,
+        )
         runs_statement = (
             select(table)
             .where(
@@ -1764,6 +1869,7 @@ class InventoryRepository(DatabaseConnection):
                 table.c.resource_type == WORKLOAD_RESOURCE_TYPE,
                 table.c.kind.in_(normalized_run_kinds),
                 table.c.deleted_at.is_(None),
+                table.c.snapshot_id == latest_snapshot_id,
                 table.c.summary["owner_uid"].astext == owner_uid,
                 table.c.summary["owner_kind"].astext == owner_kind,
                 table.c.summary["owner_name"].astext == owner_name,
@@ -1776,6 +1882,7 @@ class InventoryRepository(DatabaseConnection):
             .limit(effective_limit + 1)
         )
         with self.connection() as conn:
+            snapshot_summary = conn.execute(snapshot_summary_statement).scalar_one_or_none()
             run_rows = [dict(row) for row in conn.execute(runs_statement).mappings().all()]
             selected_runs = run_rows[:effective_limit]
             run_owners = [
@@ -1797,6 +1904,7 @@ class InventoryRepository(DatabaseConnection):
                         table.c.namespace == namespace,
                         table.c.resource_type == POD_RESOURCE_TYPE,
                         table.c.deleted_at.is_(None),
+                        table.c.snapshot_id == latest_snapshot_id,
                         or_(*run_owners),
                     )
                     .order_by(table.c.last_seen_at.desc(), table.c.inventory_key.desc())
@@ -1810,6 +1918,7 @@ class InventoryRepository(DatabaseConnection):
             ],
             "runs_truncated": len(run_rows) > effective_limit,
             "pods_truncated": len(pod_rows) > effective_pod_limit,
+            "partial_reason_codes": inventory_snapshot_partial_reason_codes(snapshot_summary),
         }
 
     def list_resource_events(
@@ -2182,6 +2291,23 @@ class InventoryRepository(DatabaseConnection):
         if cluster_ids is not None and not cluster_ids:
             return {}
         table = ClusterInventoryResourceRecord.__table__
+        snapshots = ClusterInventorySnapshotRecord.__table__
+        latest_snapshot_id = (
+            select(snapshots.c.snapshot_id)
+            .where(
+                snapshots.c.workspace_id == workspace_id,
+                snapshots.c.cluster_id == table.c.cluster_id,
+                snapshots.c.status != "ignored_stale",
+                live_inventory_snapshot_clause(snapshots),
+            )
+            .order_by(
+                snapshots.c.created_at.desc(),
+                snapshots.c.snapshot_id.desc(),
+            )
+            .limit(1)
+            .correlate(table)
+            .scalar_subquery()
+        )
         statement = (
             select(
                 table.c.cluster_id,
@@ -2195,6 +2321,7 @@ class InventoryRepository(DatabaseConnection):
                 table.c.workspace_id == workspace_id,
                 table.c.resource_type.in_(FLEET_ROLLUP_RESOURCE_TYPES),
                 table.c.deleted_at.is_(None),
+                table.c.snapshot_id == latest_snapshot_id,
             )
             .group_by(table.c.cluster_id, table.c.resource_type, table.c.status, table.c.health)
         )
@@ -2381,9 +2508,10 @@ class InventoryRepository(DatabaseConnection):
             .where(
                 table.c.workspace_id == workspace_id,
                 table.c.cluster_id == cluster_id,
+                table.c.status != "ignored_stale",
                 live_inventory_snapshot_clause(table),
             )
-            .order_by(table.c.created_at.desc())
+            .order_by(table.c.created_at.desc(), table.c.snapshot_id.desc())
             .limit(1)
         )
         with self.connection() as conn:
@@ -2408,6 +2536,7 @@ class InventoryRepository(DatabaseConnection):
 
         resources = ClusterInventoryResourceRecord.__table__
         snapshots = ClusterInventorySnapshotRecord.__table__
+        latest_snapshot_id = _latest_inventory_snapshot_id_scalar(workspace_id, cluster_id)
         latest = (
             select(
                 snapshots.c.snapshot_id,
@@ -2423,9 +2552,10 @@ class InventoryRepository(DatabaseConnection):
             .where(
                 snapshots.c.workspace_id == workspace_id,
                 snapshots.c.cluster_id == cluster_id,
+                snapshots.c.status != "ignored_stale",
                 live_inventory_snapshot_clause(snapshots),
             )
-            .order_by(snapshots.c.created_at.desc())
+            .order_by(snapshots.c.created_at.desc(), snapshots.c.snapshot_id.desc())
             .limit(1)
             .subquery("latest_node_summary_snapshot")
         )
@@ -2441,6 +2571,7 @@ class InventoryRepository(DatabaseConnection):
                 resources.c.cluster_id == cluster_id,
                 resources.c.resource_type == NODE_RESOURCE_TYPE,
                 resources.c.deleted_at.is_(None),
+                resources.c.snapshot_id == latest_snapshot_id,
             )
             .order_by(resources.c.name)
             .limit(max(1, min(limit, 1000)))
@@ -2529,6 +2660,8 @@ class InventoryRepository(DatabaseConnection):
             table.c.workspace_id == workspace_id,
             table.c.cluster_id == cluster_id,
             table.c.deleted_at.is_(None),
+            table.c.snapshot_id
+            == _latest_inventory_snapshot_id_scalar(workspace_id, cluster_id),
         ]
         if namespaces:
             predicates.append(or_(table.c.namespace.is_(None), table.c.namespace.in_(namespaces)))
@@ -2567,6 +2700,8 @@ class InventoryRepository(DatabaseConnection):
             table.c.workspace_id == workspace_id,
             table.c.cluster_id == cluster_id,
             table.c.deleted_at.is_(None),
+            table.c.snapshot_id
+            == _latest_inventory_snapshot_id_scalar(workspace_id, cluster_id),
         ]
         if namespaces:
             predicates.append(or_(table.c.namespace.is_(None), table.c.namespace.in_(namespaces)))
@@ -2600,6 +2735,8 @@ class InventoryRepository(DatabaseConnection):
             table.c.cluster_id == cluster_id,
             table.c.namespace.is_not(None),
             table.c.deleted_at.is_(None),
+            table.c.snapshot_id
+            == _latest_inventory_snapshot_id_scalar(workspace_id, cluster_id),
         ]
         if namespaces:
             predicates.append(table.c.namespace.in_(namespaces))
@@ -2732,6 +2869,23 @@ def _rightsizing_snapshot_complete(value: Any) -> bool:
         else {}
     )
     return summary.get("resources_complete") is True and limits.get("truncated") is not True
+
+
+def inventory_snapshot_partial_reason_codes(value: Any) -> tuple[str, ...]:
+    envelope = value if isinstance(value, Mapping) else {}
+    summary = envelope.get("summary") if isinstance(envelope.get("summary"), Mapping) else envelope
+    if not isinstance(summary, Mapping):
+        return ("source_resources_incomplete",)
+    limits = (
+        summary.get("collection_limits")
+        if isinstance(summary.get("collection_limits"), Mapping)
+        else {}
+    )
+    if limits.get("truncated") is True:
+        return ("source_resources_truncated",)
+    if summary.get("resources_complete") is not True:
+        return ("source_resources_incomplete",)
+    return ()
 
 
 def _rightsizing_datetime(value: Any) -> datetime | None:
