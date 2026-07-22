@@ -629,7 +629,9 @@ def test_render_respects_event_raw_json_source_type(monkeypatch, tmp_path) -> No
     assert outs[0].rendered_manifest.metadata.name == "json-config"
 
 
-def test_render_exports_kustomize_source_from_github_tree(monkeypatch) -> None:
+def test_render_exports_only_kustomize_dependency_graph_from_large_github_tree(
+    monkeypatch,
+) -> None:
     render = load_service("gitops/manifest-render-worker")
     monkeypatch.setenv("GIT_REMOTE_MANIFEST_ENABLED", "1")
     monkeypatch.setenv("GIT_REMOTE_MANIFEST_REQUIRED", "1")
@@ -667,23 +669,31 @@ def test_render_exports_kustomize_source_from_github_tree(monkeypatch) -> None:
         "https://api.github.test/repos/owner/demo/git/trees/tree123?recursive=1": json.dumps(
             {
                 "tree": [
-                    {"type": "blob", "path": "deploy/k8s/kustomization.yaml"},
-                    {"type": "blob", "path": "deploy/k8s/deployment.yaml"},
-                    {"type": "blob", "path": "README.md"},
+                    {
+                        "type": "blob",
+                        "path": "deploy/k8s/overlays/game-server/kustomization.yaml",
+                    },
+                    {"type": "blob", "path": "deploy/k8s/base/deployment.yaml"},
+                    # The repository contains more than the remote renderer's 500-file
+                    # bound, but these files are unrelated to the selected overlay.
+                    *[
+                        {"type": "blob", "path": f"packages/unused-{index}.txt"}
+                        for index in range(501)
+                    ],
                 ]
             }
         ).encode("utf-8"),
-        "https://api.github.test/repos/owner/demo/contents/deploy/k8s/kustomization.yaml?ref=kustomize123": content_payload(
+        "https://api.github.test/repos/owner/demo/contents/deploy/k8s/overlays/game-server/kustomization.yaml?ref=kustomize123": content_payload(
             "\n".join(
                 [
                     "apiVersion: kustomize.config.k8s.io/v1beta1",
                     "kind: Kustomization",
                     "resources:",
-                    "  - deployment.yaml",
+                    "  - ../../base/deployment.yaml",
                 ]
             )
         ),
-        "https://api.github.test/repos/owner/demo/contents/deploy/k8s/deployment.yaml?ref=kustomize123": content_payload(
+        "https://api.github.test/repos/owner/demo/contents/deploy/k8s/base/deployment.yaml?ref=kustomize123": content_payload(
             "\n".join(
                 [
                     "apiVersion: apps/v1",
@@ -701,10 +711,6 @@ def test_render_exports_kustomize_source_from_github_tree(monkeypatch) -> None:
                 ]
             )
         ),
-        # kustomize 감지 시 상대참조(base) 해석을 위해 저장소 루트 전체를 자료화한다.
-        "https://api.github.test/repos/owner/demo/contents/README.md?ref=kustomize123": content_payload(
-            "# demo"
-        ),
     }
 
     def stub_urlopen(req: object, timeout: float) -> Response:
@@ -719,7 +725,7 @@ def test_render_exports_kustomize_source_from_github_tree(monkeypatch) -> None:
         source_path = Path(command[-1])
         rendered_paths.append(source_path)
         assert (source_path / "kustomization.yaml").is_file()
-        assert (source_path / "deployment.yaml").is_file()
+        assert (source_path / "../../base/deployment.yaml").resolve().is_file()
         return "\n".join(
             [
                 "apiVersion: apps/v1",
@@ -748,7 +754,7 @@ def test_render_exports_kustomize_source_from_github_tree(monkeypatch) -> None:
             image="ignored",
             replicas=1,
             repo_ref="owner/demo",
-            manifest_path="deploy/k8s",
+            manifest_path="deploy/k8s/overlays/game-server",
             source_type="kustomize",
         ),
         db=db,
@@ -762,14 +768,38 @@ def test_render_exports_kustomize_source_from_github_tree(monkeypatch) -> None:
     assert artifact["source_summary"]["source_type"] == "kustomize"
     assert artifact["source_summary"]["source_is_file"] is False
     assert artifact["source_summary"]["source_document_count"] == 1
-    # kustomize 는 상대참조(base) 해석을 위해 저장소 루트 전체를 자료화한다(상한 유지).
+    # Only the selected overlay and its ../../base dependency are fetched. The
+    # 501 unrelated repository files are never counted or downloaded.
     assert calls == [
         "https://api.github.test/repos/owner/demo/commits/kustomize123",
         "https://api.github.test/repos/owner/demo/git/trees/tree123?recursive=1",
-        "https://api.github.test/repos/owner/demo/contents/README.md?ref=kustomize123",
-        "https://api.github.test/repos/owner/demo/contents/deploy/k8s/deployment.yaml?ref=kustomize123",
-        "https://api.github.test/repos/owner/demo/contents/deploy/k8s/kustomization.yaml?ref=kustomize123",
+        "https://api.github.test/repos/owner/demo/contents/deploy/k8s/overlays/game-server/kustomization.yaml?ref=kustomize123",
+        "https://api.github.test/repos/owner/demo/contents/deploy/k8s/base/deployment.yaml?ref=kustomize123",
     ]
+
+    # Prove that the formerly blocked render now reaches the real sandbox apply
+    # command boundary through the normal diff and policy workers.
+    diff_worker = load_service("gitops/diff-worker")
+    diff_events = run_handler(
+        diff_worker.on_manifest_rendered,
+        outs[0],
+        db=SpyDb(get_actual_resource_image="ghcr.io/project/checkout-api:stable"),
+    )
+    assert subjects_of(diff_events) == [
+        "desired.diff.detected",
+        "gitops.change_context.detected",
+    ]
+
+    analyze_worker = load_service("gitops/diff-analyze-worker")
+    analyzed = run_handler(
+        analyze_worker.on_desired_diff,
+        diff_events[0],
+        db=SpyDb(),
+    )
+    assert subjects_of(analyzed) == ["diff.analyzed", "safe_pr.requested"]
+    assert analyzed[1].next_alert is not None
+    assert analyzed[1].next_alert.next_command is not None
+    assert analyzed[1].next_alert.next_command.action == "apply_manifest"
 
 
 def test_render_reuses_cached_manifest_artifact_without_rerendering() -> None:

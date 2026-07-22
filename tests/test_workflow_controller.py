@@ -902,3 +902,44 @@ def test_workflow_controller_treats_completed_but_unapplied_command_as_failed() 
 
     assert subjects_of(outs) == ["workflow.step.recorded", "workflow.run.failed"]
     assert outs[-1].reason == "kubernetes api not configured; dry-run only"
+
+
+def test_workflow_controller_blocks_promotion_for_image_pull_backoff() -> None:
+    workflow = load_service("gitops/workflow-controller")
+    identity = {
+        "workflow_run_id": "workflow-canary",
+        "workspace_id": "workspace-1",
+        "application_id": "app-1",
+        "binding_id": "binding-1",
+        "environment": "development",
+        "cluster_id": Target.DEFAULT_CLUSTER_ID,
+    }
+    db = workflow_db(get_workflow_identity_for_command=identity)
+    result = {
+        "status": CommandStatus.COMPLETED,
+        "applied": True,
+        "message": "ImagePullBackOff",
+        "resources": [
+            {
+                "kind": "Deployment",
+                "name": "canary-room",
+                "status": "failed",
+                "applied": True,
+                "reason": "ImagePullBackOff",
+            }
+        ],
+        "rollout": {"ready": False, "reason": "ImagePullBackOff"},
+    }
+
+    outs = run_handler(
+        workflow.on_command_completed,
+        CommandCompletedBody(command_id="cmd-canary", result=result),
+        db,
+    )
+
+    assert subjects_of(outs) == ["workflow.step.recorded", "workflow.run.failed"]
+    assert outs[-1].reason == "ImagePullBackOff"
+    update = next(call[1][0] for call in db.calls if call[0] == "update_workflow_run_for_command")
+    assert update["status"] == "failed"
+    assert update["metadata"]["result"] == result
+    assert update["metadata"]["failed_resources"][0]["reason"] == "ImagePullBackOff"
