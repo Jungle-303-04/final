@@ -683,9 +683,6 @@ function ClusterInfoStep({
       {providers.status === "loading" && (
         <p className="flex items-center gap-2 px-0.5 text-[13px] c-2"><Spin c="size-3.5 c-accent" /> 제공자 목록 불러오는 중…</p>
       )}
-      {providers.status === "error" && (
-        <GapBanner>제공자 목록(catalog/discovery)을 불러오지 못했습니다. 가용성 표시 없이 진행됩니다 · 실제 등록은 서버가 검증합니다.</GapBanner>
-      )}
       {providers.status === "unavailable" && (
         <GapBanner>서버가 등록 가능한 클러스터 제공자를 보고하지 않았습니다.</GapBanner>
       )}

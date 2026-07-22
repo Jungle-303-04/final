@@ -64,11 +64,13 @@ const PREFLIGHT_OK: TargetPreflightResponse = {
   management_access: null,
 };
 
+let providerView: ClusterProvidersView = PROVIDERS;
+
 vi.mock("./devpreview/connectFeed", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./devpreview/connectFeed")>();
   return {
     ...actual,
-    useClusterProviders: () => PROVIDERS,
+    useClusterProviders: () => providerView,
     useClusterConnectionStatus: () => ({
       status: "idle",
       connection: null,
@@ -90,6 +92,7 @@ afterEach(cleanup);
 
 beforeEach(() => {
   vi.clearAllMocks();
+  providerView = PROVIDERS;
   vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
   vi.mocked(preflightClusterTarget).mockResolvedValue(PREFLIGHT_OK);
   vi.mocked(registerClusterTarget).mockResolvedValue({
@@ -140,6 +143,7 @@ describe("devpreview AWS cluster wizard", () => {
 
     expect(await screen.findByText("사전검증 통과")).toBeTruthy();
     await user.click(screen.getByRole("button", { name: "에이전트 등록 · 설치 명령 생성" }));
+    expect(screen.queryByLabelText("연결 진행 단계")).toBeNull();
 
     const expectedFields = {
       cloudProvider: "eks",
@@ -160,11 +164,22 @@ describe("devpreview AWS cluster wizard", () => {
     ["duplicate", { valid: true, provider_ready: true, duplicate_cluster_id: true }],
   ])("does not expose registration after a %s preflight", async (_case, override) => {
     vi.mocked(preflightClusterTarget).mockResolvedValue({ ...PREFLIGHT_OK, ...override });
+
     const user = userEvent.setup();
     await reachInstallStep(user);
 
     expect(await screen.findByText("사전검증: 확인 필요")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "에이전트 등록 · 설치 명령 생성" })).toBeNull();
     expect(registerClusterTarget).not.toHaveBeenCalled();
+  });
+
+  it("keeps provider lookup failures out of the primary registration flow", () => {
+    providerView = { ...PROVIDERS, status: "error" };
+    render(<ConnectWizard embedded initialView="cluster" />);
+
+    expect(screen.queryByText(/제공자 목록을 불러오지 못했습니다/)).toBeNull();
+    expect(screen.getByRole("button", { name: /Amazon EKS/ })).toBeTruthy();
+    expect(screen.getByRole("textbox", { name: "AWS region" })).toBeTruthy();
+    expect(screen.getByRole("textbox", { name: "EKS cluster name" })).toBeTruthy();
   });
 });
