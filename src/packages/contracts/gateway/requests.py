@@ -677,6 +677,10 @@ class ApplicationConnectRequest(StrictModel):
         return self
 
 
+class RepositoryDisconnectRequest(StrictModel):
+    repo_ref: str = Field(min_length=1, max_length=240)
+
+
 class RepositoryProbeRequest(StrictModel):
     repo_ref: str = Field(min_length=1, max_length=240)
     token: SecretStr | None = Field(

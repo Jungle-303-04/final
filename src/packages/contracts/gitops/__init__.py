@@ -16,6 +16,11 @@ class RepositoryStatus(StrEnum):
     ACTIVE = "active"
     INVALID_CREDENTIAL = "invalid_credential"
     DISABLED = "disabled"
+    # 외부(GitHub) 변경으로 소스가 사라졌거나 접근 불가일 때. 폴링/동기화는 멈추되
+    # 고아가 되지 않게 명시적 상태로 남긴다(active 조인에서 자동 제외).
+    SOURCE_UNREACHABLE = "source_unreachable"
+    # 사용자가 명시적으로 연결을 해제한 종단 상태. 재연결 전까지 활성 뷰에서 제외된다.
+    DISCONNECTED = "disconnected"
 
 
 class WatchTargetStatus(StrEnum):

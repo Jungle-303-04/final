@@ -59,6 +59,7 @@ from packages.contracts.gateway.requests import (
     ApplicationConnectRequest,
     ApplicationUpsertRequest,
     DeploymentBindingUpsertRequest,
+    RepositoryDisconnectRequest,
     RepositoryManifestValidationRequest,
 )
 from packages.contracts.gateway.responses import (
@@ -800,9 +801,23 @@ async def get_repository_connection_status(
         normalized_repo_ref,
     )
     repository_status = str(repository.get("status") or "unknown")
-    connection_stage = "ready" if repository_status == "active" else "error"
-    if repository_status not in {"active", "invalid_credential", "disabled"}:
+    known_statuses = {
+        "active",
+        "invalid_credential",
+        "disabled",
+        "source_unreachable",
+        "disconnected",
+    }
+    if repository_status not in known_statuses:
         repository_status = "unknown"
+    connection_stage = "ready" if repository_status == "active" else "error"
+    # 상태→사용자 노출 사유 매핑(단일 라이브 상태에서 '왜' 를 UI 로 전달).
+    degraded_reason = {
+        "invalid_credential": "credential_invalid",
+        "source_unreachable": "source_unreachable",
+        "disabled": "disabled",
+        "disconnected": "disconnected",
+    }.get(repository_status)
     return RepositoryConnectionStatusResponse(
         repo_ref=normalized_repo_ref,
         repository_id=str(repository.get("repository_id") or ""),
@@ -810,6 +825,56 @@ async def get_repository_connection_status(
         connection_stage=connection_stage,
         terminal=True,
         refresh_after_seconds=None,
+        degraded_reason=degraded_reason,
+    )
+
+
+@router.post(
+    gateway_routes.REPOSITORY_DISCONNECT_PATH,
+    response_model=RepositoryConnectionStatusResponse,
+)
+async def disconnect_repository_connection(
+    payload: RepositoryDisconnectRequest,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> RepositoryConnectionStatusResponse:
+    """저장소 연결을 명시적으로 해제한다(고아 없이 종단 상태로 수렴).
+
+    관리 권한이 있는 사용자만 호출 가능하며, 저장소·watch·binding·application 을
+    한 트랜잭션에서 비활성으로 내리고 저장된 repo-scope 자격증명을 삭제한다.
+    미등록 저장소는 404, 이미 해제됨은 멱등하게 disconnected 를 다시 돌려준다.
+    """
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    try:
+        normalized_repo_ref = normalize_github_repo_ref(payload.repo_ref)
+    except RepositoryDiscoveryError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    # 권한 게이트: 미등록이면 None → 404, 관리 불가면 내부에서 403.
+    manageable = require_repository_manage_if_registered(
+        db,
+        current,
+        workspace_id,
+        normalized_repo_ref,
+    )
+    if manageable is None:
+        raise HTTPException(status_code=HTTP_NOT_FOUND, detail=REPOSITORY_NOT_FOUND)
+    result = await to_thread_db_retry(
+        db.disconnect_repository,
+        workspace_id,
+        normalized_repo_ref,
+    )
+    if result is None:
+        raise HTTPException(status_code=HTTP_NOT_FOUND, detail=REPOSITORY_NOT_FOUND)
+    return RepositoryConnectionStatusResponse(
+        repo_ref=normalized_repo_ref,
+        repository_id=str(result.get("repository_id") or ""),
+        repository_status="disconnected",
+        connection_stage="error",
+        terminal=True,
+        refresh_after_seconds=None,
+        degraded_reason="disconnected",
     )
 
 

@@ -500,6 +500,163 @@ class RepoChangeRepository(GitOpsOverviewRepository):
             "repository_id": repository_id,
         }
 
+    def _cascade_repository_status(
+        self,
+        conn: Any,
+        *,
+        workspace_id: str,
+        repository_id: str,
+        repository_status: str,
+        pause_children: bool,
+    ) -> dict[str, int]:
+        """Repository 상태를 옮기고, 필요하면 자식(watch/binding/application)까지
+        비활성으로 함께 내려 고아 상태를 남기지 않는다.
+
+        active 조인들은 모두 ``status == ACTIVE`` 만 보므로, 자식을 비활성으로
+        내리면 폴링·동기화·목록에서 일관되게 사라진다(부분적으로만 남는 모순 방지).
+        반환은 각 테이블에서 실제로 바뀐 행 수(관측/검증용).
+        """
+        repo_table = GitRepository.__table__
+        conn.execute(
+            repo_table.update()
+            .where(
+                repo_table.c.workspace_id == workspace_id,
+                repo_table.c.repository_id == repository_id,
+            )
+            .values(status=repository_status, updated_at=func.now())
+        )
+        changed = {"repository": 1, "watch_targets": 0, "bindings": 0, "applications": 0}
+        if not pause_children:
+            return changed
+        watch_table = GitWatchTarget.__table__
+        watch_result = conn.execute(
+            watch_table.update()
+            .where(
+                watch_table.c.workspace_id == workspace_id,
+                watch_table.c.repository_id == repository_id,
+                watch_table.c.status == WatchTargetStatus.ACTIVE.value,
+            )
+            .values(status=WatchTargetStatus.PAUSED.value, updated_at=func.now())
+        )
+        binding_table = DeploymentBinding.__table__
+        binding_result = conn.execute(
+            binding_table.update()
+            .where(
+                binding_table.c.workspace_id == workspace_id,
+                binding_table.c.repository_id == repository_id,
+                binding_table.c.status == DeploymentBindingStatus.ACTIVE.value,
+            )
+            .values(status=DeploymentBindingStatus.PAUSED.value, updated_at=func.now())
+        )
+        app_table = Application.__table__
+        app_result = conn.execute(
+            app_table.update()
+            .where(
+                app_table.c.workspace_id == workspace_id,
+                app_table.c.repository_id == repository_id,
+                app_table.c.status == ApplicationStatus.ACTIVE.value,
+            )
+            .values(status=ApplicationStatus.ARCHIVED.value, updated_at=func.now())
+        )
+        changed["watch_targets"] = int(watch_result.rowcount or 0)
+        changed["bindings"] = int(binding_result.rowcount or 0)
+        changed["applications"] = int(app_result.rowcount or 0)
+        return changed
+
+    def set_repository_connection_status(
+        self,
+        workspace_id: str,
+        repo_ref: str,
+        status: str,
+        *,
+        pause_children: bool = True,
+    ) -> JsonObject | None:
+        """외부(GitHub) 변경 감지 등으로 저장소 연결 상태를 옮긴다(웹훅/폴러 공용).
+
+        저장소가 없으면 ``None``(멱등 무동작). 존재하면 상태를 옮기고, 폴링이 계속
+        실패·오작동하지 않게 자식까지 함께 정지시켜 부분 활성 모순을 막는다.
+        """
+        with self.unit_of_work():
+            existing = self.get_repository_by_ref(workspace_id, repo_ref)
+            if existing is None:
+                return None
+            repository_id = str(existing["repository_id"])
+            with self.connection() as conn:
+                changed = self._cascade_repository_status(
+                    conn,
+                    workspace_id=workspace_id,
+                    repository_id=repository_id,
+                    repository_status=status,
+                    pause_children=pause_children,
+                )
+            refreshed = self.get_repository_by_ref(workspace_id, repo_ref) or existing
+        return {**refreshed, "cascade": changed}
+
+    def disconnect_repository(
+        self,
+        workspace_id: str,
+        repo_ref: str,
+        *,
+        drop_credential: bool = True,
+    ) -> JsonObject | None:
+        """사용자 요청으로 저장소 연결을 해제한다(종단 상태 + 자식 정지 + 자격 삭제).
+
+        고아 방지 계약:
+          - repository → ``disconnected``
+          - watch_targets → ``paused`` (폴링 중단)
+          - deployment_bindings → ``paused`` (동기화 중단)
+          - applications → ``archived`` (목록에서 제외)
+          - 저장된 repo-scope PAT 자격증명 삭제(App 설치 참조는 vault 밖이라 무동작)
+        저장소가 없으면 ``None``(멱등). 이미 해제됨이면 다시 안전하게 수렴한다.
+        """
+        with self.unit_of_work():
+            existing = self.get_repository_by_ref(workspace_id, repo_ref)
+            if existing is None:
+                return None
+            repository_id = str(existing["repository_id"])
+            self.lock_workspace_credential_scope(
+                workspace_id, "github", repository_credential_scope(repository_id)
+            )
+            with self.connection() as conn:
+                changed = self._cascade_repository_status(
+                    conn,
+                    workspace_id=workspace_id,
+                    repository_id=repository_id,
+                    repository_status=RepositoryStatus.DISCONNECTED.value,
+                    pause_children=True,
+                )
+            credential_dropped = False
+            if drop_credential:
+                credential_dropped = self.delete_workspace_credential(
+                    workspace_id, "github", repository_credential_scope(repository_id)
+                )
+            refreshed = self.get_repository_by_ref(workspace_id, repo_ref) or existing
+        return {
+            **refreshed,
+            "cascade": changed,
+            "credential_dropped": credential_dropped,
+        }
+
+    def list_repositories_by_credential_ref(
+        self,
+        workspace_id: str,
+        credential_ref: str,
+    ) -> list[JsonObject]:
+        """특정 자격증명 참조(예: App 설치 참조)에 묶인 활성/비활성 저장소 목록.
+
+        installation 삭제·권한 회수 웹훅에서 영향받는 저장소를 찾아 상태를 내릴 때 쓴다.
+        """
+        if not workspace_id or not credential_ref:
+            return []
+        table = GitRepository.__table__
+        statement = select(table).where(
+            table.c.workspace_id == workspace_id,
+            table.c.credential_ref == credential_ref,
+        )
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        return [row_dict(row) for row in rows]
+
     def register_watch_target(self, payload: JsonObject) -> JsonObject:
         workspace_id = str(payload.get("workspace_id", DEFAULT_WORKSPACE_ID))
         repository_id = derive_repository_id(payload)

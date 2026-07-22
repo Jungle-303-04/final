@@ -2772,11 +2772,25 @@ class RepositoryConnectionStatusResponse(StrictModel):
         "active",
         "invalid_credential",
         "disabled",
+        "source_unreachable",
+        "disconnected",
         "unknown",
     ]
     connection_stage: Literal["awaiting_validation", "ready", "error"]
     terminal: bool
     refresh_after_seconds: float | None = Field(default=None, ge=0.25, le=30)
+    # 비정상/해제 사유를 UI 에 그대로 노출하기 위한 부가 정보(선택). 상태 판정에는
+    # 영향을 주지 않으며, 없으면 종전 응답과 동일하다(하위호환).
+    degraded_reason: (
+        Literal[
+            "credential_invalid",
+            "source_unreachable",
+            "permission_revoked",
+            "disconnected",
+            "disabled",
+        ]
+        | None
+    ) = None
 
     @model_validator(mode="after")
     def validate_registration_semantics(self) -> Self:
@@ -2785,6 +2799,8 @@ class RepositoryConnectionStatusResponse(StrictModel):
             "active": ("ready", True, True),
             "invalid_credential": ("error", True, True),
             "disabled": ("error", True, True),
+            "source_unreachable": ("error", True, True),
+            "disconnected": ("error", True, True),
             "unknown": ("error", True, True),
         }[self.repository_status]
         actual = (
