@@ -323,6 +323,22 @@ class ResourceDeleteCommandPayload(StrictModel):
         return self
 
 
+def agent_version_from_image(image_ref: str) -> str | None:
+    """이미지 참조에서 사람이 읽을 버전 표식(태그 또는 다이제스트 축약)을 뽑는다.
+
+    값을 만들어내지 않는다 — 참조가 비었거나 태그가 없으면 None(미관측)이다.
+    """
+    ref = image_ref.strip()
+    if not ref:
+        return None
+    if "@sha256:" in ref:
+        return ref.rsplit("@sha256:", 1)[1][:12]
+    tail = ref.rsplit("/", 1)[-1]
+    if ":" in tail:
+        return tail.rsplit(":", 1)[1]
+    return None
+
+
 class AgentConfig:
     TARGET_AGENT_SERVICE_NAME = "cluster-agent"
 
@@ -398,13 +414,21 @@ class HttpManagementPlaneClient:
         await self.client.aclose()
 
     async def register_agent(self, cluster_id: str, agent_id: str, capabilities: list[str]) -> None:
+        payload: JsonObject = {
+            Gateway.CLUSTER_ID: cluster_id,
+            Gateway.AGENT_ID: agent_id,
+            Gateway.CAPABILITIES: capabilities,
+        }
+        # 실측 버전 보고 — 설치 ConfigMap 이 주입한 자기 이미지 참조(TARGET_AGENT_IMAGE)
+        # 의 태그/다이제스트가 이 프로세스의 유일한 진짜 버전 사실이다. 서버는 agent
+        # details.version 을 이미 읽고 있고(save_cluster_agent_status 가 JSONB 병합
+        # 저장이라 이후 traffic_sources 보고에도 유지됨), 값이 없으면 지어내지 않는다.
+        version = agent_version_from_image(env("TARGET_AGENT_IMAGE", ""))
+        if version:
+            payload["details"] = {"version": version}
         response = await self.client.post(
             f"{self.base_url}{gateway_routes.AGENT_CONNECT_PATH}",
-            json={
-                Gateway.CLUSTER_ID: cluster_id,
-                Gateway.AGENT_ID: agent_id,
-                Gateway.CAPABILITIES: capabilities,
-            },
+            json=payload,
             headers=self.headers,
         )
         response.raise_for_status()
