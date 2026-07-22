@@ -17,6 +17,7 @@ import {
   type ResourceManifestSourceEndpoint,
   type ResourceManifestRemediation,
 } from "./resourceManifestFeed";
+import { grantApproval, rejectApproval } from "../api/approvals";
 import { reasonLabel } from "./statusLabel";
 import { BLUE, HP, MONO, TINT, TYPE, UI, inkA } from "./theme";
 
@@ -27,6 +28,7 @@ interface LiveResourceManifestEditorProps {
   resolving?: boolean;
   refreshKey?: number;
   onConnectRepository?: () => void;
+  onOpenDeploySurface?: () => void;
   onReauthenticate?: () => void;
   onRequestAccess?: () => void;
 }
@@ -36,6 +38,7 @@ export function LiveResourceManifestEditor({
   resolving = false,
   refreshKey = 0,
   onConnectRepository,
+  onOpenDeploySurface,
   onReauthenticate,
   onRequestAccess,
 }: LiveResourceManifestEditorProps) {
@@ -47,6 +50,9 @@ export function LiveResourceManifestEditor({
   const [reason, setReason] = useState("");
   const [confirmed, setConfirmed] = useState(false);
   const [approval, setApproval] = useState<ResourceManifestApproveEndpoint | null>(null);
+  const [approvalDecision, setApprovalDecision] = useState<"granted" | "rejected" | null>(null);
+  const [approvalDecisionBusy, setApprovalDecisionBusy] = useState(false);
+  const [approvalDecisionError, setApprovalDecisionError] = useState<string | null>(null);
   const [emergencyApproval, setEmergencyApproval] = useState<ResourceManifestApproveEndpoint | null>(null);
   const [applyReceipt, setApplyReceipt] = useState<ResourceManifestApplyEndpoint | null>(null);
   const [applyStatus, setApplyStatus] = useState<CommandStatus | null>(null);
@@ -167,6 +173,8 @@ export function LiveResourceManifestEditor({
     setPhase("submitting");
     setError(null);
     try {
+      setApprovalDecision(null);
+      setApprovalDecisionError(null);
       setApproval(await approveResourceManifestEdit(resourceId, {
         ...editInput,
         confirmed: true,
@@ -176,6 +184,24 @@ export function LiveResourceManifestEditor({
     } catch (cause) {
       setError(resourceManifestFailureText(cause));
       setPhase("failed");
+    }
+  };
+
+  const decideApproval = async (decision: "granted" | "rejected") => {
+    if (!approval || approvalDecisionBusy) return;
+    setApprovalDecisionBusy(true);
+    setApprovalDecisionError(null);
+    try {
+      if (decision === "granted") {
+        await grantApproval(approval.approval_id, { reason: reason.trim() || null });
+      } else {
+        await rejectApproval(approval.approval_id, { reason: reason.trim() || null });
+      }
+      setApprovalDecision(decision);
+    } catch (cause) {
+      setApprovalDecisionError(resourceManifestFailureText(cause));
+    } finally {
+      setApprovalDecisionBusy(false);
     }
   };
 
@@ -345,7 +371,37 @@ export function LiveResourceManifestEditor({
           </div>
         </div>
       )}
-      {approval && <ManifestNotice tone="ok" title="Safe PR 요청 접수">승인 {approval.approval_id} · 워크플로 {approval.workflow_run_id} · 기준 commit {source.base_sha?.slice(0, 12)}</ManifestNotice>}
+      {approval && (
+        <ManifestNotice tone="ok" title="Safe PR 요청 접수">
+          승인 {approval.approval_id} · 워크플로 {approval.workflow_run_id} · 기준 commit {source.base_sha?.slice(0, 12)}
+          {approvalDecision === null && (
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+              <ActionButton
+                primary
+                disabled={approvalDecisionBusy}
+                onClick={() => void decideApproval("granted")}
+              >
+                승인하고 배포 진행
+              </ActionButton>
+              <ActionButton disabled={approvalDecisionBusy} onClick={() => void decideApproval("rejected")}>
+                거부
+              </ActionButton>
+            </div>
+          )}
+          {approvalDecision === "granted" && (
+            <div style={{ marginTop: 6 }}>
+              승인 완료 — 배포 파이프라인이 진행됩니다.
+              {onOpenDeploySurface && (
+                <div style={{ marginTop: 6 }}>
+                  <ActionButton primary disabled={false} onClick={onOpenDeploySurface}>배포 게이트에서 추적</ActionButton>
+                </div>
+              )}
+            </div>
+          )}
+          {approvalDecision === "rejected" && <div style={{ marginTop: 6 }}>거부됨 — 이 변경은 배포되지 않습니다.</div>}
+          {approvalDecisionError && <div style={{ marginTop: 6 }}>결정 실패: {approvalDecisionError}</div>}
+        </ManifestNotice>
+      )}
       {emergencyApproval && <ManifestNotice tone="warn" title="Git artifact 기록 · PR pending">승인 {emergencyApproval.approval_id} · 기준 commit {source.base_sha?.slice(0, 12)} · 클러스터 직접 적용 후 PR 병합 전까지 drift 상태로 추적합니다.</ManifestNotice>}
       {applyReceipt && <ManifestNotice tone="ok" title="Owner controller 적용 명령 접수">명령 {applyReceipt.command_id} · 감사 이벤트 {applyReceipt.audit_event_id}</ManifestNotice>}
       {applyStatus && (

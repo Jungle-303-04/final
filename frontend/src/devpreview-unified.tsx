@@ -462,7 +462,7 @@ function RetryNote({ onRetry, label }: { onRetry: () => void; label?: string }) 
 // hlYaml/YAML_FONT 제거 — 합성 YAML 매니페스트를 렌더하던 DetailOverlay YAML 탭이
 // 관측 전용("관측 안 됨")으로 바뀌면서 더 이상 쓰이지 않는다.
 
-function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, onConnectRepository, onRequestManifestAccess, manifestRefreshKey = 0, forceFull = false, rightInset = 0, leftInset = 0, topInset = TOPBAR_H, viewportW = 1280 }: { kind: Kind; row: Row; onClose: () => void; onToast?: (t: { title: string; sub: string; tone: "ok" | "crit" }) => void; onOpenRef?: (kindId: string, name: string) => void; onShowPods?: (base: string) => void; onConnectRepository?: (context: RepositoryConnectionContext) => void; onRequestManifestAccess?: () => void; manifestRefreshKey?: number; forceFull?: boolean; rightInset?: number; leftInset?: number; topInset?: number; viewportW?: number }) {
+function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, onConnectRepository, onRequestManifestAccess, onOpenDeploySurface, manifestRefreshKey = 0, forceFull = false, rightInset = 0, leftInset = 0, topInset = TOPBAR_H, viewportW = 1280 }: { kind: Kind; row: Row; onClose: () => void; onToast?: (t: { title: string; sub: string; tone: "ok" | "crit" }) => void; onOpenRef?: (kindId: string, name: string) => void; onShowPods?: (base: string) => void; onConnectRepository?: (context: RepositoryConnectionContext) => void; onRequestManifestAccess?: () => void; onOpenDeploySurface?: () => void; manifestRefreshKey?: number; forceFull?: boolean; rightInset?: number; leftInset?: number; topInset?: number; viewportW?: number }) {
   const tabs = TABS_FOR(kind.id);
   const [tab, setTab] = useState<DetailTab>(tabs[0]);
   const [fullSelf, setFull] = useState(false);   // 전체 화면 (원본 레퍼런스의 ⤢)
@@ -784,6 +784,7 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
                 clusterId: row.cluster != null && String(row.cluster) ? String(row.cluster) : undefined,
                 namespace: row.ns != null && String(row.ns) ? String(row.ns) : undefined,
               })}
+              onOpenDeploySurface={onOpenDeploySurface}
               onReauthenticate={() => window.location.reload()}
               onRequestAccess={onRequestManifestAccess}
             />
@@ -2084,7 +2085,7 @@ function App() {
 
       {/* 상세 — 최상위 레이어 오버레이 (Esc로 닫힘) */}
       <AnimatePresence>
-        {detail && <DetailOverlay key={`${detail.kind.id}-${String(detail.row.cluster ?? "")}-${String(detail.row._key ?? detail.row.name)}`} kind={detail.kind} row={detail.row} onClose={() => setDetail(null)} onToast={pushToast} onOpenRef={openRef} onShowPods={(b) => { setDetail(null); setSurface("resources"); setResView("list"); setKindId("Pod"); setQ(b); }} onConnectRepository={(context) => { setRepositoryConnectContext(context); setConnectModal("repo"); }} onRequestManifestAccess={() => { setDetail(null); setSurface("settings"); }} manifestRefreshKey={manifestRefreshKey} forceFull={aiOpen} rightInset={aiOpen ? aiW : 0} leftInset={navCollapsed ? 60 : 208} topInset={topH} viewportW={vwCss} />}
+        {detail && <DetailOverlay key={`${detail.kind.id}-${String(detail.row.cluster ?? "")}-${String(detail.row._key ?? detail.row.name)}`} kind={detail.kind} row={detail.row} onClose={() => setDetail(null)} onToast={pushToast} onOpenRef={openRef} onShowPods={(b) => { setDetail(null); setSurface("resources"); setResView("list"); setKindId("Pod"); setQ(b); }} onConnectRepository={(context) => { setRepositoryConnectContext(context); setConnectModal("repo"); }} onRequestManifestAccess={() => { setDetail(null); setSurface("settings"); }} onOpenDeploySurface={() => { setDetail(null); setSurface("deploy"); }} manifestRefreshKey={manifestRefreshKey} forceFull={aiOpen} rightInset={aiOpen ? aiW : 0} leftInset={navCollapsed ? 60 : 208} topInset={topH} viewportW={vwCss} />}
       </AnimatePresence>
       {/* 이슈 RCA 사이드바 — 셸 레벨 렌더(서피스 transform 밖) */}
       <AnimatePresence>
