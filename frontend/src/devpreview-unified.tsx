@@ -1610,10 +1610,10 @@ function App() {
       failed: "서버가 연결 해제 실패를 반환했습니다",
     }[phase];
     const title = `${clusterId} · ${phase === "failed" ? "연결 해제 실패" : "연결 해제"}`;
-    const terminal = phase === "succeeded" || phase === "failed";
+    const clearLifecycleNote = phase === "succeeded";
     setNotes((current) => {
       const withoutPreviousLifecycle = current.filter((note) => !isClusterLifecycleNote(note, clusterId));
-      if (terminal) return withoutPreviousLifecycle;
+      if (clearLifecycleNote) return withoutPreviousLifecycle;
       return [
         { id: ++noteSeq.current, icon: "connect", title, body: message, lifecycleClusterId: clusterId },
         ...withoutPreviousLifecycle,
