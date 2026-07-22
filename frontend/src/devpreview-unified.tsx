@@ -1639,8 +1639,12 @@ function App() {
     setNotes((n) => [{ id: ++noteSeq.current, icon: a.kind === "alert_rule" ? "rule" : "connect", title: a.title, body: a.body }, ...n]);
     pushToast({ title: a.title, sub: a.body, tone: "ok" });
     if (a.kind === "connect") {
-      if (a.scope && a.ref) addPending(a.scope, a.ref);
-      if (a.scope === "cluster") contractRefreshRef.current();
+      if (a.scope === "cluster") {
+        if (a.ref) removePendingClusters(a.ref);
+        contractRefreshRef.current();
+      } else if (a.scope === "repo" && a.ref) {
+        addPending(a.scope, a.ref);
+      }
       window.setTimeout(() => setConnectModal(null), 400); // 연결 완료 → 모달 닫힘
     }
   }), []);
