@@ -74,6 +74,8 @@ spec:
               value: "0"
             - name: CONSOLE_ORIGIN
               value: "http://console-dev.management.svc.cluster.local:80"
+            - name: PUBLIC_BASE_URL
+              value: "https://k8s.woonyong.org"
             # 반복 JSON/DB 처리 후 RSS 를 덜 붙잡게 해 OOM 여유를 확보한다.
             - name: MALLOC_ARENA_MAX
               value: "2"
