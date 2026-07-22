@@ -65,6 +65,7 @@ import {
   getGithubAppConfig,
   getGithubAppInstallUrl,
   getGithubAppManifest,
+  verifyGithubAppInstallation,
   type GithubAppConfig,
 } from "./api/github-app";
 import { useSession } from "./devpreview/sessionFeed";
@@ -261,6 +262,8 @@ type RepoSource = {
   token: string;
   branches: RepositoryBranchView[];
   defaultBranch: string;
+  // GitHub App 원클릭 연결로 돌아온 경우의 설치 id(연결 시 자격증명으로 저장).
+  installationId?: string;
 };
 
 // GitHub App 섹션 — 구성돼 있으면 "App으로 연결"(사용자 원클릭), 아니면
@@ -389,6 +392,11 @@ function RepoStep({ providers, onNext }: { providers: ClusterProvidersView; onNe
   // GitHub App 구성 상태(토큰 숨김·App 우선 판정) + 운영자 자동등록 복귀 배너.
   const [appConfig, setAppConfig] = useState<GithubAppConfig | null>(null);
   const [appRegisterNote, setAppRegisterNote] = useState<"created" | "error" | null>(null);
+  // App 원클릭 연결 복귀 상태 — 설치 id 를 확보하고 그 저장소에 실제로 설치됐는지 확인.
+  const [appInstallationId, setAppInstallationId] = useState<string | null>(null);
+  const [appReturn, setAppReturn] = useState<
+    { kind: "verifying" | "ready" | "mismatch" | "error"; text: string } | null
+  >(null);
   const appAvailable = appConfig?.install_available === true;
 
   useEffect(() => {
@@ -398,15 +406,53 @@ function RepoStep({ providers, onNext }: { providers: ClusterProvidersView; onNe
         .then((c) => { if (!cancelled) setAppConfig(c); })
         .catch(() => { if (!cancelled) setAppConfig({ configured: false, slug: null, install_available: false }); });
     void load();
-    // 운영자 자동등록 복귀(?github_app_manifest=created|error) — 부모가 일괄 처리(자식 effect 순서 이슈 회피).
     const params = new URLSearchParams(window.location.search);
+    // 운영자 자동등록 복귀(?github_app_manifest=created|error).
     const outcome = params.get("github_app_manifest");
     if (outcome === "created" || outcome === "error") {
       setAppRegisterNote(outcome);
       if (outcome === "created") void load();
       params.delete("github_app_manifest");
       params.delete("github_app_state");
-      const rest = params.toString();
+    }
+    // 사용자 원클릭 설치 복귀(?github_app_installation_id&github_app_state).
+    const installationId = params.get("github_app_installation_id");
+    const returnedState = params.get("github_app_state");
+    if (installationId) {
+      let saved: { state?: string; repoRef?: string } = {};
+      try { saved = JSON.parse(sessionStorage.getItem("kyro_gh_app") || "{}"); } catch { saved = {}; }
+      sessionStorage.removeItem("kyro_gh_app");
+      const stateOk = Boolean(saved.state) && saved.state === returnedState; // CSRF 대조
+      const repoRef = String(saved.repoRef || "");
+      if (stateOk && repoRef) {
+        setAppInstallationId(installationId);
+        setInput(repoRef);        // 저장소 자동 복원 → 아래 detect/probe 흐름이 이어짐
+        setStatus("detecting");
+        setAppReturn({ kind: "verifying", text: "GitHub App 설치를 확인하는 중…" });
+        // 설치가 그 저장소를 실제로 포함하고 PR 쓰기 권한이 있는지 서버로 검증.
+        void verifyGithubAppInstallation(installationId, repoRef)
+          .then((v) => {
+            if (cancelled) return;
+            if (!v.matches) {
+              setAppReturn({ kind: "mismatch", text: "이 설치는 해당 저장소를 포함하지 않습니다. GitHub에서 이 저장소에 App을 설치했는지 확인하세요." });
+            } else if (!v.write_capable) {
+              setAppReturn({ kind: "ready", text: "설치 확인됨 · 연결을 마칠 수 있습니다(PR 쓰기 권한은 GitHub에서 부여 필요)." });
+            } else {
+              setAppReturn({ kind: "ready", text: "GitHub App 설치 확인됨 · 이 저장소로 연결을 마칩니다." });
+            }
+          })
+          .catch(() => {
+            if (!cancelled) setAppReturn({ kind: "error", text: "설치 확인에 실패했습니다. 잠시 후 다시 시도하세요." });
+          });
+      } else {
+        setAppReturn({ kind: "error", text: "설치 복귀 상태가 유효하지 않습니다(보안 검증 실패). 다시 시도하세요." });
+      }
+      params.delete("github_app_installation_id");
+      params.delete("github_app_setup_action");
+      params.delete("github_app_state");
+    }
+    const rest = params.toString();
+    if (window.location.search) {
       window.history.replaceState({}, "", window.location.pathname + (rest ? `?${rest}` : ""));
     }
     return () => { cancelled = true; };
@@ -420,6 +466,9 @@ function RepoStep({ providers, onNext }: { providers: ClusterProvidersView; onNe
     setAccessProbe(null);
     setProbeStatus("idle");
     setFailure("");
+    // 사용자가 주소를 직접 바꾸면 App 복귀 컨텍스트는 무효화(다른 저장소에 오적용 방지).
+    setAppInstallationId(null);
+    setAppReturn(null);
     setStatus(v.trim() ? "detecting" : "idle");
   };
 
@@ -462,6 +511,7 @@ function RepoStep({ providers, onNext }: { providers: ClusterProvidersView; onNe
   const ready = access === "public" || (access === "auth" && token.trim().length > 0);
   const verify = async () => {
     if (!repo || probeStatus === "submitting" || !ready) return;
+    if (appReturn?.kind === "mismatch") return; // 설치가 저장소를 포함하지 않으면 진행 차단
     setProbeStatus("submitting");
     setFailure("");
     try {
@@ -485,6 +535,8 @@ function RepoStep({ providers, onNext }: { providers: ClusterProvidersView; onNe
         token,
         branches: branchList.branches,
         defaultBranch,
+        // App 원클릭 복귀면 설치 id 를 함께 넘겨 연결 시 자격증명으로 저장한다.
+        ...(appInstallationId ? { installationId: appInstallationId } : {}),
       });
     } catch (cause: unknown) {
       setFailure(errorText(cause));
@@ -507,6 +559,36 @@ function RepoStep({ providers, onNext }: { providers: ClusterProvidersView; onNe
         {status === "detecting" ? <Spin c="size-[18px] c-accent" /> : <Search className="size-[18px] c-3" />}
         <input value={input} onChange={(e) => handleInputChange(e.currentTarget.value)} placeholder="https://github.com/org/repo" className="w-full bg-transparent font-mono text-[14px] c-ink outline-none placeholder:font-sans placeholder:c-3" />
       </div>
+
+      {/* GitHub App 원클릭 복귀 배너 — 설치 검증 결과를 그대로 노출. */}
+      <AnimatePresence mode="popLayout">
+        {appReturn && (
+          <motion.div
+            key="appreturn"
+            layout
+            {...REVEAL}
+            role="status"
+            className="flex items-start gap-2.5"
+            style={{
+              borderRadius: 14,
+              padding: "13px 16px",
+              background:
+                appReturn.kind === "mismatch" || appReturn.kind === "error"
+                  ? "var(--err-bg, rgba(239,68,68,0.08))"
+                  : "rgba(34,197,94,0.10)",
+            }}
+          >
+            {appReturn.kind === "verifying" ? (
+              <Spin c="size-4 c-accent" />
+            ) : appReturn.kind === "ready" ? (
+              <Check className="mt-0.5 size-4 c-green" strokeWidth={3} />
+            ) : (
+              <AlertCircle className="mt-0.5 size-4 c-red" />
+            )}
+            <span className="text-[12.5px] leading-[1.5] c-2">{appReturn.text}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence mode="popLayout">
         {status === "detecting" && (
@@ -718,6 +800,7 @@ function RepoTargetStep({ source, context, onComplete }: {
         namespace: input.namespace.trim(),
         environment: input.environment,
         ...(source.token.trim() ? { token: source.token.trim() } : {}),
+        ...(source.installationId ? { installationId: source.installationId } : {}),
       });
       onComplete(repoRef);
     } catch (cause: unknown) {
