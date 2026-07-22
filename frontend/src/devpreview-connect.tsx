@@ -61,6 +61,12 @@ import {
   type ProviderAvailability,
 } from "./devpreview/connectFeed";
 import { reasonLabel } from "./devpreview/statusLabel";
+import {
+  getGithubAppConfig,
+  getGithubAppInstallUrl,
+  getGithubAppManifest,
+  type GithubAppConfig,
+} from "./api/github-app";
 import "./styles/tokens.css";
 import "./styles/foundation.css";
 
@@ -147,19 +153,6 @@ function ProviderChips({ providers }: { providers: ProviderAvailability[] }) {
   );
 }
 
-/** 위저드 하단 뒤로가기 — 주행동과 같은 시선 라인에서 ⅓ 폭을 차지한다.
- *  헤더의 브랜드 아이콘 슬롯이 뒤로가기로 "변신"하던 패턴을 대체한다:
- *  아이콘 정체성이 유지되고, 이동 행동(뒤로/다음)이 한 줄에 모인다. */
-function WizardBackButton({ onClick }: { onClick: () => void }) {
-  return (
-    <button onClick={onClick} aria-label="이전 단계"
-      className="flex items-center justify-center gap-1.5 text-[14.5px] font-semibold c-2 transition-colors hover:bg-soft"
-      style={{ flex: "1 1 0%", borderRadius: 14, paddingTop: 14, paddingBottom: 14, background: "var(--fill)" }}>
-      <ArrowLeft className="size-[17px]" /> 뒤로
-    </button>
-  );
-}
-
 function NextButton({ show, label, onClick }: { show: boolean; label: string; onClick: () => void }) {
   return (
     <AnimatePresence initial={false}>
@@ -200,13 +193,17 @@ function FloatingToast({ message, onDismiss }: { message: string | null; onDismi
   );
 }
 
-function ShellHeader({ icon: Icon, title, sub, onClose }: { icon: typeof Server; title: string; sub: string; onClose: () => void }) {
+function ShellHeader({ icon: Icon, title, sub, onClose, onBack }: { icon: typeof Server; title: string; sub: string; onClose: () => void; onBack?: () => void }) {
   return (
     <>
       <div className="flex items-center gap-4" style={{ padding: "30px 36px 24px" }}>
-        {/* 브랜드 아이콘은 모든 스텝에서 고정 — 뒤로가기는 하단 행동 라인
-            (WizardBackButton, ⅓ 폭)이 담당한다. */}
-        <span className="grid size-12 shrink-0 place-items-center hdr-grad text-white" style={{ borderRadius: 15, boxShadow: "0 8px 18px -6px rgba(47,91,255,0.5)" }}><Icon className="size-[22px]" /></span>
+        {/* 아이콘 슬롯: 하위 스텝에서는 같은 48×48 자리를 뒤로가기 버튼이 대체한다.
+            슬롯 크기가 동일해 제목/부제 위치는 스텝이 바뀌어도 움직이지 않는다. */}
+        {onBack ? (
+          <button onClick={onBack} aria-label="이전 단계" className="grid size-12 shrink-0 place-items-center rounded-[15px] c-2 transition-colors hover:bg-soft" style={{ background: "var(--fill)" }}><ArrowLeft className="size-[22px]" /></button>
+        ) : (
+          <span className="grid size-12 shrink-0 place-items-center hdr-grad text-white" style={{ borderRadius: 15, boxShadow: "0 8px 18px -6px rgba(47,91,255,0.5)" }}><Icon className="size-[22px]" /></span>
+        )}
         <div className="min-w-0 flex-1">
           <h1 className="text-[19px] font-semibold tracking-[-0.02em] c-ink">{title}</h1>
           <p className="mt-1 text-[13px] c-2">{sub}</p>
@@ -244,9 +241,7 @@ function Steps({ steps, active }: { steps: string[]; active: number }) {
   );
 }
 
-// overflowX hidden — 스텝 전환이 x축 ±24px 슬라이드라, 차단하지 않으면 전환 중
-// 가로 스크롤바가 생겼다 사라지며 레이아웃이 옆으로 튀는 것처럼 보인다.
-const Body = ({ children }: { children: React.ReactNode }) => <div style={{ padding: "28px 36px 34px", flex: "1 1 auto", minHeight: 0, overflowY: "auto", overflowX: "hidden" }}><AnimatePresence mode="wait">{children}</AnimatePresence></div>;
+const Body = ({ children }: { children: React.ReactNode }) => <div style={{ padding: "28px 36px 34px", flex: "1 1 auto", minHeight: 0, overflowY: "auto" }}><AnimatePresence mode="wait">{children}</AnimatePresence></div>;
 
 // ── A. Git 저장소 등록 (로컬 형식 사전검사 + 서버 리비전/매니페스트 검증) ─────────────
 type RepoSource = {
@@ -257,11 +252,142 @@ type RepoSource = {
   defaultBranch: string;
 };
 
+// GitHub App 섹션 — 구성돼 있으면 "App으로 연결"(사용자 원클릭), 아니면
+// "자동 등록"(운영자 1회 · manifest 폼 POST). 토큰 붙여넣기를 대체한다.
+function GithubAppConnect({ repoRef }: { repoRef: string }) {
+  const [config, setConfig] = useState<GithubAppConfig | null>(null);
+  const [baseUrl, setBaseUrl] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<{ kind: "ok" | "err" | "info"; text: string } | null>(null);
+  const org = repoRef.split("/")[0] ?? "";
+
+  useEffect(() => {
+    let cancelled = false;
+    getGithubAppConfig()
+      .then((c) => { if (!cancelled) setConfig(c); })
+      .catch(() => { if (!cancelled) setConfig({ configured: false, slug: null, install_available: false }); });
+    // 운영자 자동등록 복귀(?github_app_manifest=created) 처리
+    const params = new URLSearchParams(window.location.search);
+    const outcome = params.get("github_app_manifest");
+    if (outcome) {
+      setNote(
+        outcome === "created"
+          ? { kind: "ok", text: "GitHub App 등록 완료 — 이제 원클릭으로 연결됩니다." }
+          : { kind: "err", text: "GitHub App 등록에 실패했습니다. 다시 시도하세요." },
+      );
+      params.delete("github_app_manifest");
+      params.delete("github_app_state");
+      const rest = params.toString();
+      window.history.replaceState({}, "", window.location.pathname + (rest ? `?${rest}` : ""));
+    }
+    return () => { cancelled = true; };
+  }, []);
+
+  const connectWithApp = async () => {
+    setBusy(true); setNote(null);
+    try {
+      const state = crypto.randomUUID();
+      sessionStorage.setItem("kyro_gh_app", JSON.stringify({ state, repoRef }));
+      const { url } = await getGithubAppInstallUrl(state);
+      window.location.href = url;
+    } catch {
+      setNote({ kind: "err", text: "설치 URL을 가져오지 못했습니다." });
+      setBusy(false);
+    }
+  };
+
+  const registerApp = async () => {
+    if (!baseUrl.trim()) { setNote({ kind: "err", text: "공개 백엔드 주소를 입력하세요." }); return; }
+    setBusy(true); setNote(null);
+    try {
+      const state = crypto.randomUUID();
+      const { action_url, manifest } = await getGithubAppManifest({
+        baseUrl: baseUrl.trim(),
+        state,
+        org: org || undefined,
+      });
+      // GitHub 은 manifest 를 폼 POST 로 받는다 — 동적 폼 생성 후 제출(값 미리 채워짐)
+      const form = document.createElement("form");
+      form.method = "post";
+      form.action = action_url;
+      const field = document.createElement("input");
+      field.type = "hidden";
+      field.name = "manifest";
+      field.value = JSON.stringify(manifest);
+      form.appendChild(field);
+      document.body.appendChild(form);
+      form.submit();
+    } catch {
+      setNote({ kind: "err", text: "등록 준비에 실패했습니다. 주소를 확인하세요." });
+      setBusy(false);
+    }
+  };
+
+  if (config === null) return null;
+
+  const noteEl = note ? (
+    <span
+      className={`px-0.5 text-[11.5px] ${note.kind === "err" ? "c-red" : note.kind === "ok" ? "c-green" : "c-2"}`}
+    >
+      {note.text}
+    </span>
+  ) : null;
+
+  if (config.install_available) {
+    return (
+      <div className="grid gap-2">
+        <button
+          onClick={() => void connectWithApp()}
+          disabled={busy}
+          className="btn-primary flex w-full items-center justify-center gap-2 rounded-[14px] py-3.5 text-[15px] font-semibold disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          GitHub App으로 연결 <ArrowRight className="size-[17px]" />
+        </button>
+        <span className="px-0.5 text-[11.5px] c-3">
+          토큰 없이 GitHub에서 한 번 승인하면 됩니다. 설치 후 이 화면으로 돌아옵니다.
+        </span>
+        {noteEl}
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid gap-2.5 rounded-[14px] p-3.5" style={{ background: "var(--fill)" }}>
+      <div className="text-[12.5px] font-medium c-2">GitHub App 미설정 · 운영자 1회 자동 등록</div>
+      <div className="flex items-center gap-3 bg-surface" style={{ borderRadius: 12, padding: "12px 14px" }}>
+        <Globe className="size-[16px] c-3" />
+        <input
+          value={baseUrl}
+          onChange={(e) => setBaseUrl(e.currentTarget.value)}
+          placeholder="공개 백엔드 주소 · https://xxx.trycloudflare.com"
+          className="w-full bg-transparent font-mono text-[13px] c-ink outline-none placeholder:font-sans placeholder:c-3"
+        />
+      </div>
+      <button
+        onClick={() => void registerApp()}
+        disabled={busy}
+        className="btn-ghost flex items-center justify-center gap-2 rounded-[12px] py-2.5 text-[13.5px] font-semibold disabled:opacity-60"
+      >
+        GitHub에서 자동 등록 <ArrowRight className="size-4" />
+      </button>
+      <span className="px-0.5 text-[11px] c-3">
+        GitHub 생성 화면이 미리 채워집니다. "Create" 한 번이면 끝 — 자격증명은 서버가 자동 수신·암호화 저장합니다.
+      </span>
+      {noteEl}
+    </div>
+  );
+}
+
 function RepoStep({ providers, onNext }: { providers: ClusterProvidersView; onNext: (v: RepoSource) => void }) {
   const [input, setInput] = useState("");
   const [status, setStatus] = useState<"idle" | "detecting" | "found" | "error">("idle");
   const [repo, setRepo] = useState<Repo | null>(null);
   const [token, setToken] = useState(""); // 로컬 상태만 · 저장/로그 금지
+  // access: 주소 인식 직후 토큰 없이 probe 해서 공개/비공개를 판정한다.
+  //  - "public": 토큰 불필요 → 토큰 입력창을 숨기고 바로 진행
+  //  - "auth":   비공개이거나 접근 불가 → 토큰 입력창을 표시하고 필수로 강제
+  const [access, setAccess] = useState<"idle" | "probing" | "public" | "auth">("idle");
+  const [accessProbe, setAccessProbe] = useState<Awaited<ReturnType<typeof probeRepository>> | null>(null);
   const [probeStatus, setProbeStatus] = useState<"idle" | "submitting" | "error">("idle");
   const [failure, setFailure] = useState("");
 
@@ -269,6 +395,8 @@ function RepoStep({ providers, onNext }: { providers: ClusterProvidersView; onNe
     setInput(v);
     setRepo(null);
     setToken("");
+    setAccess("idle");
+    setAccessProbe(null);
     setProbeStatus("idle");
     setFailure("");
     setStatus(v.trim() ? "detecting" : "idle");
@@ -284,15 +412,49 @@ function RepoStep({ providers, onNext }: { providers: ClusterProvidersView; onNe
     return () => window.clearTimeout(id);
   }, [input]);
 
-  const ready = status === "found" && repo !== null;
+  // 주소가 인식되면 토큰 없이 한 번 probe 해서 공개/비공개를 판정한다.
+  // 공개면 토큰 입력창을 아예 띄우지 않고, 비공개/접근 불가일 때만 토큰을 요구한다.
+  useEffect(() => {
+    if (status !== "found" || !repo) return;
+    let cancelled = false;
+    const controller = new AbortController();
+    setAccess("probing");
+    setAccessProbe(null);
+    setFailure("");
+    void (async () => {
+      try {
+        const probe = await probeRepository(repo.full, undefined, controller.signal);
+        if (cancelled) return;
+        setAccessProbe(probe);
+        setAccess(probe.valid && probe.reachable && probe.private === false ? "public" : "auth");
+      } catch {
+        if (cancelled || controller.signal.aborted) return;
+        // 무인증 접근 실패 → 비공개이거나 권한이 필요하므로 토큰 입력을 요구한다.
+        setAccess("auth");
+      }
+    })();
+    return () => { cancelled = true; controller.abort(); };
+  }, [status, repo]);
+
+  const needsToken = access === "auth";
+  const resolved = access === "public" || access === "auth";
+  const ready = access === "public" || (access === "auth" && token.trim().length > 0);
   const verify = async () => {
-    if (!repo || probeStatus === "submitting") return;
+    if (!repo || probeStatus === "submitting" || !ready) return;
     setProbeStatus("submitting");
     setFailure("");
     try {
-      const probe = await probeRepository(repo.full, token.trim() || undefined);
+      // 공개면 이미 받은 무인증 probe 를 재사용하고, 비공개면 토큰으로 다시 검증한다.
+      const probe = access === "public" && accessProbe
+        ? accessProbe
+        : await probeRepository(repo.full, token.trim() || undefined);
       if (!probe.valid || !probe.reachable) {
-        throw new Error(probe.errors[0] || "저장소에 연결할 수 없습니다.");
+        throw new Error(
+          probe.errors[0] ||
+            (needsToken
+              ? "토큰이 유효하지 않거나 저장소 접근 권한이 없습니다."
+              : "저장소에 연결할 수 없습니다."),
+        );
       }
       const branchList = await listRepositoryBranches(probe.normalized_repo_ref);
       const defaultBranch = branchList.default_branch || probe.default_branch || branchList.branches[0]?.name || "main";
@@ -310,9 +472,8 @@ function RepoStep({ providers, onNext }: { providers: ClusterProvidersView; onNe
   };
 
   return (
-    <motion.div key="repo" {...swap} className="grid gap-5">
-      {/* 한 줄 유지 — 580px 모달에서 줄바꿈되지 않도록 문장을 간결하게 다듬음 */}
-      <p className="text-[14px] leading-[1.55] c-2">Git 저장소 주소를 확인한 뒤 브랜치·매니페스트를 실제 리비전에서 검증합니다.</p>
+    <motion.div key="repo" {...swap} style={{ wordBreak: "keep-all", textWrap: "pretty" }} className="grid gap-5">
+      <p className="text-[14px] leading-[1.55] c-2">Git 저장소 주소를 확인한 뒤 서버가 선택한 브랜치와 매니페스트를 실제 리비전에서 검증합니다.</p>
 
       {providers.status === "ready" && providers.sourceProviders.length > 0 && (
         <div className="grid gap-2">
@@ -346,24 +507,51 @@ function RepoStep({ providers, onNext }: { providers: ClusterProvidersView; onNe
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
                   <span className="truncate text-[15px] font-semibold tracking-[-0.015em] c-ink">{repo.full}</span>
-                  {repo.visibility === "private"
-                    ? <span className="inline-flex items-center gap-1 rounded-full orange-bg px-2 py-[3px] text-[11px] font-semibold c-orange"><Lock className="size-3" strokeWidth={2.5} />인증 선택</span>
-                    : <span className="inline-flex items-center gap-1 rounded-full green-bg px-2 py-[3px] text-[11px] font-semibold c-green"><Globe className="size-3" strokeWidth={2.5} />공개 주소</span>}
+                  {/* 뱃지는 클라이언트 추측(parseRepo)이 아니라 무인증 probe 실측(access)으로 표시한다. */}
+                  {access === "probing" && (
+                    <span className="inline-flex items-center gap-1 rounded-full px-2 py-[3px] text-[11px] font-semibold c-2" style={{ background: "var(--fill)" }}><Spin c="size-3 c-accent" />접근 확인 중</span>
+                  )}
+                  {access === "public" && (
+                    <span className="inline-flex items-center gap-1 rounded-full green-bg px-2 py-[3px] text-[11px] font-semibold c-green"><Globe className="size-3" strokeWidth={2.5} />공개 저장소</span>
+                  )}
+                  {access === "auth" && (
+                    <span className="inline-flex items-center gap-1 rounded-full orange-bg px-2 py-[3px] text-[11px] font-semibold c-orange"><Lock className="size-3" strokeWidth={2.5} />비공개 · 인증 필요</span>
+                  )}
                 </div>
                 <div className="mt-1.5 flex items-center gap-1.5 text-[12.5px] c-2">
-                  <GitBranch className="size-3.5 c-3" /><span className="font-mono">{repo.full}</span><span className="c-3">·</span><span>다음 단계에서 서버 검증</span>
+                  <GitBranch className="size-3.5 c-3" /><span className="font-mono">{repo.full}</span><span className="c-3">·</span><span>{access === "public" ? "토큰 없이 연결 가능" : access === "auth" ? "액세스 토큰으로 인증" : "접근 확인 중"}</span>
                 </div>
               </div>
             </div>
 
-            <div className="grid gap-2.5 pt-1">
-              <span className="px-0.5 text-[12.5px] font-medium c-2">비공개 저장소만 액세스 토큰을 입력하세요</span>
-              <div className="field flex items-center gap-3 bg-surface" style={{ borderRadius: 14, padding: "15px 16px" }}>
-                <Lock className="size-[18px] c-3" />
-                <input value={token} onChange={(e) => setToken(e.currentTarget.value)} placeholder="선택 사항 · ghp_••••••••••••••••" type="password" autoComplete="new-password" className="w-full bg-transparent font-mono text-[14px] c-ink outline-none placeholder:c-3" />
+            {/* 비공개/접근불가일 때만 토큰창을 띄우고 필수로 강제한다. */}
+            {needsToken && (
+              <div className="grid gap-3 pt-1">
+                {/* 권장: GitHub App(원클릭) — 미설정이면 운영자 자동등록 */}
+                <GithubAppConnect repoRef={repo.full} />
+                <div className="flex items-center gap-2 px-0.5 text-[11px] c-3">
+                  <span className="h-px flex-1" style={{ background: "rgba(120,120,120,0.22)" }} />또는 액세스 토큰<span className="h-px flex-1" style={{ background: "rgba(120,120,120,0.22)" }} />
+                </div>
+                <div className="grid gap-2.5">
+                  <span className="px-0.5 text-[12.5px] font-medium c-2">비공개 저장소 · 액세스 토큰 <span className="c-red">*</span></span>
+                  <div className="field flex items-center gap-3 bg-surface" style={{ borderRadius: 14, padding: "15px 16px" }}>
+                    <Lock className="size-[18px] c-3" />
+                    <input value={token} onChange={(e) => setToken(e.currentTarget.value)} placeholder="필수 · ghp_••••••••••••••••" type="password" autoComplete="new-password" className="w-full bg-transparent font-mono text-[14px] c-ink outline-none placeholder:c-3" />
+                  </div>
+                  <span className="px-0.5 text-[11.5px] c-3">토큰은 브라우저 저장소에 남기지 않으며, 연결 성공 시 서버의 암호화된 저장소 자격증명으로 보관됩니다.</span>
+                </div>
               </div>
-              <span className="px-0.5 text-[11.5px] c-3">토큰은 브라우저 저장소에 남기지 않으며, 연결 성공 시 서버의 암호화된 저장소 자격증명으로 보관됩니다.</span>
-            </div>
+            )}
+            {/* 공개는 토큰 없이 진행하되, 쓰기(PR)엔 이후 자격증명이 필요함을 정직하게 안내한다. */}
+            {access === "public" && (
+              <div className="grid gap-3">
+                <div className="flex items-start gap-2 px-0.5 text-[12px] leading-[1.5] c-2">
+                  <Globe className="mt-0.5 size-3.5 shrink-0 c-green" />
+                  <span>공개 저장소는 토큰 없이 연결·동기화됩니다. 화면에서 YAML을 수정해 PR을 만들려면(쓰기) GitHub App 연결이 필요합니다.</span>
+                </div>
+                <GithubAppConnect repoRef={repo.full} />
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
@@ -374,8 +562,9 @@ function RepoStep({ providers, onNext }: { providers: ClusterProvidersView; onNe
           <div><div className="text-[13.5px] font-semibold c-ink">저장소 연결 확인 실패</div><div className="mt-1 break-words text-[12.5px] leading-[1.5] c-2">{failure}</div></div>
         </div>
       )}
-      {ready && (
-        <button disabled={probeStatus === "submitting"} onClick={() => void verify()} className="btn-primary flex w-full items-center justify-center gap-2 rounded-[14px] py-3.5 text-[15px] font-semibold disabled:cursor-not-allowed disabled:opacity-60">
+      {/* 접근 판정 후에만 버튼 노출. 공개면 즉시 활성, 비공개는 토큰 입력 전까지 비활성. */}
+      {resolved && (
+        <button disabled={!ready || probeStatus === "submitting"} onClick={() => void verify()} className="btn-primary flex w-full items-center justify-center gap-2 rounded-[14px] py-3.5 text-[15px] font-semibold disabled:cursor-not-allowed disabled:opacity-60">
           {probeStatus === "submitting" ? <><Spin c="size-4 text-white" /> 저장소·브랜치 확인 중…</> : <>저장소 확인 · 배포 대상 선택 <ArrowRight className="size-[17px]" /></>}
         </button>
       )}
@@ -397,10 +586,9 @@ export interface RepositoryConnectionContext {
   namespace?: string;
 }
 
-function RepoTargetStep({ source, context, onBack, onComplete }: {
+function RepoTargetStep({ source, context, onComplete }: {
   source: RepoSource;
   context?: RepositoryConnectionContext;
-  onBack?: () => void;
   onComplete: (repo: string) => void;
 }) {
   const repoRef = source.normalizedRepo || source.repo.full;
@@ -563,12 +751,9 @@ function RepoTargetStep({ source, context, onBack, onComplete }: {
       {clusterStatus === "ready" && clusters.length === 0 && <GapBanner>먼저 클러스터를 연결해야 저장소 배포 대상을 등록할 수 있습니다.</GapBanner>}
       {manifestStatus === "ready" && manifests.length === 0 && <GapBanner>선택한 브랜치에서 배포 가능한 Kubernetes 매니페스트를 찾지 못했습니다.</GapBanner>}
       <FloatingToast message={failure || null} onDismiss={() => setFailure("")} />
-      <div className="flex gap-3">
-        {onBack && <WizardBackButton onClick={onBack} />}
-        <button disabled={!complete || submitStatus === "submitting"} onClick={() => void submit()} className="btn-primary flex items-center justify-center gap-2 rounded-[14px] text-[15px] font-semibold disabled:cursor-not-allowed disabled:opacity-45" style={{ flex: onBack ? "2 1 0%" : "1 1 0%", paddingTop: 14, paddingBottom: 14 }}>
-          {submitStatus === "submitting" ? <><Spin c="size-4 text-white" /> 서버 검증·등록 중…</> : <>서버 검증 후 연결 <ArrowRight className="size-[17px]" /></>}
-        </button>
-      </div>
+      <button disabled={!complete || submitStatus === "submitting"} onClick={() => void submit()} className="btn-primary flex w-full items-center justify-center gap-2 rounded-[14px] text-[15px] font-semibold disabled:cursor-not-allowed disabled:opacity-45">
+        {submitStatus === "submitting" ? <><Spin c="size-4 text-white" /> 서버 검증·등록 중…</> : <>서버 검증 후 연결 <ArrowRight className="size-[17px]" /></>}
+      </button>
     </motion.div>
   );
 }
@@ -588,10 +773,10 @@ function RepoWizard({ providers, context, onClose, onComplete }: { providers: Cl
   const [source, setSource] = useState<RepoSource | null>(null);
   const el = {
     0: <RepoStep key="s0" providers={providers} onNext={(value) => { setSource(value); setStep(1); }} />,
-    1: source ? <RepoTargetStep key="s1" source={source} context={context} onBack={() => setStep(0)} onComplete={() => setStep(2)} /> : null,
+    1: source ? <RepoTargetStep key="s1" source={source} context={context} onComplete={() => setStep(2)} /> : null,
     2: source ? <RepoDoneStep key="s2" repo={source.normalizedRepo} onDone={() => onComplete(source.normalizedRepo)} /> : null,
   }[step];
-  return (<><ShellHeader icon={GitBranch} title="Git 저장소 연결" sub="Git 원문 검증 · 배포 대상 등록 · Safe PR 준비" onClose={onClose} /><Steps steps={REPO_STEPS} active={step} /><Body>{el}</Body></>);
+  return (<><ShellHeader icon={GitBranch} title="Git 저장소 연결" sub="Git 원문 검증 · 배포 대상 등록 · Safe PR 준비" onClose={onClose} onBack={step === 1 ? () => setStep(0) : undefined} /><Steps steps={REPO_STEPS} active={step} /><Body>{el}</Body></>);
 }
 
 // ── B. 클러스터 연결 (에이전트 설치 · 라이브) ─────────────────────────────
@@ -711,13 +896,11 @@ export function toInteractiveSafePowerShellCommand(command: string): string {
 
 // 설치 진행 표시: "설치 대기" 정적 배지 대신 단계 프로그레스로 진행을 보여주고,
 // 타임아웃(expired)·실패(failed) 시 재설치(토큰 재발급) 버튼을 노출한다.
-function InstallProgress({ conn, activation, reinstalling, onReinstall, dense = false }: {
+function InstallProgress({ conn, activation, reinstalling, onReinstall }: {
   conn: ConnectionStatusView;
   activation: ClusterActivationReadinessView;
   reinstalling: boolean;
   onReinstall: () => void;
-  /** 하단 행동 라인에 놓일 때 버튼과 비슷한 세로 크기로 축소한다. */
-  dense?: boolean;
 }) {
   const failed = conn.connection === "failed";
   const expired = conn.connection === "expired";
@@ -735,7 +918,7 @@ function InstallProgress({ conn, activation, reinstalling, onReinstall, dense = 
     : online ? "에이전트가 클러스터 상태를 수집하고 있어요."
     : "터미널에서 위 명령을 실행하면 자동으로 진행됩니다.";
   return (
-    <div className="inset grid" style={{ padding: dense ? "10px 14px" : "15px 16px", gap: dense ? 7 : 10 }}>
+    <div className="inset grid gap-2.5" style={{ padding: "15px 16px" }}>
       <div className="flex items-center gap-2.5">
         {terminal ? (
           <AlertCircle className="size-[18px] shrink-0" style={{ color }} />
@@ -760,7 +943,7 @@ function InstallProgress({ conn, activation, reinstalling, onReinstall, dense = 
   );
 }
 
-function ClusterInstallStep({ platform, name, onBack, onConnected }: { platform: PlatformId; name: string; onBack: () => void; onConnected: (info: ConnectionStatusView) => void }) {
+function ClusterInstallStep({ platform, name, onConnected }: { platform: PlatformId; name: string; onConnected: (info: ConnectionStatusView) => void }) {
   const pf = PLATFORMS.find((p) => p.id === platform)!;
   const Icon = pf.icon;
 
@@ -811,16 +994,6 @@ function ClusterInstallStep({ platform, name, onBack, onConnected }: { platform:
       .catch((cause: unknown) => { if (controller.signal.aborted || isAbortError(cause)) return; setErrMsg(errorText(cause)); setPhase("error"); });
   };
 
-  // 스텝 진입 즉시 명령 발급을 시작한다 — 버튼 하나만 있는 이전 화면은 아무것도
-  // 진행되지 않는 '멈춤'처럼 읽혔다. 실패하면 하단 라인의 '다시 시도'가 남는다.
-  const autoStarted = useRef(false);
-  useEffect(() => {
-    if (autoStarted.current || receipt !== null) return;
-    autoStarted.current = true;
-    runRegister();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   const posixCmd = toInteractiveSafePosixCommand(receipt?.install_command ?? "");
   const cmd = shell === "powershell"
     ? toInteractiveSafePowerShellCommand(
@@ -830,15 +1003,10 @@ function ClusterInstallStep({ platform, name, onBack, onConnected }: { platform:
   const copy = () => { if (!cmd) return; navigator.clipboard?.writeText(cmd).catch(() => {}); setCopied(true); window.setTimeout(() => setCopied(false), 1600); };
   return (
     <motion.div key="cinstall" {...swap} className="grid gap-5">
-      {!receipt && phase !== "error" && (
-        <div className="flex items-center justify-center gap-2 text-[14px] c-2" style={{ padding: "26px 0" }}>
-          <Spin c="size-[17px]" /> 설치 명령 생성 중…
-        </div>
-      )}
-      {!receipt && phase === "error" && (
-        <div className="flex items-center justify-center gap-2 text-[14px] c-2" style={{ padding: "26px 0" }}>
-          <AlertCircle className="size-[17px] c-red" /> 설치 명령을 생성하지 못했습니다
-        </div>
+      {!receipt && (
+        <button onClick={runRegister} disabled={phase === "registering"} className="btn-primary flex w-full items-center justify-center gap-1.5 text-[15px] font-semibold disabled:opacity-50" style={{ borderRadius: 14, paddingTop: 14, paddingBottom: 14 }}>
+          {phase === "registering" ? <><Spin c="size-[17px]" /> 명령 생성 중…</> : <>설치 명령 생성</>}
+        </button>
       )}
 
       <FloatingToast message={errMsg} onDismiss={() => setErrMsg(null)} />
@@ -860,32 +1028,11 @@ function ClusterInstallStep({ platform, name, onBack, onConnected }: { platform:
                 {copied ? <><Check className="size-3.5" strokeWidth={3} />복사됨</> : <><Copy className="size-3.5" />복사</>}
               </button>
             </div>
-            {/* 명령 칸은 셸(macOS/PowerShell)에 따라 길이가 달라도 같은 높이를
-                유지하고 내부 스크롤로 처리한다 — 탭 전환 시 모달 높이가 튀지 않고
-                한 화면 안에 안정적으로 들어온다. */}
-            <pre className="max-w-full whitespace-pre-wrap break-words font-mono text-[12.5px] leading-[1.7] c-ink [overflow-wrap:anywhere]" style={{ padding: "14px 16px", height: 185, overflowY: "auto" }}><code>{cmd}</code></pre>
+            <pre className="max-w-full whitespace-pre-wrap break-words font-mono text-[12.5px] leading-[1.7] c-ink [overflow-wrap:anywhere]" style={{ padding: "14px 16px" }}><code>{cmd}</code></pre>
           </div>
 
+          <InstallProgress conn={conn} activation={activation} reinstalling={reinstalling} onReinstall={reinstall} />
         </>
-      )}
-
-      {/* 하단 행동 라인. 명령 발급 전: [뒤로 ⅓ · 다시 시도/자리 ⅔].
-          명령 발급 후: 임시 클러스터 등록이 이미 생긴 시점이라 뒤로가 의미가
-          없으므로 버튼을 제거하고, 진행 카드가 그 줄 전체를 버튼과 비슷한
-          세로 크기(컴팩트)로 차지해 행동 라인과 일관되게 보인다. */}
-      {receipt ? (
-        <InstallProgress conn={conn} activation={activation} reinstalling={reinstalling} onReinstall={reinstall} dense />
-      ) : (
-        <div className="flex items-start gap-3">
-          <WizardBackButton onClick={onBack} />
-          {phase === "error" ? (
-            <button onClick={runRegister} className="btn-primary flex items-center justify-center gap-1.5 text-[15px] font-semibold" style={{ flex: "2 1 0%", borderRadius: 14, paddingTop: 14, paddingBottom: 14 }}>
-              <RotateCw className="size-[16px]" /> 다시 시도
-            </button>
-          ) : (
-            <span aria-hidden="true" style={{ flex: "2 1 0%" }} />
-          )}
-        </div>
       )}
 
     </motion.div>
@@ -930,16 +1077,11 @@ function ClusterWizard({ providers, onClose, onComplete }: { providers: ClusterP
   const el = {
     0: <ClusterInfoStep key="c0" providers={providers} name={name} setName={setName} platform={platform} setPlatform={setPlatform}
       onNext={() => setStep(1)} />,
-    1: <ClusterInstallStep key="c1" platform={platform} name={name} onBack={() => setStep(0)}
-      onConnected={(info) => {
-        // 서버가 connected_at 을 아직 싣지 못한 경우, "연결 확인" 이벤트가 발생한
-        // 지금 이 시각이 실측이다 — 렌더 중 Date 호출이 아니라 이벤트 시점 스탬프.
-        setConnection({ ...info, connectedAt: info.connectedAt ?? new Date().toISOString() });
-        setStep(2);
-      }} />,
+    1: <ClusterInstallStep key="c1" platform={platform} name={name}
+      onConnected={(info) => { setConnection(info); setStep(2); }} />,
     2: connection ? <ClusterDoneStep key="c2" name={name} connection={connection} onDone={() => onComplete(name)} /> : null,
   }[step];
-  return (<><ShellHeader icon={Server} title="클러스터 연결" sub="에이전트를 설치하면 클러스터가 안전하게 등록·관측됩니다" onClose={onClose} /><Steps steps={CLUSTER_STEPS} active={step} /><Body>{el}</Body></>);
+  return (<><ShellHeader icon={Server} title="클러스터 연결" sub="에이전트를 설치하면 클러스터가 안전하게 등록·관측됩니다" onClose={onClose} onBack={step === 1 ? () => setStep(0) : undefined} /><Steps steps={CLUSTER_STEPS} active={step} /><Body>{el}</Body></>);
 }
 
 // ── 런처 ─────────────────────────────
@@ -1022,10 +1164,9 @@ export function ConnectWizard({
       <AnimatePresence>
         {view && (
           <>
-            <motion.div key="backdrop" className="absolute inset-0" style={{ background: "rgba(0,0,0,0.28)", backdropFilter: "blur(5px)" }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} />
-            {/* 바깥(배경) 클릭으로는 닫지 않는다 — 설치 명령·토큰이 발급된 상태에서
-                실수 클릭으로 위저드가 사라지는 사고 방지. 닫기는 ✕ 버튼과 Esc 만. */}
-            <div className="absolute inset-0 overflow-y-auto">
+            <motion.div key="backdrop" className="absolute inset-0" style={{ background: "rgba(0,0,0,0.28)", backdropFilter: "blur(5px)" }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={closeView} />
+            {/* 바깥(배경) 클릭 시 닫기 · 모달 컨텐츠 클릭은 stopPropagation으로 전파 차단 */}
+            <div className="absolute inset-0 overflow-y-auto" onClick={closeView}>
               <div className="flex min-h-full justify-center px-6" style={{ paddingTop: "6vh", paddingBottom: "6vh" }}>
                 <motion.div key={view} role="dialog" aria-modal="true" aria-label={view === "repo" ? "Git 저장소 연결" : "클러스터 연결"}
                   tabIndex={-1} autoFocus onClick={(e) => e.stopPropagation()} initial={{ opacity: 0, y: 22, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 16, scale: 0.98 }} transition={{ type: "spring", visualDuration: 0.42, bounce: 0.2 }}
