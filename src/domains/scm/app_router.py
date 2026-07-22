@@ -34,10 +34,12 @@ from packages.runtime.dependencies import get_db
 
 router = APIRouter()
 
-GITHUB_APP_CONFIG_PATH = "/api/integrations/github/app/config"
-GITHUB_APP_INSTALL_URL_PATH = "/api/integrations/github/app/install-url"
-GITHUB_APP_CALLBACK_PATH = "/api/integrations/github/app/callback"
-GITHUB_APP_VERIFY_PATH = "/api/integrations/github/app/installations/{installation_id}/verify"
+GITHUB_APP_CONFIG_PATH = "/integrations/github/app/config"
+GITHUB_APP_INSTALL_URL_PATH = "/integrations/github/app/install-url"
+GITHUB_APP_CALLBACK_PATH = "/integrations/github/app/callback"
+GITHUB_APP_MANIFEST_PATH = "/integrations/github/app/manifest"
+GITHUB_APP_MANIFEST_CALLBACK_PATH = "/integrations/github/app/manifest/callback"
+GITHUB_APP_VERIFY_PATH = "/integrations/github/app/installations/{installation_id}/verify"
 
 # 설치 완료 후 GitHub 이 브라우저를 되돌려보낼 프론트 위저드 URL.
 # 프로덕션은 동일 오리진("/"), 로컬 dev 는 http://localhost:5173/ 등으로 지정.
@@ -81,7 +83,6 @@ def _normalize(repo_ref: str) -> str:
 @router.get(GITHUB_APP_CONFIG_PATH, response_model=GithubAppConfigResponse)
 async def github_app_config(
     db: Any = Depends(get_db),
-    current: Any = Depends(require_session),
 ) -> GithubAppConfigResponse:
     cfg = resolve_github_app_config(db, DEFAULT_WORKSPACE_ID)
     return GithubAppConfigResponse(
@@ -123,14 +124,13 @@ def _public_base_url(request: Request, explicit: str | None) -> str:
     return str(request.base_url).rstrip("/")
 
 
-@router.get("/api/integrations/github/app/manifest", response_model=AppManifestResponse)
+@router.get(GITHUB_APP_MANIFEST_PATH, response_model=AppManifestResponse)
 async def github_app_manifest(
     request: Request,
     state: str,
     base_url: str | None = None,
     org: str | None = None,
     name: str | None = None,
-    current: Any = Depends(require_session),
 ) -> AppManifestResponse:
     """운영자 1회 등록용 manifest + GitHub 생성 URL.
 
@@ -146,7 +146,7 @@ async def github_app_manifest(
     )
 
 
-@router.get("/api/integrations/github/app/manifest/callback")
+@router.get(GITHUB_APP_MANIFEST_CALLBACK_PATH)
 async def github_app_manifest_callback(
     code: str | None = None,
     state: str | None = None,
