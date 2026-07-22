@@ -13,6 +13,7 @@ import { statusLabel, reasonLabel } from "./devpreview/statusLabel";
 import { useNarrowViewport } from "./devpreview/useNarrowViewport";
 import { useDevpreviewContracts, type DevpreviewCluster } from "./devpreview/contracts";
 import { isActiveIncidentCluster } from "./devpreview/rcaIssuesFeed";
+import { useFleetSummaries } from "./devpreview/fleetSummaryFeed";
 import { useClusterSummaries, type ClusterSummaryView } from "./devpreview/clusterSummaryFeed";
 import { HOME_CARD_GRID_CLASS, HOME_CARD_GRID_ITEM_CLASS, homeCardGridItemStyle, homeCardGridStyle } from "./devpreview/widgets";
 import {
@@ -341,7 +342,7 @@ export function HomeClustersWidget({ onOpen, onSettings, onDisconnect, pending =
   pending?: string[];
 }) {
   const { clusters } = useDevpreviewContracts();
-  const summaries = useClusterSummaries(clusters.map((cluster) => cluster.id));
+  const summaries = useFleetSummaries(clusters.map((cluster) => cluster.id));
   return (
     <div data-home-clusters="compact" style={{ flex: 1, minHeight: 0, overflowY: "auto", overscrollBehavior: "contain", scrollbarGutter: "stable" }}>
       {clusters.map((cluster) => (
