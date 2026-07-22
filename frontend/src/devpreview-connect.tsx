@@ -8,7 +8,7 @@
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import {
-  AlertCircle, ArrowLeft, ArrowRight, Check, ChevronRight, Copy, Folder, GitBranch, Globe,
+  AlertCircle, ArrowLeft, ArrowRight, Check, ChevronRight, Copy, Folder, GitBranch, Globe, RotateCw,
   Info, Lock, Search, Server, Sparkles, X,
 } from "lucide-react";
 // 브랜드 로고 — 인라인 SVG (Simple Icons). tabler 의존 제거로 데모 안정성 확보.
@@ -37,6 +37,7 @@ import { Spinner } from "./shared/ui/primitives/spinner";
 import { emitAction } from "./devpreview/bus";
 import {
   connectCluster,
+  reissueClusterConnectCommand,
   connectApplication,
   isApiError,
   listClusters,
@@ -56,6 +57,7 @@ import {
   useClusterProviders,
   type ClusterProvidersView,
   type ConnectionStatusView,
+  type ClusterActivationReadinessView,
   type ProviderAvailability,
 } from "./devpreview/connectFeed";
 import { reasonLabel } from "./devpreview/statusLabel";
@@ -691,6 +693,55 @@ export function toInteractiveSafePowerShellCommand(command: string): string {
   );
 }
 
+// 설치 진행 표시: "설치 대기" 정적 배지 대신 단계 프로그레스로 진행을 보여주고,
+// 타임아웃(expired)·실패(failed) 시 재설치(토큰 재발급) 버튼을 노출한다.
+function InstallProgress({ conn, activation, reinstalling, onReinstall }: {
+  conn: ConnectionStatusView;
+  activation: ClusterActivationReadinessView;
+  reinstalling: boolean;
+  onReinstall: () => void;
+}) {
+  const failed = conn.connection === "failed";
+  const expired = conn.connection === "expired";
+  const terminal = failed || expired;
+  const ready = activation.status === "ready";
+  const online = conn.connection === "connected";
+  // 1 에이전트 연결 대기 → 2 인벤토리 수집 → 3 준비 완료
+  const step = ready ? 3 : online ? 2 : 1;
+  const pct = terminal ? 100 : (step / 3) * 100;
+  const color = failed ? "var(--red)" : expired ? "var(--orange)" : "var(--blue)";
+  const label = failed ? "설치 실패" : expired ? "설치 시간 초과" : ready ? "준비 완료" : online ? "인벤토리 수집 중" : "에이전트 연결 대기";
+  const sub = failed ? (conn.failureReason === "install_failed" ? "설치가 완료되지 않았어요. 명령을 다시 발급해 재시도하세요." : "에이전트 오류가 감지됐어요. 재설치로 다시 시도하세요.")
+    : expired ? "제한 시간 안에 에이전트가 연결되지 않았어요. 재설치로 새 명령을 발급하세요."
+    : ready ? "곧 완료 화면으로 이동합니다."
+    : online ? "에이전트가 클러스터 상태를 수집하고 있어요."
+    : "터미널에서 위 명령을 실행하면 자동으로 진행됩니다.";
+  return (
+    <div className="inset grid gap-2.5" style={{ padding: "15px 16px" }}>
+      <div className="flex items-center gap-2.5">
+        {terminal ? (
+          <AlertCircle className="size-[18px] shrink-0" style={{ color }} />
+        ) : ready ? (
+          <span className="grid size-[22px] shrink-0 place-items-center rounded-full green-bg"><Check className="size-[14px] c-green" strokeWidth={3} /></span>
+        ) : (
+          <Spin c="size-[18px] c-accent" />
+        )}
+        <span className="flex-1 text-[13.5px] font-semibold c-ink">{label}</span>
+        {!terminal && <span className="text-[12px] font-medium c-3" style={{ fontVariantNumeric: "tabular-nums" }}>{step}/3</span>}
+      </div>
+      <div className="overflow-hidden rounded-full" style={{ height: 6, background: "rgba(17,19,24,0.08)" }}>
+        <motion.div initial={false} animate={{ width: `${pct}%` }} transition={{ type: "spring", visualDuration: 0.5, bounce: 0 }} style={{ height: "100%", borderRadius: 999, background: color }} />
+      </div>
+      <span className="text-[12px] leading-[1.5] c-2">{sub}</span>
+      {terminal && (
+        <button onClick={onReinstall} disabled={reinstalling} className="btn-primary flex w-full items-center justify-center gap-1.5 text-[14px] font-semibold disabled:opacity-50" style={{ borderRadius: 12, paddingTop: 11, paddingBottom: 11, marginTop: 2 }}>
+          {reinstalling ? <><Spin c="size-4 text-white" /> 명령 재발급 중…</> : <><RotateCw className="size-4" /> 재설치</>}
+        </button>
+      )}
+    </div>
+  );
+}
+
 function ClusterInstallStep({ platform, name, onConnected }: { platform: PlatformId; name: string; onConnected: (info: ConnectionStatusView) => void }) {
   const pf = PLATFORMS.find((p) => p.id === platform)!;
   const Icon = pf.icon;
@@ -699,6 +750,7 @@ function ClusterInstallStep({ platform, name, onConnected }: { platform: Platfor
   const [receipt, setReceipt] = useState<ClusterConnectResponseView | null>(null);
   const [errMsg, setErrMsg] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [reinstalling, setReinstalling] = useState(false);
   // 설치 명령 OS 탭 — 로컬 OS 자동 선택(윈도우 → PowerShell), 사용자가 전환 가능.
   const [shell, setShell] = useState<InstallShell>(() => detectLocalShell(typeof navigator === "undefined" ? "" : navigator.platform || navigator.userAgent));
   const ctrlRef = useRef<AbortController | null>(null);
@@ -714,6 +766,17 @@ function ClusterInstallStep({ platform, name, onConnected }: { platform: Platfor
   useEffect(() => {
     if (activation.status === "ready") onConnected(conn);
   }, [activation.status, conn, onConnected]);
+
+  // 재설치: 기존 등록에 설치 명령을 재발급(토큰 회전)한다. 새 등록을 만들지 않아
+  // 고아 등록이 남지 않고, connect_expires_at(타임아웃)도 서버에서 초기화된다.
+  const reinstall = () => {
+    if (!receipt || reinstalling) return;
+    setReinstalling(true); setErrMsg(null);
+    void reissueClusterConnectCommand(receipt.cluster_id)
+      .then((fresh) => setReceipt(fresh))
+      .catch((cause: unknown) => { if (!isAbortError(cause)) setErrMsg(errorText(cause)); })
+      .finally(() => setReinstalling(false));
+  };
 
   // 이름 하나로 등록하고 OS별 설치 명령을 발급한다. 실제 대상 클러스터는 사용자가
   // 이미 로그인한 터미널의 현재 kube-context에서 명령을 실행할 때 결정된다.
@@ -767,24 +830,7 @@ function ClusterInstallStep({ platform, name, onConnected }: { platform: Platfor
             <pre className="max-w-full whitespace-pre-wrap break-words font-mono text-[12.5px] leading-[1.7] c-ink [overflow-wrap:anywhere]" style={{ padding: "14px 16px" }}><code>{cmd}</code></pre>
           </div>
 
-          <div className="inset flex items-center gap-3" style={{ padding: "15px 16px" }}>
-            {conn.connection === "connected" ? (
-              <><span className="grid size-8 shrink-0 place-items-center rounded-full green-bg"><Check className="size-[18px] c-green" strokeWidth={3} /></span><span className="flex-1 text-[13.5px] font-medium c-ink">에이전트 연결됨</span></>
-            ) : conn.connection === "expired" ? (
-              <><AlertCircle className="size-[18px] shrink-0 c-orange" /><span className="flex-1 text-[13.5px] font-medium c-ink">연결 대기 시간이 만료됐어요</span></>
-            ) : conn.status === "error" ? (
-              <><AlertCircle className="size-[18px] shrink-0 c-red" /><span className="flex-1 text-[13.5px] font-medium c-ink">연결 상태를 확인하지 못했어요</span></>
-            ) : (
-              <>
-                <span className="relative grid size-8 shrink-0 place-items-center">
-                  <span className="absolute inline-flex size-8 animate-ping rounded-full ping-g" />
-                  <span className="relative inline-flex size-2.5 rounded-full dot-g" />
-                </span>
-                <span className="flex-1 text-[13.5px] font-medium c-ink">에이전트 연결을 기다리는 중…</span>
-                <Spin c="size-[18px] c-accent" />
-              </>
-            )}
-          </div>
+          <InstallProgress conn={conn} activation={activation} reinstalling={reinstalling} onReinstall={reinstall} />
         </>
       )}
 
