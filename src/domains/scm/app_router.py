@@ -12,9 +12,11 @@ App 미구성 시 config 는 configured=False, 그 외는 409 로 degrade 하여
 from __future__ import annotations
 
 from typing import Any
+from urllib.parse import urlencode
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 
 from domains.identity.dependencies import require_session
@@ -24,12 +26,18 @@ from domains.scm.github_app import (
     is_configured,
     load_github_app_config,
 )
+from packages.config.settings import env
 
 router = APIRouter()
 
 GITHUB_APP_CONFIG_PATH = "/api/integrations/github/app/config"
 GITHUB_APP_INSTALL_URL_PATH = "/api/integrations/github/app/install-url"
+GITHUB_APP_CALLBACK_PATH = "/api/integrations/github/app/callback"
 GITHUB_APP_VERIFY_PATH = "/api/integrations/github/app/installations/{installation_id}/verify"
+
+# 설치 완료 후 GitHub 이 브라우저를 되돌려보낼 프론트 위저드 URL.
+# 프로덕션은 동일 오리진("/"), 로컬 dev 는 http://localhost:5173/ 등으로 지정.
+GITHUB_APP_WEB_RETURN_URL_ENV = "GITHUB_APP_WEB_RETURN_URL"
 
 
 class GithubAppConfigResponse(BaseModel):
@@ -87,6 +95,35 @@ async def github_app_install_url(
         return InstallUrlResponse(url=GithubAppClient().install_url(state=state))
     except GithubAppNotConfigured as exc:
         raise HTTPException(status_code=409, detail="github_app_not_configured") from exc
+
+
+@router.get(GITHUB_APP_CALLBACK_PATH)
+async def github_app_callback(
+    installation_id: str | None = None,
+    setup_action: str | None = None,
+    state: str | None = None,
+) -> RedirectResponse:
+    """GitHub 설치/승인 후 브라우저 복귀 지점.
+
+    installation_id·state 를 프론트 위저드로 그대로 넘긴다(state 는 프론트가
+    자신이 발급·저장한 값과 대조해 CSRF 를 막는다). 위저드가 이어서 verify 를
+    호출한다. 자격증명 결속은 verify 통과 후 연결 확정 시점에 이뤄지므로
+    콜백에서는 DB 를 건드리지 않는다(부작용 없음).
+    """
+    return_base = env(GITHUB_APP_WEB_RETURN_URL_ENV, "/").strip() or "/"
+    params: dict[str, str] = {}
+    if installation_id:
+        params["github_app_installation_id"] = installation_id
+    if setup_action:
+        params["github_app_setup_action"] = setup_action
+    if state:
+        params["github_app_state"] = state
+    if params:
+        sep = "&" if "?" in return_base else "?"
+        target = f"{return_base}{sep}{urlencode(params)}"
+    else:
+        target = return_base
+    return RedirectResponse(url=target, status_code=302)
 
 
 @router.post(GITHUB_APP_VERIFY_PATH, response_model=VerifyResponse)
