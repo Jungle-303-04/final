@@ -6,14 +6,10 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
-from domains.command.events import CommandCompletedBody
 from domains.command.repository import QUEUED_COMMAND_TTL_SECONDS
 from domains.target.router import emit_evidence_if_ready
 from packages.config.logs import get_logger
 from packages.config.settings import env
-from packages.contracts.event_bus.interfaces import EventConsumerBus
-from packages.events.bus import NatsEventBus, RecordedEventClient
-from packages.events.context import event_workspace
 from packages.runtime.async_db import AsyncDb
 from packages.runtime.service import AsyncService
 from packages.runtime.worker import HEARTBEAT_PATH
@@ -29,29 +25,25 @@ DEFAULT_RETENTION_SWEEP_INTERVAL_SECONDS = "3600"
 LOGGER = get_logger(__name__)
 
 
-async def emit_expired_command_completions(
-    db: Any, events: Any, service_name: str = COMMAND_JANITOR
-) -> int:
+async def emit_expired_command_completions(db: Any, service_name: str = COMMAND_JANITOR) -> int:
+    """만료 명령을 종결한다 — CommandCompleted 는 같은 트랜잭션에서 outbox 에 적재됨.
+
+    이전에는 상태 커밋 후 NATS 로 직접 발행해, 커밋과 발행 사이 크래시가
+    완료 이벤트를 영구 유실시켰다(명령은 이미 terminal 이라 재발견 불가).
+    발행은 outbox relay 가 담당하므로 janitor 는 NATS 의존이 없다.
+    """
     try:
         queue_ttl_seconds = int(env(QUEUE_TTL_SECONDS_ENV, str(QUEUED_COMMAND_TTL_SECONDS)))
-        expired = await db.fail_expired_agent_commands(queue_ttl_seconds=queue_ttl_seconds) or []
+        expired = (
+            await db.fail_expired_agent_commands(
+                queue_ttl_seconds=queue_ttl_seconds, source=service_name
+            )
+            or []
+        )
     except Exception:
         # rollout 시 schema lock 같은 일시 DB 경합은 다음 주기에 재시도한다.
         LOGGER.exception("expired_command_sweep_failed")
         return 0
-    for row in expired:
-        command_id = str(row["command_id"])
-        workspace_id = str(row.get("workspace_id") or "default")
-        result = dict(row["result"])
-        body = CommandCompletedBody(command_id=command_id, result=result)
-        correlation_id = str(row.get("correlation_id") or f"{COMMAND_JANITOR}:{command_id}")
-        with event_workspace(workspace_id):
-            await events.emit(
-                body.__subject__,
-                service_name,
-                body.to_body(),
-                correlation_id=correlation_id,
-            )
     return len(expired)
 
 
@@ -114,18 +106,18 @@ async def log_outbox_backlog(db: Any) -> None:
         )
 
 
-async def run(event_bus: EventConsumerBus | None = None) -> None:
+async def run() -> None:
+    # CommandCompleted 는 fail_expired_agent_commands 트랜잭션이 outbox 에 적재하고
+    # relay 가 발행한다 — janitor 는 더 이상 NATS 에 연결하지 않는다(발행 예외로
+    # janitor 루프가 죽는 장애 모드도 함께 제거).
     db = Database()
     async_db = AsyncDb(db)
-    bus = event_bus or NatsEventBus()
     stopping = asyncio.Event()
     loop = asyncio.get_running_loop()
     for item in (signal.SIGTERM, signal.SIGINT):
         loop.add_signal_handler(item, stopping.set)
 
     await wait_for_database(db)
-    await bus.connect()
-    events = RecordedEventClient(bus, db)
     interval = float(env(SWEEP_INTERVAL_SECONDS_ENV, DEFAULT_SWEEP_INTERVAL_SECONDS))
     retention_interval = float(
         env(RETENTION_SWEEP_INTERVAL_SECONDS_ENV, DEFAULT_RETENTION_SWEEP_INTERVAL_SECONDS)
@@ -134,7 +126,7 @@ async def run(event_bus: EventConsumerBus | None = None) -> None:
     try:
         while not stopping.is_set():
             Path(HEARTBEAT_PATH).touch()
-            count = await emit_expired_command_completions(async_db, events)
+            count = await emit_expired_command_completions(async_db)
             if count:
                 LOGGER.warning("expired_commands_swept", extra={"context": {"count": count}})
             evidence_count = await sweep_exhausted_evidence_jobs(async_db, db)
@@ -164,7 +156,6 @@ async def run(event_bus: EventConsumerBus | None = None) -> None:
             except TimeoutError:
                 continue
     finally:
-        await bus.close()
         dispose = getattr(db, "dispose", None)
         if dispose is not None:
             dispose()
