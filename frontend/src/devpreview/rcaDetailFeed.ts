@@ -4,6 +4,8 @@ import { getRecoveryPlanByCorrelation } from "../api/recovery";
 import type { RecoveryPlan } from "../api/recovery-schemas";
 import { getIncidentRecentChanges } from "../api/recent-changes";
 import type { RecentChangeItem } from "../api/recent-changes-schemas";
+import { getEvidenceWindowPayload, listRcaReports } from "../api/evidence";
+import type { EvidenceWindowPayload, RcaReport } from "../api/evidence-schemas";
 import type { RcaIssueList } from "../api/schemas";
 import { loadRcaIssueItems } from "./rcaIssuesFeed";
 import { operationalMessageLabel } from "./statusLabel";
@@ -130,30 +132,94 @@ export interface IncidentRecentChangesFeed {
   items: RecentChangeItem[];
 }
 
-export function useIncidentRecentChanges(incidentId: string | null): IncidentRecentChangesFeed {
-  const [feed, setFeed] = useState<IncidentRecentChangesFeed>({
-    status: incidentId ? "loading" : "idle",
-    items: [],
+export interface RcaReportFeed {
+  status: RcaDetailStatus | "idle";
+  report: RcaReport | null;
+}
+
+export interface EvidenceWindowFeed {
+  status: RcaDetailStatus | "idle";
+  evidence: EvidenceWindowPayload | null;
+}
+
+export function useEvidenceWindowPayload(
+  evidenceKey: string | null,
+  source: string | null,
+  enabled: boolean,
+): EvidenceWindowFeed {
+  const requestKey = enabled && evidenceKey ? `${evidenceKey}\u0000${source ?? ""}` : null;
+  const [snapshot, setSnapshot] = useState<{ requestKey: string | null; feed: EvidenceWindowFeed }>({
+    requestKey: null,
+    feed: { status: "idle", evidence: null },
   });
   useEffect(() => {
-    if (!incidentId) {
-      setFeed({ status: "idle", items: [] });
-      return;
-    }
+    if (!requestKey || !evidenceKey) return;
     const controller = new AbortController();
-    setFeed({ status: "loading", items: [] });
-    void getIncidentRecentChanges(incidentId, { signal: controller.signal })
-      .then((response) => {
+    void getEvidenceWindowPayload(evidenceKey, { source: source ?? undefined, signal: controller.signal })
+      .then((evidence) => {
         if (controller.signal.aborted) return;
-        setFeed({ status: "ready", items: response.items });
+        setSnapshot({ requestKey, feed: { status: "ready", evidence } });
       })
       .catch((cause: unknown) => {
         if (controller.signal.aborted || isAbortError(cause)) return;
-        setFeed({ status: "unavailable", items: [] });
+        setSnapshot({ requestKey, feed: { status: "unavailable", evidence: null } });
+      });
+    return () => controller.abort();
+  }, [requestKey, evidenceKey, source]);
+  if (requestKey === null) return { status: "idle", evidence: null };
+  return snapshot.requestKey === requestKey
+    ? snapshot.feed
+    : { status: "loading", evidence: null };
+}
+
+export function useLatestRcaReport(correlationId: string | null): RcaReportFeed {
+  const [snapshot, setSnapshot] = useState<{ correlationId: string | null; feed: RcaReportFeed }>({
+    correlationId: null,
+    feed: { status: "idle", report: null },
+  });
+  useEffect(() => {
+    if (!correlationId) return;
+    const controller = new AbortController();
+    void listRcaReports({ correlationId, limit: 1, signal: controller.signal })
+      .then((response) => {
+        if (controller.signal.aborted) return;
+        setSnapshot({ correlationId, feed: { status: "ready", report: response.items[0] ?? null } });
+      })
+      .catch((cause: unknown) => {
+        if (controller.signal.aborted || isAbortError(cause)) return;
+        setSnapshot({ correlationId, feed: { status: "unavailable", report: null } });
+      });
+    return () => controller.abort();
+  }, [correlationId]);
+  if (!correlationId) return { status: "idle", report: null };
+  return snapshot.correlationId === correlationId
+    ? snapshot.feed
+    : { status: "loading", report: null };
+}
+
+export function useIncidentRecentChanges(incidentId: string | null): IncidentRecentChangesFeed {
+  const [snapshot, setSnapshot] = useState<{ incidentId: string | null; feed: IncidentRecentChangesFeed }>({
+    incidentId: null,
+    feed: { status: "idle", items: [] },
+  });
+  useEffect(() => {
+    if (!incidentId) return;
+    const controller = new AbortController();
+    void getIncidentRecentChanges(incidentId, { signal: controller.signal })
+      .then((response) => {
+        if (controller.signal.aborted) return;
+        setSnapshot({ incidentId, feed: { status: "ready", items: response.items } });
+      })
+      .catch((cause: unknown) => {
+        if (controller.signal.aborted || isAbortError(cause)) return;
+        setSnapshot({ incidentId, feed: { status: "unavailable", items: [] } });
       });
     return () => controller.abort();
   }, [incidentId]);
-  return feed;
+  if (!incidentId) return { status: "idle", items: [] };
+  return snapshot.incidentId === incidentId
+    ? snapshot.feed
+    : { status: "loading", items: [] };
 }
 
 /**

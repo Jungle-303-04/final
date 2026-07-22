@@ -47,6 +47,7 @@ def _rca_report_summary_columns() -> tuple[Any, ...]:
         table.c.cluster_id,
         table.c.symptom,
         table.c.severity,
+        table.c.payload["incident"]["first_seen_at"].astext.label("first_seen_at"),
         table.c.confidence,
         table.c.reason,
         table.c.evidence_ref,

@@ -1,18 +1,19 @@
 // ── 데모 서피스: 배포 · 이슈 · 타임라인 · 점검 · 비용 · 설정 (Master Spec 5.7~5.10) ──
 // 원칙: 모든 숫자는 실제 백엔드 계약(어댑터 훅) 파생 — 관측 안 된 값은 채우지 않는다(no backfill).
 // 시각은 공용 부품(KpiValue/MiniBars/RankList/MiniTimeline)과 셸 토큰만 사용. 제품 이식 시 D5 공용 표로 수렴한다.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "motion/react";
 import {
   Rocket, Package, AlertTriangle, Bell, Clock, ShieldCheck, Coins,
-  Building2, Globe, Check, Sparkles, X, Palette, RefreshCw, Lock, Pin,
-  ChevronRight, MapPin, ShieldAlert, ArrowLeft, ArrowRight, ExternalLink, CircleAlert,
+  Building2, Globe, Check, Sparkle, Sparkles, X, Palette, RefreshCw, Lock, Pin,
+  ChevronRight, MapPin, ShieldAlert, ArrowLeft, ArrowRight, ExternalLink, CircleAlert, CircleCheck,
 } from "lucide-react";
-import { UI, BLUE, HP, TINT, MONO, TYPE, SOFT, DUR, PRESENT_SCALE, inkA, blueA, critA, BRAND } from "./devpreview/theme";
+import { UI, BLUE, HP, TINT, MONO, TYPE, SOFT, DUR, PRESENT_SCALE, inkA, blueA, critA } from "./devpreview/theme";
 import { GithubIcon } from "./devpreview/brandIcons";
 import { useCostOverview } from "./devpreview/costFeed";
 import { useChecksOverview } from "./devpreview/checksFeed";
-import { useIncidentRecentChanges, useRcaIssueDetails, useRecoveryPlan, type RcaIssueDetailView } from "./devpreview/rcaDetailFeed";
+import { useEvidenceWindowPayload, useIncidentRecentChanges, useLatestRcaReport, useRcaIssueDetails, useRecoveryPlan, type RcaIssueDetailView } from "./devpreview/rcaDetailFeed";
+import type { RcaReport } from "./api/evidence-schemas";
 import { isActiveRcaIssue } from "./devpreview/rcaIssuesFeed";
 import { useSession, sessionInitial } from "./devpreview/sessionFeed";
 import { useAiConversations, useConversationDetail } from "./devpreview/aiFeed";
@@ -608,19 +609,335 @@ function RcaCardSection({ title, children }: { title: string; children: React.Re
     </section>
   );
 }
-export function IssueDetail({ name, symptom, cluster, svc, ns, resourceKind, incidentId, currentSubject, onClose, onOpenRef, onAskAi, onRecovered: _onRecovered, correlationId, status, severity, rootCause, confidence, supportingEvidence, missingEvidence, situationSummary, recommendedActionSummary, evidenceSummary, evidenceBundleSummary, topInset = 0, leftInset = 0, rightInset = 0 }: {
+
+function reportRiskLabel(severity: string | null | undefined): string {
+  const normalized = severity?.trim().toLowerCase();
+  if (normalized === "critical" || normalized === "high") return "위험";
+  if (normalized === "warning" || normalized === "medium") return "보통";
+  if (normalized === "info" || normalized === "low") return "낮음";
+  return "미확인";
+}
+
+function reportTimeLabel(value: string | null | undefined): string {
+  if (!value) return "미확인";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "미확인";
+  return new Intl.DateTimeFormat("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false }).format(parsed);
+}
+
+function reportElapsedLabel(startValue: string | null | undefined, endValue: string | null | undefined): string | null {
+  if (!startValue || !endValue) return null;
+  const start = new Date(startValue).getTime();
+  const end = new Date(endValue).getTime();
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return null;
+  const minutes = Math.floor((end - start) / 60_000);
+  if (minutes < 1) return "1분 미만";
+  if (minutes < 60) return `${minutes}분`;
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  if (hours < 24) return remainingMinutes > 0 ? `${hours}시간 ${remainingMinutes}분` : `${hours}시간`;
+  const days = Math.floor(hours / 24);
+  const remainingHours = hours % 24;
+  return remainingHours > 0 ? `${days}일 ${remainingHours}시간` : `${days}일`;
+}
+
+function rcaDisplayLabel(value: string): string {
+  return value.replace(/_/g, " ").replace(/\./g, " · ");
+}
+
+function evidenceSourceLabel(source: string): string {
+  const normalized = source.trim().toLowerCase();
+  if (normalized === "kubernetes" || normalized === "k8s") return "Kubernetes";
+  if (normalized === "logs" || normalized === "loki") return "로그";
+  if (normalized === "metrics" || normalized === "prometheus") return "메트릭";
+  if (normalized === "traces" || normalized === "tempo") return "트레이스";
+  return rcaDisplayLabel(source);
+}
+
+function evidenceNameLabel(name: string): string {
+  const labels: Record<string, string> = {
+    pod_restart_state: "Pod 재시작 상태(pod restart state)",
+    database_authentication_errors: "데이터베이스 인증 오류(database authentication errors)",
+    container_restart_rate: "컨테이너 재시작률(container restart rate)",
+  };
+  return labels[name] ?? rcaDisplayLabel(name);
+}
+
+function metricNameLabel(name: string): string {
+  const normalized = name.replace(/_/g, " ");
+  const labels: Record<string, string> = {
+    container_restart_rate: "컨테이너 재시작률",
+    pod_ready_ratio: "Pod 준비 비율",
+    startup_failure_total: "시작 실패 누계",
+  };
+  return labels[name] ? `${labels[name]}(${normalized})` : normalized;
+}
+
+function evidencePayloadSource(source: string): string {
+  const normalized = source.trim().toLowerCase();
+  if (normalized === "k8s") return "kubernetes";
+  if (normalized === "loki") return "logs";
+  if (normalized === "prometheus") return "metrics";
+  if (normalized === "tempo") return "traces";
+  return normalized;
+}
+
+type EvidenceReference = RcaReport["supporting_evidence_refs"][number];
+
+function normalizedEvidenceToken(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, "");
+}
+
+function evidenceReferenceMatches(value: string, evidence: EvidenceReference): boolean {
+  const source = evidencePayloadSource(evidence.source);
+  const token = normalizedEvidenceToken(value);
+  return [source, evidence.name, `${source}:${evidence.name}`, evidence.check_id ?? "", evidence.evidence_ref ?? ""]
+    .some((candidate) => normalizedEvidenceToken(candidate) === token);
+}
+
+function evidenceReferenceLabel(value: string, references: readonly EvidenceReference[]): string {
+  const evidence = references.find((reference) => evidenceReferenceMatches(value, reference));
+  return evidence
+    ? `${evidenceSourceLabel(evidence.source)} · ${evidenceNameLabel(evidence.name)}`
+    : rcaDisplayLabel(value.replace(":", " · "));
+}
+
+function evidenceDetailAnchor(index: number): string {
+  return `rca-evidence-detail-${index}`;
+}
+
+function missingEvidenceAction(item: string): string {
+  const normalized = item.trim().toLowerCase();
+  if (normalized === "변경 승인 이력" || normalized === "change_approval_history") {
+    return "Git PR·배포 승인 기록에서 Secret 변경 승인 여부를 확인하세요.";
+  }
+  return `${rcaDisplayLabel(item)}을 확인하세요.`;
+}
+
+function stringValue(value: unknown): string | null {
+  if (typeof value === "string" && value.trim()) return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  return null;
+}
+
+function recordValue(value: unknown): Record<string, unknown> | null {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function evidencePreviewLines(source: string, payload: Record<string, unknown>): string[] {
+  const value = payload[source];
+  const normalized = source.trim().toLowerCase();
+  if ((normalized === "logs" || normalized === "loki") && Array.isArray(value)) {
+    const lines: string[] = [];
+    for (const rawEntry of value) {
+      const entry = recordValue(rawEntry);
+      if (!entry) continue;
+      const matchedEntries = Array.isArray(entry.matched_entries) ? entry.matched_entries : [];
+      for (const rawMatch of matchedEntries) {
+        const match = recordValue(rawMatch);
+        const message = match ? stringValue(match.message) : null;
+        if (message) lines.push(message);
+        if (lines.length >= 5) return lines;
+      }
+      const streams = Array.isArray(entry.streams) ? entry.streams : [];
+      for (const rawStream of streams) {
+        const stream = recordValue(rawStream);
+        const values = stream && Array.isArray(stream.values) ? stream.values : [];
+        for (const rawLine of values) {
+          const line = recordValue(rawLine);
+          const message = line ? stringValue(line.line) : null;
+          if (message) lines.push(message);
+          if (lines.length >= 5) return lines;
+        }
+      }
+    }
+    return lines;
+  }
+  if ((normalized === "metrics" || normalized === "prometheus") && recordValue(value)) {
+    const results = recordValue(recordValue(value)?.results);
+    if (!results) return [];
+    return Object.entries(results).slice(0, 5).map(([name, result]) => {
+      const samples = recordValue(result)?.samples;
+      const sampleItems = Array.isArray(samples) ? samples : [];
+      const latest = sampleItems.length > 0 ? recordValue(sampleItems[sampleItems.length - 1]) : null;
+      const latestValue = latest ? stringValue(latest.value) : null;
+      return latestValue === null ? metricNameLabel(name) : `${metricNameLabel(name)} · 최근 값 ${latestValue}`;
+    });
+  }
+  if ((normalized === "kubernetes" || normalized === "k8s") && recordValue(value)) {
+    const body = recordValue(value)!;
+    const groups: Array<[string, unknown]> = [
+      ["이벤트", body.events], ["Pod", body.pods], ["노드", body.nodes], ["워크로드", body.workloads],
+    ];
+    return groups.flatMap(([label, items]) => Array.isArray(items) && items.length > 0 ? [`${label} ${items.length}건`] : []).slice(0, 5);
+  }
+  return [];
+}
+
+function ReportNumberedSection({ number, title, sectionRef, children }: { number: string; title: string; sectionRef?: React.RefObject<HTMLElement | null>; children: React.ReactNode }) {
+  return (
+    <section ref={sectionRef} style={{ display: "grid", gridTemplateColumns: "42px minmax(0, 1fr)", gap: 12, padding: "17px 0", borderTop: `1px dashed ${UI.line}` }}>
+      <span aria-hidden="true" style={{ display: "grid", gridTemplateColumns: "auto 1px", gap: 9, alignSelf: "stretch", color: UI.ink2, fontSize: TYPE.bodyStrong, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>
+        <span>{number}</span><span style={{ width: 1, height: "100%", background: inkA(0.28) }} />
+      </span>
+      <div style={{ minWidth: 0, display: "grid", gap: 11 }}>
+        <h3 style={{ margin: 0, fontSize: TYPE.bodyStrong, fontWeight: 700, color: UI.ink }}>{title}</h3>
+        {children}
+      </div>
+    </section>
+  );
+}
+
+function CandidateEvidenceTokens({ label, items, tone, references = [], onEvidenceSelect }: { label: string; items: readonly string[]; tone: "ok" | "warn"; references?: readonly EvidenceReference[]; onEvidenceSelect?: (item: string) => void }) {
+  if (items.length === 0) return null;
+  return (
+    <div style={{ display: "grid", gap: 4 }}>
+      <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: TYPE.caption, fontWeight: 700, color: tone === "ok" ? TINT.ok.fg : TINT.warn.fg }}>
+        {tone === "warn" && <ShieldAlert size={13} />}{label}
+      </span>
+      <span style={{ display: "grid", justifyItems: "start", gap: 3, fontSize: TYPE.caption2, color: UI.ink2, lineHeight: 1.5 }}>
+        {items.map((item, index) => {
+          const linked = tone === "ok" && references.some((reference) => evidenceReferenceMatches(item, reference));
+          const content = evidenceReferenceLabel(item, references);
+          return linked ? (
+            <button key={`${item}-${index}`} type="button" title="해당 근거 상세로 이동" onClick={() => onEvidenceSelect?.(item)}
+              onMouseEnter={(event) => { event.currentTarget.style.color = UI.ink; }} onMouseLeave={(event) => { event.currentTarget.style.color = UI.ink2; }}
+              onFocus={(event) => { event.currentTarget.style.color = UI.ink; }} onBlur={(event) => { event.currentTarget.style.color = UI.ink2; }}
+              style={{ border: "none", borderRadius: 4, background: "transparent", color: UI.ink2, padding: 0, font: "inherit", cursor: "pointer", textDecoration: "underline", textUnderlineOffset: 3, transition: `color ${DUR.micro}s ease` }}>{content}</button>
+          ) : <span key={`${item}-${index}`}>{content}</span>;
+        })}
+      </span>
+    </div>
+  );
+}
+
+function EvidenceWindowPreview({ evidenceKey, source, open }: { evidenceKey: string | null; source: string; open: boolean }) {
+  const payloadSource = evidencePayloadSource(source);
+  const feed = useEvidenceWindowPayload(evidenceKey, payloadSource, open);
+  if (!evidenceKey) return <span style={{ fontSize: TYPE.caption, color: UI.ink3 }}>원본 근거 참조가 없습니다.</span>;
+  if (feed.status === "loading") return <span style={{ fontSize: TYPE.caption, color: UI.ink2 }}>근거 원문을 불러오는 중…</span>;
+  if (feed.status === "unavailable") return <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: TYPE.caption, color: TINT.crit.fg }}><CircleAlert size={13} />근거 원문을 불러오지 못했습니다.</span>;
+  if (feed.status !== "ready" || !feed.evidence) return null;
+  const lines = evidencePreviewLines(payloadSource, feed.evidence.payload);
+  return lines.length > 0 ? (
+    <ul style={{ display: "grid", gap: 6, margin: 0, padding: 0, listStyle: "none" }}>
+      {lines.map((line, index) => <li key={`${line}-${index}`} style={{ display: "grid", gridTemplateColumns: "10px minmax(0, 1fr)", gap: 4, borderRadius: 6, background: UI.card, padding: "7px 8px", fontFamily: source === "logs" || source === "loki" ? MONO : undefined, fontSize: TYPE.caption2, color: UI.ink2, lineHeight: 1.5, overflowWrap: "anywhere" }}><span aria-hidden="true">-</span><span>{line}</span></li>)}
+    </ul>
+  ) : <span style={{ fontSize: TYPE.caption, color: UI.ink3 }}>표시할 근거 표본이 없습니다.</span>;
+}
+
+function EvidenceDetailItem({ evidence, id, highlighted = false, onOpenChange }: { evidence: EvidenceReference; id?: string; highlighted?: boolean; onOpenChange?: (open: boolean) => void }) {
+  const [open, setOpen] = useState(false);
+  const collectedAt = reportTimeLabel(evidence.collected_at ?? evidence.window_start);
+  return (
+    <details id={id} open={open} onToggle={(event) => { const nextOpen = event.currentTarget.open; setOpen(nextOpen); onOpenChange?.(nextOpen); }} style={{ borderTop: `1px dashed ${UI.line}`, borderRadius: highlighted ? 8 : 0, background: highlighted ? UI.bg2 : "transparent", scrollMarginTop: 16, transition: `background ${DUR.fade}s ease` }}>
+      <summary style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: 9, alignItems: "center", padding: "11px 4px", cursor: "pointer", listStyle: "none" }}>
+        <span style={{ minWidth: 0, display: "grid", gap: 3 }}>
+          <strong title={evidence.name} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: TYPE.label2, color: UI.ink2 }}>{evidenceSourceLabel(evidence.source)} · {evidenceNameLabel(evidence.name)}</strong>
+          <span style={{ fontSize: TYPE.caption2, color: UI.ink2, lineHeight: 1.45 }}>{evidence.summary || "수집된 근거"}</span>
+        </span>
+        <ChevronRight size={15} style={{ color: UI.ink2, transform: open ? "rotate(90deg)" : "none", transition: "transform 150ms ease" }} />
+      </summary>
+      <div style={{ display: "grid", gap: 10, padding: "0 4px 12px" }}>
+        <dl style={{ display: "grid", gridTemplateColumns: "68px minmax(0, 1fr)", gap: "5px 9px", margin: 0, fontSize: TYPE.caption }}>
+          {evidence.query && <><dt style={{ color: UI.ink2 }}>사용 쿼리</dt><dd style={{ margin: 0, color: UI.ink, fontFamily: MONO, overflowWrap: "anywhere" }}>{evidence.query}</dd></>}
+          <dt style={{ color: UI.ink2 }}>수집 시각</dt><dd style={{ margin: 0, color: UI.ink }}>{collectedAt}</dd>
+        </dl>
+        <EvidenceWindowPreview evidenceKey={evidence.evidence_key} source={evidence.source} open={open} />
+      </div>
+    </details>
+  );
+}
+
+function RcaCandidateList({ report, fallbackCause, onEvidenceSelect }: { report: RcaReport | null; fallbackCause: string | null | undefined; onEvidenceSelect?: (item: string) => void }) {
+  const [candidateListOpen, setCandidateListOpen] = useState(false);
+  const candidates = report?.candidates ?? [];
+  if (candidates.length === 0) {
+    return <p style={{ margin: 0, fontSize: TYPE.label2, color: fallbackCause ? UI.ink2 : UI.ink3, lineHeight: 1.55 }}>{fallbackCause || "원인 후보 정보가 아직 없습니다."}</p>;
+  }
+  const selected = candidates.find((candidate) => candidate.candidate_id === report?.selected_candidate_id) ?? candidates[0]!;
+  const alternatives = candidates.filter((candidate) => candidate.candidate_id !== selected.candidate_id);
+  const selectedConfirmed = selected.supporting_evidence.length;
+  const selectedTotal = selectedConfirmed + selected.missing_evidence.length;
+  return (
+    <div style={{ display: "grid", gap: 12 }}>
+      <div style={{ display: "grid", gap: 9, borderRadius: 8, background: UI.bg2, padding: 11 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+          <span title={selected.title ?? selected.candidate_id} style={{ minWidth: 0, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: TYPE.label2, fontWeight: 700, color: UI.ink }}>{selected.title ?? rcaDisplayLabel(selected.candidate_id)}</span>
+          <span style={{ flexShrink: 0, borderRadius: 999, border: `1px solid ${TINT.ok.bd}`, background: TINT.ok.bg, color: TINT.ok.fg, padding: "2px 7px", fontSize: TYPE.micro, fontWeight: 700 }}>권장</span>
+          <span style={{ flexShrink: 0, fontSize: TYPE.caption, color: UI.ink2 }}>{selected.score === null ? "미확인" : `${Math.round(selected.score * 100)}%`}</span>
+        </div>
+        <span style={{ fontSize: TYPE.caption2, color: UI.ink2, lineHeight: 1.5 }}>- 필요한 근거 {selectedTotal}개 중 {selectedConfirmed}개가 확인되었습니다.</span>
+        {selected.reason && <p style={{ margin: 0, fontSize: TYPE.caption2, color: UI.ink2, lineHeight: 1.5 }}>- {selected.reason}</p>}
+        <div style={{ display: "grid", gap: 9, marginTop: 2, paddingTop: 10, borderTop: `1px solid ${UI.line}` }}>
+          <CandidateEvidenceTokens label="확인된 근거" items={selected.supporting_evidence} tone="ok" references={report?.supporting_evidence_refs} onEvidenceSelect={onEvidenceSelect} />
+          <CandidateEvidenceTokens label="추가 확인 필요" items={selected.missing_evidence} tone="warn" />
+        </div>
+      </div>
+      {alternatives.length > 0 && <details open={candidateListOpen} onToggle={(event) => setCandidateListOpen(event.currentTarget.open)} style={{ display: "grid", borderTop: `1px dashed ${UI.line}` }}>
+        <summary style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "10px 4px", cursor: "pointer", listStyle: "none", color: UI.ink2, fontSize: TYPE.caption, fontWeight: 700 }}><span>원인 후보 {alternatives.length}개 보기</span><ChevronRight size={15} style={{ transform: candidateListOpen ? "rotate(90deg)" : "none", transition: "transform 150ms ease" }} /></summary>
+        <div style={{ borderTop: `1px dashed ${UI.line}`, borderBottom: `1px dashed ${UI.line}` }}>
+          {alternatives.map((candidate, index) => (
+            <details key={candidate.candidate_id} style={{ borderTop: index > 0 ? `1px dashed ${UI.line}` : "none" }}>
+              <summary style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto auto", alignItems: "center", gap: 9, padding: "10px 8px", cursor: "pointer", listStyle: "none", fontSize: TYPE.label2, color: UI.ink2 }}>
+                <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{candidate.title ?? rcaDisplayLabel(candidate.candidate_id)}</span>
+                <span>{candidate.score === null ? "미확인" : `${Math.round(candidate.score * 100)}%`}</span>
+                <Sparkle size={14} style={{ color: UI.ink2, transition: "transform 150ms ease" }} />
+              </summary>
+              <div style={{ display: "grid", gap: 8, padding: "9px 8px 12px", borderTop: `1px solid ${UI.line2}`, background: UI.bg2 }}>
+                <p style={{ margin: 0, fontSize: TYPE.caption2, color: UI.ink2, lineHeight: 1.5 }}>- 필요한 근거 {candidate.supporting_evidence.length + candidate.missing_evidence.length}개 중 {candidate.supporting_evidence.length}개가 확인되었습니다.</p>
+                {candidate.reason && <p style={{ margin: 0, fontSize: TYPE.caption2, color: UI.ink2, lineHeight: 1.5 }}>- {candidate.reason}</p>}
+                <div style={{ display: "grid", gap: 9, marginTop: 2, paddingTop: 10, borderTop: `1px solid ${UI.line}` }}>
+                  <CandidateEvidenceTokens label="확인된 근거" items={candidate.supporting_evidence} tone="ok" references={report?.supporting_evidence_refs} onEvidenceSelect={onEvidenceSelect} />
+                  <CandidateEvidenceTokens label="추가 확인 필요" items={candidate.missing_evidence} tone="warn" />
+                </div>
+              </div>
+            </details>
+          ))}
+        </div>
+      </details>}
+    </div>
+  );
+}
+export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resourceKind, incidentId, currentSubject, updatedAt, onClose, onOpenRef, onAskAi, onRecovered: _onRecovered, correlationId, status, severity, rootCause, confidence, supportingEvidence, missingEvidence, situationSummary, recommendedActionSummary, evidenceSummary, evidenceBundleSummary, topInset = 0, leftInset = 0, rightInset = 0 }: {
   name: string; symptom: string; cluster: string; svc: string; ns: string; onClose: () => void; onOpenRef: (kind: string, n: string) => void; onAskAi: () => void; onRecovered?: (svc: string) => void;
-  resourceKind?: string | null; incidentId?: string | null; currentSubject?: string | null;
+  rawSymptom?: string | null; resourceKind?: string | null; incidentId?: string | null; currentSubject?: string | null; updatedAt?: string | null;
   correlationId?: string; status?: string; severity?: "critical" | "warning" | null;
   rootCause?: string | null; confidence?: number | null; supportingEvidence?: string[]; missingEvidence?: string[];
   situationSummary?: string | null; recommendedActionSummary?: string | null; evidenceSummary?: string | null; evidenceBundleSummary?: string | null;
   topInset?: number; leftInset?: number; rightInset?: number;
 }) {
   const [activeTab, setActiveTab] = useState<"detail" | "recovery">("detail");
+  const [evidenceChipActive, setEvidenceChipActive] = useState(false);
+  const [deploymentLinkActive, setDeploymentLinkActive] = useState<string | null>(null);
+  const [highlightedEvidenceIndex, setHighlightedEvidenceIndex] = useState<number | null>(null);
+  const evidenceSummaryRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    const root = document.documentElement;
+    const body = document.body;
+    const previousRootOverflow = root.style.overflow;
+    const previousRootOverscroll = root.style.overscrollBehavior;
+    const previousBodyOverflow = body.style.overflow;
+    const previousBodyOverscroll = body.style.overscrollBehavior;
+    root.style.overflow = "hidden";
+    root.style.overscrollBehavior = "none";
+    body.style.overflow = "hidden";
+    body.style.overscrollBehavior = "none";
+    return () => {
+      root.style.overflow = previousRootOverflow;
+      root.style.overscrollBehavior = previousRootOverscroll;
+      body.style.overflow = previousBodyOverflow;
+      body.style.overscrollBehavior = previousBodyOverscroll;
+    };
+  }, []);
   // 복구 후보는 실 계약(GET /api/rca/recovery-plans/by-correlation)에서만. 상관관계
   // id가 없으면(예: 지도 파생 진입) idle로 두고 관측 안 됨을 정직하게 표시한다.
   const recovery = useRecoveryPlan(correlationId ?? null);
   const recentChanges = useIncidentRecentChanges(incidentId ?? null);
+  const latestReport = useLatestRcaReport(correlationId ?? null);
+  const report = latestReport.report;
   const conf = typeof confidence === "number" && Number.isFinite(confidence) ? Math.round(confidence * 100) : null;
   const analysisState = issueAnalysisState({ status, rootCause });
   const headerTone = analysisState.label === "해결됨" ? TINT.ok
@@ -630,6 +947,23 @@ export function IssueDetail({ name, symptom, cluster, svc, ns, resourceKind, inc
   const support = supportingEvidence ?? [];
   const missing = missingEvidence ?? [];
   const observedStatus = status?.trim() ? koLabel(status) : currentSubject?.trim() ? koLabel(currentSubject) : "상태 미확인";
+  const reportConfidence = report?.confidence ?? confidence ?? null;
+  const reportConfidencePercent = typeof reportConfidence === "number" && Number.isFinite(reportConfidence) ? Math.round(reportConfidence * 100) : null;
+  const reportSymptom = report?.symptom ?? rawSymptom ?? symptom;
+  const reportScope = [report?.namespace ?? ns, report?.resource_kind ?? resourceKind, report?.resource_name ?? svc].filter(Boolean).join(" | ");
+  const reportFirstSeenAt = report?.first_seen_at ?? null;
+  const reportAnalysisAt = report?.created_at ?? updatedAt;
+  const reportElapsed = reportElapsedLabel(reportFirstSeenAt, reportAnalysisAt);
+  const reportImpact = report?.narrative?.impact?.trim() || null;
+  const openEvidenceDetail = (item: string) => {
+    const index = report?.supporting_evidence_refs.findIndex((evidence) => evidenceReferenceMatches(item, evidence)) ?? -1;
+    if (index < 0) return;
+    setHighlightedEvidenceIndex(index);
+    const target = document.getElementById(evidenceDetailAnchor(index)) as HTMLDetailsElement | null;
+    if (!target) return;
+    target.open = true;
+    requestAnimationFrame(() => target.scrollIntoView({ behavior: "smooth", block: "center" }));
+  };
   return (
     <>
       {/* 스크림 — 사이드바 밖 클릭 시 닫기 */}
@@ -650,7 +984,6 @@ export function IssueDetail({ name, symptom, cluster, svc, ns, resourceKind, inc
                 <Mono>{name}</Mono>
                 <Pill tone={analysisState.tone} label={analysisState.label} />
               </div>
-              <div style={{ fontSize: TYPE.label2, color: UI.ink2, marginTop: 4 }}>{symptom}</div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "5px 16px", marginTop: 9 }}>
                 {[
                   ["클러스터", cluster],
@@ -682,21 +1015,28 @@ export function IssueDetail({ name, symptom, cluster, svc, ns, resourceKind, inc
               );
             })}
           </div>
-          <div style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: 20, padding: "18px 20px" }}>
+          <div style={{ flex: 1, minHeight: 0, overflowY: "auto", overscrollBehavior: "contain", scrollbarGutter: "stable", display: "flex", flexDirection: "column", gap: 20, padding: "18px 20px" }}>
             {activeTab === "detail" ? <>
             <section aria-labelledby="issue-summary-heading" style={{ flexShrink: 0, display: "grid", gap: 14, border: `1px solid ${UI.line}`, borderRadius: 10, background: UI.card, padding: 16, boxShadow: `0 6px 16px -10px ${inkA(0.26)}, 0 1px 3px ${inkA(0.06)}` }}>
               <h2 id="issue-summary-heading" style={{ margin: 0, fontSize: TYPE.caption, fontWeight: 700, color: UI.ink2 }}>상황 요약</h2>
               <p style={{ margin: 0, fontSize: TYPE.body, fontWeight: 600, color: UI.ink, lineHeight: 1.65 }}>{situationSummary?.trim() || "상황 요약 정보가 아직 없습니다."}</p>
+              {(reportFirstSeenAt || reportElapsed || reportImpact) && <dl style={{ display: "grid", gridTemplateColumns: "86px minmax(0, 1fr)", gap: "7px 10px", margin: 0, paddingTop: 12, borderTop: `1px solid ${UI.line2}`, fontSize: TYPE.caption2, lineHeight: 1.5 }}>
+                {reportFirstSeenAt && <><dt style={{ color: UI.ink3 }}>장애 시작</dt><dd style={{ margin: 0, color: UI.ink2 }}>{reportTimeLabel(reportFirstSeenAt)}</dd></>}
+                {reportElapsed && <><dt style={{ color: UI.ink3 }}>분석 시점까지</dt><dd style={{ margin: 0, color: UI.ink2 }}>{reportElapsed}</dd></>}
+                {reportImpact && <><dt style={{ color: UI.ink3 }}>관측 영향</dt><dd style={{ margin: 0, color: UI.ink2 }}>{reportImpact}</dd></>}
+              </dl>}
               <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
                 <span style={{ border: `1px solid ${UI.line}`, borderRadius: 999, padding: "3px 9px", fontSize: TYPE.caption, color: UI.ink2, background: UI.card }}>{observedStatus}</span>
                 {conf !== null && <span style={{ border: `1px solid ${UI.line}`, borderRadius: 999, padding: "3px 9px", fontSize: TYPE.caption, color: UI.ink2, background: UI.card }}>신뢰도 {conf}%</span>}
-                <span style={{ border: `1px solid ${UI.line}`, borderRadius: 999, padding: "3px 9px", fontSize: TYPE.caption, color: UI.ink2, background: UI.card }}>확인된 근거 {support.length}</span>
+                <button type="button" onClick={() => evidenceSummaryRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                  onMouseEnter={() => setEvidenceChipActive(true)} onMouseLeave={() => setEvidenceChipActive(false)} onFocus={() => setEvidenceChipActive(true)} onBlur={() => setEvidenceChipActive(false)}
+                  style={{ border: `1px solid ${evidenceChipActive ? UI.ink3 : UI.line}`, borderRadius: 999, padding: "3px 9px", fontSize: TYPE.caption, color: evidenceChipActive ? UI.ink : UI.ink2, background: evidenceChipActive ? inkA(0.055) : UI.card, cursor: "pointer", transition: `background ${DUR.micro}s ease, color ${DUR.micro}s ease, border-color ${DUR.micro}s ease` }}>확인된 근거 {support.length}</button>
               </div>
               {missing.length > 0 && (
-                <div style={{ display: "grid", gap: 8, border: `1px solid ${TINT.warn.bd}`, borderRadius: 8, background: TINT.warn.bg, padding: 11 }}>
+                <div style={{ display: "grid", gap: 8, border: `1px solid ${UI.line}`, borderRadius: 8, background: UI.bg2, padding: 11 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: TYPE.caption, fontWeight: 700, color: UI.ink2 }}><ShieldAlert size={14} style={{ color: TINT.warn.fg }} />추가 확인 필요</div>
-                  <ul style={{ display: "grid", gap: 5, margin: 0, paddingLeft: 17 }}>
-                    {missing.map((item, index) => <li key={`${item}-${index}`} style={{ fontSize: TYPE.caption2, color: UI.ink2, lineHeight: 1.45 }}>{item}</li>)}
+                  <ul style={{ display: "grid", gap: 5, margin: 0, padding: 0, listStyle: "none" }}>
+                    {missing.map((item, index) => <li key={`${item}-${index}`} style={{ display: "grid", gridTemplateColumns: "10px minmax(0, 1fr)", gap: 4, fontSize: TYPE.caption2, color: UI.ink2, lineHeight: 1.45 }}><span aria-hidden="true">-</span><span>{missingEvidenceAction(item)}</span></li>)}
                   </ul>
                 </div>
               )}
@@ -727,12 +1067,16 @@ export function IssueDetail({ name, symptom, cluster, svc, ns, resourceKind, inc
                         {change.image_before && <div style={{ display: "grid", gridTemplateColumns: "auto 88px minmax(0, 1fr)", alignItems: "center", gap: 8 }}>
                           <ArrowLeft size={13} style={{ color: UI.ink2 }} />
                           <span style={{ color: UI.ink2 }}>이전 배포 버전</span>
-                          <span title={change.image_before} style={{ minWidth: 0, fontFamily: MONO, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{change.image_before}</span>
+                          <button type="button" title={`${change.resource_kind} ${change.resource_name} 상세 열기`} onClick={() => onOpenRef(change.resource_kind, change.resource_name)}
+                            onMouseEnter={() => setDeploymentLinkActive(`${change.event_id}-before`)} onMouseLeave={() => setDeploymentLinkActive(null)} onFocus={() => setDeploymentLinkActive(`${change.event_id}-before`)} onBlur={() => setDeploymentLinkActive(null)}
+                            style={{ minWidth: 0, justifySelf: "start", maxWidth: "100%", border: "none", borderRadius: 5, background: deploymentLinkActive === `${change.event_id}-before` ? inkA(0.06) : "transparent", color: deploymentLinkActive === `${change.event_id}-before` ? UI.ink : UI.ink2, padding: "2px 4px", fontFamily: MONO, fontSize: TYPE.caption2, cursor: "pointer", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{change.image_before}</button>
                         </div>}
                         {change.image_after && <div style={{ display: "grid", gridTemplateColumns: "auto 88px minmax(0, 1fr)", alignItems: "center", gap: 8 }}>
                           <ArrowRight size={13} style={{ color: UI.ink2 }} />
                           <span style={{ color: UI.ink2 }}>현재 배포 버전</span>
-                          <span title={change.image_after} style={{ minWidth: 0, fontFamily: MONO, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{change.image_after}</span>
+                          <button type="button" title={`${change.resource_kind} ${change.resource_name} 상세 열기`} onClick={() => onOpenRef(change.resource_kind, change.resource_name)}
+                            onMouseEnter={() => setDeploymentLinkActive(`${change.event_id}-after`)} onMouseLeave={() => setDeploymentLinkActive(null)} onFocus={() => setDeploymentLinkActive(`${change.event_id}-after`)} onBlur={() => setDeploymentLinkActive(null)}
+                            style={{ minWidth: 0, justifySelf: "start", maxWidth: "100%", border: "none", borderRadius: 5, background: deploymentLinkActive === `${change.event_id}-after` ? inkA(0.06) : "transparent", color: deploymentLinkActive === `${change.event_id}-after` ? UI.ink : UI.ink2, padding: "2px 4px", fontFamily: MONO, fontSize: TYPE.caption2, cursor: "pointer", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{change.image_after}</button>
                         </div>}
                       </div>
                     )}
@@ -748,29 +1092,41 @@ export function IssueDetail({ name, symptom, cluster, svc, ns, resourceKind, inc
             </RcaCardSection>
 
             <RcaCardSection title="RCA 보고서">
-              <div style={{ display: "grid", gap: 15, padding: 15 }}>
-                <div style={{ display: "grid", gap: 7 }}>
-                  <span style={{ fontSize: TYPE.caption, fontWeight: 700, color: UI.ink2 }}>최종 원인</span>
-                  <p style={{ margin: 0, fontSize: TYPE.body, fontWeight: 600, color: UI.ink, lineHeight: 1.6 }}>{rootCause || "원인 정보가 아직 없습니다."}</p>
+              <div style={{ display: "grid", padding: "15px 15px 2px" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10, paddingBottom: 14, borderBottom: `1px dashed ${UI.line}` }}>
+                  {[
+                    ["장애 심각도", reportRiskLabel(report?.severity ?? severity)],
+                    ["신뢰도", reportConfidencePercent === null ? "미확인" : `${reportConfidencePercent}%`],
+                    ["시간", reportTimeLabel(report?.created_at ?? updatedAt)],
+                  ].map(([label, value]) => <div key={label} style={{ minWidth: 0, display: "grid", gap: 3 }}><span style={{ fontSize: TYPE.micro, color: UI.ink2 }}>{label}</span><strong title={value} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: TYPE.caption2, color: UI.ink }}>{value}</strong></div>)}
                 </div>
-                <div style={{ display: "grid", gap: 8, paddingTop: 13, borderTop: `1px dashed ${UI.line}` }}>
-                  <span style={{ fontSize: TYPE.caption, fontWeight: 700, color: UI.ink2 }}>판단 근거</span>
-                  {support.length === 0 ? <span style={{ fontSize: TYPE.label2, color: UI.ink2 }}>확인된 근거가 없습니다.</span> : (
-                    <ul style={{ display: "grid", gap: 7, margin: 0, padding: 0, listStyle: "none" }}>
-                      {support.map((item, index) => <li key={`${item}-${index}`} style={{ display: "grid", gridTemplateColumns: "auto minmax(0, 1fr)", gap: 8, fontSize: TYPE.label2, color: UI.ink2, lineHeight: 1.5 }}><Check size={14} style={{ color: TINT.ok.fg, marginTop: 2 }} />{item}</li>)}
-                    </ul>
-                  )}
-                </div>
-                {(evidenceSummary || evidenceBundleSummary) && <div style={{ display: "grid", gap: 7, paddingTop: 13, borderTop: `1px dashed ${UI.line}` }}>
-                  <span style={{ fontSize: TYPE.caption, fontWeight: 700, color: UI.ink2 }}>근거 요약</span>
-                  {evidenceSummary && <p style={{ margin: 0, fontSize: TYPE.label2, color: UI.ink2, lineHeight: 1.55 }}>{evidenceSummary}</p>}
-                  {evidenceBundleSummary && <p style={{ margin: 0, fontSize: TYPE.caption2, color: UI.ink2, lineHeight: 1.5 }}>{evidenceBundleSummary}</p>}
-                </div>}
-                <div style={{ display: "grid", gap: 7, paddingTop: 13, borderTop: `1px dashed ${UI.line}` }}>
-                  <span style={{ fontSize: TYPE.caption, fontWeight: 700, color: UI.ink2 }}>권장 조치</span>
-                  <p style={{ margin: 0, fontSize: TYPE.label2, color: UI.ink2, lineHeight: 1.55 }}>{recommendedActionSummary || "권장 조치가 아직 없습니다."}</p>
-                </div>
-                <button onClick={() => onOpenRef(resourceKind ?? "Pod", name)} style={{ justifySelf: "start", border: "none", background: "transparent", color: BLUE, fontSize: TYPE.label2, fontWeight: 700, cursor: "pointer", padding: 0 }}>대상 리소스 스펙 보기 →</button>
+                <dl style={{ display: "grid", gridTemplateColumns: "52px minmax(0, 1fr)", gap: "7px 8px", margin: 0, padding: "14px 0" }}>
+                  <dt style={{ fontSize: TYPE.caption, color: UI.ink2 }}>증상</dt><dd title={reportSymptom} style={{ margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: TYPE.caption2, color: UI.ink }}>{reportSymptom}</dd>
+                  <dt style={{ fontSize: TYPE.caption, color: UI.ink2 }}>영향 범위</dt><dd title={reportScope} style={{ margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: TYPE.caption2, color: UI.ink }}>{reportScope || "미확인"}</dd>
+                </dl>
+                <ReportNumberedSection number="01" title="최종 판단">
+                  <p style={{ margin: 0, fontSize: TYPE.label2, color: UI.ink2, lineHeight: 1.6 }}>{report?.narrative?.executive_summary || situationSummary || (rootCause ? `${rootCause}로 ${reportSymptom} 증상이 발생한 것으로 판단했습니다.` : "최종 판단 정보가 아직 없습니다.")}</p>
+                </ReportNumberedSection>
+                <ReportNumberedSection number="02" title="최종 원인">
+                  {latestReport.status === "loading" && <span style={{ fontSize: TYPE.caption2, color: UI.ink2 }}>원인 후보를 불러오는 중…</span>}
+                  {latestReport.status === "unavailable" && <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: TYPE.caption2, color: TINT.crit.fg }}><CircleAlert size={14} />원인 후보를 불러오지 못했습니다.</span>}
+                  <RcaCandidateList report={report} fallbackCause={rootCause} onEvidenceSelect={openEvidenceDetail} />
+                </ReportNumberedSection>
+                <ReportNumberedSection number="03" title="근거 요약" sectionRef={evidenceSummaryRef}>
+                  {evidenceSummary || evidenceBundleSummary ? <div style={{ display: "grid", gap: 7 }}>
+                    {evidenceSummary && <div style={{ display: "grid", gridTemplateColumns: "16px minmax(0, 1fr)", gap: 7, alignItems: "start" }}><span aria-hidden="true" style={{ width: 16, height: 20, display: "grid", placeItems: "center", color: TINT.ok.fg }}><CircleCheck size={14} /></span><p style={{ margin: 0, fontSize: TYPE.label2, color: UI.ink2, lineHeight: 1.55 }}>{evidenceSummary}</p></div>}
+                    {evidenceBundleSummary && <p style={{ margin: "0 0 0 23px", fontSize: TYPE.caption2, color: UI.ink2, lineHeight: 1.5 }}>{evidenceBundleSummary}</p>}
+                  </div> : <p style={{ margin: 0, fontSize: TYPE.label2, color: UI.ink2 }}>근거 요약이 아직 없습니다.</p>}
+                </ReportNumberedSection>
+                <ReportNumberedSection number="04" title="근거 상세">
+                  {(report?.supporting_evidence_refs.length ?? 0) > 0 ? <div style={{ display: "grid", borderBottom: `1px dashed ${UI.line}` }}>
+                    {report!.supporting_evidence_refs.map((evidence, index) => <EvidenceDetailItem key={`${evidence.source}-${evidence.name}-${index}`} id={evidenceDetailAnchor(index)} evidence={evidence} highlighted={highlightedEvidenceIndex === index} onOpenChange={(open) => { if (!open) setHighlightedEvidenceIndex((current) => current === index ? null : current); }} />)}
+                  </div> : support.length > 0 ? <ul style={{ display: "grid", gap: 7, margin: 0, padding: 0, listStyle: "none" }}>{support.map((item, index) => <li key={`${item}-${index}`} style={{ fontSize: TYPE.label2, color: UI.ink2, lineHeight: 1.5 }}>{item}</li>)}</ul> : <p style={{ margin: 0, fontSize: TYPE.label2, color: UI.ink2 }}>근거 상세가 아직 없습니다.</p>}
+                </ReportNumberedSection>
+                <ReportNumberedSection number="05" title="권장 조치">
+                  <p style={{ margin: 0, fontSize: TYPE.label2, color: UI.ink2, lineHeight: 1.55 }}>{recommendedActionSummary || report?.narrative?.recommended_action || "권장 조치가 아직 없습니다."}</p>
+                  <button type="button" onClick={() => setActiveTab("recovery")} style={{ justifySelf: "end", border: `1px solid ${blueA(0.32)}`, borderRadius: 8, background: blueA(0.07), color: BLUE, padding: "7px 12px", fontSize: TYPE.caption2, fontWeight: 700, cursor: "pointer" }}>복구 조치 보기</button>
+                </ReportNumberedSection>
               </div>
             </RcaCardSection>
             </> : <>
@@ -830,9 +1186,11 @@ export function IssueDetail({ name, symptom, cluster, svc, ns, resourceKind, inc
 // 지도 등 상관관계 없는 진입점은 기본 5필드만 채우고, 상세는 정직한 "관측 안 됨"으로.
 export type RcaIncident = {
   name: string; symptom: string; cluster: string; svc: string; ns: string;
+  rawSymptom?: string | null;
   resourceKind?: string | null;
   incidentId?: string | null;
   currentSubject?: string | null;
+  updatedAt?: string | null;
   correlationId?: string;
   status?: string;
   severity?: "critical" | "warning" | null;
@@ -1010,6 +1368,7 @@ export function IssuesSurface({ incidentClusterIds, sessionRules: _sessionRules 
   const setRca = (iss: RcaIssueDetailView) => onOpenRca?.({
     name: iss.resourceName ?? iss.correlationId.slice(0, 12),
     symptom: iss.symptom ?? iss.status,
+    rawSymptom: iss.rawSymptom,
     cluster: iss.clusterId ?? "-",
     svc: iss.resourceName ?? (iss.resourceName ?? iss.correlationId.slice(0, 12)),
     ns: iss.namespace ?? "-",
@@ -1017,6 +1376,7 @@ export function IssuesSurface({ incidentClusterIds, sessionRules: _sessionRules 
     correlationId: iss.correlationId,
     incidentId: iss.incidentId,
     currentSubject: iss.currentSubject,
+    updatedAt: iss.updatedAt,
     status: iss.status,
     severity: iss.severity,
     rootCause: iss.rootCause,
