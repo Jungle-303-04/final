@@ -442,34 +442,63 @@ class TargetAgentRepository(DatabaseConnection):
         workspace_id: str,
         payload: JsonObject,
     ) -> None:
-        table = AgentPolicyStatusRecord.__table__
-        statement = pg_insert(table).values(
-            workspace_id=workspace_id,
-            cluster_id=payload["cluster_id"],
-            generation=payload["generation"],
-            status=payload["status"],
-            message=payload.get("message", ""),
-            details=payload.get("details", {}),
+        self._append_agent_status_if_changed(
+            AgentPolicyStatusRecord.__table__, workspace_id, payload
         )
-        with self.connection() as conn:
-            conn.execute(statement)
 
     def save_agent_reconcile_status(
         self,
         workspace_id: str,
         payload: JsonObject,
     ) -> None:
-        table = AgentReconcileStatusRecord.__table__
-        statement = pg_insert(table).values(
-            workspace_id=workspace_id,
-            cluster_id=payload["cluster_id"],
-            generation=payload["generation"],
-            status=payload["status"],
-            message=payload.get("message", ""),
-            details=payload.get("details", {}),
+        self._append_agent_status_if_changed(
+            AgentReconcileStatusRecord.__table__, workspace_id, payload
         )
+
+    def _append_agent_status_if_changed(
+        self,
+        table: Any,
+        workspace_id: str,
+        payload: JsonObject,
+    ) -> None:
+        """무변화 반복 보고의 append 를 생략한다 — 최신 행과 완전 동일하면 skip.
+
+        이 테이블들의 조회는 전부 최신 행 기준(row_number over id desc)이라
+        동일 내용 재기록은 정보를 더하지 않고 저장량만 늘린다(같은 generation·
+        unchanged 가 주기 보고마다 수만 건 누적). 내용이 하나라도 다르면 그대로
+        append 되어 변화 이력은 보존된다.
+        """
+        values = {
+            "workspace_id": workspace_id,
+            "cluster_id": payload["cluster_id"],
+            "generation": payload["generation"],
+            "status": payload["status"],
+            "message": payload.get("message", ""),
+            "details": payload.get("details", {}),
+        }
         with self.connection() as conn:
-            conn.execute(statement)
+            latest = (
+                conn.execute(
+                    select(table.c.generation, table.c.status, table.c.message, table.c.details)
+                    .where(
+                        table.c.workspace_id == workspace_id,
+                        table.c.cluster_id == str(values["cluster_id"]),
+                    )
+                    .order_by(table.c.id.desc())
+                    .limit(1)
+                )
+                .mappings()
+                .first()
+            )
+            if (
+                latest is not None
+                and int(latest["generation"]) == int(values["generation"])
+                and str(latest["status"]) == str(values["status"])
+                and str(latest["message"]) == str(values["message"])
+                and dict(latest["details"] or {}) == dict(values["details"] or {})
+            ):
+                return
+            conn.execute(pg_insert(table).values(**values))
 
     def upsert_target_desired_states(
         self,
