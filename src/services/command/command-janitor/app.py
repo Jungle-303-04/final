@@ -89,6 +89,12 @@ async def run(event_bus: EventConsumerBus | None = None) -> None:
             if loop_time >= next_retention_sweep:
                 retention_result = await sweep_database_retention(async_db)
                 next_retention_sweep = loop_time + retention_interval
+                if retention_result is not None and retention_result.errors:
+                    # 부분 실패 관측 — 실패 단계 이름을 남겨 침묵 마비를 조기에 드러낸다.
+                    LOGGER.error(
+                        "database_retention_steps_failed",
+                        extra={"context": {"steps": list(retention_result.errors)}},
+                    )
                 if retention_result is not None and retention_result.total:
                     LOGGER.warning(
                         "database_retention_swept",
