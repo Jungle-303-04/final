@@ -1,0 +1,281 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  VISUALIZATION ONLY - Opsia AWS reference architecture for Infrastructure
+  Composer. Every resource is guarded by an always-false condition so this
+  template does not create infrastructure when opened or submitted unchanged.
+
+Metadata:
+  Purpose: Opsia poster and architecture review
+  Region: ap-northeast-2
+  Workloads:
+    ManagementEKS: api-gateway, controller, analyzer, outbox publisher, processing ledger
+    TargetEKS: outbound agent on cluster-1 and cluster-2
+    RecoveryFlow: SQS command queue, DLQ, transactional outbox and idempotency ledger
+
+Parameters:
+  EksClusterRoleArn:
+    Type: String
+    Default: arn:aws:iam::111122223333:role/visualization-only-eks-cluster-role
+  VpcId:
+    Type: String
+    Default: vpc-visualization-only
+  PublicSubnetIds:
+    Type: CommaDelimitedList
+    Default: subnet-public-a,subnet-public-c
+  PrivateSubnetIds:
+    Type: CommaDelimitedList
+    Default: subnet-private-a,subnet-private-c
+  CertificateArn:
+    Type: String
+    Default: arn:aws:acm:ap-northeast-2:111122223333:certificate/visualization-only
+  HostedZoneId:
+    Type: String
+    Default: ZVISUALIZATIONONLY
+  DomainName:
+    Type: String
+    Default: opsia.example.com
+  AvailabilityZone:
+    Type: String
+    Default: ap-northeast-2a
+
+Conditions:
+  VisualizationOnly: !Equals [visualization-only, deploy]
+
+Resources:
+  ManagementEksCluster:
+    Type: AWS::EKS::Cluster
+    Condition: VisualizationOnly
+    Metadata:
+      Layer: Management plane
+      Workloads: API Gateway, Controller, Analyzer, Outbox Publisher, Processing Ledger
+    Properties:
+      Name: kubernetes-ops
+      RoleArn: !Ref EksClusterRoleArn
+      ResourcesVpcConfig:
+        EndpointPrivateAccess: true
+        EndpointPublicAccess: false
+        SubnetIds: !Ref PrivateSubnetIds
+      Logging:
+        ClusterLogging:
+          - Enabled: true
+            Types: [api, audit, authenticator, controllerManager, scheduler]
+
+  TargetEksCluster1:
+    Type: AWS::EKS::Cluster
+    Condition: VisualizationOnly
+    Metadata:
+      Layer: Managed target
+      Workloads: Opsia outbound agent
+    Properties:
+      Name: cluster-1
+      RoleArn: !Ref EksClusterRoleArn
+      ResourcesVpcConfig:
+        EndpointPrivateAccess: true
+        EndpointPublicAccess: false
+        SubnetIds: !Ref PrivateSubnetIds
+
+  TargetEksCluster2:
+    Type: AWS::EKS::Cluster
+    Condition: VisualizationOnly
+    Metadata:
+      Layer: Managed target
+      Workloads: Opsia outbound agent
+    Properties:
+      Name: cluster-2
+      RoleArn: !Ref EksClusterRoleArn
+      ResourcesVpcConfig:
+        EndpointPrivateAccess: true
+        EndpointPublicAccess: false
+        SubnetIds: !Ref PrivateSubnetIds
+
+  ServiceRepository:
+    Type: AWS::ECR::Repository
+    Condition: VisualizationOnly
+    Properties:
+      RepositoryName: kubernetes-ops-service
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      ImageTagMutability: IMMUTABLE
+
+  ConsoleRepository:
+    Type: AWS::ECR::Repository
+    Condition: VisualizationOnly
+    Properties:
+      RepositoryName: kubernetes-ops-console
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      ImageTagMutability: IMMUTABLE
+
+  PublicLoadBalancerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Condition: VisualizationOnly
+    Properties:
+      GroupDescription: HTTPS ingress for the Opsia console and API
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+
+  PublicLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Condition: VisualizationOnly
+    Metadata:
+      Layer: Public entry
+      Protocols: HTTPS and WebSocket
+    Properties:
+      Name: opsia-management
+      Scheme: internet-facing
+      Type: application
+      SecurityGroups: [!Ref PublicLoadBalancerSecurityGroup]
+      Subnets: !Ref PublicSubnetIds
+
+  ApiGatewayTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Condition: VisualizationOnly
+    Properties:
+      Name: opsia-api-gateway
+      Port: 8080
+      Protocol: HTTP
+      TargetType: ip
+      VpcId: !Ref VpcId
+      HealthCheckPath: /healthz
+
+  HttpsListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Condition: VisualizationOnly
+    Properties:
+      LoadBalancerArn: !Ref PublicLoadBalancer
+      Port: 443
+      Protocol: HTTPS
+      Certificates:
+        - CertificateArn: !Ref CertificateArn
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref ApiGatewayTargetGroup
+
+  OpsiaDnsRecord:
+    Type: AWS::Route53::RecordSet
+    Condition: VisualizationOnly
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Ref DomainName
+      Type: A
+      AliasTarget:
+        DNSName: !GetAtt PublicLoadBalancer.DNSName
+        HostedZoneId: !GetAtt PublicLoadBalancer.CanonicalHostedZoneID
+
+  RecoveryCommandQueue:
+    Type: AWS::SQS::Queue
+    Condition: VisualizationOnly
+    Metadata:
+      Purpose: Durable recovery commands consumed idempotently by workers
+    Properties:
+      QueueName: opsia-recovery-commands
+      VisibilityTimeout: 180
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt RecoveryDeadLetterQueue.Arn
+        maxReceiveCount: 5
+
+  RecoveryDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Condition: VisualizationOnly
+    Metadata:
+      Purpose: Failed events retained for controlled replay after recovery
+    Properties:
+      QueueName: opsia-recovery-dlq
+      MessageRetentionPeriod: 1209600
+
+  OpsiaDatabaseSecret:
+    Type: AWS::SecretsManager::Secret
+    Condition: VisualizationOnly
+    Properties:
+      Name: opsia/database
+      Description: PostgreSQL credentials for Opsia management services
+      GenerateSecretString:
+        SecretStringTemplate: '{"username":"opsia"}'
+        GenerateStringKey: password
+        PasswordLength: 32
+        ExcludePunctuation: true
+
+  OpsiaDatabase:
+    Type: AWS::RDS::DBCluster
+    Condition: VisualizationOnly
+    Metadata:
+      Data: State, incidents, transactional outbox and processing ledger
+    Properties:
+      DBClusterIdentifier: opsia-postgresql
+      Engine: aurora-postgresql
+      DatabaseName: opsia
+      MasterUsername: !Sub '{{resolve:secretsmanager:${OpsiaDatabaseSecret}:SecretString:username}}'
+      MasterUserPassword: !Sub '{{resolve:secretsmanager:${OpsiaDatabaseSecret}:SecretString:password}}'
+      StorageEncrypted: true
+
+  CacheSubnetGroup:
+    Type: AWS::ElastiCache::SubnetGroup
+    Condition: VisualizationOnly
+    Properties:
+      Description: Private subnets for Opsia cache
+      SubnetIds: !Ref PrivateSubnetIds
+
+  OpsiaCache:
+    Type: AWS::ElastiCache::ReplicationGroup
+    Condition: VisualizationOnly
+    Properties:
+      ReplicationGroupDescription: Opsia cache and short-lived coordination data
+      Engine: redis
+      CacheNodeType: cache.t4g.small
+      CacheSubnetGroupName: !Ref CacheSubnetGroup
+      NumNodeGroups: 1
+      ReplicasPerNodeGroup: 1
+      AtRestEncryptionEnabled: true
+      TransitEncryptionEnabled: true
+
+  EvidenceBucket:
+    Type: AWS::S3::Bucket
+    Condition: VisualizationOnly
+    Metadata:
+      Data: Evidence, reports and recovery artifacts
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+
+  PersistentVolume:
+    Type: AWS::EC2::Volume
+    Condition: VisualizationOnly
+    Metadata:
+      Purpose: EBS CSI persistent volume for stateful EKS workloads
+    Properties:
+      AvailabilityZone: !Ref AvailabilityZone
+      Encrypted: true
+      Size: 100
+      VolumeType: gp3
+
+  ManagementLogGroup:
+    Type: AWS::Logs::LogGroup
+    Condition: VisualizationOnly
+    Properties:
+      LogGroupName: /opsia/management
+      RetentionInDays: 30
+
+  TargetAgentLogGroup:
+    Type: AWS::Logs::LogGroup
+    Condition: VisualizationOnly
+    Properties:
+      LogGroupName: /opsia/target-agents
+      RetentionInDays: 30
+
+Outputs:
+  SafetyNotice:
+    Description: This architecture template is intentionally non-deploying.
+    Value: All resources use the always-false VisualizationOnly condition.
