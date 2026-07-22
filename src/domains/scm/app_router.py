@@ -20,13 +20,17 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 
 from domains.identity.dependencies import require_session
-from domains.scm.github_app import (
-    GithubAppClient,
-    GithubAppNotConfigured,
-    is_configured,
-    load_github_app_config,
+from domains.scm.github_app import GithubAppClient, GithubAppNotConfigured
+from domains.scm.github_app_manifest import (
+    build_app_manifest,
+    convert_manifest_code,
+    new_app_action_url,
+    resolve_github_app_config,
+    store_app_config_from_conversion,
 )
 from packages.config.settings import env
+from packages.contracts.identity import DEFAULT_WORKSPACE_ID
+from packages.runtime.dependencies import get_db
 
 router = APIRouter()
 
@@ -76,9 +80,10 @@ def _normalize(repo_ref: str) -> str:
 
 @router.get(GITHUB_APP_CONFIG_PATH, response_model=GithubAppConfigResponse)
 async def github_app_config(
+    db: Any = Depends(get_db),
     current: Any = Depends(require_session),
 ) -> GithubAppConfigResponse:
-    cfg = load_github_app_config()
+    cfg = resolve_github_app_config(db, DEFAULT_WORKSPACE_ID)
     return GithubAppConfigResponse(
         configured=cfg.configured,
         slug=cfg.slug or None,
@@ -89,12 +94,65 @@ async def github_app_config(
 @router.get(GITHUB_APP_INSTALL_URL_PATH, response_model=InstallUrlResponse)
 async def github_app_install_url(
     state: str | None = None,
+    db: Any = Depends(get_db),
     current: Any = Depends(require_session),
 ) -> InstallUrlResponse:
+    cfg = resolve_github_app_config(db, DEFAULT_WORKSPACE_ID)
     try:
-        return InstallUrlResponse(url=GithubAppClient().install_url(state=state))
+        return InstallUrlResponse(url=GithubAppClient(cfg).install_url(state=state))
     except GithubAppNotConfigured as exc:
         raise HTTPException(status_code=409, detail="github_app_not_configured") from exc
+
+
+class AppManifestResponse(BaseModel):
+    action_url: str
+    manifest: dict[str, Any]
+
+
+@router.get("/api/integrations/github/app/manifest", response_model=AppManifestResponse)
+async def github_app_manifest(
+    base_url: str,
+    state: str,
+    org: str | None = None,
+    name: str | None = None,
+    current: Any = Depends(require_session),
+) -> AppManifestResponse:
+    """운영자 1회 등록용 manifest + GitHub 생성 URL.
+
+    프론트가 이 manifest 를 GitHub 새 App 페이지로 폼 POST 하면 값이 미리 채워진다.
+    """
+    if not base_url.strip():
+        raise HTTPException(status_code=400, detail="base_url_required")
+    return AppManifestResponse(
+        action_url=new_app_action_url(org=org, state=state),
+        manifest=build_app_manifest(base_url=base_url, name=name),
+    )
+
+
+@router.get("/api/integrations/github/app/manifest/callback")
+async def github_app_manifest_callback(
+    code: str | None = None,
+    state: str | None = None,
+    db: Any = Depends(get_db),
+) -> RedirectResponse:
+    """GitHub 이 App 을 만든 뒤 돌려주는 code 를 자격증명으로 교환·저장한다.
+
+    성공하면 App 이 즉시 configured 가 되어(재기동 불필요) 프론트로 결과를 알린다.
+    """
+    return_base = env(GITHUB_APP_WEB_RETURN_URL_ENV, "/").strip() or "/"
+    outcome = "error"
+    if code:
+        try:
+            conversion = await convert_manifest_code(code)
+            store_app_config_from_conversion(db, DEFAULT_WORKSPACE_ID, conversion)
+            outcome = "created"
+        except Exception:  # noqa: BLE001 - 실패는 프론트에 error 로 전달
+            outcome = "error"
+    params = {"github_app_manifest": outcome}
+    if state:
+        params["github_app_state"] = state
+    sep = "&" if "?" in return_base else "?"
+    return RedirectResponse(url=f"{return_base}{sep}{urlencode(params)}", status_code=302)
 
 
 @router.get(GITHUB_APP_CALLBACK_PATH)
@@ -130,12 +188,14 @@ async def github_app_callback(
 async def github_app_verify_installation(
     installation_id: str,
     payload: VerifyRequest,
+    db: Any = Depends(get_db),
     current: Any = Depends(require_session),
 ) -> VerifyResponse:
     """설치가 그 레포에 실제로 걸려 있고 PR 쓰기 권한이 있는지 등록 시점에 검증한다."""
-    if not is_configured():
+    cfg = resolve_github_app_config(db, DEFAULT_WORKSPACE_ID)
+    if not cfg.configured:
         raise HTTPException(status_code=409, detail="github_app_not_configured")
-    client = GithubAppClient()
+    client = GithubAppClient(cfg)
     try:
         async with httpx.AsyncClient(timeout=20.0) as http:
             minted = await client.mint_installation_token(installation_id, client=http)
