@@ -322,8 +322,7 @@ function ScenarioGate({ runs, repositoryRef, status, onRefresh, onOpenRef, onOpe
     || step.message?.toLowerCase().includes("errimagepull") === true) ?? null;
   const blocked = scopedRuns.find((run) =>
     run.status === "waiting_for_approval"
-    || run.promotionGate?.promotion_blocked === true
-    || run.promotionGate?.blocked === true);
+    || run.promotionGate?.eligible === false);
   const actualImage = diffRecord ? detailString(diffRecord.step.details, "actual_image") : null;
   const desiredImage = diffRecord ? detailString(diffRecord.step.details, "desired_image") : null;
   const failureEvidence = failureRecord
