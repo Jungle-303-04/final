@@ -38,6 +38,7 @@ export interface RcaIssueDetailView {
   actionRoute: string | null;
   prUrl: string | null;
   errorReason: string | null;
+  updatedAt: string | null;
 }
 
 export interface RcaIssueDetailsFeed {
@@ -70,6 +71,7 @@ export function toRcaIssueDetailView(item: RcaIssueItem): RcaIssueDetailView {
     actionRoute: item.action_route,
     prUrl: item.pr_url,
     errorReason: item.error_reason,
+    updatedAt: item.updated_at,
   };
 }
 

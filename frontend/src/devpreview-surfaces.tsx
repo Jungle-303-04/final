@@ -6,6 +6,7 @@ import { motion } from "motion/react";
 import {
   Rocket, Package, AlertTriangle, Bell, Clock, ShieldCheck, Coins,
   Building2, Globe, Check, Sparkles, X, Palette, RefreshCw, Lock, Pin,
+  BrainCircuit, ChevronRight, MapPin,
 } from "lucide-react";
 import { UI, BLUE, HP, TINT, MONO, TYPE, SOFT, DUR, PRESENT_SCALE, inkA, blueA, critA, BRAND } from "./devpreview/theme";
 import { GithubIcon } from "./devpreview/brandIcons";
@@ -696,6 +697,111 @@ export type RcaIncident = {
   evidenceSummary?: string | null;
   evidenceBundleSummary?: string | null;
 };
+
+type IssueCardState = {
+  label: "분석 중" | "확인 필요";
+  tone: "info" | "warn";
+};
+
+type RecoveryCardProgress = {
+  label: "복구 대기" | "복구 요청됨" | "복구 실행 중" | "검증 중" | "복구 완료" | "복구 실패";
+  step: number;
+  tone: "approval" | "active" | "completed" | "failed";
+};
+
+function issueCardState(issue: RcaIssueDetailView): IssueCardState {
+  if (issue.missingEvidence.length > 0
+    || issue.rootCause
+    || issue.recommendedActionSummary
+    || issue.actionRoute
+    || issue.prUrl) {
+    return { label: "확인 필요", tone: "warn" };
+  }
+  return { label: "분석 중", tone: "info" };
+}
+
+function recoveryCardProgress(): RecoveryCardProgress {
+  return { label: "복구 대기", step: 0, tone: "approval" };
+}
+
+function RecoveryProgress({ progress }: { progress: RecoveryCardProgress }) {
+  const activeColor = progress.tone === "failed" ? HP.crit
+    : progress.tone === "completed" ? HP.ok
+      : progress.tone === "approval" ? HP.warn
+        : BLUE;
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 7, color: UI.ink2 }}>
+      <span>{progress.label}</span>
+      <span aria-hidden="true" style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
+        {Array.from({ length: 5 }, (_, index) => (
+          <span key={index} style={{ width: 11, height: 5, borderRadius: 3, background: index < progress.step ? activeColor : HP.pending, opacity: index < progress.step ? 1 : 0.7 }} />
+        ))}
+      </span>
+      <span style={{ fontVariantNumeric: "tabular-nums" }}>{progress.step}/5</span>
+    </span>
+  );
+}
+
+function IssueCard({ issue, onOpen }: { issue: RcaIssueDetailView; onOpen: () => void }) {
+  const state = issueCardState(issue);
+  const recovery = recoveryCardProgress();
+  const title = issue.resourceName ?? issue.correlationId.slice(0, 12);
+  const symptom = issue.symptom ?? koLabel(issue.status);
+  const severityLabel = issue.severity === "critical" ? "장애" : issue.severity === "warning" ? "주의" : "정보";
+  const symptomWithCode = issue.rawSymptom && issue.rawSymptom !== symptom
+    ? `${symptom} (${issue.rawSymptom})`
+    : symptom;
+  const evidenceCount = issue.supportingEvidence.length;
+  const target = [issue.resourceKind, issue.resourceName].filter(Boolean).join(" · ") || "대상 미확인";
+  const scope = [issue.clusterId, issue.namespace].filter(Boolean).join(" · ") || "범위 미확인";
+
+  return (
+    <motion.button
+      type="button"
+      onClick={onOpen}
+      whileHover={{ y: -1 }}
+      transition={{ duration: DUR.micro }}
+      style={{
+        width: "100%", minWidth: 0, display: "block",
+        padding: 0, overflow: "hidden", textAlign: "left", cursor: "pointer",
+        border: `1px solid ${UI.line}`, borderRadius: 10, background: UI.card,
+        boxShadow: `0 1px 2px ${inkA(0.04)}`, color: UI.ink,
+      }}
+    >
+      <span style={{ minWidth: 0, display: "grid", gap: 10, padding: "13px 14px 12px" }}>
+        <span style={{ minWidth: 0, display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ minWidth: 0, flex: 1, display: "flex", alignItems: "center", gap: 8 }}>
+            <span role="img" aria-label={`심각도: ${severityLabel}`} title={`심각도: ${severityLabel}`} style={{ width: 12, height: 12, flexShrink: 0, alignSelf: "center", cursor: "help", borderRadius: 999, background: issue.severity === "critical" ? HP.crit : issue.severity === "warning" ? HP.warn : BLUE }} />
+            <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: TYPE.bodyStrong, lineHeight: 1.35, fontWeight: 700 }}>{title}</span>
+          </span>
+          <time dateTime={issue.updatedAt ?? undefined} style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 4, fontSize: TYPE.caption2, color: UI.ink3 }}>
+            <Clock size={12} />{fromNow(issue.updatedAt)}
+          </time>
+        </span>
+
+        <span style={{ minWidth: 0, display: "grid", gap: 5, fontSize: TYPE.label2, lineHeight: 1.45 }}>
+          <span style={{ color: UI.ink2 }}><strong style={{ color: UI.ink, fontWeight: 600 }}>증상</strong><span style={{ margin: "0 7px", color: UI.line }}>|</span>{symptomWithCode}</span>
+          {issue.rootCause && <span style={{ color: UI.ink2 }}><strong style={{ color: UI.ink, fontWeight: 600 }}>원인</strong><span style={{ margin: "0 7px", color: UI.line }}>|</span>{issue.rootCause}</span>}
+          <span style={{ color: UI.ink2 }}><strong style={{ color: UI.ink, fontWeight: 600 }}>대상</strong><span style={{ margin: "0 7px", color: UI.line }}>|</span>{target}</span>
+          <span style={{ color: UI.ink2 }}><strong style={{ color: UI.ink, fontWeight: 600 }}>복구</strong><span style={{ margin: "0 7px", color: UI.line }}>|</span><RecoveryProgress progress={recovery} /></span>
+        </span>
+
+        <span style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", paddingTop: 9, borderTop: `1px dashed ${UI.line}`, fontSize: TYPE.caption2, color: UI.ink3 }}>
+          <span style={{ minWidth: 0, display: "inline-flex", alignItems: "center", gap: 4 }}><MapPin size={12} /><span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{scope}</span></span>
+          {issue.confidence !== null && <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><BrainCircuit size={12} />신뢰도 {Math.round(issue.confidence * 100)}%</span>}
+          <span>판단 근거 {evidenceCount}개</span>
+          {issue.missingEvidence.length > 0 && <span>부족한 근거 {issue.missingEvidence.length}개</span>}
+        </span>
+
+        <span style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+          <Pill tone={state.tone} label={state.label} />
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 3, color: BLUE, fontSize: TYPE.label2, fontWeight: 700 }}>열기 <ChevronRight size={14} /></span>
+        </span>
+      </span>
+    </motion.button>
+  );
+}
+
 export function IssuesSurface({ incidentClusterIds, sessionRules: _sessionRules = [], onOpenRef: _onOpenRef, onAskAi, onOpenRca }: {
   incidentClusterIds: readonly string[]; sessionRules?: string[]; onOpenRef: (kind: string, name: string) => void; onAskAi: () => void; onOpenRca?: (i: RcaIncident) => void;
 }) {
@@ -733,7 +839,6 @@ export function IssuesSurface({ incidentClusterIds, sessionRules: _sessionRules 
     evidenceSummary: iss.evidenceSummary,
     evidenceBundleSummary: iss.evidenceBundleSummary,
   });
-  const incCols: [string, string][] = [["심각도", "88px"], ["이슈", "minmax(230px,2fr)"], ["대상", "minmax(150px,1fr)"], ["네임스페이스", "96px"], ["상태", "104px"]];
   return (
     <Page title="이슈" icon={AlertTriangle} tabs={["진행 중", "RCA", "예방 점검"]} tab={tab} onTab={setTab}
       action={tab !== "예방 점검" ? <button onClick={onAskAi} style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${blueA(0.4)}`, background: blueA(0.07), color: BLUE, borderRadius: 9, padding: "6px 13px", fontSize: TYPE.label2, fontWeight: 700, cursor: "pointer" }}>AI로 원인 분석</button> : null}>
@@ -744,29 +849,15 @@ export function IssuesSurface({ incidentClusterIds, sessionRules: _sessionRules 
         { label: "RCA", value: rcaIssues.length },
       ]} />}
       {tab !== "예방 점검" && (
-        <Card pad={0}>
-          <THead cols={incCols} />
+        <div style={{ display: "grid", gap: 8 }}>
           {issues.status === "loading" ? (
-            <div style={{ padding: "14px 15px", fontSize: TYPE.label2, color: UI.ink3 }}>불러오는 중…</div>
+            <Card><div style={{ fontSize: TYPE.label2, color: UI.ink3 }}>불러오는 중…</div></Card>
           ) : issues.status === "unavailable" ? (
-            <div style={{ padding: "14px 15px", fontSize: TYPE.label2, color: UI.ink3 }}>이슈를 불러오지 못했습니다.</div>
+            <Card><div style={{ fontSize: TYPE.label2, color: UI.ink3 }}>이슈를 불러오지 못했습니다.</div></Card>
           ) : visibleIssues.length === 0 ? (
-            <div style={{ padding: "14px 15px", fontSize: TYPE.label2, color: UI.ink2 }}>{tab === "RCA" ? "RCA 분석이 필요한 이슈가 없습니다." : "진행 중인 이슈가 없습니다."}</div>
-          ) : visibleIssues.map((iss, i) => {
-            const resolved = /resolved/i.test(iss.status);
-            const label = iss.resourceName ?? iss.correlationId.slice(0, 12);
-            return (
-              <TRow key={iss.correlationId} cols={incCols} i={i}
-                onClick={() => setRca(iss)} cells={[
-                <Pill key="s" tone={iss.severity === "warning" ? "warn" : iss.severity === "critical" ? "crit" : "ok"} label={iss.severity ? koLabel(iss.severity) : "정보"} />,
-                <span key="t"><Mono>{label}</Mono><span style={{ fontSize: TYPE.label, color: UI.ink2 }}> · {iss.symptom ?? iss.status}</span></span>,
-                <Mono key="d" dim>{[iss.resourceKind, iss.clusterId].filter(Boolean).join(" · ") || "-"}</Mono>,
-                <Mono key="w" dim>{iss.namespace ?? "-"}</Mono>,
-                <Pill key="st" tone={resolved ? "ok" : "warn"} label={koLabel(iss.status)} />,
-              ]} />
-            );
-          })}
-        </Card>
+            <Card><div style={{ fontSize: TYPE.label2, color: UI.ink2 }}>{tab === "RCA" ? "RCA 분석이 필요한 이슈가 없습니다." : "진행 중인 이슈가 없습니다."}</div></Card>
+          ) : visibleIssues.map((iss) => <IssueCard key={iss.correlationId} issue={iss} onOpen={() => setRca(iss)} />)}
+        </div>
       )}
       {tab === "예방 점검" && <ChecksContent />}
     </Page>
