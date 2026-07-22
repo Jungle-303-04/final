@@ -147,6 +147,19 @@ function ProviderChips({ providers }: { providers: ProviderAvailability[] }) {
   );
 }
 
+/** 위저드 하단 뒤로가기 — 주행동과 같은 시선 라인에서 ⅓ 폭을 차지한다.
+ *  헤더의 브랜드 아이콘 슬롯이 뒤로가기로 "변신"하던 패턴을 대체한다:
+ *  아이콘 정체성이 유지되고, 이동 행동(뒤로/다음)이 한 줄에 모인다. */
+function WizardBackButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button onClick={onClick} aria-label="이전 단계"
+      className="flex items-center justify-center gap-1.5 text-[14.5px] font-semibold c-2 transition-colors hover:bg-soft"
+      style={{ flex: "1 1 0%", borderRadius: 14, paddingTop: 14, paddingBottom: 14, background: "var(--fill)" }}>
+      <ArrowLeft className="size-[17px]" /> 뒤로
+    </button>
+  );
+}
+
 function NextButton({ show, label, onClick }: { show: boolean; label: string; onClick: () => void }) {
   return (
     <AnimatePresence initial={false}>
@@ -187,17 +200,13 @@ function FloatingToast({ message, onDismiss }: { message: string | null; onDismi
   );
 }
 
-function ShellHeader({ icon: Icon, title, sub, onClose, onBack }: { icon: typeof Server; title: string; sub: string; onClose: () => void; onBack?: () => void }) {
+function ShellHeader({ icon: Icon, title, sub, onClose }: { icon: typeof Server; title: string; sub: string; onClose: () => void }) {
   return (
     <>
       <div className="flex items-center gap-4" style={{ padding: "30px 36px 24px" }}>
-        {/* 아이콘 슬롯: 하위 스텝에서는 같은 48×48 자리를 뒤로가기 버튼이 대체한다.
-            슬롯 크기가 동일해 제목/부제 위치는 스텝이 바뀌어도 움직이지 않는다. */}
-        {onBack ? (
-          <button onClick={onBack} aria-label="이전 단계" className="grid size-12 shrink-0 place-items-center rounded-[15px] c-2 transition-colors hover:bg-soft" style={{ background: "var(--fill)" }}><ArrowLeft className="size-[22px]" /></button>
-        ) : (
-          <span className="grid size-12 shrink-0 place-items-center hdr-grad text-white" style={{ borderRadius: 15, boxShadow: "0 8px 18px -6px rgba(47,91,255,0.5)" }}><Icon className="size-[22px]" /></span>
-        )}
+        {/* 브랜드 아이콘은 모든 스텝에서 고정 — 뒤로가기는 하단 행동 라인
+            (WizardBackButton, ⅓ 폭)이 담당한다. */}
+        <span className="grid size-12 shrink-0 place-items-center hdr-grad text-white" style={{ borderRadius: 15, boxShadow: "0 8px 18px -6px rgba(47,91,255,0.5)" }}><Icon className="size-[22px]" /></span>
         <div className="min-w-0 flex-1">
           <h1 className="text-[19px] font-semibold tracking-[-0.02em] c-ink">{title}</h1>
           <p className="mt-1 text-[13px] c-2">{sub}</p>
@@ -235,7 +244,9 @@ function Steps({ steps, active }: { steps: string[]; active: number }) {
   );
 }
 
-const Body = ({ children }: { children: React.ReactNode }) => <div style={{ padding: "28px 36px 34px", flex: "1 1 auto", minHeight: 0, overflowY: "auto" }}><AnimatePresence mode="wait">{children}</AnimatePresence></div>;
+// overflowX hidden — 스텝 전환이 x축 ±24px 슬라이드라, 차단하지 않으면 전환 중
+// 가로 스크롤바가 생겼다 사라지며 레이아웃이 옆으로 튀는 것처럼 보인다.
+const Body = ({ children }: { children: React.ReactNode }) => <div style={{ padding: "28px 36px 34px", flex: "1 1 auto", minHeight: 0, overflowY: "auto", overflowX: "hidden" }}><AnimatePresence mode="wait">{children}</AnimatePresence></div>;
 
 // ── A. Git 저장소 등록 (로컬 형식 사전검사 + 서버 리비전/매니페스트 검증) ─────────────
 type RepoSource = {
@@ -385,9 +396,10 @@ export interface RepositoryConnectionContext {
   namespace?: string;
 }
 
-function RepoTargetStep({ source, context, onComplete }: {
+function RepoTargetStep({ source, context, onBack, onComplete }: {
   source: RepoSource;
   context?: RepositoryConnectionContext;
+  onBack?: () => void;
   onComplete: (repo: string) => void;
 }) {
   const repoRef = source.normalizedRepo || source.repo.full;
@@ -550,9 +562,12 @@ function RepoTargetStep({ source, context, onComplete }: {
       {clusterStatus === "ready" && clusters.length === 0 && <GapBanner>먼저 클러스터를 연결해야 저장소 배포 대상을 등록할 수 있습니다.</GapBanner>}
       {manifestStatus === "ready" && manifests.length === 0 && <GapBanner>선택한 브랜치에서 배포 가능한 Kubernetes 매니페스트를 찾지 못했습니다.</GapBanner>}
       <FloatingToast message={failure || null} onDismiss={() => setFailure("")} />
-      <button disabled={!complete || submitStatus === "submitting"} onClick={() => void submit()} className="btn-primary flex w-full items-center justify-center gap-2 rounded-[14px] text-[15px] font-semibold disabled:cursor-not-allowed disabled:opacity-45">
-        {submitStatus === "submitting" ? <><Spin c="size-4 text-white" /> 서버 검증·등록 중…</> : <>서버 검증 후 연결 <ArrowRight className="size-[17px]" /></>}
-      </button>
+      <div className="flex gap-3">
+        {onBack && <WizardBackButton onClick={onBack} />}
+        <button disabled={!complete || submitStatus === "submitting"} onClick={() => void submit()} className="btn-primary flex items-center justify-center gap-2 rounded-[14px] text-[15px] font-semibold disabled:cursor-not-allowed disabled:opacity-45" style={{ flex: onBack ? "2 1 0%" : "1 1 0%", paddingTop: 14, paddingBottom: 14 }}>
+          {submitStatus === "submitting" ? <><Spin c="size-4 text-white" /> 서버 검증·등록 중…</> : <>서버 검증 후 연결 <ArrowRight className="size-[17px]" /></>}
+        </button>
+      </div>
     </motion.div>
   );
 }
@@ -572,10 +587,10 @@ function RepoWizard({ providers, context, onClose, onComplete }: { providers: Cl
   const [source, setSource] = useState<RepoSource | null>(null);
   const el = {
     0: <RepoStep key="s0" providers={providers} onNext={(value) => { setSource(value); setStep(1); }} />,
-    1: source ? <RepoTargetStep key="s1" source={source} context={context} onComplete={() => setStep(2)} /> : null,
+    1: source ? <RepoTargetStep key="s1" source={source} context={context} onBack={() => setStep(0)} onComplete={() => setStep(2)} /> : null,
     2: source ? <RepoDoneStep key="s2" repo={source.normalizedRepo} onDone={() => onComplete(source.normalizedRepo)} /> : null,
   }[step];
-  return (<><ShellHeader icon={GitBranch} title="Git 저장소 연결" sub="Git 원문 검증 · 배포 대상 등록 · Safe PR 준비" onClose={onClose} onBack={step === 1 ? () => setStep(0) : undefined} /><Steps steps={REPO_STEPS} active={step} /><Body>{el}</Body></>);
+  return (<><ShellHeader icon={GitBranch} title="Git 저장소 연결" sub="Git 원문 검증 · 배포 대상 등록 · Safe PR 준비" onClose={onClose} /><Steps steps={REPO_STEPS} active={step} /><Body>{el}</Body></>);
 }
 
 // ── B. 클러스터 연결 (에이전트 설치 · 라이브) ─────────────────────────────
@@ -742,7 +757,7 @@ function InstallProgress({ conn, activation, reinstalling, onReinstall }: {
   );
 }
 
-function ClusterInstallStep({ platform, name, onConnected }: { platform: PlatformId; name: string; onConnected: (info: ConnectionStatusView) => void }) {
+function ClusterInstallStep({ platform, name, onBack, onConnected }: { platform: PlatformId; name: string; onBack: () => void; onConnected: (info: ConnectionStatusView) => void }) {
   const pf = PLATFORMS.find((p) => p.id === platform)!;
   const Icon = pf.icon;
 
@@ -793,6 +808,16 @@ function ClusterInstallStep({ platform, name, onConnected }: { platform: Platfor
       .catch((cause: unknown) => { if (controller.signal.aborted || isAbortError(cause)) return; setErrMsg(errorText(cause)); setPhase("error"); });
   };
 
+  // 스텝 진입 즉시 명령 발급을 시작한다 — 버튼 하나만 있는 이전 화면은 아무것도
+  // 진행되지 않는 '멈춤'처럼 읽혔다. 실패하면 하단 라인의 '다시 시도'가 남는다.
+  const autoStarted = useRef(false);
+  useEffect(() => {
+    if (autoStarted.current || receipt !== null) return;
+    autoStarted.current = true;
+    runRegister();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const posixCmd = toInteractiveSafePosixCommand(receipt?.install_command ?? "");
   const cmd = shell === "powershell"
     ? toInteractiveSafePowerShellCommand(
@@ -802,10 +827,15 @@ function ClusterInstallStep({ platform, name, onConnected }: { platform: Platfor
   const copy = () => { if (!cmd) return; navigator.clipboard?.writeText(cmd).catch(() => {}); setCopied(true); window.setTimeout(() => setCopied(false), 1600); };
   return (
     <motion.div key="cinstall" {...swap} className="grid gap-5">
-      {!receipt && (
-        <button onClick={runRegister} disabled={phase === "registering"} className="btn-primary flex w-full items-center justify-center gap-1.5 text-[15px] font-semibold disabled:opacity-50" style={{ borderRadius: 14, paddingTop: 14, paddingBottom: 14 }}>
-          {phase === "registering" ? <><Spin c="size-[17px]" /> 명령 생성 중…</> : <>설치 명령 생성</>}
-        </button>
+      {!receipt && phase !== "error" && (
+        <div className="flex items-center justify-center gap-2 text-[14px] c-2" style={{ padding: "26px 0" }}>
+          <Spin c="size-[17px]" /> 설치 명령 생성 중…
+        </div>
+      )}
+      {!receipt && phase === "error" && (
+        <div className="flex items-center justify-center gap-2 text-[14px] c-2" style={{ padding: "26px 0" }}>
+          <AlertCircle className="size-[17px] c-red" /> 설치 명령을 생성하지 못했습니다
+        </div>
       )}
 
       <FloatingToast message={errMsg} onDismiss={() => setErrMsg(null)} />
@@ -833,6 +863,19 @@ function ClusterInstallStep({ platform, name, onConnected }: { platform: Platfor
           <InstallProgress conn={conn} activation={activation} reinstalling={reinstalling} onReinstall={reinstall} />
         </>
       )}
+
+      {/* 하단 행동 라인 — [뒤로 ⅓ · 주행동 ⅔]. 명령 발급 후에는 주행동이 없으므로
+          같은 폭의 자리만 유지해 상태 전환 시 뒤로 버튼 위치가 흔들리지 않게 한다. */}
+      <div className="flex gap-3">
+        <WizardBackButton onClick={onBack} />
+        {!receipt && phase === "error" ? (
+          <button onClick={runRegister} className="btn-primary flex items-center justify-center gap-1.5 text-[15px] font-semibold" style={{ flex: "2 1 0%", borderRadius: 14, paddingTop: 14, paddingBottom: 14 }}>
+            <RotateCw className="size-[16px]" /> 다시 시도
+          </button>
+        ) : (
+          <span aria-hidden="true" style={{ flex: "2 1 0%" }} />
+        )}
+      </div>
 
     </motion.div>
   );
@@ -876,11 +919,11 @@ function ClusterWizard({ providers, onClose, onComplete }: { providers: ClusterP
   const el = {
     0: <ClusterInfoStep key="c0" providers={providers} name={name} setName={setName} platform={platform} setPlatform={setPlatform}
       onNext={() => setStep(1)} />,
-    1: <ClusterInstallStep key="c1" platform={platform} name={name}
+    1: <ClusterInstallStep key="c1" platform={platform} name={name} onBack={() => setStep(0)}
       onConnected={(info) => { setConnection(info); setStep(2); }} />,
     2: connection ? <ClusterDoneStep key="c2" name={name} connection={connection} onDone={() => onComplete(name)} /> : null,
   }[step];
-  return (<><ShellHeader icon={Server} title="클러스터 연결" sub="에이전트를 설치하면 클러스터가 안전하게 등록·관측됩니다" onClose={onClose} onBack={step === 1 ? () => setStep(0) : undefined} /><Steps steps={CLUSTER_STEPS} active={step} /><Body>{el}</Body></>);
+  return (<><ShellHeader icon={Server} title="클러스터 연결" sub="에이전트를 설치하면 클러스터가 안전하게 등록·관측됩니다" onClose={onClose} /><Steps steps={CLUSTER_STEPS} active={step} /><Body>{el}</Body></>);
 }
 
 // ── 런처 ─────────────────────────────
