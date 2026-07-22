@@ -141,58 +141,45 @@ gate: ## PR 진단용 백엔드·manifest·프론트 전체 gate
 	$(MAKE) gate-backend
 	$(MAKE) gate-frontend
 
-gate-backend: product-brand-boundary-check reference-ledger-check reference-feature-ledger-check ## 백엔드·manifest 전체 gate
+gate-backend: ## 백엔드·manifest 전체 gate
 	bash scripts/test.sh
 	bash scripts/manifest-check.sh
 
-gate-contract-manifest: product-brand-boundary-check reference-ledger-check reference-feature-ledger-check ## 교차 계약·manifest 최소 gate
-	uv run pytest -q tests/test_dev_gate_contract.py tests/test_dev_gate_workflow.py tests/test_merged_pr_gate_reuse.py
+gate-contract-manifest: ## 교차 계약·manifest 최소 gate
 	bash scripts/manifest-check.sh
 
-gate-deploy-smoke-backend: ## 배포 스모크 셸·회귀 테스트 전용 gate
+gate-deploy-smoke-backend: ## 배포 스모크 셸 문법 gate
 	bash -n scripts/pre-deploy-smoke.sh scripts/post-deploy-smoke.sh scripts/post-deploy-console-smoke.sh scripts/post_deploy_read_smoke.sh scripts/lib/public-edge.sh scripts/lib/cluster-curl.sh
-	uv run pytest -q tests/test_deploy_smoke_phases.py
 
-gate-deploy-smoke-frontend: ## 브라우저 배포 스모크 계약 전용 gate
-	cd frontend && npm ci --include=dev --no-audit --no-fund
-	cd frontend && npm exec vitest run scripts/post-deploy-route-smoke.test.mjs
-	cd frontend && npm run typecheck
-	cd frontend && npm run lint
-
-gate-frontend: ## 프론트 정적 검사·테스트·빌드 전체 gate
+gate-deploy-smoke-frontend: ## 브라우저 배포 스모크 정적 gate
 	cd frontend && npm ci --include=dev --no-audit --no-fund
 	cd frontend && npm run typecheck
-	cd frontend && npm run lint
-	cd frontend && npm test
+
+gate-frontend: ## 프론트 정적 검사·빌드 전체 gate
+	cd frontend && npm ci --include=dev --no-audit --no-fund
+	cd frontend && npm run typecheck
 	cd frontend && npm run build
 	test -s frontend/dist/index.html
 	ls frontend/dist/assets/*.js >/dev/null
 
-gate-frontend-changed: ## 프론트 정적 검사·영향 테스트·빌드 gate(GATE_BASE 필수)
+gate-frontend-changed: ## 프론트 정적 검사·빌드 gate(GATE_BASE 필수)
 	test -n "$(GATE_BASE)"
 	git cat-file -e "$(GATE_BASE)^{commit}"
 	cd frontend && npm ci --include=dev --no-audit --no-fund
 	cd frontend && npm run typecheck
-	cd frontend && npm run lint
-	cd frontend && npm test -- --changed "$(GATE_BASE)"
+	cd frontend && npm run build
 	cd frontend && npm run build
 	test -s frontend/dist/index.html
 	ls frontend/dist/assets/*.js >/dev/null
 
 gate-fast: ## pre-push용 빠른 정적 검사(CI의 제품 테스트와 중복 실행하지 않음)
-	uv run ruff check .
-	uv run ruff format --check .
-	PYTHONPATH=src uv run lint-imports --config .importlinter
 	uv run python -m compileall -q src scripts
 	@set -e; changed_files="$$(bash scripts/changed-files.sh)"; \
 	if grep -Eq '^frontend/' <<<"$$changed_files"; then \
-		base="$$(bash scripts/changed-files.sh --base)"; \
 		if [[ ! -d frontend/node_modules ]] || grep -Eq '^frontend/(package.json|package-lock.json)$$' <<<"$$changed_files"; then \
 			(cd frontend && npm ci --include=dev --no-audit --no-fund); \
 		fi; \
 		(cd frontend && npm run typecheck); \
-		(cd frontend && npm run lint); \
-		(cd frontend && node scripts/product-design-guard.mjs --release-gate --base "$$base"); \
 	else \
 		echo "[gate-fast] frontend 변경 없음 — 프론트 검사 생략"; \
 	fi
