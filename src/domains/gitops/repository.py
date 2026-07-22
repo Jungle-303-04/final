@@ -1362,6 +1362,10 @@ class RepoChangeRepository(GitOpsOverviewRepository):
 
         검사(open 여부)와 갱신이 한 UPDATE 라 read-then-write 경합이 없음.
         False 반환 = 이미 해결됨(호출자는 409 로 응답).
+
+        만료 시각(expires_at)이 지난 승인은 열려 있어도 해결을 거부한다 —
+        만료를 저장만 하고 검사하지 않으면 유효기간이 장식이 되기 때문.
+        expires_at 이 없는 승인(기존 데이터 포함)은 현행대로 만료 없이 동작한다.
         """
         table = Approval.__table__
         statement = (
@@ -1370,6 +1374,7 @@ class RepoChangeRepository(GitOpsOverviewRepository):
                 table.c.approval_id == approval_id,
                 table.c.workspace_id == workspace_id,
                 table.c.status.in_(OPEN_APPROVAL_STATUSES),
+                or_(table.c.expires_at.is_(None), table.c.expires_at > func.now()),
             )
             .values(
                 status=status,
