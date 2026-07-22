@@ -6,13 +6,13 @@ import { motion } from "motion/react";
 import {
   Rocket, Package, AlertTriangle, Bell, Clock, ShieldCheck, Coins,
   Building2, Globe, Check, Sparkles, X, Palette, RefreshCw, Lock, Pin,
-  ChevronRight, MapPin,
+  ChevronRight, MapPin, ShieldAlert, ArrowLeft, ArrowRight, ExternalLink, CircleAlert,
 } from "lucide-react";
 import { UI, BLUE, HP, TINT, MONO, TYPE, SOFT, DUR, PRESENT_SCALE, inkA, blueA, critA, BRAND } from "./devpreview/theme";
 import { GithubIcon } from "./devpreview/brandIcons";
 import { useCostOverview } from "./devpreview/costFeed";
 import { useChecksOverview } from "./devpreview/checksFeed";
-import { useRcaIssueDetails, useRecoveryPlan, type RcaIssueDetailView } from "./devpreview/rcaDetailFeed";
+import { useIncidentRecentChanges, useRcaIssueDetails, useRecoveryPlan, type RcaIssueDetailView } from "./devpreview/rcaDetailFeed";
 import { isActiveRcaIssue } from "./devpreview/rcaIssuesFeed";
 import { useSession, sessionInitial } from "./devpreview/sessionFeed";
 import { useAiConversations, useConversationDetail } from "./devpreview/aiFeed";
@@ -76,8 +76,31 @@ const LOCAL_STATUS_KO: Record<string, string> = {
   port_sessions: "포트 세션",
   resource_list: "리소스 목록",
   resource_list_slow: "느린 리소스 목록",
+  evidence_received: "증거 수신",
+  evidence_collected: "증거 수집 완료",
+  evidence_built: "증거 정규화 완료",
+  evidence_bundled: "증거 묶음 생성",
+  incident_detected: "장애 감지",
+  rule_missing: "분석 규칙 확인 필요",
+  backlog_created: "분석 대기",
+  ai_fallback_requested: "AI 보완 분석 중",
   rca_planned: "RCA 계획됨",
   rca_in_progress: "RCA 분석 중",
+  rca_evaluated: "원인 후보 평가 완료",
+  rca_completed: "원인 분석 완료",
+  followup_required: "추가 확인 필요",
+  action_required: "복구 검토 필요",
+  recovery_planned: "복구 계획 생성",
+  selection_required: "복구 선택 필요",
+  recovery_selected: "복구 조치 선택됨",
+  command_requested: "복구 요청됨",
+  command_dispatched: "복구 실행 중",
+  command_queued: "복구 실행 대기",
+  command_completed: "복구 실행 완료",
+  command_rejected: "복구 명령 거부됨",
+  pr_requested: "복구 PR 요청됨",
+  pr_created: "복구 PR 생성됨",
+  pr_failed: "복구 PR 생성 실패",
 };
 function koLabel(raw: string | null | undefined): string {
   const key = raw?.trim().toLowerCase();
@@ -522,10 +545,41 @@ export function DeploySurface({ pendingRepos = [], repositoryFilter = null, onOp
 // 서버가 준 값만 렌더하고, 없으면 정직한 "관측 안 됨"으로 둔다(no backfill).
 // 실제 복구 실행 경로(capability/CSRF)는 이 데모에 배선되어 있지 않으므로 실행
 // 컨트롤은 비활성으로 두고 가짜 성공을 만들지 않는다.
-function severityMeta(severity: "critical" | "warning" | null | undefined): { tone: "crit" | "warn"; label: string } | null {
-  if (severity === "critical") return { tone: "crit", label: "장애" };
-  if (severity === "warning") return { tone: "warn", label: "주의" };
-  return null;
+type IssueAnalysisState = {
+  label: "분석 중" | "원인 분석 완료" | "해결됨";
+  tone: "info" | "ok";
+};
+
+const ANALYSIS_COMPLETED_STATUSES = new Set([
+  "rca_completed",
+  "followup_required",
+  "action_required",
+  "recovery_planned",
+  "selection_required",
+  "recovery_selected",
+  "approval_recommended",
+  "command_requested",
+  "command_dispatched",
+  "command_queued",
+  "command_completed",
+  "command_rejected",
+  "pr_requested",
+  "pr_patch_prepared",
+  "pr_diff_explained",
+  "pr_ready_for_creation",
+  "pr_created",
+  "pr_failed",
+]);
+
+function issueAnalysisState(issue: { status?: string | null; rootCause?: string | null }): IssueAnalysisState {
+  const normalizedStatus = issue.status?.trim().toLowerCase() ?? "";
+  if (["cancelled", "closed", "completed", "dismissed", "incident_resolved", "resolved"].includes(normalizedStatus)) {
+    return { label: "해결됨", tone: "ok" };
+  }
+  if ((issue.rootCause?.trim() ?? "") !== "" || ANALYSIS_COMPLETED_STATUSES.has(normalizedStatus)) {
+    return { label: "원인 분석 완료", tone: "ok" };
+  }
+  return { label: "분석 중", tone: "info" };
 }
 // 서버가 준 위험도 문자열을 방어적으로 톤에 매핑(미지의 값은 정보 톤).
 function recoveryRiskTone(risk: string): { fg: string; bg: string; bd: string } {
@@ -545,26 +599,37 @@ function RcaSection({ title, children }: { title: string; children: React.ReactN
     </div>
   );
 }
-export function IssueDetail({ name, symptom, cluster, svc, ns, onClose, onOpenRef, onAskAi, onRecovered: _onRecovered, correlationId, status, severity, rootCause, confidence, supportingEvidence, missingEvidence, situationSummary, recommendedActionSummary, evidenceSummary, evidenceBundleSummary, topInset = 0, leftInset = 0, rightInset = 0 }: {
+
+function RcaCardSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section style={{ flexShrink: 0, overflow: "hidden", border: `1px solid ${UI.line}`, borderRadius: 10, background: UI.card }}>
+      <h2 style={{ margin: 0, padding: "12px 15px", borderBottom: `1px solid ${UI.line}`, background: inkA(0.018), fontSize: TYPE.label2, fontWeight: 700, color: UI.ink }}>{title}</h2>
+      {children}
+    </section>
+  );
+}
+export function IssueDetail({ name, symptom, cluster, svc, ns, resourceKind, incidentId, currentSubject, onClose, onOpenRef, onAskAi, onRecovered: _onRecovered, correlationId, status, severity, rootCause, confidence, supportingEvidence, missingEvidence, situationSummary, recommendedActionSummary, evidenceSummary, evidenceBundleSummary, topInset = 0, leftInset = 0, rightInset = 0 }: {
   name: string; symptom: string; cluster: string; svc: string; ns: string; onClose: () => void; onOpenRef: (kind: string, n: string) => void; onAskAi: () => void; onRecovered?: (svc: string) => void;
+  resourceKind?: string | null; incidentId?: string | null; currentSubject?: string | null;
   correlationId?: string; status?: string; severity?: "critical" | "warning" | null;
   rootCause?: string | null; confidence?: number | null; supportingEvidence?: string[]; missingEvidence?: string[];
   situationSummary?: string | null; recommendedActionSummary?: string | null; evidenceSummary?: string | null; evidenceBundleSummary?: string | null;
   topInset?: number; leftInset?: number; rightInset?: number;
 }) {
+  const [activeTab, setActiveTab] = useState<"detail" | "recovery">("detail");
   // 복구 후보는 실 계약(GET /api/rca/recovery-plans/by-correlation)에서만. 상관관계
   // id가 없으면(예: 지도 파생 진입) idle로 두고 관측 안 됨을 정직하게 표시한다.
   const recovery = useRecoveryPlan(correlationId ?? null);
+  const recentChanges = useIncidentRecentChanges(incidentId ?? null);
   const conf = typeof confidence === "number" && Number.isFinite(confidence) ? Math.round(confidence * 100) : null;
-  const sev = severityMeta(severity);
+  const analysisState = issueAnalysisState({ status, rootCause });
+  const headerTone = analysisState.label === "해결됨" ? TINT.ok
+    : severity === "warning" ? TINT.warn
+      : severity === "critical" ? TINT.crit
+        : TINT.blue;
   const support = supportingEvidence ?? [];
   const missing = missingEvidence ?? [];
-  const narrative = ([
-    ["상황 요약", situationSummary ?? null],
-    ["권고 조치", recommendedActionSummary ?? null],
-    ["증거 요약", evidenceSummary ?? null],
-    ["증거 번들", evidenceBundleSummary ?? null],
-  ] as const).filter(([, v]) => v !== null && v !== "");
+  const observedStatus = status?.trim() ? koLabel(status) : currentSubject?.trim() ? koLabel(currentSubject) : "상태 미확인";
   return (
     <>
       {/* 스크림 — 사이드바 밖 클릭 시 닫기 */}
@@ -574,71 +639,141 @@ export function IssueDetail({ name, symptom, cluster, svc, ns, onClose, onOpenRe
       <motion.div initial={{ x: 580 }} animate={{ x: 0 }} exit={{ x: 580, transition: { duration: 0.14, ease: [0.4, 0, 1, 1] } }} transition={{ type: "spring", bounce: 0.06, visualDuration: 0.28 }}
         style={{ position: "fixed", top: topInset, right: rightInset, bottom: 0, width: 560, maxWidth: `calc(100vw / ${PRESENT_SCALE} - ${leftInset + rightInset}px)`, background: UI.card, borderLeft: `1px solid ${UI.line}`, boxShadow: `-24px 0 60px -30px ${inkA(0.3)}`, zIndex: 56, display: "flex", flexDirection: "column", overflow: "hidden", transition: "right .28s cubic-bezier(.32,.72,0,1), max-width .28s cubic-bezier(.32,.72,0,1)" }}>
           {/* 헤더 */}
-          <div style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "18px 20px", borderBottom: `1px solid ${UI.line}` }}>
-            <span style={{ width: 38, height: 38, borderRadius: 11, background: critA(0.1), display: "grid", placeItems: "center", flexShrink: 0 }}><AlertTriangle size={19} style={{ color: TINT.crit.fg }} /></span>
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "18px 20px 14px" }}>
+            <span style={{ width: 38, height: 38, borderRadius: 11, background: headerTone.bg, display: "grid", placeItems: "center", flexShrink: 0 }}>
+              {analysisState.label === "해결됨"
+                ? <Check size={19} strokeWidth={2.4} style={{ color: headerTone.fg }} />
+                : <AlertTriangle size={19} style={{ color: headerTone.fg }} />}
+            </span>
             <div style={{ minWidth: 0, flex: 1 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                 <Mono>{name}</Mono>
-                {sev && <Pill tone={sev.tone} label={sev.label} />}
-                {status && <span style={{ fontSize: TYPE.caption, fontWeight: 700, color: UI.ink2, background: inkA(0.05), borderRadius: 999, padding: "2px 9px" }}>{koLabel(status)}</span>}
+                <Pill tone={analysisState.tone} label={analysisState.label} />
               </div>
               <div style={{ fontSize: TYPE.label2, color: UI.ink2, marginTop: 4 }}>{symptom}</div>
-              <div style={{ fontSize: TYPE.caption2, color: UI.ink3, marginTop: 3, fontFamily: MONO }}>{svc} · {ns} · {cluster}</div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "5px 16px", marginTop: 9 }}>
+                {[
+                  ["클러스터", cluster],
+                  ["네임스페이스", ns],
+                  ["종류", resourceKind ?? "미확인"],
+                  ["대상", svc],
+                ].map(([label, value]) => (
+                  <span key={label} style={{ minWidth: 0, display: "flex", alignItems: "baseline", gap: 6, fontSize: TYPE.caption2 }}>
+                    <span style={{ flexShrink: 0, color: UI.ink3 }}>{label}</span>
+                    <span style={{ minWidth: 0, color: UI.ink2, fontFamily: MONO, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{value || "미확인"}</span>
+                  </span>
+                ))}
+              </div>
             </div>
-            <button onClick={onClose} style={{ width: 30, height: 30, borderRadius: 999, border: "none", background: inkA(0.06), color: UI.ink2, cursor: "pointer", flexShrink: 0 }}><X size={15} /></button>
+            <button type="button" aria-label="상세 닫기" onClick={onClose} style={{ width: 30, height: 30, padding: 0, borderRadius: 999, border: "none", background: inkA(0.06), color: UI.ink2, cursor: "pointer", flexShrink: 0, display: "grid", placeItems: "center", lineHeight: 1 }}><X size={15} /></button>
+          </div>
+          <div role="tablist" aria-label="이슈 상세 보기" style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", padding: "0 20px", borderBottom: `1px solid ${UI.line}` }}>
+            {([
+              ["detail", "이슈 상세"],
+              ["recovery", "복구 계획"],
+            ] as const).map(([id, label]) => {
+              const selected = activeTab === id;
+              return (
+                <button key={id} type="button" role="tab" aria-selected={selected} onClick={() => setActiveTab(id)}
+                  style={{ position: "relative", height: 42, border: "none", background: "transparent", color: selected ? UI.ink : UI.ink3, fontSize: TYPE.label2, fontWeight: selected ? 700 : 600, cursor: "pointer" }}>
+                  {label}
+                  {selected && <span aria-hidden="true" style={{ position: "absolute", left: 0, right: 0, bottom: -1, height: 2, background: BLUE, borderRadius: "2px 2px 0 0" }} />}
+                </button>
+              );
+            })}
           </div>
           <div style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: 20, padding: "18px 20px" }}>
-            {/* 근본 원인 + 확신도 — 서버가 준 값만. 없으면 정직한 "관측 안 됨" */}
-            <RcaSection title="근본 원인">
-              <div style={{ background: UI.bg2, border: `1px solid ${UI.line}`, borderRadius: 12, padding: 14 }}>
-                {conf !== null && (
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-                    <span style={{ fontSize: TYPE.label2, fontWeight: 700, color: UI.ink }}>확신도</span>
-                    <span style={{ flex: 1, height: 6, borderRadius: 999, background: inkA(0.08), overflow: "hidden" }}>
-                      <motion.span initial={{ width: 0 }} animate={{ width: `${conf}%` }} transition={{ duration: DUR.meter, ease: "easeInOut" }} style={{ display: "block", height: "100%", borderRadius: 999, background: conf >= 80 ? HP.ok : conf >= 50 ? HP.warn : HP.crit }} />
-                    </span>
-                    <span style={{ fontFamily: MONO, fontSize: TYPE.label2, fontWeight: 700, color: UI.ink }}>{conf}%</span>
-                  </div>
-                )}
-                {rootCause
-                  ? <div style={{ fontSize: TYPE.body, color: UI.ink, lineHeight: 1.55 }}>{rootCause}</div>
-                  : <div style={{ fontSize: TYPE.label2, color: UI.ink3 }}>원인 정보 없음</div>}
-                {conf === null && <div style={{ fontSize: TYPE.caption2, color: UI.ink3, marginTop: 6 }}>확신도 관측 안 됨</div>}
+            {activeTab === "detail" ? <>
+            <section aria-labelledby="issue-summary-heading" style={{ flexShrink: 0, display: "grid", gap: 14, border: `1px solid ${UI.line}`, borderRadius: 10, background: UI.card, padding: 16, boxShadow: `0 6px 16px -10px ${inkA(0.26)}, 0 1px 3px ${inkA(0.06)}` }}>
+              <h2 id="issue-summary-heading" style={{ margin: 0, fontSize: TYPE.caption, fontWeight: 700, color: UI.ink2 }}>상황 요약</h2>
+              <p style={{ margin: 0, fontSize: TYPE.body, fontWeight: 600, color: UI.ink, lineHeight: 1.65 }}>{situationSummary?.trim() || "상황 요약 정보가 아직 없습니다."}</p>
+              <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
+                <span style={{ border: `1px solid ${UI.line}`, borderRadius: 999, padding: "3px 9px", fontSize: TYPE.caption, color: UI.ink2, background: UI.card }}>{observedStatus}</span>
+                {conf !== null && <span style={{ border: `1px solid ${UI.line}`, borderRadius: 999, padding: "3px 9px", fontSize: TYPE.caption, color: UI.ink2, background: UI.card }}>신뢰도 {conf}%</span>}
+                <span style={{ border: `1px solid ${UI.line}`, borderRadius: 999, padding: "3px 9px", fontSize: TYPE.caption, color: UI.ink2, background: UI.card }}>확인된 근거 {support.length}</span>
               </div>
-            </RcaSection>
-            {/* 증거 — 실 supporting/missing evidence(문자열 트레일) */}
-            <RcaSection title="근거 (수집 트레일)">
-              <div style={{ border: `1px solid ${UI.line}`, borderRadius: 12, overflow: "hidden" }}>
-                {support.length === 0 && missing.length === 0 && (
-                  <div style={{ padding: "10px 12px", fontSize: TYPE.label2, color: UI.ink3 }}>수집된 근거 없음</div>
-                )}
-                {support.map((e, i) => (
-                  <div key={`s-${i}`} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "9px 12px", borderTop: i > 0 ? `1px solid ${UI.line2}` : "none" }}>
-                    <Check size={14} style={{ color: TINT.ok.fg, flexShrink: 0, marginTop: 2 }} />
-                    <span style={{ minWidth: 0, flex: 1, fontSize: TYPE.caption2, color: UI.ink2, lineHeight: 1.5 }}>{e}</span>
-                  </div>
-                ))}
-                {missing.map((mi, i) => (
-                  <div key={`m-${i}`} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "9px 12px", borderTop: (support.length > 0 || i > 0) ? `1px solid ${UI.line2}` : "none", background: TINT.warn.bg }}>
-                    <span style={{ width: 14, height: 14, borderRadius: 999, border: `1.5px dashed ${TINT.warn.fg}`, flexShrink: 0, marginTop: 1 }} />
-                    <span style={{ minWidth: 0, flex: 1 }}>
-                      <span style={{ fontSize: TYPE.caption, fontWeight: 700, color: TINT.warn.fg }}>미충족</span>
-                      <span style={{ display: "block", fontSize: TYPE.caption2, color: UI.ink2, marginTop: 1, lineHeight: 1.5 }}>{mi}</span>
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </RcaSection>
-            {/* 보고서 — 서버가 준 AI 작성 요약만 렌더 */}
-            {narrative.length > 0 && (
-              <RcaSection title="보고서">
-                <div style={{ display: "flex", flexDirection: "column", gap: 11, fontSize: TYPE.label2, color: UI.ink, lineHeight: 1.6 }}>
-                  {narrative.map(([k, v]) => (
-                    <div key={k}><span style={{ fontWeight: 700, color: UI.ink2 }}>{k} · </span>{v}</div>
-                  ))}
+              {missing.length > 0 && (
+                <div style={{ display: "grid", gap: 8, border: `1px solid ${TINT.warn.bd}`, borderRadius: 8, background: TINT.warn.bg, padding: 11 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: TYPE.caption, fontWeight: 700, color: UI.ink2 }}><ShieldAlert size={14} style={{ color: TINT.warn.fg }} />추가 확인 필요</div>
+                  <ul style={{ display: "grid", gap: 5, margin: 0, paddingLeft: 17 }}>
+                    {missing.map((item, index) => <li key={`${item}-${index}`} style={{ fontSize: TYPE.caption2, color: UI.ink2, lineHeight: 1.45 }}>{item}</li>)}
+                  </ul>
                 </div>
-              </RcaSection>
-            )}
+              )}
+            </section>
+
+            <RcaCardSection title="최근 변경">
+              <div>
+                {recentChanges.status === "loading" ? (
+                  <div style={{ padding: 14, fontSize: TYPE.label2, color: UI.ink2 }}>최근 변경을 불러오는 중…</div>
+                ) : recentChanges.status === "unavailable" ? (
+                  <div role="alert" style={{ display: "grid", gridTemplateColumns: "auto minmax(0, 1fr)", gap: 9, padding: 15, color: TINT.crit.fg }}>
+                    <CircleAlert size={15} style={{ marginTop: 1 }} />
+                    <div style={{ display: "grid", gap: 4 }}>
+                      <span style={{ fontSize: TYPE.label2, fontWeight: 700 }}>최근 변경을 불러올 수 없습니다.</span>
+                      <span style={{ fontSize: TYPE.caption2, lineHeight: 1.45 }}>요청한 최근 변경 기록을 확인할 수 없습니다.</span>
+                    </div>
+                  </div>
+                ) : recentChanges.status === "idle" || recentChanges.items.length === 0 ? (
+                  <div style={{ padding: 14, fontSize: TYPE.label2, color: UI.ink2 }}>장애 이전에 확인된 변경이 없습니다.</div>
+                ) : recentChanges.items.map((change, index) => (
+                  <div key={change.event_id} style={{ display: "grid", gap: 8, padding: 13, borderTop: index > 0 ? `1px solid ${UI.line2}` : "none" }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                      <span style={{ minWidth: 0, fontSize: TYPE.label2, fontWeight: 700, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{change.resource_kind} · {change.resource_name}</span>
+                      <time dateTime={change.changed_at} style={{ flexShrink: 0, fontSize: TYPE.caption, color: UI.ink2 }}>{fromNow(change.changed_at)}</time>
+                    </div>
+                    {(change.image_before || change.image_after) && (
+                      <div style={{ display: "grid", gap: 8, borderRadius: 8, background: UI.bg2, padding: 10, fontSize: TYPE.caption2, color: UI.ink2 }}>
+                        {change.image_before && <div style={{ display: "grid", gridTemplateColumns: "auto 88px minmax(0, 1fr)", alignItems: "center", gap: 8 }}>
+                          <ArrowLeft size={13} style={{ color: UI.ink2 }} />
+                          <span style={{ color: UI.ink2 }}>이전 배포 버전</span>
+                          <span title={change.image_before} style={{ minWidth: 0, fontFamily: MONO, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{change.image_before}</span>
+                        </div>}
+                        {change.image_after && <div style={{ display: "grid", gridTemplateColumns: "auto 88px minmax(0, 1fr)", alignItems: "center", gap: 8 }}>
+                          <ArrowRight size={13} style={{ color: UI.ink2 }} />
+                          <span style={{ color: UI.ink2 }}>현재 배포 버전</span>
+                          <span title={change.image_after} style={{ minWidth: 0, fontFamily: MONO, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{change.image_after}</span>
+                        </div>}
+                      </div>
+                    )}
+                    <div style={{ display: "grid", gridTemplateColumns: "76px minmax(0, 1fr)", gap: "6px 10px", paddingTop: 2, fontSize: TYPE.caption, color: UI.ink2 }}>
+                      {change.commit_sha && <><span>커밋</span><b title={change.commit_sha} style={{ minWidth: 0, color: UI.ink2, fontFamily: MONO, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{change.commit_sha.slice(0, 7)}</b></>}
+                      {(change.repository_id || change.repo_ref) && <><span>저장소</span><span style={{ minWidth: 0, display: "flex", alignItems: "center", gap: 7, color: UI.ink2, overflow: "hidden" }}>{change.repo_ref && <span style={{ flexShrink: 0, borderRadius: 6, background: inkA(0.06), padding: "2px 7px", fontSize: TYPE.micro, color: UI.ink2 }}>{change.repo_ref}</span>}<span title={change.repository_id} style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{change.repository_id || "저장소 미확인"}</span></span></>}
+                      {change.workflow_run_id && <><span>배포 실행</span><span title={`CI/CD 배포 실행 ID: ${change.workflow_run_id}`} style={{ minWidth: 0, color: UI.ink2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{change.workflow_run_id}</span></>}
+                    </div>
+                    {change.pr_url && <a href={change.pr_url} target="_blank" rel="noopener noreferrer" style={{ justifySelf: "end", display: "inline-flex", alignItems: "center", gap: 5, color: BLUE, fontSize: TYPE.caption2, fontWeight: 700, textDecoration: "none" }}><ExternalLink size={13} />Pull request 열기</a>}
+                  </div>
+                ))}
+              </div>
+            </RcaCardSection>
+
+            <RcaCardSection title="RCA 보고서">
+              <div style={{ display: "grid", gap: 15, padding: 15 }}>
+                <div style={{ display: "grid", gap: 7 }}>
+                  <span style={{ fontSize: TYPE.caption, fontWeight: 700, color: UI.ink2 }}>최종 원인</span>
+                  <p style={{ margin: 0, fontSize: TYPE.body, fontWeight: 600, color: UI.ink, lineHeight: 1.6 }}>{rootCause || "원인 정보가 아직 없습니다."}</p>
+                </div>
+                <div style={{ display: "grid", gap: 8, paddingTop: 13, borderTop: `1px dashed ${UI.line}` }}>
+                  <span style={{ fontSize: TYPE.caption, fontWeight: 700, color: UI.ink2 }}>판단 근거</span>
+                  {support.length === 0 ? <span style={{ fontSize: TYPE.label2, color: UI.ink2 }}>확인된 근거가 없습니다.</span> : (
+                    <ul style={{ display: "grid", gap: 7, margin: 0, padding: 0, listStyle: "none" }}>
+                      {support.map((item, index) => <li key={`${item}-${index}`} style={{ display: "grid", gridTemplateColumns: "auto minmax(0, 1fr)", gap: 8, fontSize: TYPE.label2, color: UI.ink2, lineHeight: 1.5 }}><Check size={14} style={{ color: TINT.ok.fg, marginTop: 2 }} />{item}</li>)}
+                    </ul>
+                  )}
+                </div>
+                {(evidenceSummary || evidenceBundleSummary) && <div style={{ display: "grid", gap: 7, paddingTop: 13, borderTop: `1px dashed ${UI.line}` }}>
+                  <span style={{ fontSize: TYPE.caption, fontWeight: 700, color: UI.ink2 }}>근거 요약</span>
+                  {evidenceSummary && <p style={{ margin: 0, fontSize: TYPE.label2, color: UI.ink2, lineHeight: 1.55 }}>{evidenceSummary}</p>}
+                  {evidenceBundleSummary && <p style={{ margin: 0, fontSize: TYPE.caption2, color: UI.ink2, lineHeight: 1.5 }}>{evidenceBundleSummary}</p>}
+                </div>}
+                <div style={{ display: "grid", gap: 7, paddingTop: 13, borderTop: `1px dashed ${UI.line}` }}>
+                  <span style={{ fontSize: TYPE.caption, fontWeight: 700, color: UI.ink2 }}>권장 조치</span>
+                  <p style={{ margin: 0, fontSize: TYPE.label2, color: UI.ink2, lineHeight: 1.55 }}>{recommendedActionSummary || "권장 조치가 아직 없습니다."}</p>
+                </div>
+                <button onClick={() => onOpenRef(resourceKind ?? "Pod", name)} style={{ justifySelf: "start", border: "none", background: "transparent", color: BLUE, fontSize: TYPE.label2, fontWeight: 700, cursor: "pointer", padding: 0 }}>대상 리소스 스펙 보기 →</button>
+              </div>
+            </RcaCardSection>
+            </> : <>
             {/* 복구 계획 — 실 계약의 후보만. 실제 실행은 서버 실행(capability/CSRF) 미배선 → 컨트롤 비활성 */}
             <RcaSection title="복구 계획">
               {recovery.status === "idle" ? (
@@ -683,7 +818,7 @@ export function IssueDetail({ name, symptom, cluster, svc, ns, onClose, onOpenRe
                 </div>
               )}
             </RcaSection>
-            <button onClick={() => onOpenRef("Pod", name)} style={{ alignSelf: "flex-start", border: "none", background: "transparent", color: BLUE, fontSize: TYPE.label2, fontWeight: 700, cursor: "pointer", padding: 0 }}>대상 리소스 스펙 보기 →</button>
+            </>}
           </div>
       </motion.div>
     </>
@@ -695,6 +830,9 @@ export function IssueDetail({ name, symptom, cluster, svc, ns, onClose, onOpenRe
 // 지도 등 상관관계 없는 진입점은 기본 5필드만 채우고, 상세는 정직한 "관측 안 됨"으로.
 export type RcaIncident = {
   name: string; symptom: string; cluster: string; svc: string; ns: string;
+  resourceKind?: string | null;
+  incidentId?: string | null;
+  currentSubject?: string | null;
   correlationId?: string;
   status?: string;
   severity?: "critical" | "warning" | null;
@@ -708,11 +846,6 @@ export type RcaIncident = {
   evidenceBundleSummary?: string | null;
 };
 
-type IssueCardState = {
-  label: "상태 미확인" | "확인 필요" | "해결됨";
-  tone: "info" | "warn" | "ok";
-};
-
 type IssueSeverityFilter = "all" | "critical" | "warning";
 
 type RecoveryCardProgress = {
@@ -720,18 +853,6 @@ type RecoveryCardProgress = {
   step: number;
   tone: "approval" | "active" | "completed" | "failed";
 };
-
-function issueCardState(issue: RcaIssueDetailView): IssueCardState {
-  if (!isActiveRcaIssue(issue)) return { label: "해결됨", tone: "ok" };
-  if (issue.missingEvidence.length > 0
-    || issue.rootCause
-    || issue.recommendedActionSummary
-    || issue.actionRoute
-    || issue.prUrl) {
-    return { label: "확인 필요", tone: "warn" };
-  }
-  return { label: "상태 미확인", tone: "info" };
-}
 
 function IssueSeverityFilters({ active, criticalCount, warningCount, onChange, totalCount }: {
   active: IssueSeverityFilter;
@@ -790,7 +911,7 @@ function RecoveryProgress({ progress }: { progress: RecoveryCardProgress }) {
 
 function IssueCard({ issue, onOpen, onOpenTarget }: { issue: RcaIssueDetailView; onOpen: () => void; onOpenTarget: (() => void) | null }) {
   const [targetActive, setTargetActive] = useState(false);
-  const state = issueCardState(issue);
+  const state = issueAnalysisState(issue);
   const recovery = recoveryCardProgress();
   const title = issue.resourceName ?? "대상 미확인";
   const symptom = issue.symptom ?? "증상 미확인";
@@ -892,7 +1013,10 @@ export function IssuesSurface({ incidentClusterIds, sessionRules: _sessionRules 
     cluster: iss.clusterId ?? "-",
     svc: iss.resourceName ?? (iss.resourceName ?? iss.correlationId.slice(0, 12)),
     ns: iss.namespace ?? "-",
+    resourceKind: iss.resourceKind,
     correlationId: iss.correlationId,
+    incidentId: iss.incidentId,
+    currentSubject: iss.currentSubject,
     status: iss.status,
     severity: iss.severity,
     rootCause: iss.rootCause,

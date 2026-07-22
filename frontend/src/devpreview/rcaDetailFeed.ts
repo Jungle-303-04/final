@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 
 import { getRecoveryPlanByCorrelation } from "../api/recovery";
 import type { RecoveryPlan } from "../api/recovery-schemas";
+import { getIncidentRecentChanges } from "../api/recent-changes";
+import type { RecentChangeItem } from "../api/recent-changes-schemas";
 import type { RcaIssueList } from "../api/schemas";
 import { loadRcaIssueItems } from "./rcaIssuesFeed";
 import { operationalMessageLabel } from "./statusLabel";
@@ -19,6 +21,7 @@ export type RcaDetailStatus = "loading" | "ready" | "unavailable";
 export interface RcaIssueDetailView {
   correlationId: string;
   incidentId: string | null;
+  currentSubject: string;
   clusterId: string | null;
   namespace: string | null;
   resourceName: string | null;
@@ -52,6 +55,7 @@ export function toRcaIssueDetailView(item: RcaIssueItem): RcaIssueDetailView {
   return {
     correlationId: item.correlation_id,
     incidentId: item.incident_id,
+    currentSubject: item.current_subject,
     clusterId: item.cluster_id,
     namespace: item.incident_namespace,
     resourceName: item.incident_resource_name,
@@ -117,6 +121,39 @@ export type RecoveryPlanStatus = "idle" | "loading" | "ready" | "unavailable";
 export interface RecoveryPlanFeed {
   status: RecoveryPlanStatus;
   plan: RecoveryPlan | null;
+}
+
+export type IncidentRecentChangesStatus = "idle" | "loading" | "ready" | "unavailable";
+
+export interface IncidentRecentChangesFeed {
+  status: IncidentRecentChangesStatus;
+  items: RecentChangeItem[];
+}
+
+export function useIncidentRecentChanges(incidentId: string | null): IncidentRecentChangesFeed {
+  const [feed, setFeed] = useState<IncidentRecentChangesFeed>({
+    status: incidentId ? "loading" : "idle",
+    items: [],
+  });
+  useEffect(() => {
+    if (!incidentId) {
+      setFeed({ status: "idle", items: [] });
+      return;
+    }
+    const controller = new AbortController();
+    setFeed({ status: "loading", items: [] });
+    void getIncidentRecentChanges(incidentId, { signal: controller.signal })
+      .then((response) => {
+        if (controller.signal.aborted) return;
+        setFeed({ status: "ready", items: response.items });
+      })
+      .catch((cause: unknown) => {
+        if (controller.signal.aborted || isAbortError(cause)) return;
+        setFeed({ status: "unavailable", items: [] });
+      });
+    return () => controller.abort();
+  }, [incidentId]);
+  return feed;
 }
 
 /**
