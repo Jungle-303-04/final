@@ -19,8 +19,13 @@ import { ConnectWizard, type RepositoryConnectionContext } from "./devpreview-co
 import { TopologyView } from "./devpreview-topology";
 import { GithubIcon } from "./devpreview/brandIcons";
 import { DevpreviewContractProvider, useDevpreviewContracts } from "./devpreview/contracts";
-import { ClusterLifecycleControl } from "./devpreview/ClusterLifecycleControl";
-import { unregisterCluster } from "./api/clusters";
+import { ClusterLifecycleControl, toHomeClusterChoice } from "./devpreview/ClusterLifecycleControl";
+import { ClusterDisconnectDialog } from "./pages/clusters/ClusterDisconnectDialog";
+import { createClusterDisconnectPort } from "./app/composition/surfaces/clusters";
+
+// 목록(⋮ 메뉴) 연결 해제도 상세 뷰와 같은 캐논 계약 port 를 공유한다 —
+// 두 번째 unregister 구현이 생기지 않게 하는 ClusterLifecycleControl 원칙 준수.
+const LIST_CLUSTER_DISCONNECT_PORT = createClusterDisconnectPort();
 import {
   PENDING_CLUSTER_STORAGE_KEY,
   reconcilePendingClusters,
@@ -1598,6 +1603,12 @@ function App() {
     setToasts((cur) => [...cur, { id, ...t }]);
     window.setTimeout(() => setToasts((cur) => cur.filter((x) => x.id !== id)), 3800);
   };
+  // 목록(⋮ 메뉴)에서 연 연결 해제 대상 — 상세 뷰와 같은 다이얼로그를 제어형으로 연다.
+  const [listDisconnectClusterId, setListDisconnectClusterId] = useState<string | null>(null);
+  const listDisconnectChoice = useMemo(() => {
+    const target = contract.clusters.find((cluster) => cluster.id === listDisconnectClusterId);
+    return target ? toHomeClusterChoice(target) : null;
+  }, [contract.clusters, listDisconnectClusterId]);
   const reportClusterLifecyclePhase = (
     clusterId: string,
     phase: "confirm" | "submitting" | "uninstalling" | "cleanup-required" | "residual-cleanup" | "succeeded" | "failed",
@@ -1937,25 +1948,16 @@ function App() {
           onDrillCluster={(cl) => { setDrillCl(cl); setSurface("resources"); setResView("map"); }}
           onClusterSettings={() => setSurface("settings")}
           onClusterDisconnect={(cl) => {
-            // 리스트 메뉴의 "연결 해제"를 실제 해제 API에 연결한다 — 기존에는 상세
-            // 화면으로 이동만 하는 placeholder 였다. ClusterLifecycleControl 과 같은
-            // unregisterCluster 계약을 사용하고, cleanup_required 면 수동 정리 명령을 안내한다.
+            // 상세 뷰와 동일한 캐논 다이얼로그(이름 입력 확인 + 단계식 진행)를
+            // 제어형으로 연다 — 목록 메뉴가 confirm 한 번으로 DELETE 를 쏘는
+            // 두 번째 해제 구현이 되지 않게 한다.
             const target = contract.clusters.find((cluster) => cluster.id === cl);
-            const label = target?.displayName ?? cl;
-            if (!window.confirm(`${label} 클러스터 연결을 해제할까요?\n에이전트 정리가 큐잉되고 목록에서 제거됩니다.`)) return;
-            void (async () => {
-              try {
-                const result = await unregisterCluster(cl);
-                removePendingClusters(cl, target?.name, target?.displayName);
-                if (scope.cluster === cl) { setScope({ level: "clusters" }); setDrillCl(null); }
-                contract.refresh();
-                if (result.status === "cleanup_required" && result.uninstall_command) {
-                  window.alert(`클러스터에 남은 리소스 정리가 필요합니다. 아래 명령을 실행해주세요:\n\n${result.uninstall_command}`);
-                }
-              } catch {
-                window.alert("클러스터 연결 해제에 실패했습니다. 잠시 후 다시 시도해주세요.");
-              }
-            })();
+            if (!target) return;
+            if (!(target.role === "target" && !target.readOnly && session.roles.includes("service_admin"))) {
+              pushToast({ title: "연결 해제 권한이 없습니다", sub: "service_admin 역할이 필요합니다", tone: "crit" });
+              return;
+            }
+            setListDisconnectClusterId(cl);
           }}
           onOpenIssues={() => setSurface("issues")}
           onConnect={() => setConnectModal("cluster")}
@@ -2080,6 +2082,25 @@ function App() {
           </motion.button>
         )}
       </AnimatePresence>
+
+      {/* 목록 ⋮ 메뉴의 연결 해제 — 상세 뷰와 동일한 캐논 다이얼로그(이름 입력 확인) */}
+      {listDisconnectChoice && (
+        <ClusterDisconnectDialog
+          cluster={listDisconnectChoice}
+          key={listDisconnectChoice.id}
+          open
+          onOpenChange={(nextOpen) => { if (!nextOpen) setListDisconnectClusterId(null); }}
+          onDisconnected={(clusterId) => {
+            const disconnected = contract.clusters.find((cluster) => cluster.id === clusterId);
+            removePendingClusters(clusterId, disconnected?.name, disconnected?.displayName);
+            if (scope.cluster === clusterId) { setScope({ level: "clusters" }); setDrillCl(null); }
+            contract.refresh();
+            setListDisconnectClusterId(null);
+          }}
+          onPhaseChange={reportClusterLifecyclePhase}
+          port={LIST_CLUSTER_DISCONNECT_PORT}
+        />
+      )}
 
       {/* 환경 연결 — 문맥 모달. 위저드가 자체 백드롭·중앙정렬·스크롤을 소유(이중 모달 금지) */}
       <AnimatePresence>

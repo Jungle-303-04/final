@@ -857,21 +857,28 @@ function ClusterInstallStep({ platform, name, onBack, onConnected }: { platform:
                 {copied ? <><Check className="size-3.5" strokeWidth={3} />복사됨</> : <><Copy className="size-3.5" />복사</>}
               </button>
             </div>
-            <pre className="max-w-full whitespace-pre-wrap break-words font-mono text-[12.5px] leading-[1.7] c-ink [overflow-wrap:anywhere]" style={{ padding: "14px 16px" }}><code>{cmd}</code></pre>
+            {/* 명령 칸은 셸(macOS/PowerShell)에 따라 길이가 달라도 같은 높이를
+                유지하고 내부 스크롤로 처리한다 — 탭 전환 시 모달 높이가 튀지 않고
+                한 화면 안에 안정적으로 들어온다. */}
+            <pre className="max-w-full whitespace-pre-wrap break-words font-mono text-[12.5px] leading-[1.7] c-ink [overflow-wrap:anywhere]" style={{ padding: "14px 16px", height: 185, overflowY: "auto" }}><code>{cmd}</code></pre>
           </div>
 
-          <InstallProgress conn={conn} activation={activation} reinstalling={reinstalling} onReinstall={reinstall} />
         </>
       )}
 
-      {/* 하단 행동 라인 — [뒤로 ⅓ · 주행동 ⅔]. 명령 발급 후에는 주행동이 없으므로
-          같은 폭의 자리만 유지해 상태 전환 시 뒤로 버튼 위치가 흔들리지 않게 한다. */}
-      <div className="flex gap-3">
+      {/* 하단 행동 라인 — [뒤로 ⅓ · 오른쪽 ⅔]. 오른쪽 슬롯은 상태에 따라
+          다시 시도(에러) 또는 연결 진행 상황(명령 발급 후)이 차지해, 뒤로
+          버튼이 홀로 줄바꿈된 것처럼 남지 않는다. */}
+      <div className="flex items-stretch gap-3">
         <WizardBackButton onClick={onBack} />
         {!receipt && phase === "error" ? (
           <button onClick={runRegister} className="btn-primary flex items-center justify-center gap-1.5 text-[15px] font-semibold" style={{ flex: "2 1 0%", borderRadius: 14, paddingTop: 14, paddingBottom: 14 }}>
             <RotateCw className="size-[16px]" /> 다시 시도
           </button>
+        ) : receipt ? (
+          <div style={{ flex: "2 1 0%", minWidth: 0 }}>
+            <InstallProgress conn={conn} activation={activation} reinstalling={reinstalling} onReinstall={reinstall} />
+          </div>
         ) : (
           <span aria-hidden="true" style={{ flex: "2 1 0%" }} />
         )}
