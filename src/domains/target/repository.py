@@ -996,6 +996,21 @@ class TargetAgentRepository(DatabaseConnection):
 
             trusted_envelope = replace(event_envelope, workspace_id=workspace_id)
             self.stage_event_envelope(conn, event_table, outbox_table, trusted_envelope)
+            # 집계 payload 가 window 행에 확정된 순간 provider 원문(result)은 더
+            # 이상 읽히지 않는다 — evidence_payload_if_ready 는 window 생성 전
+            # 단계에서만 호출되고, lease/complete/목록 조회는 result 를 반환하지
+            # 않는다. 같은 트랜잭션에서 비워 JSONB/TOAST 중복 보존을 제거한다
+            # (동일 payload 가 window·events·outbox 에 이미 3중 저장됨).
+            job_table = EvidenceJob.__table__
+            conn.execute(
+                update(job_table)
+                .where(
+                    job_table.c.evidence_key == evidence_key,
+                    job_table.c.workspace_id == workspace_id,
+                    job_table.c.result.is_not(None),
+                )
+                .values(result=None, updated_at=func.now())
+            )
         return {"duplicate": False, **dict(inserted)}
 
     def stage_event_envelope(
