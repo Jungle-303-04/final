@@ -57,11 +57,13 @@ def build_app_manifest(
             "pull_requests": "write",
             "metadata": "read",
         },
+        # installation·installation_repositories 는 App 이 자동 수신하는 관리 이벤트라
+        # default_events 로 구독하면 GitHub 이 거부한다(권한 매핑 없음). 빼도 자동 수신됨.
+        # 여기엔 권한에 매핑되는 이벤트만 둔다: push→contents, pull_request→pull_requests,
+        # repository→metadata.
         "default_events": [
             "push",
             "pull_request",
-            "installation",
-            "installation_repositories",
             "repository",
         ],
     }

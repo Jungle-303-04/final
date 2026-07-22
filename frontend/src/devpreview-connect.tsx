@@ -75,6 +75,16 @@ const EASE = [0.32, 0.72, 0, 1] as const;
 // 로컬 주소 파서 디바운스만 남긴다(서버 호출 아님). 성공을 흉내내는 타이머는 제거됨.
 const T = { detectMs: 1000 } as const;
 const SPRING = { type: "spring", visualDuration: 0.34, bounce: 0.28 } as const;
+// 동적으로 나타나는 섹션(토큰창·App버튼 등)은 전부 같은 스프링을 써서 일관된
+// 속도로 부드럽게 등장하게 한다. layout 트랜지션도 같은 값으로 통일해 형제
+// 요소가 툭 튀지 않고 자연스럽게 밀려나도록 한다("툭툭" 방지).
+const REVEAL_T = { type: "spring", visualDuration: 0.36, bounce: 0.16 } as const;
+const REVEAL = {
+  initial: { opacity: 0, y: 8 },
+  animate: { opacity: 1, y: 0 },
+  exit: { opacity: 0, y: -6 },
+  transition: { ...REVEAL_T, layout: REVEAL_T },
+} as const;
 const swap = {
   initial: { opacity: 0, x: 24 },
   animate: { opacity: 1, x: 0 },
@@ -320,7 +330,7 @@ function GithubAppConnect({
   // ① 구성됨 → 누구나 원클릭 연결
   if (config.install_available) {
     return (
-      <div className="grid gap-2">
+      <motion.div layout {...REVEAL} className="grid gap-2">
         <button
           onClick={() => void connectWithApp()}
           disabled={busy}
@@ -328,29 +338,28 @@ function GithubAppConnect({
         >
           GitHub App으로 연결 <ArrowRight className="size-[17px]" />
         </button>
-        <span className="px-0.5 text-[11.5px] c-3">토큰 없이 GitHub에서 한 번 승인하면 됩니다.</span>
         {banner}
         {noteEl}
-      </div>
+      </motion.div>
     );
   }
 
   // ② 미구성 + 비어드민 → 관리자 설정 필요(등록 카드 숨김)
   if (!isAdmin) {
     return (
-      <div className="grid gap-1.5 rounded-[14px] p-3.5" style={{ background: "var(--fill)" }}>
+      <motion.div layout {...REVEAL} className="grid gap-1.5 rounded-[14px] p-3.5" style={{ background: "var(--fill)" }}>
         <div className="text-[12.5px] font-medium c-2">GitHub App이 아직 설정되지 않았어요</div>
         <span className="text-[11.5px] c-3">
           관리자가 GitHub App을 등록하면 토큰 없이 연결됩니다. 지금은 아래 액세스 토큰으로 연결하세요.
         </span>
         {banner}
-      </div>
+      </motion.div>
     );
   }
 
   // ③ 미구성 + 어드민 → 원클릭 자동 등록(주소 입력 불필요)
   return (
-    <div className="grid gap-2.5 rounded-[14px] p-3.5" style={{ background: "var(--fill)" }}>
+    <motion.div layout {...REVEAL} className="grid gap-2.5 rounded-[14px] p-3.5" style={{ background: "var(--fill)" }}>
       <div className="text-[12.5px] font-medium c-2">GitHub App 미설정 · 운영자 1회 자동 등록</div>
       <button
         onClick={() => void registerApp()}
@@ -359,12 +368,9 @@ function GithubAppConnect({
       >
         GitHub에서 자동 등록 <ArrowRight className="size-4" />
       </button>
-      <span className="px-0.5 text-[11px] c-3">
-        서버 주소는 자동 인식됩니다. GitHub 생성 화면이 미리 채워지니 "Create" 한 번이면 끝 — 자격증명은 서버가 자동 수신·암호화 저장합니다.
-      </span>
       {banner}
       {noteEl}
-    </div>
+    </motion.div>
   );
 }
 
@@ -516,7 +522,7 @@ function RepoStep({ providers, onNext }: { providers: ClusterProvidersView; onNe
           </motion.div>
         )}
         {status === "found" && repo && (
-          <motion.div key="found" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={SPRING} className="grid gap-4">
+          <motion.div key="found" layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ ...SPRING, layout: REVEAL_T }} className="grid gap-4">
             <div className="flex items-center gap-4 bg-soft" style={{ borderRadius: 16, padding: "16px 18px" }}>
               <span className="grid size-11 shrink-0 place-items-center bg-surface" style={{ borderRadius: 13, boxShadow: "0 1px 3px rgba(0,0,0,0.08)" }}><Folder className="size-[22px] c-2" /></span>
               <div className="min-w-0 flex-1">
@@ -539,9 +545,11 @@ function RepoStep({ providers, onNext }: { providers: ClusterProvidersView; onNe
               </div>
             </div>
 
-            {/* 비공개/접근불가일 때만 토큰창을 띄우고 필수로 강제한다. */}
+            {/* 비공개/접근불가일 때만 토큰창을 띄우고 필수로 강제한다.
+                probing→public/auth 전환이 툭 튀지 않게 같은 스프링으로 등장/퇴장. */}
+            <AnimatePresence mode="popLayout" initial={false}>
             {needsToken && (
-              <div className="grid gap-3 pt-1">
+              <motion.div key="auth" layout {...REVEAL} className="grid gap-3 pt-1">
                 {/* 권장: GitHub App(원클릭) — 미설정이면 어드민 자동등록 / 비어드민 안내 */}
                 <GithubAppConnect repoRef={repo.full} config={appConfig} registerNote={appRegisterNote} />
                 {/* App이 구성되면 토큰 칸을 숨긴다(App 기본). 미구성 시에만 토큰 폴백 노출. */}
@@ -560,34 +568,37 @@ function RepoStep({ providers, onNext }: { providers: ClusterProvidersView; onNe
                     </div>
                   </>
                 )}
-              </div>
+              </motion.div>
             )}
             {/* 공개는 토큰 없이 진행하되, 쓰기(PR)엔 이후 자격증명이 필요함을 정직하게 안내한다. */}
             {access === "public" && (
-              <div className="grid gap-3">
+              <motion.div key="pub" layout {...REVEAL} className="grid gap-3">
                 <div className="flex items-start gap-2 px-0.5 text-[12px] leading-[1.5] c-2">
                   <Globe className="mt-0.5 size-3.5 shrink-0 c-green" />
                   <span>공개 저장소는 토큰 없이 연결·동기화됩니다. 화면에서 YAML을 수정해 PR을 만들려면(쓰기) GitHub App 연결이 필요합니다.</span>
                 </div>
                 <GithubAppConnect repoRef={repo.full} config={appConfig} registerNote={appRegisterNote} />
-              </div>
+              </motion.div>
             )}
+            </AnimatePresence>
           </motion.div>
         )}
       </AnimatePresence>
 
+      <AnimatePresence mode="popLayout" initial={false}>
       {failure && (
-        <div role="alert" className="flex items-start gap-3.5 err-bg" style={{ borderRadius: 16, padding: "14px 16px" }}>
+        <motion.div key="fail" layout {...REVEAL} role="alert" className="flex items-start gap-3.5 err-bg" style={{ borderRadius: 16, padding: "14px 16px" }}>
           <AlertCircle className="mt-0.5 size-5 shrink-0 c-red" />
           <div><div className="text-[13.5px] font-semibold c-ink">저장소 연결 확인 실패</div><div className="mt-1 break-words text-[12.5px] leading-[1.5] c-2">{failure}</div></div>
-        </div>
+        </motion.div>
       )}
       {/* 토큰 경로 버튼: 공개는 항상, 비공개는 App 미가용일 때만(App 가용 시 App 버튼이 경로). */}
       {resolved && (access === "public" || !appAvailable) && (
-        <button disabled={!ready || probeStatus === "submitting"} onClick={() => void verify()} className="btn-primary flex w-full items-center justify-center gap-2 rounded-[14px] py-3.5 text-[15px] font-semibold disabled:cursor-not-allowed disabled:opacity-60">
+        <motion.button key="confirm" layout {...REVEAL} disabled={!ready || probeStatus === "submitting"} onClick={() => void verify()} className="btn-primary flex w-full items-center justify-center gap-2 rounded-[14px] py-3.5 text-[15px] font-semibold disabled:cursor-not-allowed disabled:opacity-60">
           {probeStatus === "submitting" ? <><Spin c="size-4 text-white" /> 저장소·브랜치 확인 중…</> : <>저장소 확인 · 배포 대상 선택 <ArrowRight className="size-[17px]" /></>}
-        </button>
+        </motion.button>
       )}
+      </AnimatePresence>
     </motion.div>
   );
 }
