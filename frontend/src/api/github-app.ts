@@ -38,6 +38,20 @@ export function getGithubAppConfig(signal?: AbortSignal): Promise<GithubAppConfi
   return apiRequest("/api/integrations/github/app/config", githubAppConfigSchema, { signal });
 }
 
+const uninstallSchema = z.strictObject({
+  removed: z.boolean(),
+  env_fallback_active: z.boolean(),
+});
+export type GithubAppUninstall = z.infer<typeof uninstallSchema>;
+
+// 서버에 저장된 App 구성(개인키·웹훅시크릿) 제거(운영자 오프보딩, 관리자 전용).
+export function uninstallGithubApp(signal?: AbortSignal): Promise<GithubAppUninstall> {
+  return apiRequest("/api/integrations/github/app/config", uninstallSchema, {
+    method: "DELETE",
+    signal,
+  });
+}
+
 export function getGithubAppInstallUrl(
   state: string,
   signal?: AbortSignal,

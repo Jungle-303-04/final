@@ -16,3 +16,20 @@ export function getRepositoryConnectionStatus(
   );
   return apiRequest(path, repositoryConnectionStatusSchema, { signal });
 }
+
+/**
+ * 저장소 연결을 명시적으로 해제한다(고아 없이 종단 상태로 수렴).
+ * 서버가 repo·watch·binding·application 을 한 트랜잭션에서 비활성으로 내리고
+ * 저장된 자격증명을 삭제한 뒤, disconnected 상태를 돌려준다.
+ */
+export function disconnectRepository(
+  repoRef: string,
+  signal?: AbortSignal,
+): Promise<RepositoryConnectionStatus> {
+  return apiRequest("/api/repositories/disconnect" as ApiPath, repositoryConnectionStatusSchema, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ repo_ref: repoRef }),
+    signal,
+  });
+}

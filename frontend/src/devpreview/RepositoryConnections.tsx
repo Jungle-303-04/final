@@ -1,15 +1,20 @@
+import { useState } from "react";
+
+import { disconnectRepository } from "../api/repository-connection";
 import { GithubIcon } from "./brandIcons";
 import type { RepositoryGroup } from "./repositoryRegistry";
 
 /**
  * Repository-level summary backed by observed application bindings.
  *
- * Disconnect remains intentionally unavailable until the backend exposes a
- * capability-gated repository disconnect contract.
+ * 연결 해제는 서버의 capability-gated `POST /repositories/disconnect` 계약으로
+ * 지원된다. 해제는 repo·watch·binding·application 을 한 트랜잭션에서 비활성으로
+ * 내리므로(고아 없음), 해제 후 부모가 목록을 새로고침하면 자연히 사라진다.
  */
 export function RepositoryConnections({
   groups,
   onOpenRepository,
+  onDisconnected,
   selectedRepository,
   expandedRepositories,
 }: {
@@ -26,85 +31,197 @@ export function RepositoryConnections({
         const selected = expandedRepositories
           ? expandedRepositories.some((repositoryRef) => repositoryRef.toLowerCase() === repositoryKey)
           : selectedRepository?.toLowerCase() === repositoryKey;
-        const applicationsId = `repository-${group.repositoryRef.replace(/[^a-zA-Z0-9_-]/g, "-")}-applications`;
-
         return (
-          <div key={group.repositoryRef}>
-            <button
-              type="button"
-              aria-expanded={selected}
-              aria-controls={applicationsId}
-              aria-label={`${group.repositoryRef} GitOps ${selected ? "닫기" : "열기"}`}
-              onClick={() => onOpenRepository?.(group.repositoryRef)}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                width: "100%",
-                minWidth: 0,
-                minHeight: 54,
-                padding: "6px 7px",
-                border: selected ? "1px solid rgba(37,99,235,.45)" : "1px solid transparent",
-                borderRadius: 9,
-                background: selected ? "rgba(37,99,235,.09)" : "rgba(34,197,94,.08)",
-                boxShadow: selected ? "0 0 0 2px rgba(37,99,235,.08)" : "none",
-                color: "#0f172a",
-                textAlign: "left",
-                cursor: onOpenRepository ? "pointer" : "default",
-              }}
-            >
-              <GithubIcon size={16} aria-hidden="true" style={{ flexShrink: 0 }} />
-              <span style={{ minWidth: 0, flex: 1 }}>
-                <strong
-                  title={group.repositoryRef}
-                  style={{
-                    display: "block",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                    color: "#0f172a",
-                    fontSize: 12,
-                  }}
-                >
-                  {group.repositoryRef}
-                </strong>
-                <span style={{ display: "block", marginTop: 2, color: "#16803b", fontSize: 11, lineHeight: 1.35 }}>
-                  연결됨 · 앱 {group.applications.length}개
-                </span>
-              </span>
-              <span aria-hidden="true" style={{ color: "#64748b", fontSize: 13, transform: selected ? "rotate(180deg)" : "none", transition: "transform 150ms ease" }}>
-                ▾
-              </span>
-            </button>
-
-            {selected && (
-              <ul
-                id={applicationsId}
-                style={{ display: "grid", gap: 4, margin: "4px 0 7px", padding: "0 7px 0 31px", listStyle: "none" }}
-              >
-                {group.applications.map((application) => (
-                  <li
-                    key={application.id}
-                    style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, minWidth: 0, padding: "9px 10px", border: "1px solid #e5e7eb", borderRadius: 8, background: "#fff" }}
-                  >
-                    <span style={{ minWidth: 0 }}>
-                      <strong style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "#111827", fontSize: 12 }}>
-                        {application.name}
-                      </strong>
-                      <span style={{ display: "block", marginTop: 2, overflow: "hidden", color: "#9aa0aa", fontSize: 11, textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {application.manifestPath ?? "매니페스트 경로 관측 안 됨"}
-                      </span>
-                    </span>
-                    <span style={{ flex: "0 0 auto", color: "#9aa0aa", fontSize: 11 }}>
-                      {application.branch ?? "브랜치 관측 안 됨"}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
+          <RepositoryRow
+            key={group.repositoryRef}
+            group={group}
+            selected={Boolean(selected)}
+            onOpenRepository={onOpenRepository}
+            onDisconnected={onDisconnected}
+          />
         );
       })}
+    </div>
+  );
+}
+
+function RepositoryRow({
+  group,
+  selected,
+  onOpenRepository,
+  onDisconnected,
+}: {
+  group: RepositoryGroup;
+  selected: boolean;
+  onOpenRepository?: (repositoryRef: string) => void;
+  onDisconnected?: (repositoryRef: string) => void;
+}) {
+  const applicationsId = `repository-${group.repositoryRef.replace(/[^a-zA-Z0-9_-]/g, "-")}-applications`;
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const runDisconnect = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await disconnectRepository(group.repositoryRef);
+      onDisconnected?.(group.repositoryRef);
+      // 성공 시 부모가 목록을 새로고침하므로 이 행은 사라진다.
+    } catch {
+      setError("연결 해제에 실패했습니다. 권한을 확인하세요.");
+      setBusy(false);
+      setConfirming(false);
+    }
+  };
+
+  return (
+    <div>
+      <button
+        type="button"
+        aria-expanded={selected}
+        aria-controls={applicationsId}
+        aria-label={`${group.repositoryRef} GitOps ${selected ? "닫기" : "열기"}`}
+        onClick={() => onOpenRepository?.(group.repositoryRef)}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          width: "100%",
+          minWidth: 0,
+          minHeight: 54,
+          padding: "6px 7px",
+          border: selected ? "1px solid rgba(37,99,235,.45)" : "1px solid transparent",
+          borderRadius: 9,
+          background: selected ? "rgba(37,99,235,.09)" : "rgba(34,197,94,.08)",
+          boxShadow: selected ? "0 0 0 2px rgba(37,99,235,.08)" : "none",
+          color: "#0f172a",
+          textAlign: "left",
+          cursor: onOpenRepository ? "pointer" : "default",
+        }}
+      >
+        <GithubIcon size={16} aria-hidden="true" style={{ flexShrink: 0 }} />
+        <span style={{ minWidth: 0, flex: 1 }}>
+          <strong
+            title={group.repositoryRef}
+            style={{
+              display: "block",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              color: "#0f172a",
+              fontSize: 12,
+            }}
+          >
+            {group.repositoryRef}
+          </strong>
+          <span style={{ display: "block", marginTop: 2, color: "#16803b", fontSize: 11, lineHeight: 1.35 }}>
+            연결됨 · 앱 {group.applications.length}개
+          </span>
+        </span>
+        <span aria-hidden="true" style={{ color: "#64748b", fontSize: 13, transform: selected ? "rotate(180deg)" : "none", transition: "transform 150ms ease" }}>
+          ▾
+        </span>
+      </button>
+
+      {selected && (
+        <ul
+          id={applicationsId}
+          style={{ display: "grid", gap: 4, margin: "4px 0 7px", padding: "0 7px 0 31px", listStyle: "none" }}
+        >
+          {group.applications.map((application) => (
+            <li
+              key={application.id}
+              style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, minWidth: 0, padding: "9px 10px", border: "1px solid #e5e7eb", borderRadius: 8, background: "#fff" }}
+            >
+              <span style={{ minWidth: 0 }}>
+                <strong style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "#111827", fontSize: 12 }}>
+                  {application.name}
+                </strong>
+                <span style={{ display: "block", marginTop: 2, overflow: "hidden", color: "#9aa0aa", fontSize: 11, textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {application.manifestPath ?? "매니페스트 경로 관측 안 됨"}
+                </span>
+              </span>
+              <span style={{ flex: "0 0 auto", color: "#9aa0aa", fontSize: 11 }}>
+                {application.branch ?? "브랜치 관측 안 됨"}
+              </span>
+            </li>
+          ))}
+
+          {/* 연결 해제 — 인라인 2단계 확인(브라우저 다이얼로그 미사용). */}
+          <li style={{ listStyle: "none", marginTop: 2 }}>
+            {error && (
+              <div role="alert" style={{ marginBottom: 6, color: "#b91c1c", fontSize: 11 }}>
+                {error}
+              </div>
+            )}
+            {!confirming ? (
+              <button
+                type="button"
+                onClick={() => setConfirming(true)}
+                style={{
+                  width: "100%",
+                  padding: "8px 10px",
+                  border: "1px solid #fca5a5",
+                  borderRadius: 8,
+                  background: "#fff",
+                  color: "#b91c1c",
+                  fontSize: 11.5,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                이 저장소 연결 해제
+              </button>
+            ) : (
+              <div style={{ display: "grid", gap: 6 }}>
+                <span style={{ color: "#7f1d1d", fontSize: 11, lineHeight: 1.45 }}>
+                  해제하면 이 저장소의 폴링·동기화가 멈추고 앱 {group.applications.length}개가
+                  목록에서 내려갑니다. 저장된 자격증명도 삭제됩니다.
+                </span>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void runDisconnect()}
+                    style={{
+                      flex: 1,
+                      padding: "8px 10px",
+                      border: 0,
+                      borderRadius: 8,
+                      background: busy ? "#f0a3a3" : "#dc2626",
+                      color: "#fff",
+                      fontSize: 11.5,
+                      fontWeight: 700,
+                      cursor: busy ? "default" : "pointer",
+                    }}
+                  >
+                    {busy ? "해제 중…" : "해제 확정"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => setConfirming(false)}
+                    style={{
+                      flex: 1,
+                      padding: "8px 10px",
+                      border: "1px solid #d1d5db",
+                      borderRadius: 8,
+                      background: "#fff",
+                      color: "#374151",
+                      fontSize: 11.5,
+                      fontWeight: 600,
+                      cursor: busy ? "default" : "pointer",
+                    }}
+                  >
+                    취소
+                  </button>
+                </div>
+              </div>
+            )}
+          </li>
+        </ul>
+      )}
     </div>
   );
 }

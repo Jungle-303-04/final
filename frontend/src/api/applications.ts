@@ -36,6 +36,8 @@ export interface ApplicationConnectInput {
   namespace: string;
   environment: string;
   token?: string;
+  /** GitHub App 원클릭 연결 완료 시의 설치 id(있으면 App 설치 참조로 저장). */
+  installationId?: string;
 }
 
 /** Lists Applications visible to the signed-in user. */
@@ -69,6 +71,7 @@ export function connectApplication(
         namespace: input.namespace,
         environment: input.environment,
         ...(input.token ? { token: input.token } : {}),
+        ...(input.installationId ? { installation_id: input.installationId } : {}),
       }),
       signal,
     },
