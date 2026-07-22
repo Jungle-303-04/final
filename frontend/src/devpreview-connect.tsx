@@ -868,8 +868,9 @@ function ClusterInstallStep({ platform, name, onBack, onConnected }: { platform:
 
       {/* 하단 행동 라인 — [뒤로 ⅓ · 오른쪽 ⅔]. 오른쪽 슬롯은 상태에 따라
           다시 시도(에러) 또는 연결 진행 상황(명령 발급 후)이 차지해, 뒤로
-          버튼이 홀로 줄바꿈된 것처럼 남지 않는다. */}
-      <div className="flex items-stretch gap-3">
+          버튼이 홀로 줄바꿈된 것처럼 남지 않는다. 뒤로 버튼은 오른쪽 카드
+          높이에 늘어나지 않고 에러 상태의 버튼과 같은 고정 높이를 유지한다. */}
+      <div className="flex items-start gap-3">
         <WizardBackButton onClick={onBack} />
         {!receipt && phase === "error" ? (
           <button onClick={runRegister} className="btn-primary flex items-center justify-center gap-1.5 text-[15px] font-semibold" style={{ flex: "2 1 0%", borderRadius: 14, paddingTop: 14, paddingBottom: 14 }}>
@@ -1013,9 +1014,10 @@ export function ConnectWizard({
       <AnimatePresence>
         {view && (
           <>
-            <motion.div key="backdrop" className="absolute inset-0" style={{ background: "rgba(0,0,0,0.28)", backdropFilter: "blur(5px)" }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={closeView} />
-            {/* 바깥(배경) 클릭 시 닫기 · 모달 컨텐츠 클릭은 stopPropagation으로 전파 차단 */}
-            <div className="absolute inset-0 overflow-y-auto" onClick={closeView}>
+            <motion.div key="backdrop" className="absolute inset-0" style={{ background: "rgba(0,0,0,0.28)", backdropFilter: "blur(5px)" }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} />
+            {/* 바깥(배경) 클릭으로는 닫지 않는다 — 설치 명령·토큰이 발급된 상태에서
+                실수 클릭으로 위저드가 사라지는 사고 방지. 닫기는 ✕ 버튼과 Esc 만. */}
+            <div className="absolute inset-0 overflow-y-auto">
               <div className="flex min-h-full justify-center px-6" style={{ paddingTop: "6vh", paddingBottom: "6vh" }}>
                 <motion.div key={view} role="dialog" aria-modal="true" aria-label={view === "repo" ? "Git 저장소 연결" : "클러스터 연결"}
                   tabIndex={-1} autoFocus onClick={(e) => e.stopPropagation()} initial={{ opacity: 0, y: 22, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 16, scale: 0.98 }} transition={{ type: "spring", visualDuration: 0.42, bounce: 0.2 }}
