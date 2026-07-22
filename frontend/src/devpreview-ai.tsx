@@ -466,15 +466,15 @@ export function AiPanel({ onClose, embedded = false, contextView = "resources", 
     <div className={`opsia-ai relative flex ${embedded ? "h-full w-full min-w-0" : "h-screen w-[460px]"} flex-col overflow-hidden border-l border-black/[0.06] bg-gradient-to-b from-[oklch(0.99_0.002_255)] to-[oklch(0.97_0.003_255)] shadow-2xl`}>
       <header className="flex items-center gap-2.5 border-b border-black/[0.05] bg-white/60 px-3.5 py-3 backdrop-blur-xl">
         <span className="grid size-9 shrink-0 place-items-center rounded-[13px] bg-gradient-to-br from-primary to-[color-mix(in_oklch,var(--primary)_75%,black)] text-primary-foreground shadow-[0_2px_8px_-2px_color-mix(in_oklch,var(--primary)_55%,transparent)]"><Sparkles className="size-4" /></span>
-        <div className="min-w-0 flex-1"><h2 className="text-[14px] font-semibold leading-tight tracking-[-0.01em]">Kyro AI</h2><p className="truncate text-[11.5px] text-muted-foreground">현재 화면 맥락으로 질문하고 근거를 확인합니다</p></div>
-        <button className="grid size-8 place-items-center rounded-full text-muted-foreground/80 transition-colors hover:bg-black/[0.05] hover:text-foreground" onClick={() => newChat()} title="새 대화" type="button"><Play className="size-[17px]" /></button>
-        <button className="grid size-8 place-items-center rounded-full text-muted-foreground/80 transition-colors hover:bg-black/[0.05] hover:text-foreground" onClick={() => setListOpen((v) => !v)} title="대화 목록" type="button"><SquarePen className="size-[17px]" /></button>
-        <button className="grid size-8 place-items-center rounded-full text-muted-foreground/80 transition-colors hover:bg-black/[0.05] hover:text-foreground" onClick={onClose} title="닫기" type="button"><X className="size-[17px]" /></button>
+        <div className="min-w-0 flex-1"><h2 className="text-[14px] font-semibold leading-tight tracking-[-0.01em] text-black">Kyro AI</h2></div>
+        <button className="grid size-8 place-items-center rounded-full text-black/65 transition-colors hover:bg-black/[0.05] hover:text-black" onClick={() => newChat()} title="새 대화" type="button"><Play className="size-[17px]" /></button>
+        <button className="grid size-8 place-items-center rounded-full text-black/65 transition-colors hover:bg-black/[0.05] hover:text-black" onClick={() => setListOpen((v) => !v)} title="대화 목록" type="button"><SquarePen className="size-[17px]" /></button>
+        <button className="grid size-8 place-items-center rounded-full text-black/65 transition-colors hover:bg-black/[0.05] hover:text-black" onClick={onClose} title="닫기" type="button"><X className="size-[17px]" /></button>
       </header>
-      <div className="flex items-center gap-1.5 border-b border-black/[0.04] bg-white/30 px-3.5 py-2 backdrop-blur">
-        <span className="text-[11px] font-medium text-muted-foreground/80">맥락</span>
-        <span className="inline-flex items-center gap-1 rounded-full bg-black/[0.05] px-2 py-0.5 text-[11px] font-medium"><Boxes className="size-3" />{contextView}</span>
-        <span className="inline-flex items-center gap-1 rounded-full bg-black/[0.05] px-2 py-0.5 text-[11px] font-medium"><Server className="size-3" />{contextScope}</span>
+      <div className="flex items-center gap-1.5 border-b border-black/[0.04] bg-white/30 px-3.5 py-2 text-black backdrop-blur">
+        <span className="text-[11px] font-medium text-black">맥락</span>
+        <span className="inline-flex items-center gap-1 rounded-full bg-black/[0.05] px-2 py-0.5 text-[11px] font-medium text-black"><Boxes className="size-3" />{contextView}</span>
+        <span className="inline-flex items-center gap-1 rounded-full bg-black/[0.05] px-2 py-0.5 text-[11px] font-medium text-black"><Server className="size-3" />{contextScope}</span>
       </div>
       {listOpen ? (
         <div className="absolute inset-x-0 top-[97px] z-10 border-b border-black/[0.06] bg-white/90 shadow-xl backdrop-blur-xl" style={{ animation: `fadeUp 0.2s ${SPRING}` }}>
@@ -486,7 +486,7 @@ export function AiPanel({ onClose, embedded = false, contextView = "resources", 
             <p className="px-3.5 py-3 text-[12.5px] text-muted-foreground">저장된 대화가 없습니다.</p>
           ) : (
             <ul className="grid gap-0.5 p-2">{conversations.items.map((c) => (
-              <li key={c.id}><button className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13px] transition-colors hover:bg-black/[0.04]" onClick={() => openConversation(c.id)} type="button"><Sparkles className="size-3.5 shrink-0 text-muted-foreground" /><span className="flex-1 truncate">{c.title}</span>{c.updatedAt ? <span className="shrink-0 text-[11.5px] text-muted-foreground">{c.updatedAt}</span> : null}</button></li>
+              <li key={c.id}><button className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13px] text-black/80 transition-colors hover:bg-black/[0.04] hover:text-black" onClick={() => openConversation(c.id)} type="button"><Sparkles className="size-3.5 shrink-0 text-black/60" /><span className="flex-1 truncate">{c.title}</span>{c.updatedAt ? <span className="shrink-0 text-[11.5px] text-black/60">{c.updatedAt}</span> : null}</button></li>
             ))}</ul>
           )}
         </div>
@@ -537,13 +537,13 @@ export function AiPanel({ onClose, embedded = false, contextView = "resources", 
         ) : null}
         <div className="relative rounded-[20px] border border-black/[0.08] bg-white/90 shadow-[0_1px_2px_rgba(0,0,0,0.04),inset_0_1px_0_rgba(255,255,255,0.6)] transition-all focus-within:border-primary/40 focus-within:shadow-[0_0_0_4px_color-mix(in_oklch,var(--primary)_12%,transparent)]">
           <textarea
-            className="min-h-[60px] w-full resize-none rounded-[20px] bg-transparent px-3.5 py-3 pr-12 text-[13.5px] leading-relaxed tracking-[-0.006em] outline-none placeholder:text-muted-foreground/60"
+            className="min-h-[60px] w-full resize-none rounded-[20px] bg-transparent px-3.5 py-3 pr-12 text-[13.5px] leading-relaxed tracking-[-0.006em] text-black outline-none placeholder:text-muted-foreground/60"
             onChange={(e) => setInput(e.currentTarget.value)}
             onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(input); } }}
             placeholder="질문 입력"
             value={input}
           />
-          <button className="absolute bottom-2.5 right-2.5 grid size-8 place-items-center rounded-full bg-primary text-primary-foreground shadow-[0_2px_6px_-1px_color-mix(in_oklch,var(--primary)_50%,transparent)] transition-all hover:brightness-105 active:scale-90 disabled:scale-90 disabled:opacity-40" disabled={!input.trim()} onClick={() => send(input)} title="보내기" type="button"><Send className="size-4" /></button>
+          <button className="absolute bottom-2.5 right-2.5 grid size-8 place-items-center rounded-full bg-primary text-primary-foreground shadow-[0_2px_6px_-1px_color-mix(in_oklch,var(--primary)_50%,transparent)] transition-all hover:brightness-105 active:scale-90 disabled:scale-90 disabled:bg-primary/20 disabled:text-primary disabled:opacity-100" disabled={!input.trim()} onClick={() => send(input)} title="보내기" type="button"><Send className="size-4" /></button>
         </div>
       </div>
 

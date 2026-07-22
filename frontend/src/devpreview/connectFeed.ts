@@ -251,11 +251,20 @@ export interface ConnectionStatusView {
   connectedAt: string | null;
 }
 
+type ConnectionStatusState = ConnectionStatusView & {
+  clusterId: string | null;
+};
+
 const IDLE_CONNECTION: ConnectionStatusView = {
   status: "idle",
   connection: null,
   agentVersion: null,
   connectedAt: null,
+};
+
+const IDLE_CONNECTION_STATE: ConnectionStatusState = {
+  ...IDLE_CONNECTION,
+  clusterId: null,
 };
 
 const POLL_INTERVAL_MS = 3000;
@@ -268,7 +277,7 @@ const POLL_INTERVAL_MS = 3000;
  * server reports a terminal `connected` / `expired` status.
  */
 export function useClusterConnectionStatus(clusterId: string | null): ConnectionStatusView {
-  const [view, setView] = useState<ConnectionStatusView>(IDLE_CONNECTION);
+  const [view, setView] = useState<ConnectionStatusState>(IDLE_CONNECTION_STATE);
 
   useEffect(() => {
     if (!clusterId) return;
@@ -295,6 +304,7 @@ export function useClusterConnectionStatus(clusterId: string | null): Connection
         .then((response) => {
           if (cancelled || controller.signal.aborted || revision !== requestRevision) return;
           setView({
+            clusterId,
             status: "ready",
             connection: response.status,
             agentVersion: response.agent_version,
@@ -305,7 +315,7 @@ export function useClusterConnectionStatus(clusterId: string | null): Connection
         })
         .catch((cause: unknown) => {
           if (cancelled || controller.signal.aborted || revision !== requestRevision || isAbortError(cause)) return;
-          setView((prev) => ({ ...prev, status: "error" }));
+          setView({ ...IDLE_CONNECTION, clusterId, status: "error" });
         });
       if (revision === requestRevision) {
         requestInFlight = false;
@@ -335,7 +345,7 @@ export function useClusterConnectionStatus(clusterId: string | null): Connection
     };
   }, [clusterId]);
 
-  return view;
+  return view.clusterId === clusterId ? view : IDLE_CONNECTION;
 }
 
 export type ActivationEvidenceStatus = "waiting" | "ready" | "error";

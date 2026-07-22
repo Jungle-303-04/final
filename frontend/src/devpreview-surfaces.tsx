@@ -381,9 +381,15 @@ export function DeploySurface({ pendingRepos = [], repositoryFilter = null, onOp
 }) {
   const [tab, setTab] = useState(repositoryFilter ? "GitOps" : "워크플로우");
   const [selectedRepository, setSelectedRepository] = useState<string | null>(repositoryFilter);
+  const [expandedRepositories, setExpandedRepositories] = useState<string[]>(repositoryFilter ? [repositoryFilter] : []);
   useEffect(() => {
     if (repositoryFilter) {
       setSelectedRepository(repositoryFilter);
+      setExpandedRepositories((current) =>
+        current.some((repositoryRef) => repositoryRef.toLowerCase() === repositoryFilter.toLowerCase())
+          ? current
+          : [...current, repositoryFilter],
+      );
       setTab("GitOps");
     }
   }, [repositoryFilter]);
@@ -393,12 +399,6 @@ export function DeploySurface({ pendingRepos = [], repositoryFilter = null, onOp
   const helm = useHelmReleases();
   const apps = appsFeed.items;
   const repositoryGroups = useMemo(() => groupApplicationsByRepository(apps), [apps]);
-  const visibleRepositoryGroups = useMemo(
-    () => selectedRepository
-      ? repositoryGroups.filter((group) => group.repositoryRef.toLowerCase() === selectedRepository.toLowerCase())
-      : repositoryGroups,
-    [selectedRepository, repositoryGroups],
-  );
   const connectedRepositoryKeys = useMemo(
     () => new Set(repositoryGroups.map((group) => group.repositoryRef.toLowerCase())),
     [repositoryGroups],
@@ -444,11 +444,21 @@ export function DeploySurface({ pendingRepos = [], repositoryFilter = null, onOp
         <Card pad={10}>
           {loading ? emptyRow("불러오는 중…")
             : appsFeed.status === "unavailable" ? emptyRow("GitOps 바인딩을 불러오지 못했습니다.")
-            : (visibleRepositoryGroups.length === 0 && pendingOnly.length === 0) ? emptyRow("연결된 저장소 없음")
+            : (repositoryGroups.length === 0 && pendingOnly.length === 0) ? emptyRow("연결된 저장소 없음")
             : <>
               <RepositoryConnections
-                groups={visibleRepositoryGroups}
-                onOpenRepository={(repositoryRef) => { setSelectedRepository(repositoryRef); setTab("GitOps"); }}
+                groups={repositoryGroups}
+                expandedRepositories={expandedRepositories}
+                onOpenRepository={(repositoryRef) => {
+                  const repositoryKey = repositoryRef.toLowerCase();
+                  const isOpen = expandedRepositories.some((current) => current.toLowerCase() === repositoryKey);
+                  setExpandedRepositories((current) =>
+                    isOpen
+                      ? current.filter((expandedRepository) => expandedRepository.toLowerCase() !== repositoryKey)
+                      : [...current, repositoryRef],
+                  );
+                  setSelectedRepository(isOpen ? null : repositoryRef);
+                }}
                 onDisconnected={() => setRepositoryRefreshKey((key) => key + 1)}
               />
               {pendingOnly.map((repositoryRef) => (

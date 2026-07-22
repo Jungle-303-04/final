@@ -1321,6 +1321,19 @@ const lensTabFor = (id: string): "svc" | "cfg" | "git" | null =>
   : ["Application", "ApplicationSet", "AppProject"].includes(id) ? "git"
   : null;
 
+type SessionNote = {
+  id: number;
+  icon: "rule" | "connect";
+  title: string;
+  body: string;
+  lifecycleClusterId?: string;
+};
+
+function isClusterLifecycleNote(note: SessionNote, clusterId: string): boolean {
+  return note.lifecycleClusterId === clusterId
+    || (note.icon === "connect" && note.title.startsWith(`${clusterId} · `));
+}
+
 function App() {
   const contract = useDevpreviewContracts();
   // 헤더 계정/워크스페이스/로그아웃 — 실 GET /api/auth/session(하드코딩 세션 제거).
@@ -1572,7 +1585,7 @@ function App() {
   // 실 알림 이벤트(GET /api/... alert-events) — fixture 인벤토리 파생 알림 제거. 관측 안 되면 세션 알림(notes)만.
   const alertEvents = useAlertEvents();
   // 세션 알림 — 위저드 연결·AI 규칙 생성 등 실제 사용자 행동의 결과
-  const [notes, setNotes] = useState<{ id: number; icon: "rule" | "connect"; title: string; body: string }[]>([]);
+  const [notes, setNotes] = useState<SessionNote[]>([]);
   const noteSeq = useRef(0);
   const liveAlerts = alertEvents.status === "ready" ? alertEvents.items : [];
   const alertTotal = liveAlerts.length + notes.length;
@@ -1597,7 +1610,15 @@ function App() {
       failed: "서버가 연결 해제 실패를 반환했습니다",
     }[phase];
     const title = `${clusterId} · ${phase === "failed" ? "연결 해제 실패" : "연결 해제"}`;
-    setNotes((current) => [{ id: ++noteSeq.current, icon: "connect", title, body: message }, ...current]);
+    const clearLifecycleNote = phase === "succeeded";
+    setNotes((current) => {
+      const withoutPreviousLifecycle = current.filter((note) => !isClusterLifecycleNote(note, clusterId));
+      if (clearLifecycleNote) return withoutPreviousLifecycle;
+      return [
+        { id: ++noteSeq.current, icon: "connect", title, body: message, lifecycleClusterId: clusterId },
+        ...withoutPreviousLifecycle,
+      ];
+    });
     pushToast({ title, sub: message, tone: phase === "failed" ? "crit" : "ok" });
   };
   // 관련 리소스 이동 — 현재 로드된 라이브 rows에서 이름으로 찾고,
@@ -1639,8 +1660,12 @@ function App() {
     setNotes((n) => [{ id: ++noteSeq.current, icon: a.kind === "alert_rule" ? "rule" : "connect", title: a.title, body: a.body }, ...n]);
     pushToast({ title: a.title, sub: a.body, tone: "ok" });
     if (a.kind === "connect") {
-      if (a.scope && a.ref) addPending(a.scope, a.ref);
-      if (a.scope === "cluster") contractRefreshRef.current();
+      if (a.scope === "cluster") {
+        if (a.ref) removePendingClusters(a.ref);
+        contractRefreshRef.current();
+      } else if (a.scope === "repo" && a.ref) {
+        addPending(a.scope, a.ref);
+      }
       window.setTimeout(() => setConnectModal(null), 400); // 연결 완료 → 모달 닫힘
     }
   }), []);
