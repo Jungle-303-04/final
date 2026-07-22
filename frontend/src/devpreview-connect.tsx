@@ -719,6 +719,8 @@ function RepoTargetStep({ source, context, onComplete }: {
   const [clusterStatus, setClusterStatus] = useState<"loading" | "ready" | "error">("loading");
   const [submitStatus, setSubmitStatus] = useState<"idle" | "submitting" | "error">("idle");
   const [failure, setFailure] = useState("");
+  // 리소스 소유권 겹침(다른 앱이 이미 관리 중) 감지 시 사용자 확인을 요구.
+  const [conflict, setConflict] = useState<string | null>(null);
   const [manifests, setManifests] = useState<RepositoryManifestCandidateView[]>([]);
   const [manifestStatus, setManifestStatus] = useState<"loading" | "ready" | "error">("loading");
 
@@ -777,10 +779,11 @@ function RepoTargetStep({ source, context, onComplete }: {
     setSubmitStatus("idle");
   };
   const complete = Object.values(input).every((value) => value.trim() !== "") && clusterStatus === "ready" && manifestStatus === "ready";
-  const submit = async () => {
+  const submit = async (allowConflicts = false) => {
     if (!complete || submitStatus === "submitting") return;
     setSubmitStatus("submitting");
     setFailure("");
+    if (!allowConflicts) setConflict(null);
     try {
       const candidate = manifests.find((item) => item.path === input.manifestPath);
       const validation = await validateRepositoryManifest(
@@ -801,9 +804,19 @@ function RepoTargetStep({ source, context, onComplete }: {
         environment: input.environment,
         ...(source.token.trim() ? { token: source.token.trim() } : {}),
         ...(source.installationId ? { installationId: source.installationId } : {}),
+        ...(allowConflicts ? { allowConflicts: true } : {}),
       });
       onComplete(repoRef);
     } catch (cause: unknown) {
+      // 소유권 겹침(409)이면 실패가 아니라 '확인 후 진행' 흐름으로 전환한다.
+      if (isApiError(cause) && cause.status === 409) {
+        setConflict(
+          "이 저장소가 만들 리소스 중 일부를 이미 다른 앱이 관리하고 있습니다. " +
+            "그대로 연결하면 두 소스가 같은 리소스를 서로 덮어써(무한 드리프트) 위험합니다.",
+        );
+        setSubmitStatus("error");
+        return;
+      }
       setFailure(errorText(cause));
       setSubmitStatus("error");
     }
@@ -865,9 +878,32 @@ function RepoTargetStep({ source, context, onComplete }: {
       {clusterStatus === "ready" && clusters.length === 0 && <GapBanner>먼저 클러스터를 연결해야 저장소 배포 대상을 등록할 수 있습니다.</GapBanner>}
       {manifestStatus === "ready" && manifests.length === 0 && <GapBanner>선택한 브랜치에서 배포 가능한 Kubernetes 매니페스트를 찾지 못했습니다.</GapBanner>}
       <FloatingToast message={failure || null} onDismiss={() => setFailure("")} />
-      <button disabled={!complete || submitStatus === "submitting"} onClick={() => void submit()} className="btn-primary flex w-full items-center justify-center gap-2 rounded-[14px] text-[15px] font-semibold disabled:cursor-not-allowed disabled:opacity-45">
-        {submitStatus === "submitting" ? <><Spin c="size-4 text-white" /> 서버 검증·등록 중…</> : <>서버 검증 후 연결 <ArrowRight className="size-[17px]" /></>}
-      </button>
+      <AnimatePresence mode="popLayout">
+        {conflict && (
+          <motion.div key="conflict" layout {...REVEAL} role="alert" className="grid gap-3 err-bg" style={{ borderRadius: 16, padding: "15px 18px" }}>
+            <div className="flex items-start gap-2.5">
+              <AlertCircle className="mt-0.5 size-[18px] shrink-0 c-red" />
+              <div>
+                <div className="text-[13.5px] font-semibold c-ink">리소스 소유권이 겹칩니다</div>
+                <div className="mt-1 break-words text-[12.5px] leading-[1.5] c-2">{conflict}</div>
+              </div>
+            </div>
+            <div className="flex gap-2.5">
+              <button onClick={() => void submit(true)} disabled={submitStatus === "submitting"} className="flex-1 rounded-[12px] py-2.5 text-[13px] font-bold disabled:opacity-60" style={{ background: "#dc2626", color: "#fff" }}>
+                {submitStatus === "submitting" ? "진행 중…" : "위험 감수하고 그대로 연결"}
+              </button>
+              <button onClick={() => { setConflict(null); setSubmitStatus("idle"); }} disabled={submitStatus === "submitting"} className="flex-1 rounded-[12px] border py-2.5 text-[13px] font-semibold c-2" style={{ borderColor: "rgba(120,120,120,0.3)" }}>
+                취소
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      {!conflict && (
+        <button disabled={!complete || submitStatus === "submitting"} onClick={() => void submit()} className="btn-primary flex w-full items-center justify-center gap-2 rounded-[14px] text-[15px] font-semibold disabled:cursor-not-allowed disabled:opacity-45">
+          {submitStatus === "submitting" ? <><Spin c="size-4 text-white" /> 서버 검증·등록 중…</> : <>서버 검증 후 연결 <ArrowRight className="size-[17px]" /></>}
+        </button>
+      )}
     </motion.div>
   );
 }

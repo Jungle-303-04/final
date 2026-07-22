@@ -10,6 +10,10 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from domains.application_filter.query import ApplicationFilters, parse_application_filters
+from domains.applications.ownership import (
+    candidate_identity_keys,
+    find_resource_conflicts,
+)
 from domains.applications.product_projection import (
     APPLICATION_TOPOLOGY_NODE_LIMIT,
     application_card,
@@ -1121,6 +1125,32 @@ async def connect_application(
         ) from exc
     if validated_repo_ref != normalized_repo_ref:
         raise HTTPException(status_code=422, detail="validated repository identity changed")
+
+    # 소유권 겹침 감지 — 이 대상이 만들 리소스가 이미 다른 활성 앱이 소유한 것과
+    # 겹치면 SSA force-apply 로 조용히 서로 덮어쓰며 무한 드리프트가 난다. 사용자가
+    # 명시적으로 허용(allow_conflicts)하지 않는 한 409 로 막고 소유 앱을 알려준다.
+    owned_lister = getattr(db, "list_owned_resource_identities", None)
+    if not payload.allow_conflicts and callable(owned_lister):
+        exclude_app_id = derive_application_id(
+            {
+                "workspace_id": workspace_id,
+                "repository_id": preflight_repository_id,
+                "name": payload.name,
+            }
+        )
+        owned_index = owned_lister(
+            workspace_id,
+            payload.cluster_id,
+            exclude_application_id=exclude_app_id,
+        )
+        conflicts = find_resource_conflicts(
+            candidate_identity_keys(validation.resources), owned_index
+        )
+        if conflicts:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "resource_ownership_conflict", "conflicts": conflicts},
+            )
 
     try:
         source_type = normalize_source_type(payload.source_type) or source_type_from_path(

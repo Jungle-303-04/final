@@ -1832,6 +1832,56 @@ class RepoChangeRepository(GitOpsOverviewRepository):
             artifacts.append(artifact)
         return artifacts
 
+    def list_owned_resource_identities(
+        self,
+        workspace_id: str,
+        cluster_id: str,
+        *,
+        exclude_application_id: str | None = None,
+    ) -> dict[str, dict[str, str]]:
+        """클러스터에서 활성 추적 대상이 이미 소유한 리소스 식별자 → 소유 앱 매핑.
+
+        연결 시점의 '소유권 겹침' 감지에 쓴다. 활성 바인딩의 렌더된 매니페스트
+        아티팩트에서 resource_identity 를 모아 인덱스로 만든다. 재연결 중인 앱은
+        exclude_application_id 로 제외해 자기 자신과의 충돌을 피한다.
+
+        주의: 오래된 커밋의 아티팩트가 남아 있으면 과다 보고될 수 있다(경고 성격).
+        하드 차단이 아니라 사용자 확인(override)로 진행 가능하게 설계한다.
+        """
+        art = ManifestArtifact.__table__
+        binding = DeploymentBinding.__table__
+        rid = art.c.source_summary["resource_identity"].astext
+        app_id_col = art.c.source_summary["application_id"].astext
+        statement = (
+            select(
+                rid.label("rid"),
+                app_id_col.label("app_id"),
+                binding.c.app_name.label("app_name"),
+            )
+            .select_from(art.join(binding, art.c.binding_id == binding.c.binding_id))
+            .where(
+                art.c.workspace_id == workspace_id,
+                binding.c.cluster_id == cluster_id,
+                binding.c.status == DeploymentBindingStatus.ACTIVE.value,
+                art.c.status == ManifestArtifactStatus.RENDERED.value,
+                rid.is_not(None),
+            )
+        )
+        index: dict[str, dict[str, str]] = {}
+        with self.connection() as conn:
+            for row in conn.execute(statement).mappings():
+                key = str(row["rid"] or "")
+                owner_app_id = str(row["app_id"] or "")
+                if not key:
+                    continue
+                if exclude_application_id and owner_app_id == exclude_application_id:
+                    continue
+                index[key] = {
+                    "application_id": owner_app_id,
+                    "app_name": str(row["app_name"] or ""),
+                }
+        return index
+
     def get_manifest_artifact_provenance(
         self,
         workspace_id: str,
