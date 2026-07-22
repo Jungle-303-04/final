@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { getRecoveryPlanByCorrelation } from "../api/recovery";
 import type { RecoveryPlan } from "../api/recovery-schemas";
 import type { RcaIssueList } from "../api/schemas";
-import { loadActiveRcaIssueItems } from "./rcaIssuesFeed";
+import { loadRcaIssueItems } from "./rcaIssuesFeed";
 import { operationalMessageLabel } from "./statusLabel";
 
 // UI-PHASE2-001: typed live adapters for the RCA Issue *detail* drawer. Unlike
@@ -96,7 +96,7 @@ export function useRcaIssueDetails(clusterIds?: readonly string[]): RcaIssueDeta
   useEffect(() => {
     const controller = new AbortController();
     const scopedClusterIds = scopeKey === null ? undefined : scopeKey === "" ? [] : scopeKey.split("\u0000");
-    void loadActiveRcaIssueItems(scopedClusterIds, controller.signal)
+    void loadRcaIssueItems(scopedClusterIds, controller.signal)
       .then((items) => {
         if (controller.signal.aborted) return;
         setSnapshot({ scopeKey, feed: { status: "ready", items: items.map(toRcaIssueDetailView) } });

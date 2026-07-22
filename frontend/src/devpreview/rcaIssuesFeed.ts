@@ -91,7 +91,7 @@ export function rcaIssueIdentity(item: Pick<RcaIssueItem,
   ].join("\u0000");
 }
 
-export async function loadActiveRcaIssueItems(
+export async function loadRcaIssueItems(
   clusterIds: readonly string[] | undefined,
   signal: AbortSignal,
 ): Promise<RcaIssueItem[]> {
@@ -117,10 +117,17 @@ export async function loadActiveRcaIssueItems(
   });
   return [...latestByIdentity.values()]
     .sort((a, b) => b.updatedMs - a.updatedMs || a.index - b.index)
-    .map(({ item }) => item)
-    // Resolve/close is applied after identity reduction: the newest terminal
-    // row ends every older correlation for that same active incident.
-    .filter(isActiveRcaIssue);
+    .map(({ item }) => item);
+}
+
+export async function loadActiveRcaIssueItems(
+  clusterIds: readonly string[] | undefined,
+  signal: AbortSignal,
+): Promise<RcaIssueItem[]> {
+  const items = await loadRcaIssueItems(clusterIds, signal);
+  // Resolve/close is applied after identity reduction: the newest terminal
+  // row ends every older correlation for that same active incident.
+  return items.filter(isActiveRcaIssue);
 }
 
 export function toRcaIssueView(item: RcaIssueItem): RcaIssueView {
