@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Mapping
 from typing import Any, cast
 
@@ -38,6 +39,7 @@ from packages.contracts.gitops import (
     DEFAULT_REPOSITORY_ID,
     DEFAULT_WATCH_TARGET_ID,
     ApprovalStatus,
+    RepositoryStatus,
 )
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID, Permission
 from packages.events.context import event_workspace
@@ -56,6 +58,18 @@ HTTP_CONFLICT = 409
 GITOPS_WEBHOOK_IMAGE_ENV = "GITOPS_WEBHOOK_IMAGE"
 GITHUB_PUSH_EVENT = "push"
 GITHUB_PULL_REQUEST_EVENT = "pull_request"
+# App 이 자동 수신하는 수명주기 이벤트 — 외부(GitHub) 변경을 내부 상태로 반영해
+# 고아(연결은 남아있는데 실제로는 죽은) 상태를 없앤다.
+GITHUB_INSTALLATION_EVENT = "installation"
+GITHUB_INSTALLATION_REPOSITORIES_EVENT = "installation_repositories"
+GITHUB_REPOSITORY_EVENT = "repository"
+GITHUB_LIFECYCLE_EVENTS = frozenset(
+    {
+        GITHUB_INSTALLATION_EVENT,
+        GITHUB_INSTALLATION_REPOSITORIES_EVENT,
+        GITHUB_REPOSITORY_EVENT,
+    }
+)
 
 
 def build_git_webhook_body(payload: GitHubWebhookRequest) -> GitWebhookReceivedBody:
@@ -239,6 +253,120 @@ def build_git_webhook_bodies(
     return matched
 
 
+def _installation_id(payload: Mapping[str, Any]) -> str:
+    installation = payload.get("installation")
+    if isinstance(installation, Mapping):
+        return str(installation.get("id") or "")
+    return ""
+
+
+def github_lifecycle_intents(
+    payload: Mapping[str, Any],
+    event_name: str,
+) -> list[dict[str, str]]:
+    """수명주기 이벤트 → 저장소 상태 전이 의도(순수 함수, DB 무접근).
+
+    - installation deleted/suspend → 그 설치에 묶인 모든 저장소를 invalid_credential
+      (권한 회수/앱 제거). 자격증명이 더는 유효하지 않음을 정직하게 표시.
+    - installation_repositories.repositories_removed → 해당 저장소 접근 상실 →
+      invalid_credential.
+    - repository deleted/archived/renamed/transferred → 소스 소실 → source_unreachable.
+    added/created/unsuspend 등 '복구/증가' 이벤트는 상태를 내리지 않는다(무동작).
+    """
+    if event_name == GITHUB_INSTALLATION_EVENT:
+        action = str(payload.get("action") or "")
+        installation_id = _installation_id(payload)
+        if installation_id and action in {"deleted", "suspend"}:
+            return [
+                {
+                    "kind": "installation",
+                    "installation_id": installation_id,
+                    "status": RepositoryStatus.INVALID_CREDENTIAL.value,
+                }
+            ]
+        return []
+    if event_name == GITHUB_INSTALLATION_REPOSITORIES_EVENT:
+        removed = payload.get("repositories_removed")
+        intents: list[dict[str, str]] = []
+        if isinstance(removed, list):
+            for repo in removed:
+                full = str((repo or {}).get("full_name") or "") if isinstance(repo, Mapping) else ""
+                if full:
+                    intents.append(
+                        {
+                            "kind": "repo",
+                            "repo_ref": full,
+                            "status": RepositoryStatus.INVALID_CREDENTIAL.value,
+                        }
+                    )
+        return intents
+    if event_name == GITHUB_REPOSITORY_EVENT:
+        action = str(payload.get("action") or "")
+        repository = payload.get("repository")
+        full = str(repository.get("full_name") or "") if isinstance(repository, Mapping) else ""
+        refs: list[str] = []
+        if action in {"deleted", "archived"} and full:
+            refs.append(full)
+        elif action in {"renamed", "transferred"}:
+            # rename/transfer 후엔 새 full_name 이 오므로, 우리가 저장한 '이전' ref 를
+            # changes.repository.name.from + 기존 owner 로 최선 복원한다.
+            owner = full.split("/")[0] if "/" in full else ""
+            changes = payload.get("changes")
+            old_name = ""
+            if isinstance(changes, Mapping):
+                repo_change = changes.get("repository")
+                if isinstance(repo_change, Mapping):
+                    name_change = repo_change.get("name")
+                    if isinstance(name_change, Mapping):
+                        old_name = str(name_change.get("from") or "")
+            if owner and old_name:
+                refs.append(f"{owner}/{old_name}")
+            if full:
+                refs.append(full)
+        return [
+            {"kind": "repo", "repo_ref": ref, "status": RepositoryStatus.SOURCE_UNREACHABLE.value}
+            for ref in refs
+        ]
+    return []
+
+
+def apply_github_lifecycle(db: Any, intents: list[dict[str, str]]) -> int:
+    """수명주기 의도를 실제 저장소 상태로 반영하고 영향받은 저장소 수를 돌려준다.
+
+    설치 단위 의도는 그 설치 참조에 묶인 저장소들을 찾아 일괄 전이하고, 캐시된
+    설치 토큰을 무효화한다. 저장소가 없으면 조용히 0(멱등).
+    """
+    setter = getattr(db, "set_repository_connection_status", None)
+    if not callable(setter):
+        return 0
+    from domains.scm.github_app_credentials import (
+        invalidate_installation_token,
+        make_app_installation_ref,
+    )
+
+    affected = 0
+    for intent in intents:
+        status = intent["status"]
+        if intent.get("kind") == "installation":
+            installation_id = intent["installation_id"]
+            lister = getattr(db, "list_repositories_by_credential_ref", None)
+            repositories = (
+                lister(DEFAULT_WORKSPACE_ID, make_app_installation_ref(installation_id))
+                if callable(lister)
+                else []
+            )
+            for repository in repositories:
+                repo_ref = str(repository.get("repo_ref") or "")
+                if repo_ref and setter(DEFAULT_WORKSPACE_ID, repo_ref, status):
+                    affected += 1
+            invalidate_installation_token(installation_id)
+        else:
+            repo_ref = intent.get("repo_ref", "")
+            if repo_ref and setter(DEFAULT_WORKSPACE_ID, repo_ref, status):
+                affected += 1
+    return affected
+
+
 def accepted_event_response(accepted: Any) -> AcceptedEventResponse:
     return AcceptedEventResponse(
         accepted=True,
@@ -255,10 +383,24 @@ async def github_webhook(
     events: Any = Depends(get_events),
     db: Any = Depends(get_db),
 ) -> AcceptedEventResponse | JSONResponse:
+    event_name = request.headers.get("x-github-event", "")
+    # 배포 이벤트 이전에 수명주기 이벤트를 상태 전이로 흡수한다(고아 방지).
+    # 서명은 라우터 의존성에서 이미 검증됨.
+    if event_name in GITHUB_LIFECYCLE_EVENTS:
+        intents = github_lifecycle_intents(payload, event_name)
+        affected = await asyncio.to_thread(apply_github_lifecycle, db, intents)
+        return JSONResponse(
+            status_code=202,
+            content={
+                "accepted": True,
+                "lifecycle": event_name,
+                "repositories_transitioned": affected,
+            },
+        )
     bodies = build_git_webhook_bodies(
         payload,
         db=db,
-        event_name=request.headers.get("x-github-event", ""),
+        event_name=event_name,
     )
     if not bodies:
         return JSONResponse(
