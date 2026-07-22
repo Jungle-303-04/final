@@ -148,8 +148,10 @@ spec:
               value: ""
             - name: OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
               value: ""
+            # 실시간 모니터링 체감을 위해 kubelet 갱신 주기(~10s)를 놓치지 않는 5s.
+            # 저장 부하는 evidence result 조기 해제(b30ee0ea)로 상쇄된다.
             - name: EVIDENCE_INTERVAL_SECONDS
-              value: "15"
+              value: "5"
             - name: POLICY_SYNC_INTERVAL_SECONDS
               value: "15"
             - name: RECONCILE_INTERVAL_SECONDS
