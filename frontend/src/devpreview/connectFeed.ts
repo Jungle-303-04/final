@@ -249,6 +249,7 @@ export interface ConnectionStatusView {
   connection: ClusterConnectStatusResponse["status"] | null;
   agentVersion: string | null;
   connectedAt: string | null;
+  failureReason: string | null;
 }
 
 type ConnectionStatusState = ConnectionStatusView & {
@@ -260,6 +261,7 @@ const IDLE_CONNECTION: ConnectionStatusView = {
   connection: null,
   agentVersion: null,
   connectedAt: null,
+  failureReason: null,
 };
 
 const IDLE_CONNECTION_STATE: ConnectionStatusState = {
@@ -309,6 +311,7 @@ export function useClusterConnectionStatus(clusterId: string | null): Connection
             connection: response.status,
             agentVersion: response.agent_version,
             connectedAt: response.connected_at,
+            failureReason: response.failure_reason ?? null,
           });
           waiting = response.status === "waiting";
           if (waiting) schedule();
@@ -316,6 +319,9 @@ export function useClusterConnectionStatus(clusterId: string | null): Connection
         .catch((cause: unknown) => {
           if (cancelled || controller.signal.aborted || revision !== requestRevision || isAbortError(cause)) return;
           setView({ ...IDLE_CONNECTION, clusterId, status: "error" });
+          // 일시 네트워크 오류 한 번에 폴링이 영구 정지하지 않도록, 아직 대기 중이면
+          // 다음 주기를 다시 예약한다. visibility 토글에만 의존하지 않는다.
+          if (waiting) schedule();
         });
       if (revision === requestRevision) {
         requestInFlight = false;

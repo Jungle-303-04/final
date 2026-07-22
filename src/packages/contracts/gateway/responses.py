@@ -2806,9 +2806,11 @@ class ClusterConnectResponse(StrictModel):
 
 
 class ClusterConnectStatusResponse(StrictModel):
-    status: Literal["waiting", "connected", "expired"]
+    status: Literal["waiting", "connected", "expired", "failed"]
+    stage: str | None = None
     agent_version: str | None = None
     connected_at: str | None = None
+    failure_reason: str | None = None
 
 
 class ClusterUnregisterResponse(StrictModel):

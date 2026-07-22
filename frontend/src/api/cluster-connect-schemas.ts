@@ -22,9 +22,11 @@ export const clusterConnectResponseSchema = clusterConnectResponseWireSchema.tra
 );
 
 export const clusterConnectStatusResponseSchema = z.strictObject({
-  status: z.enum(["waiting", "connected", "expired"]),
+  status: z.enum(["waiting", "connected", "expired", "failed"]),
+  stage: z.string().nullable().optional(),
   agent_version: z.string().nullable(),
   connected_at: z.string().nullable(),
+  failure_reason: z.string().nullable().optional(),
 });
 
 export type ClusterConnectProvider = z.infer<typeof clusterConnectProviderSchema>;

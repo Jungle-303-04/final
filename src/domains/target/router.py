@@ -1705,12 +1705,24 @@ async def get_cluster_connection(
         current=current,
         db=db,
     )
-    if connection.connection_status == AGENT_STATUS_ONLINE:
+    stage = connection.connection_stage
+    # 연결 판정은 rich stage 계약을 정본으로 사용한다. 위저드는 stage=="ready"
+    # (에이전트 online + 인벤토리 스냅샷 적재 + 후속 heartbeat)에서만 완료로 넘어가고,
+    # install_failed/error 는 무한 대기로 뭉개지 않고 명시적 failed 로 표면화한다.
+    if stage == "ready":
         status = "connected"
-    elif connection.connection_status == AGENT_STATUS_INSTALL_EXPIRED:
+    elif stage == "expired" or connection.connection_status == AGENT_STATUS_INSTALL_EXPIRED:
         status = "expired"
+    elif stage == "error":
+        status = "failed"
     else:
         status = "waiting"
+    failure_reason: str | None = None
+    if status == "failed":
+        if connection.connection_status == AGENT_STATUS_INSTALL_FAILED:
+            failure_reason = "install_failed"
+        else:
+            failure_reason = "agent_error"
     agent_version = next(
         (
             str(agent.details["version"])
@@ -1719,10 +1731,13 @@ async def get_cluster_connection(
         ),
         None,
     )
+    connected_at = connection.last_seen_at if status == "connected" else None
     return ClusterConnectStatusResponse(
         status=status,
+        stage=stage,
         agent_version=agent_version,
-        connected_at=None,
+        connected_at=connected_at,
+        failure_reason=failure_reason,
     )
 
 
