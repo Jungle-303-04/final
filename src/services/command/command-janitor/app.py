@@ -3,10 +3,12 @@ from __future__ import annotations
 import asyncio
 import signal
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 from domains.command.events import CommandCompletedBody
 from domains.command.repository import QUEUED_COMMAND_TTL_SECONDS
+from domains.target.router import emit_evidence_if_ready
 from packages.config.logs import get_logger
 from packages.config.settings import env
 from packages.contracts.event_bus.interfaces import EventConsumerBus
@@ -51,6 +53,31 @@ async def emit_expired_command_completions(
                 correlation_id=correlation_id,
             )
     return len(expired)
+
+
+async def sweep_exhausted_evidence_jobs(async_db: Any, raw_db: Any) -> int:
+    """attempt 소진 + lease 만료 evidence 잡을 종결하고 window 집계를 트리거한다.
+
+    lease 상한 도입으로 소진된 잡은 재임대가 불가능해졌으므로, janitor 가
+    FAILED 로 닫아야 window 가 failure_policy 에 따라 발행/보류로 진행된다.
+    emit_evidence_if_ready 는 outbox 스테이징(DB-only)이라 NATS 연결이 필요
+    없다 — events 인자는 source 문자열로만 쓰인다.
+    """
+    try:
+        keys = await async_db.fail_exhausted_evidence_jobs()
+    except Exception:
+        LOGGER.exception("exhausted_evidence_sweep_failed")
+        return 0
+    source = SimpleNamespace(source=COMMAND_JANITOR)
+    for key in keys:
+        try:
+            await emit_evidence_if_ready(key, source, raw_db)
+        except Exception:
+            LOGGER.exception(
+                "evidence_emit_after_sweep_failed",
+                extra={"context": {"evidence_key": key}},
+            )
+    return len(keys)
 
 
 async def sweep_database_retention(db: Any) -> RetentionSweepResult | None:
@@ -110,6 +137,12 @@ async def run(event_bus: EventConsumerBus | None = None) -> None:
             count = await emit_expired_command_completions(async_db, events)
             if count:
                 LOGGER.warning("expired_commands_swept", extra={"context": {"count": count}})
+            evidence_count = await sweep_exhausted_evidence_jobs(async_db, db)
+            if evidence_count:
+                LOGGER.warning(
+                    "exhausted_evidence_jobs_swept",
+                    extra={"context": {"count": evidence_count}},
+                )
             loop_time = loop.time()
             if loop_time >= next_retention_sweep:
                 retention_result = await sweep_database_retention(async_db)

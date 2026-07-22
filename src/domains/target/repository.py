@@ -712,6 +712,10 @@ class TargetAgentRepository(DatabaseConnection):
                 table.c.cluster_id == cluster_id,
                 table.c.provider_key == provider_key,
                 available,
+                # 재임대도 attempt 소모다 — 명시적 실패 보고 없이 lease 만 만료되는
+                # 장애(프로세스 사망·hang)가 무한 재임대로 이어지지 않도록 상한을
+                # lease 시점에 강제한다. 소진된 잡은 janitor 가 FAILED 로 종결한다.
+                table.c.attempt_count < table.c.max_attempts,
             )
             .order_by(table.c.created_at)
             .limit(1)
@@ -735,6 +739,42 @@ class TargetAgentRepository(DatabaseConnection):
             )
             row = (await conn.execute(statement)).mappings().first()
         return self.serialize_evidence_job(dict(row)) if row else None
+
+    def fail_exhausted_evidence_jobs(self, *, limit: int = 200) -> list[str]:
+        """attempt 소진 + lease 만료 잡을 FAILED 로 종결하고 evidence_key 를 반환.
+
+        lease 조건에 attempt 상한이 걸리면서, 상한을 소진한 채 lease 가 만료된
+        잡은 어떤 에이전트도 다시 가져가지 못한다. 명시적 실패 보고 없이 죽은
+        경우를 janitor 가 종결해야 window 집계가 failure_policy 에 따라 진행된다.
+        호출자는 반환된 key 마다 집계·발행 시도를 트리거한다.
+        """
+        table = EvidenceJob.__table__
+        exhausted = (
+            select(table.c.job_id)
+            .where(
+                table.c.status == EVIDENCE_JOB_STATUS_LEASED,
+                table.c.leased_until < func.now(),
+                table.c.attempt_count >= table.c.max_attempts,
+            )
+            .order_by(table.c.job_id)
+            .limit(limit)
+            .with_for_update(skip_locked=True)
+            .cte("exhausted_evidence_jobs")
+        )
+        statement = (
+            update(table)
+            .where(table.c.job_id.in_(select(exhausted.c.job_id)))
+            .values(
+                status=EVIDENCE_JOB_STATUS_FAILED,
+                result=None,
+                error="lease expired; retry attempts exhausted",
+                updated_at=func.now(),
+            )
+            .returning(table.c.evidence_key)
+        )
+        with self.connection() as conn:
+            rows = conn.execute(statement).all()
+        return sorted({str(row[0]) for row in rows})
 
     def complete_evidence_job(
         self,
@@ -765,8 +805,11 @@ class TargetAgentRepository(DatabaseConnection):
                         table.c.cluster_id == cluster_id,
                         table.c.lease_id == lease_id,
                         table.c.agent_id == agent_id,
+                        # lease 만료 후에도 아무도 재임대하지 않았다면(같은 lease_id 가
+                        # 그 증거) 성실한 늦은 결과를 받아준다. 재임대가 일어났다면
+                        # lease_id 가 바뀌어 있어 자동 거부되므로 이중 수용은 구조적으로
+                        # 불가능하다 — 시간 초과라는 이유만으로 정상 수집을 버리지 않는다.
                         table.c.status == EVIDENCE_JOB_STATUS_LEASED,
-                        table.c.leased_until >= func.now(),
                     )
                     .with_for_update()
                 )
