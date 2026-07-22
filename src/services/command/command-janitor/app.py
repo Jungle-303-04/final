@@ -62,6 +62,31 @@ async def sweep_database_retention(db: Any) -> RetentionSweepResult | None:
     return result
 
 
+async def log_outbox_backlog(db: Any) -> None:
+    """미발행 outbox 적체를 주기 관측한다 — relay 가 죽으면 로그로 드러난다.
+
+    outbox 는 relay 가 발행해야 비워지는데, relay 장애는 발행 지연이라는
+    침묵 증상만 남긴다. pending 건수와 최고령 행 나이를 retention 주기마다
+    남겨 적체를 조기에 발견 가능하게 한다.
+    """
+    try:
+        pending = int(await db.outbox_pending_count() or 0)
+        oldest_age = float(await db.outbox_oldest_age_seconds() or 0)
+    except Exception:
+        LOGGER.exception("outbox_backlog_probe_failed")
+        return
+    if pending:
+        LOGGER.warning(
+            "outbox_backlog",
+            extra={
+                "context": {
+                    "pending": pending,
+                    "oldest_age_seconds": int(oldest_age),
+                }
+            },
+        )
+
+
 async def run(event_bus: EventConsumerBus | None = None) -> None:
     db = Database()
     async_db = AsyncDb(db)
@@ -89,6 +114,7 @@ async def run(event_bus: EventConsumerBus | None = None) -> None:
             if loop_time >= next_retention_sweep:
                 retention_result = await sweep_database_retention(async_db)
                 next_retention_sweep = loop_time + retention_interval
+                await log_outbox_backlog(async_db)
                 if retention_result is not None and retention_result.errors:
                     # 부분 실패 관측 — 실패 단계 이름을 남겨 침묵 마비를 조기에 드러낸다.
                     LOGGER.error(
