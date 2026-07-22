@@ -2,6 +2,10 @@ import { useEffect, useState } from "react";
 
 import { getRecoveryPlanByCorrelation } from "../api/recovery";
 import type { RecoveryPlan } from "../api/recovery-schemas";
+import { getIncidentRecentChanges } from "../api/recent-changes";
+import type { RecentChangeItem } from "../api/recent-changes-schemas";
+import { getEvidenceWindowPayload, listRcaReports } from "../api/evidence";
+import type { EvidenceWindowPayload, RcaReport } from "../api/evidence-schemas";
 import type { RcaIssueList } from "../api/schemas";
 import { loadRcaIssueItems } from "./rcaIssuesFeed";
 import { operationalMessageLabel } from "./statusLabel";
@@ -19,6 +23,7 @@ export type RcaDetailStatus = "loading" | "ready" | "unavailable";
 export interface RcaIssueDetailView {
   correlationId: string;
   incidentId: string | null;
+  currentSubject: string;
   clusterId: string | null;
   namespace: string | null;
   resourceName: string | null;
@@ -52,6 +57,7 @@ export function toRcaIssueDetailView(item: RcaIssueItem): RcaIssueDetailView {
   return {
     correlationId: item.correlation_id,
     incidentId: item.incident_id,
+    currentSubject: item.current_subject,
     clusterId: item.cluster_id,
     namespace: item.incident_namespace,
     resourceName: item.incident_resource_name,
@@ -117,6 +123,103 @@ export type RecoveryPlanStatus = "idle" | "loading" | "ready" | "unavailable";
 export interface RecoveryPlanFeed {
   status: RecoveryPlanStatus;
   plan: RecoveryPlan | null;
+}
+
+export type IncidentRecentChangesStatus = "idle" | "loading" | "ready" | "unavailable";
+
+export interface IncidentRecentChangesFeed {
+  status: IncidentRecentChangesStatus;
+  items: RecentChangeItem[];
+}
+
+export interface RcaReportFeed {
+  status: RcaDetailStatus | "idle";
+  report: RcaReport | null;
+}
+
+export interface EvidenceWindowFeed {
+  status: RcaDetailStatus | "idle";
+  evidence: EvidenceWindowPayload | null;
+}
+
+export function useEvidenceWindowPayload(
+  evidenceKey: string | null,
+  source: string | null,
+  enabled: boolean,
+): EvidenceWindowFeed {
+  const requestKey = enabled && evidenceKey ? `${evidenceKey}\u0000${source ?? ""}` : null;
+  const [snapshot, setSnapshot] = useState<{ requestKey: string | null; feed: EvidenceWindowFeed }>({
+    requestKey: null,
+    feed: { status: "idle", evidence: null },
+  });
+  useEffect(() => {
+    if (!requestKey || !evidenceKey) return;
+    const controller = new AbortController();
+    void getEvidenceWindowPayload(evidenceKey, { source: source ?? undefined, signal: controller.signal })
+      .then((evidence) => {
+        if (controller.signal.aborted) return;
+        setSnapshot({ requestKey, feed: { status: "ready", evidence } });
+      })
+      .catch((cause: unknown) => {
+        if (controller.signal.aborted || isAbortError(cause)) return;
+        setSnapshot({ requestKey, feed: { status: "unavailable", evidence: null } });
+      });
+    return () => controller.abort();
+  }, [requestKey, evidenceKey, source]);
+  if (requestKey === null) return { status: "idle", evidence: null };
+  return snapshot.requestKey === requestKey
+    ? snapshot.feed
+    : { status: "loading", evidence: null };
+}
+
+export function useLatestRcaReport(correlationId: string | null): RcaReportFeed {
+  const [snapshot, setSnapshot] = useState<{ correlationId: string | null; feed: RcaReportFeed }>({
+    correlationId: null,
+    feed: { status: "idle", report: null },
+  });
+  useEffect(() => {
+    if (!correlationId) return;
+    const controller = new AbortController();
+    void listRcaReports({ correlationId, limit: 1, signal: controller.signal })
+      .then((response) => {
+        if (controller.signal.aborted) return;
+        setSnapshot({ correlationId, feed: { status: "ready", report: response.items[0] ?? null } });
+      })
+      .catch((cause: unknown) => {
+        if (controller.signal.aborted || isAbortError(cause)) return;
+        setSnapshot({ correlationId, feed: { status: "unavailable", report: null } });
+      });
+    return () => controller.abort();
+  }, [correlationId]);
+  if (!correlationId) return { status: "idle", report: null };
+  return snapshot.correlationId === correlationId
+    ? snapshot.feed
+    : { status: "loading", report: null };
+}
+
+export function useIncidentRecentChanges(incidentId: string | null): IncidentRecentChangesFeed {
+  const [snapshot, setSnapshot] = useState<{ incidentId: string | null; feed: IncidentRecentChangesFeed }>({
+    incidentId: null,
+    feed: { status: "idle", items: [] },
+  });
+  useEffect(() => {
+    if (!incidentId) return;
+    const controller = new AbortController();
+    void getIncidentRecentChanges(incidentId, { signal: controller.signal })
+      .then((response) => {
+        if (controller.signal.aborted) return;
+        setSnapshot({ incidentId, feed: { status: "ready", items: response.items } });
+      })
+      .catch((cause: unknown) => {
+        if (controller.signal.aborted || isAbortError(cause)) return;
+        setSnapshot({ incidentId, feed: { status: "unavailable", items: [] } });
+      });
+    return () => controller.abort();
+  }, [incidentId]);
+  if (!incidentId) return { status: "idle", items: [] };
+  return snapshot.incidentId === incidentId
+    ? snapshot.feed
+    : { status: "loading", items: [] };
 }
 
 /**

@@ -655,6 +655,7 @@ class RcaReportSummaryItem(StrictModel):
     cluster_id: str | None = None
     symptom: str | None = None
     severity: str | None = None
+    first_seen_at: str | None = None
     confidence: float | None = None
     reason: str | None = None
     evidence_ref: str | None = None

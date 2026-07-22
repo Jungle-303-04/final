@@ -37,6 +37,14 @@ export const evidenceListSchema = z.strictObject({
   next_cursor: nullableStringSchema,
 });
 
+export const evidenceWindowPayloadSchema = z.strictObject({
+  evidence_key: z.string().min(1),
+  workspace_id: z.string().min(1),
+  cluster_id: nullableStringSchema,
+  source: nullableStringSchema,
+  payload: z.record(z.string(), z.unknown()),
+});
+
 const rcaCandidateScoreSchema = z.strictObject({
   candidate_id: z.string().min(1),
   title: nullableStringSchema,
@@ -93,6 +101,7 @@ export const rcaReportSchema = z.strictObject({
   cluster_id: nullableStringSchema,
   symptom: nullableStringSchema,
   severity: nullableStringSchema,
+  first_seen_at: nullableStringSchema,
   confidence: z.number().finite().nullable(),
   reason: nullableStringSchema,
   evidence_ref: nullableStringSchema,
@@ -121,5 +130,6 @@ export const rcaReportListSchema = z.strictObject({
 
 export type EvidenceRecord = z.infer<typeof evidenceRecordSchema>;
 export type EvidenceList = z.infer<typeof evidenceListSchema>;
+export type EvidenceWindowPayload = z.infer<typeof evidenceWindowPayloadSchema>;
 export type RcaReport = z.infer<typeof rcaReportSchema>;
 export type RcaReportList = z.infer<typeof rcaReportListSchema>;

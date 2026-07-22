@@ -1,8 +1,10 @@
 import { apiRequest, type ApiPath } from "./client";
 import {
   evidenceListSchema,
+  evidenceWindowPayloadSchema,
   rcaReportListSchema,
   type EvidenceList,
+  type EvidenceWindowPayload,
   type RcaReportList,
 } from "./evidence-schemas";
 import { optionalQueryString, withQuery } from "./url";
@@ -51,6 +53,18 @@ export async function listEvidence(
     ["cursor", optionalOpaqueCursor(options.cursor)],
   ]);
   return apiRequest(path, evidenceListSchema, { signal: options.signal });
+}
+
+/** Reads one stored evidence window, optionally narrowed to one source. */
+export async function getEvidenceWindowPayload(
+  evidenceKey: string,
+  options: { source?: string; signal?: AbortSignal } = {},
+): Promise<EvidenceWindowPayload> {
+  const path = withQuery(
+    `/api/evidence/windows/${encodeURIComponent(evidenceKey)}` as ApiPath,
+    [["source", optionalQueryString(options.source)]],
+  );
+  return apiRequest(path, evidenceWindowPayloadSchema, { signal: options.signal });
 }
 
 /** Lists stored RCA report summaries, optionally scoped to one Incident. */
