@@ -91,3 +91,29 @@ async def resolve_installation_token(
     if token:
         _cache_put(installation_id, token, expiry)
     return token
+
+
+def resolve_installation_token_sync(
+    db: Any,
+    workspace_id: str,
+    installation_id: str,
+    *,
+    now: float | None = None,
+    client: httpx.Client | None = None,
+) -> str:
+    """``resolve_installation_token`` 의 동기 버전(폴러 등 동기 경로용).
+
+    같은 프로세스 캐시(_TOKEN_CACHE)를 공유하므로 async(verify) 와 sync(poller) 가
+    발급한 토큰을 서로 재사용한다. App 미구성이면 GithubAppNotConfigured 전파.
+    """
+    ts = now if now is not None else time.time()
+    cached = _cache_get(installation_id, ts)
+    if cached:
+        return cached
+    cfg = resolve_github_app_config(db, workspace_id)
+    minted = GithubAppClient(cfg).mint_installation_token_sync(installation_id, client=client)
+    token = str(minted.get("token") or "")
+    expiry = _parse_expiry(str(minted.get("expires_at") or ""), now=ts)
+    if token:
+        _cache_put(installation_id, token, expiry)
+    return token

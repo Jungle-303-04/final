@@ -25,6 +25,12 @@ from typing import Any
 import httpx
 from settings import Settings
 
+from domains.scm.github_app import GithubAppNotConfigured
+from domains.scm.github_app_credentials import (
+    is_app_installation_ref,
+    parse_app_installation_ref,
+    resolve_installation_token_sync,
+)
 from packages.config.logs import CONTEXT_KEY, get_logger
 from packages.config.settings import env
 from packages.contracts.gateway import routes as gateway_routes
@@ -457,6 +463,8 @@ class GitHubPoller:
     def _read_token_ref(self, ref: str, target: GitHubPollTarget) -> str:
         if ref == PUBLIC_GITHUB_CREDENTIAL_REF:
             return ""
+        if is_app_installation_ref(ref):
+            return self._read_app_installation_token(ref, target)
         if ref.startswith("db:"):
             return self._read_db_token_ref(ref, target)
         try:
@@ -504,6 +512,42 @@ class GitHubPoller:
                         "branch": target.branch,
                         "watch_target_id": target.watch_target_id,
                         "credential_ref": ref,
+                        "reason": str(exc),
+                    }
+                },
+            )
+            return ""
+
+    def _read_app_installation_token(self, ref: str, target: GitHubPollTarget) -> str:
+        """App 설치 참조(``github-app-installation:{id}``)면 단명 설치 토큰을 발급.
+
+        기존 PAT/vault/public 경로는 손대지 않는 additive 분기다. 발급 실패(미구성·
+        네트워크·권한)면 빈 토큰으로 degrade 하고, 이후 폴 응답의 401/403 을
+        record_poll_result 가 기존대로 기록한다(폴러가 죽지 않음).
+        """
+        try:
+            installation_id = parse_app_installation_ref(ref)
+            return resolve_installation_token_sync(self.db, target.workspace_id, installation_id)
+        except GithubAppNotConfigured:
+            LOGGER.warning(
+                "github_poll_app_not_configured",
+                extra={
+                    CONTEXT_KEY: {
+                        "repo": target.repo_ref,
+                        "branch": target.branch,
+                        "watch_target_id": target.watch_target_id,
+                    }
+                },
+            )
+            return ""
+        except Exception as exc:  # noqa: BLE001 - 발급 실패는 degrade(폴러 지속)
+            LOGGER.warning(
+                "github_poll_app_token_mint_failed",
+                extra={
+                    CONTEXT_KEY: {
+                        "repo": target.repo_ref,
+                        "branch": target.branch,
+                        "watch_target_id": target.watch_target_id,
                         "reason": str(exc),
                     }
                 },

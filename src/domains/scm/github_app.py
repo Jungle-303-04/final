@@ -148,6 +148,30 @@ class GithubAppClient:
             if owns:
                 await http.aclose()
 
+    def mint_installation_token_sync(
+        self,
+        installation_id: str,
+        *,
+        client: httpx.Client | None = None,
+    ) -> dict[str, Any]:
+        """``mint_installation_token`` 의 동기 버전(폴러 등 동기 경로용).
+
+        폴러의 토큰 해석은 동기 함수라 async 를 호출할 수 없다. JWT 서명은 동일하게
+        재사용하고 발급 POST 만 동기 httpx.Client 로 수행한다. 토큰은 1시간짜리라
+        상위(캐시)에서 재사용되므로 이 블로킹 호출은 설치당 시간당 1회 수준이다.
+        """
+        cfg = self._require()
+        url = f"{cfg.api_base}/app/installations/{installation_id}/access_tokens"
+        owns = client is None
+        http = client or httpx.Client(timeout=_HTTP_TIMEOUT)
+        try:
+            resp = http.post(url, headers=self._app_headers())
+            resp.raise_for_status()
+            return resp.json()
+        finally:
+            if owns:
+                http.close()
+
     async def list_installation_repositories(
         self,
         installation_id: str,
