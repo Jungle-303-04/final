@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import {
   connectCluster as connectClusterApi,
   getClusterConnectStatus,
+  reissueClusterConnectCommand as reissueClusterConnectCommandApi,
 } from "../api/cluster-connect";
 import type {
   ClusterConnectProvider,
@@ -85,6 +86,14 @@ export function connectCluster(
   signal?: AbortSignal,
 ): Promise<ClusterConnectResponse> {
   return connectClusterApi(input, signal);
+}
+
+/** 설치 실패/만료 후 같은 등록에 새 토큰으로 설치 명령을 재발급한다(명령어 하나로 재설치). */
+export function reissueClusterConnectCommand(
+  clusterId: string,
+  signal?: AbortSignal,
+): Promise<ClusterConnectResponse> {
+  return reissueClusterConnectCommandApi(clusterId, signal);
 }
 
 export function connectApplication(
@@ -463,9 +472,12 @@ export function useClusterActivationReadiness(
 
   if (!clusterId) return IDLE_ACTIVATION;
   if (connection !== "connected") {
+    // expired 와 failed 는 모두 종결 실패 상태다. 활성화 준비도를 error 로 두어
+    // 어떤 소비자도 실패한 연결을 "대기 중"으로 오인하지 않게 한다.
+    const terminalError = connection === "expired" || connection === "failed";
     return {
-      status: connection === "expired" ? "error" : "waiting",
-      heartbeat: connection === "expired" ? "error" : "waiting",
+      status: terminalError ? "error" : "waiting",
+      heartbeat: terminalError ? "error" : "waiting",
       inventory: "waiting",
       metrics: "waiting",
     };
