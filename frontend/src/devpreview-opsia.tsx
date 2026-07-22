@@ -5,6 +5,7 @@
 // no backfill: 계약이 노출하지 않는 값(CPU/MEM/용량/파드→노드 귀속 등)은 절대
 // 지어내지 않는다. 관측이 없으면 "관측 안 됨"/"관측된 리소스가 없습니다"를 렌더한다.
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Activity, AlertTriangle, Box, Check, ChevronLeft, ChevronRight, Clock3, Cpu, EllipsisVertical, ExternalLink, FileCog, Network, Plug, RotateCcw, Server, Settings, Unplug } from "lucide-react";
 import { UI, BLUE, HP, TINT, MONO, TYPE, SOFT, SPRING, PAGE, PRESENT_SCALE, DUR, inkA, blueA, LINE3, INK4, BRAND, cardA } from "./devpreview/theme";
@@ -225,14 +226,48 @@ function isHealthyConnection(cluster: Pick<DevpreviewCluster, "connectionStatus"
     && ["agent_connected", "connected", "online", "ready", "snapshot_received"].includes(state);
 }
 
+/**
+ * 수치 보간 — 새 관측이 도착하면 0.5초 동안 ease-out 으로 이전 값에서 목표값까지
+ * 이동시켜 스텝 점프 대신 자연스러운 움직임을 만든다.
+ * no backfill 원칙 유지: null(관측 없음)은 보간 대상이 아니라 즉시 null 로 표시하고,
+ * null → 값 첫 등장도 지어낸 시작점 없이 즉시 표시한다.
+ */
+export function useSmoothedValue(target: number | null, durationMs = 500): number | null {
+  const [display, setDisplay] = useState<number | null>(target);
+  const displayRef = useRef<number | null>(target);
+  useEffect(() => {
+    const from = displayRef.current;
+    if (target === null || from === null) {
+      displayRef.current = target;
+      setDisplay(target);
+      return;
+    }
+    if (from === target) return;
+    let raf = 0;
+    const started = performance.now();
+    const step = (now: number) => {
+      const t = Math.min(1, (now - started) / durationMs);
+      const eased = 1 - (1 - t) * (1 - t);
+      const value = Math.round((from + (target - from) * eased) * 10) / 10;
+      displayRef.current = value;
+      setDisplay(value);
+      if (t < 1) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [target, durationMs]);
+  return display;
+}
+
 function CompactUsage({ label, value }: { label: string; value: number | null }) {
+  const shown = useSmoothedValue(value);
   return (
     <span style={{ display: "grid", gridTemplateColumns: "30px minmax(48px, 1fr) 38px", alignItems: "center", gap: 6, minWidth: 0 }}>
       <span style={{ fontSize: TYPE.micro, fontWeight: 700, color: UI.ink3 }}>{label}</span>
       <span style={{ height: 4, borderRadius: 999, background: inkA(0.06), overflow: "hidden" }}>
-        {value !== null && <span style={{ display: "block", width: `${value}%`, height: "100%", borderRadius: 999, background: value >= 90 ? HP.crit : value >= 75 ? HP.warn : HP.ok }} />}
+        {shown !== null && <span style={{ display: "block", width: `${Math.min(100, shown)}%`, height: "100%", borderRadius: 999, background: shown >= 90 ? HP.crit : shown >= 75 ? HP.warn : HP.ok }} />}
       </span>
-      <span style={{ textAlign: "right", fontSize: TYPE.micro, fontWeight: 700, fontFamily: MONO, color: value === null ? UI.ink3 : UI.ink }}>{value === null ? "—" : `${value}%`}</span>
+      <span style={{ textAlign: "right", fontSize: TYPE.micro, fontWeight: 700, fontFamily: MONO, color: shown === null ? UI.ink3 : UI.ink }}>{shown === null ? "—" : `${Math.round(shown)}%`}</span>
     </span>
   );
 }
@@ -245,18 +280,29 @@ function CompactClusterRow({ cl, summary, onOpen, onSettings, onDisconnect }: {
   onDisconnect?: () => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null);
   const menuRef = useRef<HTMLSpanElement>(null);
+  const portalMenuRef = useRef<HTMLSpanElement>(null);
   useEffect(() => {
     if (!menuOpen) return;
     const close = (event: MouseEvent) => {
-      if (!menuRef.current?.contains(event.target as Node)) setMenuOpen(false);
+      const target = event.target as Node;
+      if (!menuRef.current?.contains(target) && !portalMenuRef.current?.contains(target)) {
+        setMenuOpen(false);
+      }
     };
     const escape = (event: KeyboardEvent) => { if (event.key === "Escape") setMenuOpen(false); };
+    // 메뉴는 body portal(fixed)이라 스크롤·리사이즈 시 기준 좌표가 어긋난다 — 즉시 닫는다.
+    const dismiss = () => setMenuOpen(false);
     document.addEventListener("mousedown", close);
     document.addEventListener("keydown", escape);
+    window.addEventListener("scroll", dismiss, true);
+    window.addEventListener("resize", dismiss);
     return () => {
       document.removeEventListener("mousedown", close);
       document.removeEventListener("keydown", escape);
+      window.removeEventListener("scroll", dismiss, true);
+      window.removeEventListener("resize", dismiss);
     };
   }, [menuOpen]);
   const summaryLoading = summary === undefined || summary.status === "loading";
@@ -315,14 +361,24 @@ function CompactClusterRow({ cl, summary, onOpen, onSettings, onDisconnect }: {
         <CompactUsage label="MEM" value={summaryLoading ? null : summary?.memPct ?? null} />
       </span>
       <span ref={menuRef} style={{ position: "relative", display: "grid", placeItems: "center", alignSelf: "center" }} onClick={(event) => event.stopPropagation()}>
-        <button type="button" aria-label={`${cl.displayName} 클러스터 메뉴`} aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}
+        <button type="button" aria-label={`${cl.displayName} 클러스터 메뉴`} aria-expanded={menuOpen}
+          onClick={(event) => {
+            const rect = event.currentTarget.getBoundingClientRect();
+            setMenuPos({ top: rect.bottom + 4, right: Math.max(8, window.innerWidth - rect.right) });
+            setMenuOpen((open) => !open);
+          }}
           style={{ width: 28, height: 28, display: "grid", placeItems: "center", border: "none", borderRadius: 7, background: menuOpen ? inkA(0.06) : "transparent", color: UI.ink3, cursor: "pointer" }}><EllipsisVertical size={15} /></button>
-        {menuOpen && (
-          <span role="menu" aria-label={`${cl.displayName} 클러스터 작업`} style={{ position: "absolute", top: 31, right: 0, zIndex: 50, width: 156, display: "flex", flexDirection: "column", gap: 2, padding: 5, border: `1px solid ${UI.line}`, borderRadius: 10, background: UI.card, boxShadow: `0 16px 40px -18px ${inkA(0.35)}` }}>
+        {/* 카드 스택/오버플로 컨텍스트 안에서는 다음 카드가 메뉴 위에 그려져 클릭을
+            가로챈다(가림+미동작의 공통 원인). body portal + fixed 좌표로 최상위에 띄운다. */}
+        {menuOpen && menuPos && createPortal(
+          <span ref={portalMenuRef} role="menu" aria-label={`${cl.displayName} 클러스터 작업`}
+            onClick={(event) => event.stopPropagation()}
+            style={{ position: "fixed", top: menuPos.top, right: menuPos.right, zIndex: 1200, width: 156, display: "flex", flexDirection: "column", gap: 2, padding: 5, border: `1px solid ${UI.line}`, borderRadius: 10, background: UI.card, boxShadow: `0 16px 40px -18px ${inkA(0.35)}` }}>
             <button role="menuitem" type="button" onClick={activate} style={compactMenuStyle}><ExternalLink size={13} />상세 보기</button>
             {onSettings && <button role="menuitem" type="button" onClick={() => { setMenuOpen(false); onSettings(); }} style={compactMenuStyle}><Settings size={13} />설정</button>}
             {onDisconnect && <button role="menuitem" type="button" onClick={() => { setMenuOpen(false); onDisconnect(); }} style={{ ...compactMenuStyle, color: HP.crit }}><Unplug size={13} />연결 해제…</button>}
-          </span>
+          </span>,
+          document.body,
         )}
       </span>
     </motion.div>
