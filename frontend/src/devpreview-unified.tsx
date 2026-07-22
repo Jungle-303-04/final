@@ -20,6 +20,11 @@ import { TopologyView } from "./devpreview-topology";
 import { GithubIcon } from "./devpreview/brandIcons";
 import { DevpreviewContractProvider, useDevpreviewContracts } from "./devpreview/contracts";
 import { ClusterLifecycleControl } from "./devpreview/ClusterLifecycleControl";
+import {
+  PENDING_CLUSTER_STORAGE_KEY,
+  reconcilePendingClusters,
+  removePendingClusterReferences,
+} from "./devpreview/pendingClusterState";
 import { AuthSessionGateProvider } from "./features/auth/AuthSessionGate";
 import { I18nProvider } from "./shared/i18n";
 import { activeIncidentClusterIds, useRcaIssues } from "./devpreview/rcaIssuesFeed";
@@ -1357,7 +1362,7 @@ function App() {
   const [repositoryConnectContext, setRepositoryConnectContext] = useState<RepositoryConnectionContext | null>(null);
   const [manifestRefreshKey, setManifestRefreshKey] = useState(0);
   // 세션 중 등록한 연결 대기 항목 — 등록의 결과가 목록에 보여야 한다(로그아웃=세션 초기화로 함께 소멸)
-  const [pendingCl, setPendingCl] = useState<string[]>(() => { try { return JSON.parse(sessionStorage.getItem("opsia-demo-pending-cl") || "[]"); } catch { return []; } });
+  const [pendingCl, setPendingCl] = useState<string[]>(() => { try { return JSON.parse(sessionStorage.getItem(PENDING_CLUSTER_STORAGE_KEY) || "[]"); } catch { return []; } });
   const [pendingRepo, setPendingRepo] = useState<string[]>(() => { try { return JSON.parse(sessionStorage.getItem("opsia-demo-pending-repo") || "[]"); } catch { return []; } });
   const repositoryApplications = useApplications(manifestRefreshKey);
   const connectedRepos = useMemo(
@@ -1369,10 +1374,28 @@ function App() {
     [repositoryApplications.items],
   );
   const addPending = (scope: "cluster" | "repo", ref: string) => {
-    const key = scope === "cluster" ? "opsia-demo-pending-cl" : "opsia-demo-pending-repo";
+    const key = scope === "cluster" ? PENDING_CLUSTER_STORAGE_KEY : "opsia-demo-pending-repo";
     const set = scope === "cluster" ? setPendingCl : setPendingRepo;
     set((xs) => { const nx = xs.includes(ref) ? xs : [...xs, ref]; try { sessionStorage.setItem(key, JSON.stringify(nx)); } catch { /* 데모 */ } return nx; });
   };
+  const removePendingClusters = (...references: unknown[]) => {
+    setPendingCl((current) => {
+      const next = removePendingClusterReferences(current, references);
+      if (next === current) return current;
+      try { sessionStorage.setItem(PENDING_CLUSTER_STORAGE_KEY, JSON.stringify(next)); } catch { /* 세션 저장 불가 */ }
+      return next;
+    });
+  };
+  // 서버 인벤토리에 실 클러스터가 나타나면 부트스트랩 임시 카드는 즉시 승격한다.
+  // id/name/displayName 중 어느 식별자로 연결했더라도 중복 카드와 새로고침 재등장을 막는다.
+  useEffect(() => {
+    setPendingCl((current) => {
+      const next = reconcilePendingClusters(current, contract.clusters);
+      if (next === current) return current;
+      try { sessionStorage.setItem(PENDING_CLUSTER_STORAGE_KEY, JSON.stringify(next)); } catch { /* 세션 저장 불가 */ }
+      return next;
+    });
+  }, [contract.clusters, pendingCl]);
   // 연결 완료는 세션 타이머가 아니라 서버가 소유한 repository 상태로 확정한다.
   // 이전 구현은 pendingRepo를 추가만 하고 제거하지 않아 active 저장소도 영원히
   // "초기 동기화 대기"로 남았다. 서버가 ready를 반환하는 즉시 대기 목록과
@@ -1606,6 +1629,8 @@ function App() {
   // 버스 구독은 마운트 1회만 — 최신 openRef를 ref로 참조해 재구독 없이 호출한다.
   const openRefRef = useRef(openRef);
   useEffect(() => { openRefRef.current = openRef; });
+  const contractRefreshRef = useRef(contract.refresh);
+  useEffect(() => { contractRefreshRef.current = contract.refresh; });
   // 버스 수신 → 토스트 + 세션 알림 (선언은 위쪽, 여기서는 구독만)
   useEffect(() => onAction((a: DemoAction) => {
     // 내비게이션 액션 — AI 근거/링크가 셸의 실제 표면을 연다
@@ -1615,6 +1640,7 @@ function App() {
     pushToast({ title: a.title, sub: a.body, tone: "ok" });
     if (a.kind === "connect") {
       if (a.scope && a.ref) addPending(a.scope, a.ref);
+      if (a.scope === "cluster") contractRefreshRef.current();
       window.setTimeout(() => setConnectModal(null), 400); // 연결 완료 → 모달 닫힘
     }
   }), []);
@@ -1695,6 +1721,8 @@ function App() {
               ? contract.clusters.find((cluster) => cluster.id === scope.cluster) ?? null
               : null}
             onDisconnected={(clusterId) => {
+              const disconnected = contract.clusters.find((cluster) => cluster.id === clusterId);
+              removePendingClusters(clusterId, disconnected?.name, disconnected?.displayName);
               if (scope.cluster === clusterId) {
                 setScope({ level: "clusters" });
                 setDrillCl(null);
