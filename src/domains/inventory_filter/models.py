@@ -96,6 +96,22 @@ class InventoryResourceVersion(Base):
             postgresql_using="gin",
             postgresql_ops={"search_text": "gin_trgm_ops"},
         ),
+        Index(
+            "ix_inventory_versions_active_facets",
+            "workspace_id",
+            "cluster_id",
+            postgresql_include=(
+                "version_id",
+                "inventory_key",
+                "resource_type",
+                "kind",
+                "namespace",
+                "name",
+                "health",
+                "search_text",
+            ),
+            postgresql_where=text("valid_to_revision IS NULL"),
+        ),
     )
 
     version_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
@@ -144,6 +160,12 @@ class InventoryResourceLabelVersion(Base):
             "selector",
             postgresql_using="gin",
             postgresql_ops={"selector": "gin_trgm_ops"},
+        ),
+        Index(
+            "ix_inventory_label_versions_active_lookup",
+            "version_id",
+            "workspace_id",
+            postgresql_include=("selector", "key", "value"),
         ),
     )
 

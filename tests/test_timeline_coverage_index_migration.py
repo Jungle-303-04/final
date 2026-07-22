@@ -17,7 +17,7 @@ from domains.inventory.repository import _timeline_coverage_statement
 from packages.contracts.timeline import TimelineWindow
 
 ROOT = Path(__file__).resolve().parents[1]
-HEAD_REVISION = "20260719_0500"
+HEAD_REVISION = "20260722_0610"
 REVISION = "20260718_0400"
 DOWN_REVISION = "20260718_0300"
 INDEX_NAME = "ix_inventory_snapshots_timeline_capture_projection"
@@ -147,9 +147,10 @@ def test_timeline_coverage_projection_migration_removes_summary_toast_reads(
     config = _config(monkeypatch)
     script = ScriptDirectory.from_config(config)
 
-    assert script.get_revision(HEAD_REVISION).down_revision == REVISION
+    projection_revision = "20260719_0500"
+    assert script.get_revision(projection_revision).down_revision == REVISION
 
-    upgrade = _render(config, "upgrade", f"{REVISION}:{HEAD_REVISION}")
+    upgrade = _render(config, "upgrade", f"{REVISION}:{projection_revision}")
     assert (
         "alter table cluster_inventory_snapshots add column if not exists event_capture jsonb"
     ) in upgrade
@@ -164,7 +165,7 @@ def test_timeline_coverage_projection_migration_removes_summary_toast_reads(
     ) in upgrade
     assert f"drop index concurrently if exists {OBSERVED_INDEX_NAME}" in upgrade
 
-    downgrade = _render(config, "downgrade", f"{HEAD_REVISION}:{REVISION}")
+    downgrade = _render(config, "downgrade", f"{projection_revision}:{REVISION}")
     assert (
         f"create index concurrently if not exists {OBSERVED_INDEX_NAME} "
         "on cluster_inventory_snapshots "

@@ -24,7 +24,7 @@ from domains.timeline.repository import (
 ROOT = Path(__file__).resolve().parents[1]
 REVISION = "20260718_0200"
 DOWN_REVISION = "20260718_0100"
-HEAD_REVISION = "20260719_0500"
+HEAD_REVISION = "20260722_0610"
 INDEX_NAME = "ix_timeline_events_diagnostics"
 
 

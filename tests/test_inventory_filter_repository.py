@@ -606,6 +606,9 @@ def test_global_facets_remove_only_their_own_axis_and_compile_scoped_sql(
         == 5
     )
     assert combined_sql.count("union all") == 5
+    assert "join lateral" in combined_sql
+    assert "global_matching_labels.version_id" not in combined_sql
+    assert "offset 0" in combined_sql
 
 
 def test_global_facets_without_a_projection_revision_are_empty() -> None:
@@ -634,6 +637,50 @@ def test_global_facets_without_a_projection_revision_are_empty() -> None:
         "labels": [],
         "resources": [],
     }
+
+
+def test_global_facets_disable_postgres_jit_for_the_bounded_interactive_query() -> None:
+    class Dialect:
+        name = "postgresql"
+
+    class Connection(_RecordingConnection):
+        dialect = Dialect()
+
+        def __init__(self) -> None:
+            super().__init__()
+            self.driver_sql: list[str] = []
+
+        def exec_driver_sql(self, statement: str) -> None:
+            self.driver_sql.append(statement)
+
+    connection = Connection()
+
+    @contextmanager
+    def recording_connection() -> Iterator[Connection]:
+        yield connection
+
+    repository = object.__new__(InventoryFilterRepository)
+    repository.connection = recording_connection  # type: ignore[method-assign]
+    repository.list_global_filter_facets(
+        workspace_id="workspace-a",
+        allowed_cluster_ids={"cluster-a"},
+        allowed_application_ids=set(),
+        filters=_filters(
+            clusters=None,
+            namespaces=None,
+            applications=None,
+            resource_types=None,
+            health=None,
+            labels=None,
+            query=None,
+        ),
+        snapshot_revision=42,
+        query="game",
+        limit=20,
+    )
+
+    assert connection.driver_sql == ["SET LOCAL jit = off"]
+    assert len(connection.statements) == 1
 
 
 def test_global_facets_split_the_single_union_result_without_losing_group_fields() -> None:

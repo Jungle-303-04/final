@@ -41,6 +41,7 @@ from domains.inventory_filter.models import (
     InventoryResourceVersion,
 )
 from domains.inventory_filter.query import ResourceFilters
+from packages.config.inventory_projection import late_projection_lock_enabled
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.gitops import (
     DeploymentBindingStatus,
@@ -86,47 +87,40 @@ def inventory_filter_projection_lock_key(workspace_id: str) -> int:
     return inventory_snapshot_lock_key("inventory-filter-projection", workspace_id)
 
 
-def sync_inventory_filter_projection(
+@dataclass(frozen=True)
+class _ProjectionDiff:
+    """Cluster-local plan for one snapshot, computed without the workspace lock.
+
+    Nothing here needs the workspace revision id, so the expensive reads (the
+    authoritative application-binding join, the active-version scan) and the diff
+    run outside the workspace advisory lock. Only the revision allocation and the
+    stamped writes must stay inside it to keep allocation order == commit order.
+    """
+
+    application_binding_complete: bool
+    desired_rows: list[JsonObject]
+    desired_labels: dict[str, dict[str, str]]
+    desired_applications: dict[str, tuple[str, ...]]
+    close_ids: set[int]
+    version_ids_by_inventory_key: dict[str, int]
+
+
+# Rows are stamped with the real revision id at write time, after the lock is held.
+# The diff builds them with this placeholder; content_hash excludes valid_from_revision.
+_UNSTAMPED_REVISION = 0
+
+
+def _compute_projection_diff(
     conn: Any,
     *,
     workspace_id: str,
     cluster_id: str,
     snapshot_id: str,
-    observed_at: datetime,
-    labels_complete: bool,
-    resources_complete: bool,
-    partial_reason_codes: Sequence[str],
-) -> InventoryFilterProjectionMutation:
-    """Advance one cluster's immutable filter revision in the snapshot transaction."""
-    revision_table = InventoryFilterRevision.__table__
+) -> _ProjectionDiff:
+    """Read cluster state and diff it against the active versions — no workspace lock."""
     version_table = InventoryResourceVersion.__table__
-    label_table = InventoryResourceLabelVersion.__table__
-    application_table = InventoryResourceApplicationVersion.__table__
     current_table = ClusterInventoryResourceRecord.__table__
 
-    # Sequence allocation happens before commit. Cursors are workspace-bound, so a
-    # workspace transaction lock preserves visible ordering without serializing tenants.
-    conn.execute(
-        select(func.pg_advisory_xact_lock(inventory_filter_projection_lock_key(workspace_id)))
-    )
-
-    revision_id = int(
-        conn.execute(
-            pg_insert(revision_table)
-            .values(
-                snapshot_id=snapshot_id,
-                workspace_id=workspace_id,
-                cluster_id=cluster_id,
-                observed_at=observed_at,
-                labels_complete=labels_complete,
-                resources_complete=resources_complete,
-                application_bindings_complete=False,
-                change_ledger_epoch=INVENTORY_CHANGE_LEDGER_EPOCH,
-                partial_reason_codes=sorted(set(partial_reason_codes)),
-            )
-            .returning(revision_table.c.revision_id)
-        ).scalar_one()
-    )
     current_rows = [
         dict(row)
         for row in conn.execute(
@@ -144,17 +138,6 @@ def sync_inventory_filter_projection(
             conn,
             workspace_id=workspace_id,
             cluster_id=cluster_id,
-        )
-    )
-    revision_reasons = set(partial_reason_codes)
-    if not application_binding_complete:
-        revision_reasons.add("application_bindings_incomplete")
-    conn.execute(
-        update(revision_table)
-        .where(revision_table.c.revision_id == revision_id)
-        .values(
-            application_bindings_complete=application_binding_complete,
-            partial_reason_codes=sorted(revision_reasons),
         )
     )
     active_rows = {
@@ -187,7 +170,7 @@ def sync_inventory_filter_projection(
         labels = _normalized_labels(resource.get("labels"))
         row = _version_row(
             resource,
-            revision_id=revision_id,
+            revision_id=_UNSTAMPED_REVISION,
             snapshot_id=snapshot_id,
             labels=labels,
             application_ids=application_ids,
@@ -206,11 +189,36 @@ def sync_inventory_filter_projection(
         if inventory_key not in current_keys:
             close_ids.add(int(active["version_id"]))
 
-    if close_ids:
+    return _ProjectionDiff(
+        application_binding_complete=application_binding_complete,
+        desired_rows=desired_rows,
+        desired_labels=desired_labels,
+        desired_applications=desired_applications,
+        close_ids=close_ids,
+        version_ids_by_inventory_key=version_ids_by_inventory_key,
+    )
+
+
+def _write_projection_versions(
+    conn: Any,
+    *,
+    revision_id: int,
+    observed_at: datetime,
+    workspace_id: str,
+    cluster_id: str,
+    diff: _ProjectionDiff,
+) -> dict[str, int]:
+    """Close superseded versions and insert the stamped new versions under the lock."""
+    version_table = InventoryResourceVersion.__table__
+    label_table = InventoryResourceLabelVersion.__table__
+    application_table = InventoryResourceApplicationVersion.__table__
+    version_ids_by_inventory_key = dict(diff.version_ids_by_inventory_key)
+
+    if diff.close_ids:
         conn.execute(
             update(version_table)
             .where(
-                version_table.c.version_id.in_(close_ids),
+                version_table.c.version_id.in_(diff.close_ids),
                 version_table.c.valid_to_revision.is_(None),
             )
             .values(
@@ -219,8 +227,11 @@ def sync_inventory_filter_projection(
             )
         )
 
-    for start in range(0, len(desired_rows), PROJECTION_WRITE_CHUNK):
-        chunk = desired_rows[start : start + PROJECTION_WRITE_CHUNK]
+    for row in diff.desired_rows:
+        row["valid_from_revision"] = revision_id
+
+    for start in range(0, len(diff.desired_rows), PROJECTION_WRITE_CHUNK):
+        chunk = diff.desired_rows[start : start + PROJECTION_WRITE_CHUNK]
         inserted = conn.execute(
             pg_insert(version_table)
             .values(chunk)
@@ -231,7 +242,7 @@ def sync_inventory_filter_projection(
         for version_id, inventory_key_value in inserted:
             inventory_key = str(inventory_key_value)
             version_ids_by_inventory_key[inventory_key] = int(version_id)
-            for key, value in desired_labels[inventory_key].items():
+            for key, value in diff.desired_labels[inventory_key].items():
                 label_rows.append(
                     {
                         "version_id": int(version_id),
@@ -242,7 +253,7 @@ def sync_inventory_filter_projection(
                         "selector": f"{key}={value}".casefold(),
                     }
                 )
-            for application_id in desired_applications[inventory_key]:
+            for application_id in diff.desired_applications[inventory_key]:
                 application_rows.append(
                     {
                         "version_id": int(version_id),
@@ -255,6 +266,122 @@ def sync_inventory_filter_projection(
             conn.execute(pg_insert(label_table).values(label_rows))
         if application_rows:
             conn.execute(pg_insert(application_table).values(application_rows))
+    return version_ids_by_inventory_key
+
+
+def sync_inventory_filter_projection(
+    conn: Any,
+    *,
+    workspace_id: str,
+    cluster_id: str,
+    snapshot_id: str,
+    observed_at: datetime,
+    labels_complete: bool,
+    resources_complete: bool,
+    partial_reason_codes: Sequence[str],
+) -> InventoryFilterProjectionMutation:
+    """Advance one cluster's immutable filter revision in the snapshot transaction.
+
+    The workspace advisory lock forces revision allocation order to equal commit
+    order, which keeps the single workspace-wide revision cursor gapless. Only that
+    ordering needs the lock, so the late-lock path (default) runs the cluster-local
+    reads and diff first and holds the lock only across revision allocation and the
+    stamped writes — the same guarantee, a far shorter critical section. Setting
+    INVENTORY_LATE_PROJECTION_LOCK=0 restores the original lock-first ordering.
+    """
+    revision_table = InventoryFilterRevision.__table__
+    lock_statement = select(
+        func.pg_advisory_xact_lock(inventory_filter_projection_lock_key(workspace_id))
+    )
+
+    if not late_projection_lock_enabled():
+        # Legacy: hold the workspace lock across the whole projection (original order).
+        conn.execute(lock_statement)
+        revision_id = int(
+            conn.execute(
+                pg_insert(revision_table)
+                .values(
+                    snapshot_id=snapshot_id,
+                    workspace_id=workspace_id,
+                    cluster_id=cluster_id,
+                    observed_at=observed_at,
+                    labels_complete=labels_complete,
+                    resources_complete=resources_complete,
+                    application_bindings_complete=False,
+                    change_ledger_epoch=INVENTORY_CHANGE_LEDGER_EPOCH,
+                    partial_reason_codes=sorted(set(partial_reason_codes)),
+                )
+                .returning(revision_table.c.revision_id)
+            ).scalar_one()
+        )
+        diff = _compute_projection_diff(
+            conn,
+            workspace_id=workspace_id,
+            cluster_id=cluster_id,
+            snapshot_id=snapshot_id,
+        )
+        revision_reasons = set(partial_reason_codes)
+        if not diff.application_binding_complete:
+            revision_reasons.add("application_bindings_incomplete")
+        conn.execute(
+            update(revision_table)
+            .where(revision_table.c.revision_id == revision_id)
+            .values(
+                application_bindings_complete=diff.application_binding_complete,
+                partial_reason_codes=sorted(revision_reasons),
+            )
+        )
+        version_ids_by_inventory_key = _write_projection_versions(
+            conn,
+            revision_id=revision_id,
+            observed_at=observed_at,
+            workspace_id=workspace_id,
+            cluster_id=cluster_id,
+            diff=diff,
+        )
+        return InventoryFilterProjectionMutation(
+            revision_id=revision_id,
+            version_ids_by_inventory_key=version_ids_by_inventory_key,
+        )
+
+    # Late-lock: the heavy, cluster-local reads and diff run without the workspace lock.
+    diff = _compute_projection_diff(
+        conn,
+        workspace_id=workspace_id,
+        cluster_id=cluster_id,
+        snapshot_id=snapshot_id,
+    )
+    revision_reasons = set(partial_reason_codes)
+    if not diff.application_binding_complete:
+        revision_reasons.add("application_bindings_incomplete")
+
+    # Critical section: allocate the revision and write while holding the workspace lock.
+    conn.execute(lock_statement)
+    revision_id = int(
+        conn.execute(
+            pg_insert(revision_table)
+            .values(
+                snapshot_id=snapshot_id,
+                workspace_id=workspace_id,
+                cluster_id=cluster_id,
+                observed_at=observed_at,
+                labels_complete=labels_complete,
+                resources_complete=resources_complete,
+                application_bindings_complete=diff.application_binding_complete,
+                change_ledger_epoch=INVENTORY_CHANGE_LEDGER_EPOCH,
+                partial_reason_codes=sorted(revision_reasons),
+            )
+            .returning(revision_table.c.revision_id)
+        ).scalar_one()
+    )
+    version_ids_by_inventory_key = _write_projection_versions(
+        conn,
+        revision_id=revision_id,
+        observed_at=observed_at,
+        workspace_id=workspace_id,
+        cluster_id=cluster_id,
+        diff=diff,
+    )
     return InventoryFilterProjectionMutation(
         revision_id=revision_id,
         version_ids_by_inventory_key=version_ids_by_inventory_key,
@@ -852,7 +979,19 @@ class InventoryFilterRepository(DatabaseConnection):
         # continue to use ``_current_versions`` and retain their historical semantics.
         version = InventoryResourceVersion.__table__
         current = (
-            select(version, literal(1).label("rank"))
+            select(
+                version.c.version_id,
+                version.c.inventory_key,
+                version.c.workspace_id,
+                version.c.cluster_id,
+                version.c.resource_type,
+                version.c.kind,
+                version.c.namespace,
+                version.c.name,
+                version.c.health,
+                version.c.search_text,
+                literal(1).label("rank"),
+            )
             .where(
                 version.c.workspace_id == workspace_id,
                 version.c.cluster_id.in_(cluster_ids),
@@ -1006,27 +1145,34 @@ class InventoryFilterRepository(DatabaseConnection):
         ).limit(effective_limit)
 
         label = InventoryResourceLabelVersion.__table__
+        # Start label search from the bounded active version set.  Letting PostgreSQL
+        # start from the historical selector GIN scanned hundreds of thousands of old
+        # label versions for common terms before discarding all but the live parents.
+        # OFFSET 0 deliberately preserves this correlated lookup boundary; the
+        # covering (version_id, workspace_id) index makes each probe heap-free.
+        matching_labels = (
+            select(label.c.key, label.c.value)
+            .where(
+                label.c.workspace_id == selected_matches.c.workspace_id,
+                label.c.version_id == selected_matches.c.version_id,
+                label.c.selector.like(pattern, escape="\\"),
+            )
+            .correlate(selected_matches)
+            .offset(0)
+            .lateral("global_matching_labels")
+        )
         label_statement = (
             select(
-                label.c.key,
-                label.c.value,
+                matching_labels.c.key,
+                matching_labels.c.value,
                 func.count(func.distinct(selected_matches.c.version_id)).label("count"),
             )
-            .select_from(
-                selected_matches.join(
-                    label,
-                    and_(
-                        label.c.workspace_id == selected_matches.c.workspace_id,
-                        label.c.version_id == selected_matches.c.version_id,
-                    ),
-                )
-            )
-            .where(label.c.selector.like(pattern, escape="\\"))
-            .group_by(label.c.key, label.c.value)
+            .select_from(selected_matches.join(matching_labels, true()))
+            .group_by(matching_labels.c.key, matching_labels.c.value)
             .order_by(
                 func.count(func.distinct(selected_matches.c.version_id)).desc(),
-                label.c.key,
-                label.c.value,
+                matching_labels.c.key,
+                matching_labels.c.value,
             )
             .limit(effective_limit)
         )
@@ -1116,6 +1262,13 @@ class InventoryFilterRepository(DatabaseConnection):
         # and removes five serial network round trips.  Each branch still drops only
         # its own selected axis, so disjunctive-facet counts retain their meaning.
         with self.connection() as conn:
+            # The correlated label probe intentionally has a pessimistic planner cost
+            # (one bounded index lookup per active version). Compiling JIT functions for
+            # that estimate took 1-1.7s while execution itself stayed below 200ms. Keep
+            # this small interactive query latency-bound; SET LOCAL is transaction-scoped.
+            dialect = getattr(conn, "dialect", None)
+            if getattr(dialect, "name", None) == "postgresql":
+                conn.exec_driver_sql("SET LOCAL jit = off")
             rows = [dict(row) for row in conn.execute(union_all(*branches)).mappings()]
         grouped: dict[str, list[JsonObject]] = defaultdict(list)
         for row in rows:

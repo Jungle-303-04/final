@@ -41,6 +41,8 @@ BASELINE_INDEXES = {
 }
 MODEL_INDEXES = BASELINE_INDEXES | {
     "ix_inventory_filter_revisions_change_coverage",
+    "ix_inventory_versions_active_facets",
+    "ix_inventory_label_versions_active_lookup",
 }
 
 

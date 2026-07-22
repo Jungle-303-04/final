@@ -351,13 +351,9 @@ class DemoRetentionRepository(DatabaseConnection):
                 limit=limit,
                 predicates=(
                     ~exists(
-                        select(1).where(
-                            or_(
-                                version.c.valid_from_revision == revision.c.revision_id,
-                                version.c.valid_to_revision == revision.c.revision_id,
-                            )
-                        )
+                        select(1).where(version.c.valid_from_revision == revision.c.revision_id)
                     ),
+                    ~exists(select(1).where(version.c.valid_to_revision == revision.c.revision_id)),
                 ),
             ),
         )

@@ -24,7 +24,7 @@ from domains.inventory.repository import (
 ROOT = Path(__file__).resolve().parents[1]
 REVISION = "20260718_0100"
 DOWN_REVISION = "20260718_0010"
-HEAD_REVISION = "20260719_0500"
+HEAD_REVISION = "20260722_0610"
 INDEX_NAME = "ix_inventory_snapshots_live_scope_latest"
 
 
