@@ -37,6 +37,7 @@ from domains.diagnostics.router import router as diagnostics_router
 from domains.gitops.detail_router import router as gitops_detail_router
 from domains.gitops.overview_router import router as gitops_overview_router
 from domains.gitops.repository_discovery_router import router as repository_discovery_router
+from domains.scm.app_router import router as github_app_router
 from domains.gitops.router import approval_router
 from domains.gitops.router import router as gitops_router
 from domains.gitops_filter.router import router as gitops_filter_router
@@ -445,6 +446,7 @@ class ApiGateway:
         app.include_router(diagnose_router)  # durable resource investigation + replayable SSE
         app.include_router(identity_admin_router)  # 관리 콘솔: 조직/그룹/멤버/권한(admin 세션)
         app.include_router(repository_discovery_router)  # repo 연결 전 branch/manifest 탐색
+        app.include_router(github_app_router)  # GitHub App 연동(설치 URL·설치↔레포 검증)
         # 정적 filter 경로는 /applications/{application_id}보다 먼저 등록해야 한다.
         app.include_router(application_filter_router)  # workspace Applications 필터·facet
         app.include_router(applications_router)  # web UI용 application/deployment 바인딩 API

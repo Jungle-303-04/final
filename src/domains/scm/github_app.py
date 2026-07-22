@@ -153,15 +153,19 @@ class GithubAppClient:
         installation_id: str,
         *,
         client: httpx.AsyncClient | None = None,
+        token: str | None = None,
     ) -> list[dict[str, Any]]:
-        """설치가 접근 가능한 레포 전체를 반환한다(주소 불일치 감지에 사용)."""
+        """설치가 접근 가능한 레포 전체를 반환한다(주소 불일치 감지에 사용).
+
+        ``token`` 을 주면 재발급 없이 그 설치 토큰을 재사용한다.
+        """
         cfg = self._config
         owns = client is None
         http = client or httpx.AsyncClient(timeout=_HTTP_TIMEOUT)
         try:
-            minted = await self.mint_installation_token(installation_id, client=http)
+            access_token = token or (await self.mint_installation_token(installation_id, client=http))["token"]
             headers = {
-                "Authorization": f"Bearer {minted['token']}",
+                "Authorization": f"Bearer {access_token}",
                 "Accept": "application/vnd.github+json",
                 "X-GitHub-Api-Version": "2022-11-28",
             }
