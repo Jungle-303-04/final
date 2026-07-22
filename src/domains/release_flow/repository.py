@@ -37,6 +37,25 @@ SUCCEEDED_STEP_STATUS = "succeeded"
 FAILED_STEP_STATUS = "failed"
 TERMINAL_RUN_STATUSES = {"succeeded", "failed", "cancelled", "rollback_requested"}
 
+# 릴리스 run 상태 전이 가드 — target 상태별 허용 source 집합.
+# 상태 갱신은 현재 상태를 WHERE 에 넣은 CAS 로 수행해, 경합 시 "마지막 쓰기 승리"가
+# 아니라 "먼저 종결한 쪽 승리"가 되도록 한다(예: cancel 직후 도착한 advance 가
+# cancelled 를 running 으로 부활시키는 회귀 차단). 같은 상태 재기록은 멱등 허용.
+RELEASE_RUN_ALLOWED_SOURCES: dict[str, frozenset[str]] = {
+    "running": frozenset({"pending", "paused", "waiting_for_approval", "failed"}),
+    "paused": frozenset({"running", "waiting_for_approval"}),
+    "waiting_for_approval": frozenset({"running", "paused"}),
+    "succeeded": frozenset({"running", "waiting_for_approval"}),
+    "failed": frozenset({"running", "paused", "waiting_for_approval"}),
+    "cancelled": frozenset({"pending", "running", "paused", "waiting_for_approval"}),
+    "rollback_requested": frozenset({"running", "paused", "waiting_for_approval"}),
+}
+
+
+def release_run_transition_sources(status: str) -> frozenset[str]:
+    """target 상태로 전이 가능한 source 상태 집합(같은 상태 재기록 포함)."""
+    return RELEASE_RUN_ALLOWED_SOURCES.get(status, frozenset()) | {status}
+
 
 class ReleasePlanWorkspaceMismatchError(LookupError):
     """A plan id already belongs to a different workspace."""
@@ -858,7 +877,13 @@ class ReleaseFlowRepository(DatabaseConnection):
                 next_status = projected_release_status(run_row, step_rows)
                 conn.execute(
                     run_table.update()
-                    .where(run_table.c.workspace_id == workspace_id, run_table.c.run_id == run_id)
+                    .where(
+                        run_table.c.workspace_id == workspace_id,
+                        run_table.c.run_id == run_id,
+                        # 종결된 run 은 지연·재배달 스텝 이벤트로 부활하지 않는다 —
+                        # terminal 상태와 그 시점의 health 를 그대로 동결한다.
+                        run_table.c.status.not_in(sorted(TERMINAL_RUN_STATUSES)),
+                    )
                     .values(
                         status=next_status,
                         health=release_health_summary([dict(row) for row in step_rows]),
@@ -884,11 +909,20 @@ class ReleaseFlowRepository(DatabaseConnection):
             values["current_wave"] = current_wave
         statement = (
             table.update()
-            .where(table.c.workspace_id == workspace_id, table.c.run_id == run_id)
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.run_id == run_id,
+                table.c.status.in_(sorted(release_run_transition_sources(status))),
+            )
             .values(**values)
+            .returning(table.c.run_id)
         )
         with self.connection() as conn:
-            conn.execute(statement)
+            updated = conn.execute(statement).first()
+            if updated is None:
+                # 전이 거부(이미 terminal 이거나 허용되지 않은 source) — 상태를
+                # 바꾸지 않았으므로 감사 이벤트도 남기지 않고 현재 행을 반환한다.
+                return self.get_release_run(workspace_id, run_id)
             conn.execute(
                 pg_insert(ReleaseRunEvent.__table__).values(
                     **release_run_event_values(
@@ -980,11 +1014,19 @@ class ReleaseFlowRepository(DatabaseConnection):
         table = ReleaseRun.__table__
         event_type = f"release.retry.wave.{wave}.attempt.{attempt}.{status}"
         with self.connection() as conn:
-            conn.execute(
+            updated = conn.execute(
                 table.update()
-                .where(table.c.workspace_id == workspace_id, table.c.run_id == run_id)
+                .where(
+                    table.c.workspace_id == workspace_id,
+                    table.c.run_id == run_id,
+                    table.c.status.in_(sorted(release_run_transition_sources(status))),
+                )
                 .values(status=status, current_wave=wave, updated_at=func.now())
-            )
+                .returning(table.c.run_id)
+            ).first()
+            if updated is None:
+                # 전이 거부 — retry 마킹이 경합에서 밀렸으므로 감사 이벤트도 남기지 않는다.
+                return self.get_release_run(workspace_id, run_id)
             conn.execute(
                 pg_insert(ReleaseRunEvent.__table__).values(
                     **release_run_event_values(
