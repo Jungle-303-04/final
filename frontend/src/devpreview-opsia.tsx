@@ -536,7 +536,7 @@ export function NodePodSlotGrid({ node, pods }: { node: InvNode; pods: readonly 
       data-hidden-slot-count={hiddenCapacity}
       style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}
     >
-      <span aria-hidden="true" style={{ display: "grid", gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, gap: 4, flex: 1, minWidth: 0 }}>
+      <span className="node-slot-grid" aria-hidden="true" style={{ display: "grid", gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, gap: 4, flex: 1, minWidth: 0 }}>
         {states.map((state, index) => (
           <motion.span
             data-slot-state={state}
@@ -845,8 +845,8 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
         </div>
 
         {/* 좁아지면(AI 도킹 등) 어사이드가 아래로 내려간다 — 겹침 방지 */}
-        <div style={{ display: "flex", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
-          <div style={{ flex: "1 1 440px", minWidth: 0, position: "relative" }}>
+        <div className="opsia-content-layout" style={{ display: "flex", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
+          <div className="opsia-main-pane" style={{ flex: "1 1 440px", minWidth: 0, position: "relative" }}>
             <AnimatePresence mode="popLayout" custom={{ dir, mode }} initial={false}>
               <motion.div key={viewKey} custom={{ dir, mode }}
                 variants={{
@@ -896,7 +896,7 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
                             className="node-card-shell"
                             data-node-card-span={span}
                             key={node.key}
-                            style={{ minWidth: 0, maxWidth: "100%", gridColumn: `span ${span}`, aspectRatio: `${span} / 1`, contain: "layout paint" }}
+                            style={{ minWidth: 0, maxWidth: "100%", gridColumn: `span ${span}`, contain: "layout" }}
                             layout={reducedMotion ? false : "position"}
                             initial={reducedMotion ? false : { opacity: 0, y: 8 }}
                             animate={{ opacity: 1, y: 0 }}
@@ -986,12 +986,23 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
       <style>{`
         html, body { background: ${UI.bg}; }
         .op { min-height: 100vh; background: ${UI.bg}; font-family: var(--font-sans); font-weight: var(--font-weight-body); -webkit-font-smoothing: antialiased; }
+        .op .opsia-content-layout { container: opsia-content / inline-size; }
+        .op .opsia-main-pane { container: opsia-main / inline-size; }
+        .op .node-slot-grid { grid-template-columns: repeat(auto-fit, 48px) !important; justify-content: start; }
         .op .podrow { position: relative; transition: background .15s ease; }
         .op .podrow:hover { background: ${inkA(0.035)} !important; }
+        @container opsia-content (max-width: 1000px) {
+          .op .opsia-main-pane { flex-basis: 100% !important; }
+          .op .opsia-side-panel { position: static !important; top: auto !important; width: 100% !important; max-height: none !important; }
+        }
+        @container opsia-main (max-width: 720px) {
+          .op .node-grid { grid-template-columns: minmax(0, 1fr) !important; }
+          .op .node-card-shell { grid-column: auto !important; }
+        }
         @media (max-width: 760px) {
           .op .cluster-grid,
           .op .node-grid { grid-template-columns: minmax(0, 1fr) !important; }
-          .op .node-card-shell { grid-column: auto !important; aspect-ratio: auto !important; min-height: 240px; }
+          .op .node-card-shell { grid-column: auto !important; }
           .home-cluster-grid { grid-template-columns: minmax(0, 1fr) !important; }
           .home-cluster-grid > * { grid-column: auto !important; }
         }
@@ -1106,7 +1117,7 @@ function SidePanel({ forcedTab, scaled, onAddRepo, onOpenRepository, stickyTop, 
 }) {
   const [tab, setTab] = useState<"svc" | "cfg" | "git">(forcedTab ?? "svc");
   return (
-    <aside style={{ width: 270, flexShrink: 0, alignSelf: "flex-start", background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 16, position: "sticky", top: stickyTop ?? 24, maxHeight: scaled ? `calc(100vh / ${PRESENT_SCALE} - ${(stickyTop ?? 24) + 16}px)` : "calc(100vh - 60px)", overflow: "hidden", display: "flex" }}>
+    <aside className="opsia-side-panel" style={{ width: 270, flexShrink: 0, alignSelf: "flex-start", background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 16, position: "sticky", top: stickyTop ?? 24, maxHeight: scaled ? `calc(100vh / ${PRESENT_SCALE} - ${(stickyTop ?? 24) + 16}px)` : "calc(100vh - 60px)", overflow: "hidden", display: "flex" }}>
     <div style={{ flex: 1, minWidth: 0, padding: "14px 6px 14px 14px", display: "flex", flexDirection: "column", gap: 12, overflowY: "auto", scrollbarGutter: "stable" }}>
       {/* P1: 중복 "연결 보기" heading 제거. 서비스/구성/저장소 탭을 사이드바 최상단에 고정하고
           결과 목록만 내부 스크롤한다(탭 sticky). */}
