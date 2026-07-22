@@ -6,7 +6,7 @@ import { motion } from "motion/react";
 import {
   Rocket, Package, AlertTriangle, Bell, Clock, ShieldCheck, Coins,
   Building2, Globe, Check, Sparkles, X, Palette, RefreshCw, Lock, Pin,
-  BrainCircuit, ChevronRight, MapPin,
+  ChevronRight, MapPin,
 } from "lucide-react";
 import { UI, BLUE, HP, TINT, MONO, TYPE, SOFT, DUR, PRESENT_SCALE, inkA, blueA, critA, BRAND } from "./devpreview/theme";
 import { GithubIcon } from "./devpreview/brandIcons";
@@ -699,7 +699,7 @@ export type RcaIncident = {
 };
 
 type IssueCardState = {
-  label: "분석 중" | "확인 필요";
+  label: "상태 미확인" | "확인 필요";
   tone: "info" | "warn";
 };
 
@@ -717,7 +717,7 @@ function issueCardState(issue: RcaIssueDetailView): IssueCardState {
     || issue.prUrl) {
     return { label: "확인 필요", tone: "warn" };
   }
-  return { label: "분석 중", tone: "info" };
+  return { label: "상태 미확인", tone: "info" };
 }
 
 function recoveryCardProgress(): RecoveryCardProgress {
@@ -745,8 +745,9 @@ function RecoveryProgress({ progress }: { progress: RecoveryCardProgress }) {
 function IssueCard({ issue, onOpen }: { issue: RcaIssueDetailView; onOpen: () => void }) {
   const state = issueCardState(issue);
   const recovery = recoveryCardProgress();
-  const title = issue.resourceName ?? issue.correlationId.slice(0, 12);
-  const symptom = issue.symptom ?? koLabel(issue.status);
+  const title = issue.resourceName ?? "대상 미확인";
+  const symptom = issue.symptom ?? "증상 미확인";
+  const rootCause = issue.rootCause ?? "원인 미확인";
   const severityLabel = issue.severity === "critical" ? "장애" : issue.severity === "warning" ? "주의" : "정보";
   const symptomWithCode = issue.rawSymptom && issue.rawSymptom !== symptom
     ? `${symptom} (${issue.rawSymptom})`
@@ -781,16 +782,14 @@ function IssueCard({ issue, onOpen }: { issue: RcaIssueDetailView; onOpen: () =>
 
         <span style={{ minWidth: 0, display: "grid", gap: 5, fontSize: TYPE.label2, lineHeight: 1.45 }}>
           <span style={{ color: UI.ink2 }}><strong style={{ color: UI.ink, fontWeight: 600 }}>증상</strong><span style={{ margin: "0 7px", color: UI.line }}>|</span>{symptomWithCode}</span>
-          {issue.rootCause && <span style={{ color: UI.ink2 }}><strong style={{ color: UI.ink, fontWeight: 600 }}>원인</strong><span style={{ margin: "0 7px", color: UI.line }}>|</span>{issue.rootCause}</span>}
+          <span style={{ color: UI.ink2 }}><strong style={{ color: UI.ink, fontWeight: 600 }}>원인</strong><span style={{ margin: "0 7px", color: UI.line }}>|</span>{rootCause}</span>
           <span style={{ color: UI.ink2 }}><strong style={{ color: UI.ink, fontWeight: 600 }}>대상</strong><span style={{ margin: "0 7px", color: UI.line }}>|</span>{target}</span>
           <span style={{ color: UI.ink2 }}><strong style={{ color: UI.ink, fontWeight: 600 }}>복구</strong><span style={{ margin: "0 7px", color: UI.line }}>|</span><RecoveryProgress progress={recovery} /></span>
         </span>
 
         <span style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", paddingTop: 9, borderTop: `1px dashed ${UI.line}`, fontSize: TYPE.caption2, color: UI.ink3 }}>
           <span style={{ minWidth: 0, display: "inline-flex", alignItems: "center", gap: 4 }}><MapPin size={12} /><span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{scope}</span></span>
-          {issue.confidence !== null && <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><BrainCircuit size={12} />신뢰도 {Math.round(issue.confidence * 100)}%</span>}
           <span>판단 근거 {evidenceCount}개</span>
-          {issue.missingEvidence.length > 0 && <span>부족한 근거 {issue.missingEvidence.length}개</span>}
         </span>
 
         <span style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
