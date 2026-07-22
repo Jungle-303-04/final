@@ -22,6 +22,8 @@ from pydantic import BaseModel
 from domains.identity.dependencies import require_session
 from domains.scm.github_app import GithubAppClient, GithubAppNotConfigured
 from domains.scm.github_app_manifest import (
+    APP_CONFIG_PROVIDER,
+    APP_CONFIG_SCOPE,
     build_app_manifest,
     convert_manifest_code,
     new_app_action_url,
@@ -29,7 +31,7 @@ from domains.scm.github_app_manifest import (
     store_app_config_from_conversion,
 )
 from packages.config.settings import env
-from packages.contracts.identity import DEFAULT_WORKSPACE_ID
+from packages.contracts.identity import DEFAULT_WORKSPACE_ID, ServiceRole
 from packages.runtime.dependencies import get_db
 
 router = APIRouter()
@@ -90,6 +92,42 @@ async def github_app_config(
         slug=cfg.slug or None,
         install_available=bool(cfg.configured and cfg.slug),
     )
+
+
+class GithubAppUninstallResponse(BaseModel):
+    removed: bool
+    env_fallback_active: bool
+
+
+@router.delete(GITHUB_APP_CONFIG_PATH, response_model=GithubAppUninstallResponse)
+async def github_app_uninstall(
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> GithubAppUninstallResponse:
+    """저장된 GitHub App 구성(개인키·웹훅시크릿 등)을 서버에서 제거한다(운영자 오프보딩).
+
+    등록한 담당자가 이탈하거나 소유권이 바뀔 때, DB 에 남은 App 자격증명을 지워
+    더는 그 App 으로 설치 토큰을 발급하지 못하게 한다(관리자 전용).
+
+    참고:
+      - GitHub 상의 App/설치 자체 삭제는 GitHub 설정에서 별도로 해야 한다(여기선
+        서버 보관본만 제거). 프론트가 그 안내를 함께 노출한다.
+      - env(GITHUB_APP_*) 로 구성된 폴백이 남아 있으면 ``env_fallback_active`` 로
+        알려, '지운 줄 알았는데 여전히 동작'하는 고아 인식을 막는다.
+    """
+    if ServiceRole.SERVICE_ADMIN.value not in tuple(getattr(current, "roles", ()) or ()):
+        raise HTTPException(status_code=403, detail="service_admin_required")
+    deleter = getattr(db, "delete_workspace_credential", None)
+    removed = (
+        bool(deleter(DEFAULT_WORKSPACE_ID, APP_CONFIG_PROVIDER, APP_CONFIG_SCOPE))
+        if callable(deleter)
+        else False
+    )
+    # DB 구성을 지운 뒤에도 env 폴백이 살아있으면 여전히 configured 로 보인다.
+    from domains.scm.github_app import load_github_app_config
+
+    env_fallback_active = load_github_app_config().configured
+    return GithubAppUninstallResponse(removed=removed, env_fallback_active=env_fallback_active)
 
 
 @router.get(GITHUB_APP_INSTALL_URL_PATH, response_model=InstallUrlResponse)
