@@ -28,7 +28,7 @@ export const clustersKo = {
   "clusters.action.add": "클러스터 추가",
   "clusters.action.disconnect": "연결 해제",
   "clusters.disconnect.title": "클러스터 연결 해제",
-  "clusters.disconnect.description": "{name} 에이전트의 연결을 해제합니다. 클러스터 안의 워크로드는 변경하지 않습니다.",
+  "clusters.disconnect.description": "에이전트 연결을 해제합니다. 클러스터 안의 워크로드는 변경하지 않습니다.",
   "clusters.disconnect.confirm.label": "확인을 위해 클러스터 이름 입력",
   "clusters.disconnect.confirm.hint": "계속하려면 {name}을 정확히 입력하세요.",
   "clusters.disconnect.submitting": "연결 해제를 요청하는 중",

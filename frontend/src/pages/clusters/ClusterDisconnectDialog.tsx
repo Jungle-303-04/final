@@ -197,7 +197,7 @@ export function ClusterDisconnectDialog({
       open={open}
     >
       <DialogContent
-        className="overflow-hidden rounded-[26px] sm:max-w-xl"
+        className="gap-5 overflow-hidden rounded-[26px] p-7 sm:max-w-[580px]"
         closeLabel={t("common.action.close")}
         showCloseButton={!terminal}
         style={LIGHT_SURFACE_TOKENS}
@@ -278,7 +278,9 @@ export function ClusterDisconnectDialog({
             </Alert>
           ) : null}
 
-          <DialogFooter>
+          {/* 위저드에는 푸터 밴드가 없다 — 기본 회색 배경·border·음수 마진을 제거해
+              본문과 같은 면 위에서 행동 라인만 남긴다. */}
+          <DialogFooter className="mx-0 mb-0 rounded-none border-0 bg-transparent p-0">
             {terminal ? (
               <Button onClick={() => changeOpen(false)} type="button">
                 {t("common.action.close")}

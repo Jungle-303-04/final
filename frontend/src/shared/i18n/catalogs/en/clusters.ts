@@ -28,7 +28,7 @@ export const clustersEn = {
   "clusters.action.add": "Add cluster",
   "clusters.action.disconnect": "Disconnect",
   "clusters.disconnect.title": "Disconnect cluster",
-  "clusters.disconnect.description": "Disconnect the Kyro agent from {name}. Workloads inside the cluster are not changed.",
+  "clusters.disconnect.description": "Disconnect the Kyro agent. Workloads inside the cluster are not changed.",
   "clusters.disconnect.confirm.label": "Enter the cluster name to confirm",
   "clusters.disconnect.confirm.hint": "Enter {name} exactly to continue.",
   "clusters.disconnect.submitting": "Requesting disconnection",
