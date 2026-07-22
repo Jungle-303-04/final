@@ -50,7 +50,7 @@ spec:
             failureThreshold: 6
           env:
             - name: RECOVERY_ENABLE_AUTO_REVERT_PR
-              value: "false"
+              value: "true"
           envFrom:
             - configMapRef:
                 name: management-runtime-config
