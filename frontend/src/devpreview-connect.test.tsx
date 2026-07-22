@@ -136,4 +136,5 @@ describe("devpreview name-only cluster wizard", () => {
     expect(await screen.findByText("cluster name already exists")).toBeTruthy();
     expect(screen.queryByRole("tab", { name: "Windows PowerShell" })).toBeNull();
   });
+
 });
