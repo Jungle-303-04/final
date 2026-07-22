@@ -2089,7 +2089,13 @@ function App() {
           cluster={listDisconnectChoice}
           key={listDisconnectChoice.id}
           open
-          onOpenChange={(nextOpen) => { if (!nextOpen) setListDisconnectClusterId(null); }}
+          onOpenChange={(nextOpen) => {
+            if (nextOpen) return;
+            setListDisconnectClusterId(null);
+            // 취소로 닫아도 목록을 재조회 — 다이얼로그 진행 중 서버 상태가 바뀌었을
+            // 수 있고(부분 해제 등), 닫힘 직후 화면이 최신이어야 한다.
+            contract.refresh();
+          }}
           onDisconnected={(clusterId) => {
             const disconnected = contract.clusters.find((cluster) => cluster.id === clusterId);
             removePendingClusters(clusterId, disconnected?.name, disconnected?.displayName);
@@ -2119,6 +2125,10 @@ function App() {
               onDismiss={() => {
                 setRepositoryConnectContext(null);
                 setConnectModal(null);
+                // 위저드를 어느 단계에서 닫든 목록을 즉시 재조회한다 — 명령 발급
+                // 단계까지 갔다면 가등록 클러스터가 이미 생겨 있으므로, 갱신 없이는
+                // 방금 만든 클러스터가 홈에 보이지 않는 사용성 구멍이 있었다.
+                contract.refresh();
               }}
             />
           </motion.div>
