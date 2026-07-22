@@ -28,6 +28,7 @@ from packages.events.bus import (
     DeadLetterSink,
     NatsEventBus,
     RecordedEventClient,
+    ack_wait_seconds,
     event_causation,
     event_context,
 )
@@ -88,6 +89,28 @@ HEARTBEAT_PATH = env(WORKER_HEARTBEAT_PATH_ENV, "/tmp/heartbeat")
 
 def elapsed_ms(start: float) -> int:
     return max(0, int((time.perf_counter() - start) * 1000))
+
+
+def validate_event_timing_contract(handler_timeout_seconds: int) -> None:
+    """핸들러·재배달·claim 신선도 타이머의 안전 순서를 기동 시점에 강제한다.
+
+    handler_timeout < ack_wait  : 처리 중 JetStream 재배달 금지 창 보장.
+    ack_wait < processing_stale : 재배달이 와도 원 claim 이 stale 로 오판되어
+                                  탈취되지 않음을 보장.
+    이 순서가 깨지면 같은 이벤트를 두 소비자가 동시에 처리할 수 있다(조용한
+    중복 실행). env 로만 존재하던 계약을 코드로 강제해, 잘못 조합된 배포는
+    조용히 오작동하는 대신 부팅에서 즉시 실패한다.
+    """
+    from packages.storage.repositories.event import PROCESSING_STALE_SECONDS
+
+    ack_wait = ack_wait_seconds()
+    if not handler_timeout_seconds < ack_wait < PROCESSING_STALE_SECONDS:
+        raise ValueError(
+            "unsafe event timing contract: require "
+            f"WORKER_HANDLER_TIMEOUT_SECONDS({handler_timeout_seconds}) "
+            f"< NATS_ACK_WAIT_SECONDS({ack_wait}) "
+            f"< EVENT_PROCESSING_STALE_SECONDS({PROCESSING_STALE_SECONDS})"
+        )
 
 
 @dataclass(frozen=True)
@@ -374,6 +397,7 @@ class WorkerRuntime:
     async def run(self) -> None:
         from packages.storage.database import wait_for_database
 
+        validate_event_timing_contract(self.spec.retry_policy.handler_timeout_seconds)
         Path(HEARTBEAT_PATH).touch()  # 시작 즉시 생존 표시(DB 대기 중 liveness 오살 방지)
         await wait_for_database(self.db)
         await self.bus.connect()

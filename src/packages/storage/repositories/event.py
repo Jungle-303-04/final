@@ -9,6 +9,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import Connection
 
 from packages.config.logs import CONTEXT_KEY, get_logger
+from packages.config.settings import env
 from packages.contracts.event_bus.interfaces import (
     EventConsumerLagSnapshot,
     EventConsumerMetrics,
@@ -34,8 +35,11 @@ from packages.storage.schema import (
 
 # PROCESSING claim 신선도 창 — 이 시간 안의 PROCESSING 은 다른 소비자 인스턴스가
 # 실제 처리 중인 것으로 간주해 재클레임 거절(JetStream 재배달과의 동시 중복 처리 방지).
-# ack_wait(60s) 뒤 재배달이 와도 원 claim 이 이 창을 넘길 때까지는 획득 불가함.
-PROCESSING_STALE_SECONDS = 90
+# ack_wait 뒤 재배달이 와도 원 claim 이 이 창을 넘길 때까지는 획득 불가함.
+# 반드시 handler_timeout < ack_wait < 이 값 순서를 지켜야 하며, 워커 기동 시
+# validate_event_timing_contract(runtime/worker.py)가 이 관계를 강제한다.
+PROCESSING_STALE_SECONDS_ENV = "EVENT_PROCESSING_STALE_SECONDS"
+PROCESSING_STALE_SECONDS = int(env(PROCESSING_STALE_SECONDS_ENV, "90"))
 EVENT_CONSUMER_METRICS_UPSERT_CHUNK = 1_000
 LOGGER = get_logger(__name__)
 
