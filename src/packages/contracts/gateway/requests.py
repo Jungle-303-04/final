@@ -401,7 +401,9 @@ class TargetRegisterRequest(TargetProviderSelectionRequest):
 
 class ClusterConnectRequest(StrictModel):
     name: str = Field(min_length=1, max_length=120, pattern=r"\S")
-    provider: Literal["aws", "gcp", "azure", "onprem"]
+    # The lightweight connect flow only needs the user-facing name.  Provider
+    # selection is retained as a backwards-compatible hint for older clients.
+    provider: Literal["aws", "gcp", "azure", "onprem"] = "aws"
     environment: Literal["development", "staging", "production"] = "development"
 
 

@@ -919,7 +919,10 @@ def test_console_proxy_uses_runtime_dns_and_does_not_buffer_api_streams() -> Non
             "set $realtime_upstream http://realtime-gateway.management.svc.cluster.local:8000"
             in source
         )
-        assert "proxy_pass $realtime_upstream/live/" in source
+        # 변수+URI 형태는 /api/live/browser 를 /live/ 로 뭉개 WS 403 을 만들었다.
+        assert "proxy_pass $realtime_upstream/live/" not in source
+        assert "rewrite ^/api/live/(.*)$ /live/$1 break;" in source
+        assert "proxy_pass $realtime_upstream;" in source
 
 
 def test_gateway_manifest_uses_canonical_console_origin() -> None:

@@ -1,22 +1,15 @@
 import { Check } from "lucide-react";
-import {
-  useEffect,
-  useRef,
-  useState,
-  type ComponentType,
-} from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuthSessionGate } from "../../features/auth/AuthSessionGate";
 import {
   ClustersPortFailure,
-  type ClusterConnectProvider,
   type ClusterConnectReceipt,
   type ClusterConnectStage,
   type ClustersPort,
 } from "../../features/clusters/clustersContract";
 import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
-import { useI18n, type MessageKey } from "../../shared/i18n";
-import { ProviderLogo, type ProviderLogoKind } from "../../shared/brand/ProviderLogo";
+import { useI18n } from "../../shared/i18n";
 import { Button, buttonVariants } from "../../shared/ui/primitives/button";
 import { cn } from "@/shared/lib/cn";
 import {
@@ -33,16 +26,6 @@ import { ConnectionCommandStep } from "./ClusterConnectDialogParts";
 import { clusterResourcesHref } from "./clusterNavigation";
 
 const POLL_INTERVAL_MS = 2_000;
-const providers: readonly {
-  id: ClusterConnectProvider;
-  logo: ProviderLogoKind | ComponentType<{ className?: string }>;
-  labelKey: MessageKey;
-}[] = [
-  { id: "aws", logo: "eks", labelKey: "clusters.connect.provider.aws" },
-  { id: "gcp", logo: "gke", labelKey: "clusters.connect.provider.gcp" },
-  { id: "azure", logo: "aks", labelKey: "clusters.connect.provider.azure" },
-];
-
 type WizardStep = 1 | 2 | 3;
 export type ConnectPhase =
   | "idle"
@@ -74,7 +57,7 @@ export function ClusterConnectDialog({
   const { formatDate, t } = useI18n();
   const [step, setStep] = useState<WizardStep>(1);
   const [name, setName] = useState("");
-  const [provider, setProvider] = useState<ClusterConnectProvider>("aws");
+  const [installShell, setInstallShell] = useState<"posix" | "powershell">(detectInstallShell);
   const [phase, setPhase] = useState<ConnectPhase>("idle");
   const [receipt, setReceipt] = useState<ClusterConnectReceipt | null>(null);
   const [connectionStage, setConnectionStage] = useState<ClusterConnectStage>("awaiting_install");
@@ -164,7 +147,7 @@ export function ClusterConnectDialog({
   const reset = () => {
     setStep(1);
     setName("");
-    setProvider("aws");
+    setInstallShell(detectInstallShell());
     setPhase("idle");
     setReceipt(null);
     setConnectionStage("awaiting_install");
@@ -181,7 +164,7 @@ export function ClusterConnectDialog({
     setServerNameConflict(false);
     setPhase("submitting");
     try {
-      const nextReceipt = await port.connect({ name: name.trim(), provider }, controller.signal);
+      const nextReceipt = await port.connect({ name: name.trim() }, controller.signal);
       setReceipt(nextReceipt);
       setConnectionStage("awaiting_install");
       waitingStartedAt.current = Date.now();
@@ -237,7 +220,11 @@ export function ClusterConnectDialog({
     // then surface the uncommon permission failure if the browser rejects the write.
     setCopyState("copied");
     try {
-      await navigator.clipboard.writeText(receipt.installCommand);
+      await navigator.clipboard.writeText(
+        installShell === "powershell"
+          ? receipt.powershellInstallCommand
+          : receipt.installCommand,
+      );
     } catch {
       setCopyState("failed");
     }
@@ -279,26 +266,6 @@ export function ClusterConnectDialog({
                 </span>
               ) : null}
             </label>
-            <fieldset className="grid gap-2">
-              <legend className="mb-1 text-sm font-medium">{t("clusters.connect.provider.label")}</legend>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                {providers.map(({ id, logo, labelKey }) => (
-                  <button
-                    aria-pressed={provider === id}
-                    className={cn(
-                      "grid min-h-24 place-items-center gap-2 rounded-xl border bg-card p-3 text-sm outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 motion-reduce:transition-none",
-                      provider === id && "border-ring bg-muted",
-                    )}
-                    key={id}
-                    onClick={() => setProvider(id)}
-                    type="button"
-                  >
-                    <ConnectProviderLogo logo={logo} />
-                    <span>{t(labelKey)}</span>
-                  </button>
-                ))}
-              </div>
-            </fieldset>
             <DialogFooter className="mt-1">
               <Button
                 aria-busy={phase === "submitting"}
@@ -321,9 +288,12 @@ export function ClusterConnectDialog({
               expiresAt={receipt?.expiresAt ?? null}
               formatDate={formatDate}
               installCommand={receipt?.installCommand ?? null}
+              installShell={installShell}
               onCopy={() => void copyCommand()}
               onReissue={() => void reissue()}
+              onShellChange={setInstallShell}
               phase={phase}
+              powershellInstallCommand={receipt?.powershellInstallCommand ?? null}
               t={t}
             />
           </div>
@@ -355,19 +325,13 @@ function normalizeDisplayName(value: string): string {
   return value.trim().toLocaleLowerCase();
 }
 
-function ConnectProviderLogo({
-  logo,
-}: {
-  logo: ProviderLogoKind | ComponentType<{ className?: string }>;
-}) {
-  if (typeof logo === "string") {
-    return <ProviderLogo className="size-6" provider={logo} />;
-  }
-  const ProviderIcon = logo;
-  return <ProviderIcon className="size-6" />;
-}
-
 function isAbortError(error: unknown): boolean {
   return typeof error === "object" && error !== null && "name" in error &&
     error.name === "AbortError";
+}
+
+function detectInstallShell(): "posix" | "powershell" {
+  if (typeof navigator === "undefined") return "posix";
+  const platform = `${navigator.platform ?? ""} ${navigator.userAgent ?? ""}`.toLowerCase();
+  return platform.includes("win") ? "powershell" : "posix";
 }

@@ -37,6 +37,7 @@ from domains.target.router import (
     install_manifest_by_token,
     list_clusters,
     normalize_target_provider_defaults,
+    powershell_install_command_for,
     register_target,
     reissue_cluster_connect_command,
     router,
@@ -550,12 +551,21 @@ def assert_guarded_install_command(
     manifest_url_prefix: str,
 ) -> None:
     assert "\n" not in command
-    assert command.startswith('existing="$(kubectl -n target get configmap ')
+    assert command.startswith('(existing="$(kubectl -n target get configmap ')
     assert "jsonpath='{.data.TARGET_CLUSTER_ID}'" in command
+    assert "target-runtime-config --ignore-not-found" in command
     assert f'[ "$existing" != {cluster_id} ]' in command
     assert "Kyro agent is already registered as" in command
     assert f"curl -fsSL {manifest_url_prefix}" in command
-    assert command.endswith("| kubectl apply -f -")
+    assert command.endswith("| kubectl apply -f -)")
+
+
+def test_powershell_first_install_does_not_fail_when_target_namespace_is_absent() -> None:
+    command = powershell_install_command_for(target_request(), "agent-secret")
+
+    assert "$targetNamespace=(& kubectl get namespace 'target' --ignore-not-found" in command
+    assert "if ($targetNamespace) { $existing=(& kubectl -n 'target' get configmap" in command
+    assert "target-runtime-config --ignore-not-found" in command
 
 
 def test_target_install_manifest_sets_agent_and_telemetry_config() -> None:

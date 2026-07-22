@@ -7,7 +7,7 @@ import { chromium } from "playwright";
 const SIDEBAR_SELECTOR = 'aside[data-slot="sidebar"]';
 const NAVIGATION_LINK_SELECTOR = `${SIDEBAR_SELECTOR} nav a[href]`;
 const UNIFIED_SHELL_SELECTOR = "#root .uni";
-const UNIFIED_NAVIGATION_SELECTOR = 'button[aria-label$=" 화면으로 이동"]';
+export const UNIFIED_NAVIGATION_SELECTOR = '[data-slot="global-navigation"] button[aria-label$=" 화면으로 이동"]';
 const WORKSPACE_HEADER_SELECTOR =
   'header[data-slot="product-header"] [data-slot="product-header-workspace"]';
 const AUTH_BOOTSTRAP_TIMEOUT_MS = 60_000;
@@ -51,7 +51,7 @@ export const ROUTE_CRITICAL_API_CONTRACTS = Object.freeze({
   "/deploy": Object.freeze(["/api/applications"]),
   "/issues": Object.freeze(["/api/dashboard/rca"]),
   "/timeline": Object.freeze(["/api/timeline"]),
-  "/checks": Object.freeze(["/api/checks"]),
+  "/checks": Object.freeze(["/api/checks/overview"]),
   "/cost": Object.freeze([
     "/api/cost",
     "/api/rightsizing",
@@ -460,12 +460,16 @@ async function runUnifiedShellSmoke(page, baseUrl, diagnostics) {
   );
 
   const navigation = page.locator(UNIFIED_NAVIGATION_SELECTOR);
-  const surfaceCount = await navigation.count();
-  assert.ok(surfaceCount > 1, "unified navigation must expose multiple surfaces");
-  for (let index = 0; index < surfaceCount; index += 1) {
-    const item = navigation.nth(index);
-    const label = await item.getAttribute("aria-label");
-    diagnostics.failingRoute = label ?? `<surface-${index}>`;
+  const labels = await navigation.evaluateAll((items) => items
+    .map((item) => item.getAttribute("aria-label"))
+  );
+  assert.equal(labels.length, 9, "GlobalNav must expose exactly eight primary surfaces plus settings");
+  assert.ok(labels.every((label) => typeof label === "string" && label.length > 0), "GlobalNav labels must be non-empty");
+  assert.equal(new Set(labels).size, labels.length, "GlobalNav labels must be unique");
+  for (const label of labels) {
+    const item = page.locator('[data-slot="global-navigation"]')
+      .getByRole("button", { name: label, exact: true });
+    diagnostics.failingRoute = label;
     await item.click();
     await page.waitForTimeout(250);
     assert.equal(
@@ -479,7 +483,7 @@ async function runUnifiedShellSmoke(page, baseUrl, diagnostics) {
     );
     assertDiagnostics(diagnostics);
   }
-  process.stdout.write(`authenticated unified shell smoke passed: ${surfaceCount} surfaces\n`);
+  process.stdout.write(`authenticated unified shell smoke passed: ${labels.length} surfaces\n`);
 }
 
 export async function verifyCurrentWorkspaceEvidence({
@@ -892,13 +896,11 @@ async function collectReleasedRoutes(page) {
 
 async function releasedRouteLink(page, pathname) {
   const links = page.locator(NAVIGATION_LINK_SELECTOR);
-  const count = await links.count();
-  for (let index = 0; index < count; index += 1) {
-    const link = links.nth(index);
-    const href = await link.getAttribute("href");
-    if (href && new URL(href, page.url()).pathname === pathname) return link;
-  }
-  throw new Error(`released route link disappeared: ${pathname}`);
+  const hrefs = await links.evaluateAll((items) => items
+    .map((item) => item.getAttribute("href"))
+    .filter((href) => href));
+  assert.ok(hrefs.some((href) => new URL(href, page.url()).pathname === pathname), `released route link disappeared: ${pathname}`);
+  return page.locator(`${SIDEBAR_SELECTOR} nav a[href="${pathname}"]`).first();
 }
 
 async function waitForRouteSurface(

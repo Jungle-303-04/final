@@ -2668,6 +2668,8 @@ class TargetInstallResponse(StrictModel):
     install_command: str = ""
     # provider별 설치 명령. 새 UI는 이 값을 우선 사용하고 없으면 install_command로 fallback.
     bootstrap_command: str = ""
+    powershell_install_command: str = ""
+    powershell_bootstrap_command: str = ""
     bootstrap_steps: list[BootstrapStep] = Field(default_factory=list)
     connect_timeout_seconds: int | None = None
     connect_expires_at: str | None = None
@@ -2799,6 +2801,7 @@ class RepositoryConnectionStatusResponse(StrictModel):
 class ClusterConnectResponse(StrictModel):
     cluster_id: str
     install_command: str = Field(min_length=1)
+    powershell_install_command: str = Field(min_length=1)
     expires_at: str
 
 

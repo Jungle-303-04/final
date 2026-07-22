@@ -13,9 +13,12 @@ export function ConnectionCommandStep({
   expiresAt,
   formatDate,
   installCommand,
+  installShell,
   onCopy,
   onReissue,
+  onShellChange,
   phase,
+  powershellInstallCommand,
   t,
 }: {
   copyState: "idle" | "copied" | "failed";
@@ -24,9 +27,12 @@ export function ConnectionCommandStep({
   expiresAt: string | null;
   formatDate: I18nController["formatDate"];
   installCommand: string | null;
+  installShell: "posix" | "powershell";
   onCopy: () => void;
   onReissue: () => void;
+  onShellChange: (shell: "posix" | "powershell") => void;
   phase: ConnectPhase;
+  powershellInstallCommand: string | null;
   t: I18nController["t"];
 }) {
   if (phase === "reissuing") {
@@ -58,12 +64,37 @@ export function ConnectionCommandStep({
       </Alert>
     );
   }
-  if (!installCommand) return null;
+  if (!installCommand || !powershellInstallCommand) return null;
+  const activeCommand = installShell === "powershell"
+    ? powershellInstallCommand
+    : installCommand;
   return (
     <div className="grid gap-4">
       <div className="grid gap-1">
         <h3 className="font-semibold">{t("clusters.connect.command.title")}</h3>
         <p className="text-sm text-muted-foreground">{t("clusters.connect.command.description")}</p>
+      </div>
+      <div className="inline-flex w-fit rounded-lg border bg-muted p-1" role="tablist" aria-label={t("clusters.connect.command.shellAria")}>
+        <Button
+          aria-selected={installShell === "posix"}
+          onClick={() => onShellChange("posix")}
+          role="tab"
+          size="sm"
+          type="button"
+          variant={installShell === "posix" ? "secondary" : "ghost"}
+        >
+          {t("clusters.connect.command.shellPosix")}
+        </Button>
+        <Button
+          aria-selected={installShell === "powershell"}
+          onClick={() => onShellChange("powershell")}
+          role="tab"
+          size="sm"
+          type="button"
+          variant={installShell === "powershell" ? "secondary" : "ghost"}
+        >
+          {t("clusters.connect.command.shellPowerShell")}
+        </Button>
       </div>
       <div
         className="flex min-w-0 max-w-full items-start gap-2 overflow-hidden rounded-xl border bg-muted p-2"
@@ -76,7 +107,7 @@ export function ConnectionCommandStep({
           role="region"
           tabIndex={0}
         >
-          <pre className="select-text whitespace-pre-wrap break-all px-3 py-2.5 text-xs leading-5 [overflow-wrap:anywhere]"><code>{installCommand}</code></pre>
+          <pre className="select-text whitespace-pre-wrap break-all px-3 py-2.5 text-xs leading-5 [overflow-wrap:anywhere]"><code>{activeCommand}</code></pre>
         </div>
         <Button
           aria-label={t(copyState === "copied" ? "clusters.connect.action.copied" : "clusters.connect.action.copy")}

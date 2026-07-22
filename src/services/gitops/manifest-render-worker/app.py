@@ -31,6 +31,14 @@ from domains.gitops.events import (
     RenderedMetadata,
     RenderedSpec,
 )
+from domains.gitops.repository_discovery import (
+    ManifestRenderValidationError,
+    find_kustomization_path,
+    kustomize_local_references,
+    normalize_kustomize_local_reference,
+    parse_kustomization_document,
+    repository_directories,
+)
 from domains.gitops.source_patch import canonical_manifest_digest
 from packages.config.constants import Sandbox
 from packages.config.settings import env
@@ -426,41 +434,134 @@ def export_github_render_source(
     source_dir = render_source_directory(manifest_path, source_type)
     try:
         tree = github_tree(repo_ref, github_commit_tree_sha(repo_ref, commit_sha))
-        source_paths = sorted(
+        blob_paths = sorted(
             {
                 path
                 for item in tree
                 if str(item.get("type") or "") == "blob"
                 for path in [normalize_repository_path(str(item.get("path") or ""))]
-                if path and path_is_under_directory(path, source_dir)
+                if path
             }
         )
-        if not source_paths:
-            raise ManifestSourceError(
-                f"{source_type} render source contains no files under {source_dir}"
+        # Kustomize overlay 는 저장소 상대참조(예: resources: ../../base)를 쓴다.
+        # 저장소 루트 전체를 내려받으면 관계없는 대형 monorepo 파일까지
+        # 파일 상한에 산입되어 정상 overlay가 렌더 전에 거부된다.
+        # Kustomization 그래프에서 직접 참조한 로컬 파일만 수집하고,
+        # 그 의존성 집합에 대해 기존 파일/바이트 상한을 강제한다.
+        has_kustomization = any(
+            path_is_under_directory(path, source_dir)
+            and path.rsplit("/", 1)[-1] in KUSTOMIZATION_FILES
+            for path in blob_paths
+        )
+        if source_type == SOURCE_TYPE_KUSTOMIZE or has_kustomization:
+            source_contents = collect_github_kustomize_source_contents(
+                repo_ref,
+                commit_sha,
+                source_dir,
+                set(blob_paths),
             )
-        if len(source_paths) > MAX_REMOTE_RENDER_SOURCE_FILES:
-            raise ManifestSourceError(
-                f"{source_type} render source exceeds file limit "
-                f"({len(source_paths)} > {MAX_REMOTE_RENDER_SOURCE_FILES})"
-            )
-
-        total_bytes = 0
-        for path in source_paths:
-            content = read_github_content_bytes(repo_ref, commit_sha, path)
-            total_bytes += len(content)
-            if total_bytes > MAX_REMOTE_RENDER_SOURCE_BYTES:
+            for path, content in sorted(source_contents.items()):
+                write_render_source_file(destination, path, content)
+        else:
+            source_paths = [
+                path for path in blob_paths if path_is_under_directory(path, source_dir)
+            ]
+            if not source_paths:
                 raise ManifestSourceError(
-                    f"{source_type} render source exceeds byte limit "
-                    f"({total_bytes} > {MAX_REMOTE_RENDER_SOURCE_BYTES})"
+                    f"{source_type} render source contains no files under {source_dir}"
                 )
-            write_render_source_file(destination, path, content)
+            if len(source_paths) > MAX_REMOTE_RENDER_SOURCE_FILES:
+                raise ManifestSourceError(
+                    f"{source_type} render source exceeds file limit "
+                    f"({len(source_paths)} > {MAX_REMOTE_RENDER_SOURCE_FILES})"
+                )
+
+            total_bytes = 0
+            for path in source_paths:
+                content = read_github_content_bytes(repo_ref, commit_sha, path)
+                total_bytes += len(content)
+                if total_bytes > MAX_REMOTE_RENDER_SOURCE_BYTES:
+                    raise ManifestSourceError(
+                        f"{source_type} render source exceeds byte limit "
+                        f"({total_bytes} > {MAX_REMOTE_RENDER_SOURCE_BYTES})"
+                    )
+                write_render_source_file(destination, path, content)
     except ManifestSourceError:
         if env_truthy(GIT_REMOTE_MANIFEST_REQUIRED_ENV, "1"):
             raise
         return None
 
     return destination if source_dir == "." else destination / source_dir
+
+
+def collect_github_kustomize_source_contents(
+    repo_ref: str,
+    commit_sha: str,
+    source_dir: str,
+    blob_paths: set[str],
+) -> dict[str, bytes]:
+    """Fetch only the bounded local dependency graph for one Kustomize root."""
+
+    selected_source_paths = {
+        path for path in blob_paths if path_is_under_directory(path, source_dir)
+    }
+    if len(selected_source_paths) > MAX_REMOTE_RENDER_SOURCE_FILES:
+        raise ManifestSourceError(
+            "kustomize render source exceeds file limit "
+            f"({len(selected_source_paths)} > {MAX_REMOTE_RENDER_SOURCE_FILES})"
+        )
+
+    directory_paths = repository_directories(blob_paths)
+    source_contents: dict[str, bytes] = {}
+    total_bytes = 0
+
+    def fetch(path: str) -> bytes:
+        nonlocal total_bytes
+        cached = source_contents.get(path)
+        if cached is not None:
+            return cached
+        if path not in blob_paths:
+            raise ManifestSourceError(
+                f"Kustomize local reference does not exist in repository: {path}"
+            )
+        if len(source_contents) >= MAX_REMOTE_RENDER_SOURCE_FILES:
+            raise ManifestSourceError(
+                "kustomize render source exceeds file limit "
+                f"({len(source_contents) + 1} > {MAX_REMOTE_RENDER_SOURCE_FILES})"
+            )
+        content = read_github_content_bytes(repo_ref, commit_sha, path)
+        total_bytes += len(content)
+        if total_bytes > MAX_REMOTE_RENDER_SOURCE_BYTES:
+            raise ManifestSourceError(
+                "kustomize render source exceeds byte limit "
+                f"({total_bytes} > {MAX_REMOTE_RENDER_SOURCE_BYTES})"
+            )
+        source_contents[path] = content
+        return content
+
+    pending_directories = [source_dir]
+    visited_directories: set[str] = set()
+    try:
+        while pending_directories:
+            directory = pending_directories.pop()
+            if directory in visited_directories:
+                continue
+            visited_directories.add(directory)
+            kustomization_path = find_kustomization_path(directory, blob_paths)
+            document = parse_kustomization_document(fetch(kustomization_path), kustomization_path)
+            for field, raw_reference, may_be_directory in kustomize_local_references(document):
+                reference = normalize_kustomize_local_reference(
+                    raw_reference,
+                    field=field,
+                    current_directory=directory,
+                )
+                if may_be_directory and reference in directory_paths:
+                    pending_directories.append(reference)
+                    continue
+                fetch(reference)
+    except ManifestRenderValidationError as exc:
+        raise ManifestSourceError(str(exc)) from exc
+    return source_contents
 
 
 def render_source_directory(manifest_path: str, source_type: str) -> str:

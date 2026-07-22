@@ -829,6 +829,49 @@ def test_global_filter_facets_etag_304_and_recompute_on_revision_change() -> Non
     assert third.headers.get("etag") != etag
 
 
+def test_global_filter_facets_etag_weak_comparison_from_edge() -> None:
+    """edge(Cloudflare)가 압축하며 강한 ETag 를 W/"…" 로 약화시켜 브라우저가
+    W/ 접두 If-None-Match 를 보낸다 — RFC 7232 약한 비교로 304 를 반환해야 한다."""
+    db = InventoryFilterApiDb(
+        allowed_clusters={CLUSTER_ID},
+        allowed_applications={APPLICATION_ID},
+    )
+    client, _auth = _make_client(db)
+
+    first = client.get("/filter-facets", params={"clusters": CLUSTER_ID})
+    assert first.status_code == 200
+    etag = first.headers.get("etag")
+    assert etag
+    calls = sum(1 for item in db.data_calls if item[0] == "global-facets")
+
+    weakened = client.get(
+        "/filter-facets",
+        params={"clusters": CLUSTER_ID},
+        headers={"If-None-Match": f"W/{etag}"},
+    )
+    assert weakened.status_code == 304
+    assert sum(1 for item in db.data_calls if item[0] == "global-facets") == calls
+
+    listed = client.get(
+        "/filter-facets",
+        params={"clusters": CLUSTER_ID},
+        headers={"If-None-Match": f'"other-tag", W/{etag}'},
+    )
+    assert listed.status_code == 304
+
+    wildcard = client.get(
+        "/filter-facets", params={"clusters": CLUSTER_ID}, headers={"If-None-Match": "*"}
+    )
+    assert wildcard.status_code == 304
+
+    mismatch = client.get(
+        "/filter-facets",
+        params={"clusters": CLUSTER_ID},
+        headers={"If-None-Match": 'W/"stale-tag"'},
+    )
+    assert mismatch.status_code == 200
+
+
 def test_facets_single_flight_coalesces_same_key_and_propagates_failure() -> None:
     """같은 키 동시 계산은 1회로 합류하고(저장 없음), 실패는 전원에 정직 전파된다."""
     import asyncio as _asyncio

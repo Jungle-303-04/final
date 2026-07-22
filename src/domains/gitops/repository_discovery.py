@@ -457,7 +457,13 @@ class RepositoryDiscoveryService:
         normalized = normalize_repo_ref(repo_ref)
         normalized_branch = normalize_branch(branch)
         tree, warnings = await self.client.tree(normalized, normalized_branch)
-        candidates = manifest_candidates_from_tree(tree)
+        candidates, classification_warnings = await content_aware_manifest_candidates(
+            self.client,
+            normalized,
+            normalized_branch,
+            tree,
+        )
+        warnings.extend(classification_warnings)
         if len(candidates) >= MAX_CANDIDATES:
             warnings.append("candidate list was limited; narrow the repository layout if needed")
         if not candidates:
@@ -1538,6 +1544,113 @@ def manifest_candidates_from_tree(
         if manifest_extension(path) in {".yaml", ".yml"}:
             add_candidate(candidates, path, "raw-yaml", "YAML manifest")
     return sorted(candidates.values(), key=candidate_sort_key)[:MAX_CANDIDATES]
+
+
+async def content_aware_manifest_candidates(
+    client: GitHubClient,
+    repo_ref: str,
+    branch: str,
+    tree: Sequence[Mapping[str, Any]],
+) -> tuple[list[RepositoryManifestCandidate], list[str]]:
+    """Disambiguate Kustomize render roots from Kubernetes resources with the same name.
+
+    Flux commonly stores a Kubernetes ``Kustomization`` custom resource in a
+    file named ``kustomization.yaml``.  A tree-only classifier mistakes that
+    file for a Kustomize build root, so the connection wizard later invokes
+    ``kubectl kustomize`` and rejects a perfectly valid multi-document YAML.
+    Inspect only the bounded Kustomize candidates and preserve the tree-only
+    result when GitHub content cannot be read.
+    """
+
+    initial = manifest_candidates_from_tree(tree)
+    candidate_directories = {
+        candidate.path for candidate in initial if candidate.source_type == "kustomize"
+    }
+    ambiguous_paths = [
+        path
+        for item in tree
+        if str(item.get("type") or "") == "blob"
+        for path in [normalize_tree_path(str(item.get("path") or ""))]
+        if path
+        and path.rsplit("/", 1)[-1] in KUSTOMIZATION_FILES
+        and parent_path(path) in candidate_directories
+    ][:MAX_CANDIDATES]
+    semaphore = asyncio.Semaphore(MANIFEST_SCAN_CONCURRENCY)
+
+    async def inspect(path: str) -> tuple[str, bool | None]:
+        async with semaphore:
+            try:
+                content = await client.content(repo_ref, branch, path)
+            except RepositoryDiscoveryError:
+                return path, None
+            return path, is_kustomize_render_configuration(content)
+
+    inspected = await asyncio.gather(*(inspect(path) for path in ambiguous_paths))
+    render_directories = {
+        parent_path(path) for path, is_render_config in inspected if is_render_config is True
+    }
+    classified_directories = {
+        parent_path(path) for path, is_render_config in inspected if is_render_config is not None
+    }
+    candidates = {
+        candidate.path: candidate
+        for candidate in initial
+        if not (
+            candidate.source_type == "kustomize"
+            and candidate.path in classified_directories
+            and candidate.path not in render_directories
+        )
+    }
+    for path, is_render_config in inspected:
+        if is_render_config is False:
+            add_candidate(candidates, path, "raw-yaml", "Kubernetes YAML manifest")
+
+    unreadable_count = sum(is_render_config is None for _, is_render_config in inspected)
+    warnings = (
+        [f"{unreadable_count} Kustomization candidate(s) could not be content-classified"]
+        if unreadable_count
+        else []
+    )
+    return sorted(candidates.values(), key=candidate_sort_key)[:MAX_CANDIDATES], warnings
+
+
+def is_kustomize_render_configuration(content: bytes) -> bool | None:
+    """Return True for a Kustomize config, False for a Kubernetes YAML resource."""
+
+    try:
+        documents = [
+            document
+            for document in yaml.safe_load_all(content.decode("utf-8"))
+            if document is not None
+        ]
+    except (UnicodeDecodeError, yaml.YAMLError):
+        return None
+    if len(documents) != 1 or not isinstance(documents[0], Mapping):
+        return False
+    document = documents[0]
+    api_version = str(document.get("apiVersion") or "")
+    kind = str(document.get("kind") or "")
+    if api_version.startswith("kustomize.config.k8s.io/"):
+        return True
+    if api_version or (kind and kind != "Kustomization"):
+        return False
+    return bool(
+        set(document)
+        & {
+            "resources",
+            "bases",
+            "components",
+            "patches",
+            "patchesStrategicMerge",
+            "patchesJson6902",
+            "configMapGenerator",
+            "secretGenerator",
+            "generators",
+            "transformers",
+            "images",
+            "replacements",
+        }
+    )
 
 
 def normalize_tree_path(path: str) -> str:

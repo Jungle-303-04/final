@@ -85,3 +85,23 @@ def test_rca_timeline_janitor_refreshes_heartbeat_during_long_wait() -> None:
     asyncio.run(scenario())
 
     assert len(touches) >= 3
+
+
+def test_incident_latest_snapshot_probe_is_index_order_aligned() -> None:
+    """correlated 최신-스냅샷 probe 는 partial 인덱스 정렬(created_at, snapshot_id)을 쓴다.
+
+    collected_at 정렬은 후보 행마다 클러스터 스냅샷 전체 top-N 정렬을 유발해
+    (live EXPLAIN 3,507 buffers/probe) sweep 이 statement timeout 으로 CrashLoop 했다.
+    """
+    from sqlalchemy import select
+    from sqlalchemy.dialects import postgresql
+
+    from domains.dashboard.models import RcaTimeline
+    from domains.dashboard.repository import latest_inventory_snapshot_id_for_incident
+
+    probe = latest_inventory_snapshot_id_for_incident(RcaTimeline.__table__)
+    sql = " ".join(str(select(probe).compile(dialect=postgresql.dialect())).casefold().split())
+
+    assert "order by cluster_inventory_snapshots.created_at desc, " in sql
+    assert "cluster_inventory_snapshots.snapshot_id desc" in sql
+    assert "collected_at desc" not in sql

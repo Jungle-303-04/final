@@ -187,7 +187,7 @@ def test_disconnected_display_name_can_be_registered_again_with_new_token(
 
     response = asyncio.run(
         connect_cluster(
-            ClusterConnectRequest(name="  GAME CLUSTER  ", provider="aws"),
+            ClusterConnectRequest(name="  GAME CLUSTER  "),
             current=SimpleNamespace(user_id="admin", workspace_id="default"),
             db=db,
             events=_Events(),
@@ -196,4 +196,8 @@ def test_disconnected_display_name_can_be_registered_again_with_new_token(
 
     assert response.cluster_id != "cluster-2-old"
     assert response.install_command
+    assert "Invoke-WebRequest" in response.powershell_install_command
+    assert response.powershell_install_command.count("jsonpath={.data.TARGET_CLUSTER_ID}") == 1
+    assert response.powershell_install_command.count("Invoke-WebRequest") == 1
+    assert response.powershell_install_command.count("kubectl apply") == 1
     assert db.registrations[-1]["status"] == ClusterRegistrationStatus.PENDING_INSTALL.value

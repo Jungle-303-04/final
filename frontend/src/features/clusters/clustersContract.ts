@@ -12,6 +12,7 @@ export type ClusterConnectStage =
 export interface ClusterConnectReceipt {
   clusterId: string;
   installCommand: string;
+  powershellInstallCommand: string;
   expiresAt: string;
 }
 
@@ -42,7 +43,7 @@ export class ClustersPortFailure extends Error {
 
 export interface ClustersPort {
   connect(
-    input: { name: string; provider: ClusterConnectProvider },
+    input: { name: string; provider?: ClusterConnectProvider },
     signal?: AbortSignal,
   ): Promise<ClusterConnectReceipt>;
   loadConnection(

@@ -212,6 +212,61 @@ def test_manifest_candidates_filter_to_attachable_paths() -> None:
     ]
 
 
+def test_manifest_discovery_classifies_flux_kustomization_file_as_raw_yaml() -> None:
+    path = "gitops/flux/kustomization.yaml"
+    client = StubGitHubClient(
+        contents={
+            path: b"""
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: game
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: game
+spec:
+  path: ./manifests
+""",
+        },
+        tree_items=[{"type": "blob", "path": path}],
+    )
+
+    response = asyncio.run(
+        RepositoryDiscoveryService(client).list_manifest_candidates("owner/service", "trunk")
+    )
+
+    assert [(item.path, item.source_type) for item in response.candidates] == [(path, "raw-yaml")]
+    assert client.content_paths == [path]
+
+
+def test_manifest_discovery_keeps_conventional_kustomize_directory() -> None:
+    path = "deploy/kustomization.yaml"
+    client = StubGitHubClient(
+        contents={
+            path: b"""
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - deployment.yaml
+""",
+        },
+        tree_items=[
+            {"type": "blob", "path": path},
+            {"type": "blob", "path": "deploy/deployment.yaml"},
+        ],
+    )
+
+    response = asyncio.run(
+        RepositoryDiscoveryService(client).list_manifest_candidates("owner/service", "trunk")
+    )
+
+    assert ("deploy", "kustomize") in [
+        (item.path, item.source_type) for item in response.candidates
+    ]
+
+
 def test_probe_and_branch_list_use_normalized_repo_ref() -> None:
     service = RepositoryDiscoveryService(StubGitHubClient())
 

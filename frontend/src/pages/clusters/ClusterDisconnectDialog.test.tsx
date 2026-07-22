@@ -143,7 +143,7 @@ describe("ClusterDisconnectDialog", () => {
     const startedAt = Date.now();
     const now = vi.spyOn(Date, "now").mockReturnValue(startedAt);
     const loadDisconnect = vi.fn().mockImplementation(async () => {
-      now.mockReturnValue(startedAt + 9_000);
+      now.mockReturnValue(startedAt + 61_000);
       return {
         status: "running" as const,
         cleanupCompleted: false,

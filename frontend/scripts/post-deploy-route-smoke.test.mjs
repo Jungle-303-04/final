@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
+import { chromium } from "playwright";
 
 import {
   ROUTE_CRITICAL_API_CONTRACTS,
+  UNIFIED_NAVIGATION_SELECTOR,
   assertRouteReleaseBudget,
   classifyRouteApiRequest,
   createRouteNetworkObserver,
@@ -184,6 +186,38 @@ describe("post-deploy route smoke helpers", () => {
     expect(ROUTE_CRITICAL_API_CONTRACTS["/alerts"]).toEqual([
       "/api/alert-events",
     ]);
+  });
+
+  it("scopes unified traversal to GlobalNav and excludes widget deep links", () => {
+    expect(UNIFIED_NAVIGATION_SELECTOR).toBe(
+      '[data-slot="global-navigation"] button[aria-label$=" 화면으로 이동"]',
+    );
+  });
+
+  it("requires the eight primary surfaces plus settings", () => {
+    const fixture = Array.from({ length: 9 }, (_, index) => `route-${index} 화면으로 이동`);
+    expect(fixture).toHaveLength(9);
+    expect(new Set(fixture).size).toBe(9);
+  });
+
+  it("uses a real DOM fixture: nine GlobalNav buttons, widgets excluded, live labels survive removal", async () => {
+    const browser = await chromium.launch({ headless: true });
+    const page = await browser.newPage();
+    const labels = [...Array(8)].map((_, i) => `표면${i + 1} 화면으로 이동`).concat("설정 화면으로 이동");
+    await page.setContent(`<nav data-slot="global-navigation">${labels.map((label) => `<button aria-label="${label}">${label}</button>`).join("")}</nav><div id="widgets">${Array.from({length: 8}, (_, i) => `<button aria-label="위젯${i} 화면으로 이동">widget</button>`).join("")}</div>`);
+    await page.locator('[data-slot="global-navigation"] button').evaluateAll((buttons) => buttons.forEach((button) => button.addEventListener("click", () => {
+      buttons.forEach((item) => item.removeAttribute("aria-current"));
+      button.setAttribute("aria-current", "page");
+      if (button.getAttribute("aria-label") === "설정 화면으로 이동") document.querySelector("#widgets")?.remove();
+    })));
+    const nav = page.locator('[data-slot="global-navigation"] button[aria-label$=" 화면으로 이동"]');
+    expect(await nav.count()).toBe(9);
+    expect(await page.locator('#widgets button[aria-label$=" 화면으로 이동"]').count()).toBe(8);
+    const snapshot = await nav.evaluateAll((items) => items.map((item) => item.getAttribute("aria-label")));
+    for (const label of snapshot) await page.locator('[data-slot="global-navigation"]').getByRole("button", { name: label, exact: true }).click();
+    expect(await page.locator("#widgets").count()).toBe(0);
+    expect(await page.locator('[data-slot="global-navigation"] button[aria-current="page"]').getAttribute("aria-label")).toBe("설정 화면으로 이동");
+    await browser.close();
   });
 
   it("preserves DOM order when the current URL is not a released navigation route", () => {
@@ -374,7 +408,7 @@ describe("post-deploy route smoke helpers", () => {
       listeners.get(event)?.forEach((listener) => listener(value));
     };
     const request = {
-      url: () => "https://example.test/api/checks?secret=redacted",
+      url: () => "https://example.test/api/checks/overview?secret=redacted",
     };
     const observer = createRouteNetworkObserver(page, "https://example.test");
 
@@ -409,7 +443,7 @@ describe("post-deploy route smoke helpers", () => {
         slowCriticalApi: [{
           durationMs: 425,
           in_flight: false,
-          path: "/api/checks",
+          path: "/api/checks/overview",
           status: 200,
         }],
       });

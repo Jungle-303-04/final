@@ -108,6 +108,8 @@ const INSTALL_RESPONSE = {
   agent_token: "one-time-secret",
   install_command: "curl https://opsia.example.com/api/install/token | kubectl apply -f -",
   bootstrap_command: "aws eks update-kubeconfig && curl ... | kubectl apply -f -",
+  powershell_install_command: "Invoke-WebRequest token | kubectl apply -f -",
+  powershell_bootstrap_command: "Invoke-WebRequest token | kubectl apply -f -",
   bootstrap_steps: [
     { label: "Prepare kubeconfig", command: "aws eks update-kubeconfig" },
     { label: "Install agent", command: "curl ... | kubectl apply -f -" },

@@ -1094,6 +1094,7 @@ class AgentCommandRepository(DatabaseConnection):
             table.c.status,
             table.c.result,
             table.c.completed_at,
+            table.c.terminal_event_id,
             table.c.confirmation_event_id,
             table.c.impact_identity,
             table.c.direct_execution,

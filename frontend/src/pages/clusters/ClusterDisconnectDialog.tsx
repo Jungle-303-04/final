@@ -38,7 +38,10 @@ export type DisconnectPhase =
   | "failed";
 
 const COMMAND_POLL_MS = 1_000;
-const COMMAND_ACK_TIMEOUT_MS = 8_000;
+// Agent removal includes Kubernetes API propagation and the final cleanup
+// evidence callback. Eight seconds made a healthy uninstall look stalled in
+// the demo; keep polling for a realistic bounded minute before backgrounding.
+const COMMAND_ACK_TIMEOUT_MS = 60_000;
 
 export function ClusterDisconnectDialog({
   cluster,

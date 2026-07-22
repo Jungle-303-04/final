@@ -36,6 +36,7 @@ const IconBrandDocker = ({ size = 21, style }: BrandIconProps) => (
 import { Spinner } from "./shared/ui/primitives/spinner";
 import { emitAction } from "./devpreview/bus";
 import {
+  connectCluster,
   connectApplication,
   isApiError,
   listClusters,
@@ -44,24 +45,20 @@ import {
   probeRepository,
   validateRepositoryManifest,
   type ClusterSummaryView,
+  type ClusterConnectResponseView,
   type RepositoryBranchView,
   type RepositoryManifestCandidateView,
-  type TargetInstallResponse,
-  type TargetPreflightResponse,
 } from "./devpreview/connectFeed";
 import {
   PLATFORM_CLOUD_PROVIDER,
-  preflightClusterTarget,
-  registerClusterTarget,
   useClusterConnectionStatus,
   useClusterActivationReadiness,
   useClusterProviders,
   type ClusterProvidersView,
   type ConnectionStatusView,
   type ProviderAvailability,
-  type ProviderConfigField,
 } from "./devpreview/connectFeed";
-import { reasonLabel, statusLabel } from "./devpreview/statusLabel";
+import { reasonLabel } from "./devpreview/statusLabel";
 import "./styles/tokens.css";
 import "./styles/foundation.css";
 
@@ -78,7 +75,6 @@ const swap = {
 
 const REPO_STEPS = ["저장소", "배포 대상", "완료"];
 const CLUSTER_STEPS = ["정보", "설치", "연결"];
-const CLUSTER_ENVS = ["prod", "staging", "dev"];
 
 // 설치 플랫폼 · 라이브 providers 디스커버리의 cloud_provider 로 매핑되어 가용성이 결정된다.
 const PLATFORMS = [
@@ -456,6 +452,7 @@ function RepoTargetStep({ source, context, onBack, onComplete }: {
         repository: repoRef,
         branch: input.branch.trim(),
         manifestPath: input.manifestPath.trim(),
+        sourceType: candidate?.source_type ?? "",
         clusterId: input.clusterId,
         namespace: input.namespace.trim(),
         environment: input.environment,
@@ -561,112 +558,14 @@ function RepoWizard({ providers, context, onClose, onComplete }: { providers: Cl
 }
 
 // ── B. 클러스터 연결 (에이전트 설치 · 라이브) ─────────────────────────────
-function PlatformAvailability({ providers, cloud }: { providers: ClusterProvidersView; cloud: string }) {
-  const info = providers.cloudProviders.get(cloud);
-  if (providers.status === "loading") return null;
-  if (!info || info.available) return null;
-  return (
-    <span className="text-[10.5px] font-semibold c-orange">
-      미지원{info.unavailableReason ? ` · ${reasonLabel(info.unavailableReason)}` : ""}
-    </span>
-  );
-}
-
-function providerConfigValue(
-  providerConfig: Record<string, unknown>,
-  key: string,
-): string {
-  const value = providerConfig[key];
-  return typeof value === "string" ? value : "";
-}
-
-function requiredProviderConfigPresent(
-  fields: ProviderConfigField[],
-  providerConfig: Record<string, unknown>,
-): boolean {
-  return fields.every((field) => (
-    !field.required || providerConfigValue(providerConfig, field.key).trim() !== ""
-  ));
-}
-
-function ProviderConfigFields({
-  fields,
-  providerConfig,
-  setProviderConfig,
-}: {
-  fields: ProviderConfigField[];
-  providerConfig: Record<string, unknown>;
-  setProviderConfig: (value: Record<string, unknown>) => void;
-}) {
-  if (fields.length === 0) return null;
-  const update = (key: string, value: string) => {
-    setProviderConfig({ ...providerConfig, [key]: value });
-  };
-  return (
-    <div className="grid gap-3" aria-label="클러스터 제공자 연결 정보">
-      <div className="flex items-center gap-2 px-0.5">
-        <span className="text-[12.5px] font-semibold c-2">연결 정보</span>
-        <span className="text-[11.5px] c-3">서버 제공자 카탈로그 기준</span>
-      </div>
-      {fields.map((field) => {
-        const value = providerConfigValue(providerConfig, field.key);
-        return (
-          <label key={field.key} className="grid gap-1.5">
-            <span className="flex items-center gap-1.5 px-0.5 text-[12px] font-medium c-2">
-              {field.label}
-              {field.required && <span className="c-red" aria-hidden>*</span>}
-              {!field.required && <span className="text-[10.5px] c-3">선택</span>}
-            </span>
-            {field.kind === "select" && field.options.length > 0 ? (
-              <select
-                aria-label={field.label}
-                required={field.required}
-                value={value}
-                onChange={(event) => update(field.key, event.currentTarget.value)}
-                className="field w-full bg-surface font-mono text-[14px] c-ink outline-none"
-                style={{ borderRadius: 14, padding: "14px 16px" }}
-              >
-                <option value="">선택</option>
-                {field.options.map((option) => (
-                  <option key={option} value={option}>{option}</option>
-                ))}
-              </select>
-            ) : (
-              <input
-                aria-label={field.label}
-                required={field.required}
-                value={value}
-                onChange={(event) => update(field.key, event.currentTarget.value)}
-                placeholder={field.description || field.label}
-                autoComplete="off"
-                spellCheck={false}
-                className="field w-full bg-surface font-mono text-[14px] c-ink outline-none placeholder:font-sans placeholder:c-3"
-                style={{ borderRadius: 14, padding: "14px 16px" }}
-              />
-            )}
-            {field.description && (
-              <span className="px-0.5 text-[11px] leading-[1.45] c-3">{field.description}</span>
-            )}
-          </label>
-        );
-      })}
-    </div>
-  );
-}
-
 function ClusterInfoStep({
-  providers, name, setName, platform, setPlatform, env, setEnv,
-  providerConfig, setProviderConfig, onNext,
+  providers, name, setName, platform, setPlatform, onNext,
 }: {
   providers: ClusterProvidersView;
   name: string;
   setName: (v: string) => void;
   platform: PlatformId;
   setPlatform: (v: PlatformId) => void;
-  env: string;
-  setEnv: (v: string) => void;
-  providerConfig: Record<string, unknown>;
-  setProviderConfig: (value: Record<string, unknown>) => void;
   onNext: () => void;
 }) {
   const cloudFor = (id: PlatformId) => PLATFORM_CLOUD_PROVIDER[id] ?? "";
@@ -676,8 +575,6 @@ function ClusterInfoStep({
     return info ? !info.available : false;
   };
   const selectedDisabled = isDisabled(platform);
-  const configFields = providers.providerConfigFieldsFor(cloudFor(platform));
-  const providerConfigReady = requiredProviderConfigPresent(configFields, providerConfig);
   return (
     <motion.div key="cinfo" {...swap} className="grid gap-5">
       {providers.status === "loading" && (
@@ -690,14 +587,15 @@ function ClusterInfoStep({
         <span className="px-0.5 text-[12.5px] font-semibold c-2">플랫폼</span>
         <div className="grid grid-cols-2 gap-2.5">
           {PLATFORMS.map((p) => {
-            const on = platform === p.id; const Icon = p.icon; const disabled = isDisabled(p.id);
+            const on = platform === p.id;
+            const Icon = p.icon;
+            const disabled = isDisabled(p.id);
             return (
               <button key={p.id} disabled={disabled} onClick={() => setPlatform(p.id)} className={`card flex items-center gap-3 ${on ? "card-on" : ""} ${disabled ? "opacity-45" : ""}`} style={{ borderRadius: 14, padding: "12px 13px" }}>
                 <span className="grid shrink-0 place-items-center" style={{ width: 34, height: 34, borderRadius: 10, background: `${p.color}1A` }}><Icon size={21} stroke={2} style={{ color: p.color }} /></span>
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-[13px] font-semibold tracking-[-0.01em] c-ink">{p.name}</div>
                   <div className="text-[11px] c-3">{p.sub}</div>
-                  <PlatformAvailability providers={providers} cloud={cloudFor(p.id)} />
                 </div>
                 <span className="grid shrink-0 place-items-center" style={{ width: 18, height: 18 }}>
                   <motion.span animate={{ scale: on ? 1 : 0, opacity: on ? 1 : 0 }} initial={false} transition={{ type: "spring", visualDuration: 0.26, bounce: 0.3 }} style={{ display: "grid" }}>
@@ -710,63 +608,76 @@ function ClusterInfoStep({
         </div>
       </div>
       <div className="grid gap-2.5">
-        <span className="px-0.5 text-[12.5px] font-semibold c-2">클러스터 이름</span>
+        {/* P0 이름-only 연결: 플랫폼 선택 후 입력은 표시 이름 하나뿐이다. region/EKS 이름/
+            context alias/환경은 UI 에서 받지 않는다 — 실제 클러스터 식별은 사용자가 자기
+            터미널(이미 로그인된 컨텍스트)에서 설치 명령을 실행할 때 결정된다. */}
+        <span className="px-0.5 text-[12.5px] font-semibold c-2">클러스터 표시 이름</span>
         <div className="field flex items-center gap-3 bg-surface" style={{ borderRadius: 14, padding: "15px 16px" }}>
           <Server className="size-[18px] c-3" />
-          <input value={name} onChange={(e) => setName(e.currentTarget.value)} placeholder="game-server-apne2" className="w-full bg-transparent font-mono text-[14px] c-ink outline-none placeholder:font-sans placeholder:c-3" />
+          <input aria-label="클러스터 표시 이름" value={name} onChange={(e) => setName(e.currentTarget.value)} placeholder="game-server-apne2" className="w-full bg-transparent font-mono text-[14px] c-ink outline-none placeholder:font-sans placeholder:c-3" />
         </div>
       </div>
-      <ProviderConfigFields
-        fields={configFields}
-        providerConfig={providerConfig}
-        setProviderConfig={setProviderConfig}
-      />
-      <div className="grid gap-2.5">
-        <div className="flex items-center gap-2 px-0.5"><span className="text-[12.5px] font-semibold c-2">환경</span><span className="text-[11.5px] c-3">이 클러스터의 용도 라벨</span></div>
-        <div className="seg flex" style={{ borderRadius: 14, padding: 4 }}>
-          {CLUSTER_ENVS.map((e) => (
-            <button key={e} onClick={() => setEnv(e)} className="relative flex-1 text-[13px] font-semibold" style={{ borderRadius: 10, padding: "9px 0" }}>
-              {env === e && <motion.span layoutId="cenv" className="absolute inset-0 bg-surface" style={{ borderRadius: 10, boxShadow: "0 2px 6px -1px rgba(17,19,24,0.12)" }} transition={{ type: "spring", visualDuration: 0.28, bounce: 0.18 }} />}
-              <span className="relative" style={{ color: env === e ? "var(--ink)" : "var(--ink-3)" }}>{e}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-      <NextButton show={name.trim().length > 1 && !selectedDisabled && providerConfigReady}
+      <NextButton show={name.trim().length > 1 && !selectedDisabled}
         label="등록 단계로" onClick={onNext} />
     </motion.div>
   );
 }
 
-function PreflightPanel({ result }: { result: TargetPreflightResponse }) {
-  const ok = result.valid && result.provider_ready && !result.duplicate_cluster_id;
-  return (
-    <div className="grid gap-2.5 inset" style={{ padding: 14 }}>
-      <div className="flex items-center gap-2">
-        <span className={`grid size-6 place-items-center rounded-full ${ok ? "green-bg" : "orange-bg"}`}>
-          {ok ? <Check className="size-[15px] c-green" strokeWidth={3} /> : <AlertCircle className="size-[15px] c-orange" />}
-        </span>
-        <span className="text-[13px] font-semibold c-ink">{ok ? "사전검증 통과" : "사전검증: 확인 필요"}</span>
-        <span className="ml-auto font-mono text-[11.5px] c-3">{statusLabel(result.connection_status)}</span>
-      </div>
-      {result.errors.map((e) => <div key={e} className="text-[11.5px] c-red">· {reasonLabel(e)}</div>)}
-      {result.warnings.map((w) => <div key={w} className="text-[11.5px] c-orange">· {reasonLabel(w)}</div>)}
-    </div>
+// P0 이름-only 연결 · 설치 명령 OS 탭 — 서버가 생성한 실제 명령을 셸별로 충실 변환만
+// 한다(내용/토큰/매니페스트 발명 0). POSIX(macOS/Linux)는 원문 그대로, PowerShell 은
+// heredoc(<<EOF … EOF)을 here-string(@'…'@ | …)으로 옮기는 구문 변환만 수행한다.
+export type InstallShell = "posix" | "powershell";
+
+export function detectLocalShell(platformText: string): InstallShell {
+  return /win/i.test(platformText) ? "powershell" : "posix";
+}
+
+export function toPowerShellCommand(posixCommand: string): string {
+  // `<명령> <<'?EOF'? … EOF` 패턴 → PowerShell here-string 파이프.
+  const heredoc = posixCommand.match(/^([\s\S]*?)<<-?\s*'?"?([A-Za-z_][A-Za-z0-9_]*)'?"?\n([\s\S]*?)\n\2\s*$/);
+  if (heredoc) {
+    const head = heredoc[1].replace(/-f\s*-\s*$/, "-f -").trimEnd();
+    const body = heredoc[3];
+    return `@'\n${body}\n'@ | ${head}`;
+  }
+  return posixCommand; // heredoc 없는 단일 명령은 PowerShell 에서도 동일하게 유효
+}
+
+export function toInteractiveSafePosixCommand(command: string): string {
+  const trimmed = command.trim();
+  if (!trimmed) return "";
+  // Rolling deployments can still serve the older ownership guard containing
+  // `exit 1`. Preserve the rejection while keeping the user's terminal open.
+  if (/^\([\s\S]*\)$/.test(trimmed)) return trimmed;
+  return `(${trimmed})`;
+}
+
+export function toInteractiveSafePowerShellCommand(command: string): string {
+  const trimmed = command.trim();
+  if (!trimmed) return "";
+  // Older receipts queried the ConfigMap before its namespace existed. Under
+  // Windows PowerShell that expected first-run NotFound can be terminating.
+  const compatible = trimmed.replace(
+    /get configmap target-runtime-config(?! --ignore-not-found)/,
+    "get configmap target-runtime-config --ignore-not-found",
+  );
+  if (compatible.includes("$targetNamespace=")) return compatible;
+  return compatible.replace(
+    /\$existing=\(& kubectl -n 'target' get configmap target-runtime-config --ignore-not-found -o 'jsonpath=\{\.data\.TARGET_CLUSTER_ID\}' 2>\$null\);/,
+    "$existing=''; $targetNamespace=(& kubectl get namespace 'target' --ignore-not-found -o name 2>$null); if ($targetNamespace) { $existing=(& kubectl -n 'target' get configmap target-runtime-config --ignore-not-found -o 'jsonpath={.data.TARGET_CLUSTER_ID}' 2>$null) };",
   );
 }
 
-function ClusterInstallStep({ providers, platform, name, env, providerConfig, onBack, onConnected }: { providers: ClusterProvidersView; platform: PlatformId; name: string; env: string; providerConfig: Record<string, unknown>; onBack: () => void; onConnected: (info: ConnectionStatusView) => void }) {
-  const cloud = PLATFORM_CLOUD_PROVIDER[platform] ?? providers.defaultCloudProvider ?? "existing-k8s";
-  const deploy = providers.deployProviderFor(cloud) ?? providers.defaultDeployProvider ?? "manual-manifest";
-  const fields = { cloudProvider: cloud, deployProvider: deploy, name, environment: env, providerConfig };
+function ClusterInstallStep({ platform, name, onBack, onConnected }: { platform: PlatformId; name: string; onBack: () => void; onConnected: (info: ConnectionStatusView) => void }) {
   const pf = PLATFORMS.find((p) => p.id === platform)!;
   const Icon = pf.icon;
 
-  const [phase, setPhase] = useState<"idle" | "preflighting" | "preflighted" | "registering" | "registered" | "error">("idle");
-  const [preflight, setPreflight] = useState<TargetPreflightResponse | null>(null);
-  const [receipt, setReceipt] = useState<TargetInstallResponse | null>(null);
+  const [phase, setPhase] = useState<"idle" | "registering" | "registered" | "error">("idle");
+  const [receipt, setReceipt] = useState<ClusterConnectResponseView | null>(null);
   const [errMsg, setErrMsg] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  // 설치 명령 OS 탭 — 로컬 OS 자동 선택(윈도우 → PowerShell), 사용자가 전환 가능.
+  const [shell, setShell] = useState<InstallShell>(() => detectLocalShell(typeof navigator === "undefined" ? "" : navigator.platform || navigator.userAgent));
   const ctrlRef = useRef<AbortController | null>(null);
 
   useEffect(() => () => ctrlRef.current?.abort(), []);
@@ -781,57 +692,33 @@ function ClusterInstallStep({ providers, platform, name, env, providerConfig, on
     if (activation.status === "ready") onConnected(conn);
   }, [activation.status, conn, onConnected]);
 
-  // 사전검증(비변경 POST) — 명시적 클릭에서만.
-  const runPreflight = () => {
-    ctrlRef.current?.abort();
-    const controller = new AbortController();
-    ctrlRef.current = controller;
-    setPhase("preflighting"); setErrMsg(null); setPreflight(null);
-    void preflightClusterTarget(fields, controller.signal)
-      .then((res) => { if (controller.signal.aborted) return; setPreflight(res); setPhase("preflighted"); })
-      .catch((cause: unknown) => { if (controller.signal.aborted || isAbortError(cause)) return; setErrMsg(errorText(cause)); setPhase("error"); });
-  };
-
-  // 등록(실제 변경 POST) — 사전검증 통과 후 두 번째 명시적 클릭에서만. 토큰은 화면 상태에만 유지.
+  // 이름 하나로 등록하고 OS별 설치 명령을 발급한다. 실제 대상 클러스터는 사용자가
+  // 이미 로그인한 터미널의 현재 kube-context에서 명령을 실행할 때 결정된다.
   const runRegister = () => {
     ctrlRef.current?.abort();
     const controller = new AbortController();
     ctrlRef.current = controller;
     setPhase("registering"); setErrMsg(null);
-    void registerClusterTarget(fields, controller.signal)
+    void connectCluster({
+      name: name.trim(),
+      provider: platform === "docker" ? "onprem" : platform,
+    }, controller.signal)
       .then((res) => { if (controller.signal.aborted) return; setReceipt(res); setPhase("registered"); })
       .catch((cause: unknown) => { if (controller.signal.aborted || isAbortError(cause)) return; setErrMsg(errorText(cause)); setPhase("error"); });
   };
 
-  const cmd = receipt?.install_command ?? "";
+  const posixCmd = toInteractiveSafePosixCommand(receipt?.install_command ?? "");
+  const cmd = shell === "powershell"
+    ? toInteractiveSafePowerShellCommand(
+        receipt?.powershell_install_command ?? toPowerShellCommand(posixCmd),
+      )
+    : posixCmd;
   const copy = () => { if (!cmd) return; navigator.clipboard?.writeText(cmd).catch(() => {}); setCopied(true); window.setTimeout(() => setCopied(false), 1600); };
-  const canRegister = phase === "preflighted"
-    && preflight !== null
-    && preflight.valid
-    && preflight.provider_ready
-    && !preflight.duplicate_cluster_id;
-
   return (
     <motion.div key="cinstall" {...swap} className="grid gap-5">
-      <p className="text-[14px] leading-[1.55] c-2">
-        <span className="c-ink font-medium">{cloud}</span> · <span className="font-mono">{deploy}</span> 대상으로 에이전트를 등록합니다.
-        등록은 명시적 클릭에서만 실행되며(<span className="font-mono">apply=false</span>, 비파괴적), 설치 명령은 서버가 생성합니다.
-        {platform === "aws" && <> AWS CLI 로그인 권한이 있는 터미널에서 생성된 명령을 실행해야 합니다.</>}
-      </p>
-
-      {/* 1단계: 사전검증 */}
-      {(phase === "idle" || phase === "preflighting" || phase === "error") && !receipt && (
-        <button onClick={runPreflight} disabled={phase === "preflighting"} className="btn-primary flex w-full items-center justify-center gap-1.5 text-[15px] font-semibold disabled:opacity-50" style={{ borderRadius: 14, paddingTop: 14, paddingBottom: 14 }}>
-          {phase === "preflighting" ? <><Spin c="size-[17px]" /> 사전검증 중…</> : <>사전검증 실행</>}
-        </button>
-      )}
-
-      {preflight && <PreflightPanel result={preflight} />}
-
-      {/* 2단계: 등록(실제 변경) — 사전검증 통과 후에만 노출 */}
-      {(canRegister || phase === "registering") && !receipt && (
+      {!receipt && (
         <button onClick={runRegister} disabled={phase === "registering"} className="btn-primary flex w-full items-center justify-center gap-1.5 text-[15px] font-semibold disabled:opacity-50" style={{ borderRadius: 14, paddingTop: 14, paddingBottom: 14 }}>
-          {phase === "registering" ? <><Spin c="size-[17px]" /> 등록 중…</> : <>에이전트 등록 · 설치 명령 생성</>}
+          {phase === "registering" ? <><Spin c="size-[17px]" /> 명령 생성 중…</> : <>설치 명령 생성</>}
         </button>
       )}
 
@@ -848,23 +735,19 @@ function ClusterInstallStep({ providers, platform, name, env, providerConfig, on
           <div className="cmd overflow-hidden" style={{ borderRadius: 16 }}>
             <div className="flex items-center justify-between" style={{ padding: "10px 14px", borderBottom: "1px solid var(--line)" }}>
               <span className="flex items-center gap-2 text-[12px] font-semibold c-2"><Icon size={15} stroke={2} style={{ color: pf.color }} />Kyro Agent · {pf.name}</span>
+              <span className="flex items-center gap-1" role="tablist" aria-label="설치 명령 셸 선택">
+                {([["posix", "macOS/Linux"], ["powershell", "Windows PowerShell"]] as const).map(([id, label]) => (
+                  <button key={id} role="tab" aria-selected={shell === id} onClick={() => setShell(id)}
+                    className="rounded-full px-2.5 py-1 text-[11.5px] font-semibold"
+                    style={{ color: shell === id ? "var(--ink)" : "var(--ink-3)", background: shell === id ? "rgba(17,19,24,0.07)" : "transparent" }}>{label}</button>
+                ))}
+              </span>
               <button onClick={copy} className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-semibold transition-colors" style={{ color: copied ? "var(--green)" : "var(--ink-2)", background: copied ? "rgba(34,197,94,0.12)" : "rgba(17,19,24,0.05)" }}>
                 {copied ? <><Check className="size-3.5" strokeWidth={3} />복사됨</> : <><Copy className="size-3.5" />복사</>}
               </button>
             </div>
-            <pre className="overflow-x-auto font-mono text-[12.5px] leading-[1.7] c-ink" style={{ padding: "14px 16px" }}>{cmd}</pre>
+            <pre className="max-w-full whitespace-pre-wrap break-words font-mono text-[12.5px] leading-[1.7] c-ink [overflow-wrap:anywhere]" style={{ padding: "14px 16px" }}><code>{cmd}</code></pre>
           </div>
-
-          {receipt.bootstrap_steps.length > 0 && (
-            <div className="inset" style={{ padding: 8 }}>
-              {receipt.bootstrap_steps.map((s, i) => (
-                <div key={`${i}-${s.label}`} className="inset-row">
-                  <span className="grid size-6 shrink-0 place-items-center rounded-full bg-soft text-[11px] font-bold c-accent">{i + 1}</span>
-                  <div className="min-w-0 flex-1"><div className="text-[13px] font-medium c-ink">{s.label}</div><div className="mt-0.5 truncate font-mono text-[11px] c-3">{s.command}</div></div>
-                </div>
-              ))}
-            </div>
-          )}
 
           <div className="inset flex items-center gap-3" style={{ padding: "15px 16px" }}>
             {conn.connection === "connected" ? (
@@ -884,16 +767,6 @@ function ClusterInstallStep({ providers, platform, name, env, providerConfig, on
               </>
             )}
           </div>
-          {conn.connection === "connected" ? (
-            <div className="inset grid gap-2.5" aria-label="등록 준비 상태" style={{ padding: "13px 16px" }}>
-              <ActivationEvidenceRow label="에이전트 heartbeat" status={activation.heartbeat} />
-              <ActivationEvidenceRow label="인벤토리 수신" status={activation.inventory} />
-              <ActivationEvidenceRow label="CPU·메모리 메트릭 수신" status={activation.metrics} />
-              {activation.status === "error" ? (
-                <p className="text-[11.5px] c-red">실제 관측 API 응답을 확인하지 못했습니다. 자동으로 다시 확인합니다.</p>
-              ) : null}
-            </div>
-          ) : null}
         </>
       )}
 
@@ -902,38 +775,14 @@ function ClusterInstallStep({ providers, platform, name, env, providerConfig, on
   );
 }
 
-function ActivationEvidenceRow({
-  label,
-  status,
-}: {
-  label: string;
-  status: "waiting" | "ready" | "error";
-}) {
-  return (
-    <div className="flex min-w-0 items-center gap-2 text-[12.5px]">
-      {status === "ready" ? (
-        <Check aria-hidden="true" className="size-4 shrink-0 c-green" strokeWidth={3} />
-      ) : status === "error" ? (
-        <AlertCircle aria-hidden="true" className="size-4 shrink-0 c-red" />
-      ) : (
-        <Spin c="size-4 shrink-0 c-accent" />
-      )}
-      <span className="min-w-0 flex-1 truncate c-ink">{label}</span>
-      <span className={status === "ready" ? "c-green" : status === "error" ? "c-red" : "c-3"}>
-        {status === "ready" ? "Ready" : status === "error" ? "확인 오류" : "대기"}
-      </span>
-    </div>
-  );
-}
-
-function ClusterDoneStep({ name, env, connection, onDone }: { name: string; env: string; connection: ConnectionStatusView; onDone: () => void }) {
+function ClusterDoneStep({ name, connection, onDone }: { name: string; connection: ConnectionStatusView; onDone: () => void }) {
   return (
     <motion.div key="cdone" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="grid gap-5">
       <div className="flex flex-col items-center gap-3 pt-1 text-center">
         <motion.span initial={{ scale: 0, rotate: -18 }} animate={{ scale: 1, rotate: 0 }} transition={{ type: "spring", visualDuration: 0.45, bounce: 0.5 }} className="grid size-16 place-items-center rounded-full lime-bg"><Check className="size-8 c-ink" strokeWidth={3} /></motion.span>
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.14 }}>
           <div className="text-[19px] font-bold tracking-[-0.02em] c-ink">클러스터가 연결됐어요</div>
-          <div className="mt-1 text-[13.5px] c-2"><span className="font-mono c-ink">{name}</span> · {env} · Kyro Agent 실행 중</div>
+          <div className="mt-1 text-[13.5px] c-2"><span className="font-mono c-ink">{name}</span> · Kyro Agent 실행 중</div>
         </motion.div>
       </div>
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.22 }} className="stat">
@@ -960,16 +809,13 @@ function ClusterWizard({ providers, onClose, onComplete }: { providers: ClusterP
   const [step, setStep] = useState(0);
   const [name, setName] = useState("game-server");
   const [platform, setPlatform] = useState<PlatformId>("aws");
-  const [env, setEnv] = useState("prod");
-  const [providerConfig, setProviderConfig] = useState<Record<string, unknown>>({});
   const [connection, setConnection] = useState<ConnectionStatusView | null>(null);
   const el = {
-    0: <ClusterInfoStep key="c0" providers={providers} name={name} setName={setName} platform={platform} setPlatform={(next) => { setPlatform(next); setProviderConfig({}); }} env={env} setEnv={setEnv}
-      providerConfig={providerConfig} setProviderConfig={setProviderConfig}
+    0: <ClusterInfoStep key="c0" providers={providers} name={name} setName={setName} platform={platform} setPlatform={setPlatform}
       onNext={() => setStep(1)} />,
-    1: <ClusterInstallStep key="c1" providers={providers} platform={platform} name={name} env={env} providerConfig={providerConfig}
+    1: <ClusterInstallStep key="c1" platform={platform} name={name}
       onBack={() => setStep(0)} onConnected={(info) => { setConnection(info); setStep(2); }} />,
-    2: connection ? <ClusterDoneStep key="c2" name={name} env={env} connection={connection} onDone={() => onComplete(name)} /> : null,
+    2: connection ? <ClusterDoneStep key="c2" name={name} connection={connection} onDone={() => onComplete(name)} /> : null,
   }[step];
   return (<><ShellHeader icon={Server} title="클러스터 연결" sub="에이전트를 설치하면 클러스터가 안전하게 등록·관측됩니다" onClose={onClose} /><Steps steps={CLUSTER_STEPS} active={step} /><Body>{el}</Body></>);
 }

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
-import { listApplications } from "../api/applications";
-import type { Application } from "../api/applications-schemas";
+import { listApplicationRuns, listApplications } from "../api/applications";
+import type { Application, WorkflowRun } from "../api/applications-schemas";
 import { listHelmReleases } from "../api/helm-releases";
 
 // UI-PHASE2-001 §2 "Deploy": typed live adapters for the /deploy surface.
@@ -35,6 +35,13 @@ function readObject(record: Record<string, unknown>, key: string): Record<string
   return typeof value === "object" && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : null;
+}
+
+function readObjects(record: Record<string, unknown>, key: string): Record<string, unknown>[] {
+  const value = record[key];
+  return Array.isArray(value)
+    ? value.filter((item): item is Record<string, unknown> => typeof item === "object" && item !== null && !Array.isArray(item))
+    : [];
 }
 
 // ── applications ─────────────────────────────────────────────────────────────
@@ -87,7 +94,7 @@ function toApplicationView(record: Application, index: number): ApplicationView 
  * Reads the live Application list. An empty list is an honest "관측된
  * 애플리케이션 없음"; a load failure is an honest `unavailable`.
  */
-export function useApplications(): ApplicationsFeed {
+export function useApplications(refreshKey: unknown = null): ApplicationsFeed {
   const [feed, setFeed] = useState<ApplicationsFeed>({ status: "loading", items: [] });
   useEffect(() => {
     const controller = new AbortController();
@@ -101,7 +108,105 @@ export function useApplications(): ApplicationsFeed {
         setFeed({ status: "unavailable", items: [] });
       });
     return () => controller.abort();
-  }, []);
+  }, [refreshKey]);
+  return feed;
+}
+
+// ── actual GitOps workflow evidence ─────────────────────────────────────────
+
+export interface WorkflowStepView {
+  name: string;
+  status: string | null;
+  message: string | null;
+  updatedAt: string | null;
+  details: Record<string, unknown>;
+}
+
+export interface ApplicationRunView {
+  applicationId: string;
+  applicationName: string;
+  repositoryRef: string | null;
+  workflowRunId: string;
+  status: string | null;
+  currentStep: string | null;
+  commitSha: string | null;
+  clusterId: string | null;
+  commandId: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+  steps: WorkflowStepView[];
+  promotionGate: Record<string, unknown> | null;
+}
+
+export interface ApplicationRunsFeed {
+  status: DeployFeedStatus;
+  items: ApplicationRunView[];
+}
+
+function toRunView(run: WorkflowRun, application: ApplicationView): ApplicationRunView | null {
+  const workflowRunId = readString(run, "workflow_run_id");
+  if (workflowRunId === null) return null;
+  return {
+    applicationId: application.id,
+    applicationName: application.name,
+    repositoryRef: application.repositoryRef,
+    workflowRunId,
+    status: readString(run, "status"),
+    currentStep: readString(run, "current_step"),
+    commitSha: readString(run, "commit_sha"),
+    clusterId: readString(run, "cluster_id"),
+    commandId: readString(run, "command_id"),
+    createdAt: readString(run, "created_at"),
+    updatedAt: readString(run, "updated_at"),
+    steps: readObjects(run, "steps").map((step) => ({
+      name: readString(step, "name") ?? "unknown",
+      status: readString(step, "status"),
+      message: readString(step, "message"),
+      updatedAt: readString(step, "updated_at"),
+      details: readObject(step, "details") ?? {},
+    })),
+    promotionGate: readObject(run, "promotion_gate"),
+  };
+}
+
+/**
+ * Reads server-recorded workflow history for the currently visible
+ * Applications. This is deliberately read-only: the demo gate never advances
+ * from a timer or a local optimistic state.
+ */
+export function useApplicationRuns(
+  applications: ApplicationView[],
+  refreshKey: unknown = null,
+): ApplicationRunsFeed {
+  const [feed, setFeed] = useState<ApplicationRunsFeed>({ status: "loading", items: [] });
+  const applicationKey = applications.map(({ id, workflowRunId }) => `${id}:${workflowRunId ?? ""}`).join("|");
+  useEffect(() => {
+    const controller = new AbortController();
+    if (applications.length === 0) {
+      setFeed({ status: "ready", items: [] });
+      return () => controller.abort();
+    }
+    setFeed({ status: "loading", items: [] });
+    void Promise.allSettled(applications.map(async (application) => {
+      // A single application can accumulate many connect-validation and retry
+      // runs before the GitOps recovery flow completes. Read the full bounded
+      // server history so preserved failure/recovery evidence is not pushed
+      // out of the local demo surface by newer validation-only runs.
+      const response = await listApplicationRuns(application.id, { limit: 500, signal: controller.signal });
+      return response.runs
+        .map((run) => toRunView(run, application))
+        .filter((run): run is ApplicationRunView => run !== null);
+    })).then((results) => {
+      if (controller.signal.aborted) return;
+      const fulfilled = results.filter((result): result is PromiseFulfilledResult<ApplicationRunView[]> => result.status === "fulfilled");
+      const items = fulfilled.flatMap(({ value }) => value).sort((left, right) =>
+        (right.updatedAt ?? right.createdAt ?? "").localeCompare(left.updatedAt ?? left.createdAt ?? ""));
+      setFeed({ status: fulfilled.length > 0 ? "ready" : "unavailable", items });
+    });
+    return () => controller.abort();
+    // applicationKey is a stable serialization of the server-owned identities.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [applicationKey, refreshKey]);
   return feed;
 }
 

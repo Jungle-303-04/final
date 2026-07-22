@@ -14,6 +14,7 @@ import {
 interface ClusterConnectWire {
   cluster_id: string;
   install_command: string;
+  powershell_install_command: string;
   expires_at: string;
 }
 
@@ -48,7 +49,7 @@ interface CommandStatusWire {
 
 export interface ClustersEndpointDependencies {
   connectCluster(
-    input: { name: string; provider: ClusterConnectProvider },
+    input: { name: string; provider?: ClusterConnectProvider },
     signal?: AbortSignal,
   ): Promise<ClusterConnectWire>;
   getClusterConnectionStatus(
@@ -114,11 +115,19 @@ export function createClustersAdapter(
 
 function connectReceipt(response: ClusterConnectWire): ClusterConnectReceipt {
   const command = response.install_command.trim();
-  if (!response.cluster_id.trim() || !command || command.includes("\n")) invalidResponse();
+  const powershellCommand = response.powershell_install_command.trim();
+  if (
+    !response.cluster_id.trim()
+    || !command
+    || command.includes("\n")
+    || !powershellCommand
+    || powershellCommand.includes("\n")
+  ) invalidResponse();
   canonicalTimestamp(response.expires_at);
   return {
     clusterId: response.cluster_id,
     installCommand: command,
+    powershellInstallCommand: powershellCommand,
     expiresAt: response.expires_at,
   };
 }

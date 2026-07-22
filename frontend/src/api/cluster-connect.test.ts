@@ -12,19 +12,35 @@ describe("cluster connect API", () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({
       cluster_id: "production-a1b2",
       install_command: "curl -fsSL https://opsia.example/api/install/token | kubectl apply -f -",
+      powershell_install_command: "Invoke-WebRequest token | kubectl apply -f -",
       expires_at: "2026-07-14T06:00:00Z",
     }));
 
-    await expect(connectCluster({ name: "Production", provider: "aws" })).resolves
+    await expect(connectCluster({ name: "Production" })).resolves
       .toMatchObject({ cluster_id: "production-a1b2" });
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/clusters/connect",
       expect.objectContaining({
-        body: JSON.stringify({ name: "Production", provider: "aws" }),
+        body: JSON.stringify({ name: "Production" }),
         credentials: "include",
         method: "POST",
       }),
     );
+  });
+
+  it("accepts the POSIX-only receipt served by an older replica during rollout", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({
+      cluster_id: "production-rolling-a1b2",
+      install_command: "curl -fsSL https://kyro.example/api/install/token | kubectl apply -f -",
+      expires_at: "2026-07-14T06:00:00Z",
+    }));
+
+    await expect(connectCluster({ name: "Production rolling", provider: "aws" }))
+      .resolves.toMatchObject({
+        cluster_id: "production-rolling-a1b2",
+        powershell_install_command:
+          "curl -fsSL https://kyro.example/api/install/token | kubectl apply -f -",
+      });
   });
 
   it("encodes the cluster identity for connection polling", async () => {
@@ -46,6 +62,7 @@ describe("cluster connect API", () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({
       cluster_id: "target / blue",
       install_command: "curl rotated-command | kubectl apply -f -",
+      powershell_install_command: "Invoke-WebRequest rotated-command | kubectl apply -f -",
       expires_at: "2026-07-15T07:00:00Z",
     }));
 

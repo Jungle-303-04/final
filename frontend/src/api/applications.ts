@@ -31,6 +31,7 @@ export interface ApplicationConnectInput {
   repository: string;
   branch: string;
   manifestPath: string;
+  sourceType?: string;
   clusterId: string;
   namespace: string;
   environment: string;
@@ -63,6 +64,7 @@ export function connectApplication(
         repo_ref: input.repository,
         branch: input.branch,
         manifest_path: input.manifestPath,
+        ...(input.sourceType ? { source_type: input.sourceType } : {}),
         cluster_id: input.clusterId,
         namespace: input.namespace,
         environment: input.environment,

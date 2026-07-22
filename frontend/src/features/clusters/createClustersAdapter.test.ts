@@ -9,6 +9,7 @@ describe("Clusters adapter", () => {
     await expect(port.connect({ name: "Production", provider: "aws" })).resolves.toEqual({
       clusterId: "production-a1b2",
       installCommand: "curl one-line | kubectl apply -f -",
+      powershellInstallCommand: "Invoke-WebRequest one-line | kubectl apply -f -",
       expiresAt: "2026-07-14T06:00:00Z",
     });
     await expect(port.loadConnection("production-a1b2")).resolves.toEqual({
@@ -20,6 +21,7 @@ describe("Clusters adapter", () => {
     await expect(port.reissue("production-a1b2")).resolves.toEqual({
       clusterId: "production-a1b2",
       installCommand: "curl rotated-line | kubectl apply -f -",
+      powershellInstallCommand: "Invoke-WebRequest rotated-line | kubectl apply -f -",
       expiresAt: "2026-07-15T07:00:00Z",
     });
     await expect(port.disconnect("production-a1b2")).resolves.toMatchObject({
@@ -49,6 +51,7 @@ describe("Clusters adapter", () => {
     endpoints.connectCluster.mockResolvedValue({
       cluster_id: "production-a1b2",
       install_command: "curl one\nkubectl apply",
+      powershell_install_command: "Invoke-WebRequest one-line | kubectl apply -f -",
       expires_at: "2026-07-14T06:00:00Z",
     });
 
@@ -62,6 +65,7 @@ function dependencies() {
     connectCluster: vi.fn(async () => ({
       cluster_id: "production-a1b2",
       install_command: "curl one-line | kubectl apply -f -",
+      powershell_install_command: "Invoke-WebRequest one-line | kubectl apply -f -",
       expires_at: "2026-07-14T06:00:00Z",
     })),
     getClusterConnectionStatus: vi.fn(async () => ({
@@ -77,6 +81,7 @@ function dependencies() {
     reissueClusterConnectCommand: vi.fn(async () => ({
       cluster_id: "production-a1b2",
       install_command: "curl rotated-line | kubectl apply -f -",
+      powershell_install_command: "Invoke-WebRequest rotated-line | kubectl apply -f -",
       expires_at: "2026-07-15T07:00:00Z",
     })),
     getCommandStatus: vi.fn(async () => ({

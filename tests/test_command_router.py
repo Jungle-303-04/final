@@ -620,6 +620,51 @@ class SpyUninstallResultDb:
         return True
 
 
+class RetryableUninstallRevocationDb(SpyUninstallResultDb):
+    def __init__(self) -> None:
+        super().__init__(action=Command.CLUSTER_AGENT_UNINSTALL_ACTION)
+        self.stored_result: dict[str, object] | None = None
+        self.revocation_results = [False, True]
+
+    async def get_agent_command(self, command_id: str, workspace_id: str) -> dict[str, object]:
+        return {
+            "command_id": command_id,
+            "workspace_id": workspace_id,
+            "cluster_id": "trusted-cluster",
+            "action": self.action,
+            "status": "completed" if self.stored_result is not None else "running",
+            "result": self.stored_result or {},
+            "terminal_event_id": "evt-uninstall",
+        }
+
+    async def complete_agent_command_and_stage_event(
+        self,
+        command_id: str,
+        workspace_id: str,
+        cluster_id: str,
+        result: dict[str, object],
+        lease_id: str,
+        agent_id: str,
+        source: str,
+    ) -> SimpleNamespace | None:
+        if self.stored_result is not None:
+            return None
+        self.stored_result = result
+        return await super().complete_agent_command_and_stage_event(
+            command_id,
+            workspace_id,
+            cluster_id,
+            result,
+            lease_id,
+            agent_id,
+            source,
+        )
+
+    def unregister_target_cluster(self, workspace_id: str, cluster_id: str) -> bool:
+        self.unregistered.append((workspace_id, cluster_id))
+        return self.revocation_results.pop(0)
+
+
 def manual_diff() -> dict[str, str]:
     return {
         "resource": "deployment/checkout-api",
@@ -795,6 +840,44 @@ def test_uninstall_completed_ack_revokes_registration() -> None:
 
         assert response.accepted is True
         assert db.unregistered == [("trusted-workspace", "trusted-cluster")]
+
+    asyncio.run(run())
+
+
+def test_uninstall_completed_ack_retries_registration_revocation_after_durable_result() -> None:
+    async def run() -> None:
+        db = RetryableUninstallRevocationDb()
+        payload = CommandResultRequest(
+            status="completed",
+            agent_id="agent-1",
+            lease_id="lease-1",
+            cleanup_completed=True,
+            cleanup_resources=list(UNINSTALL_CLEANUP_RESOURCE_REFS),
+        )
+
+        with pytest.raises(HTTPException) as first_error:
+            await command_result(
+                "cmd-uninstall-1",
+                payload,
+                identity=AGENT_IDENTITY,
+                db=db,
+            )
+        assert first_error.value.status_code == 500
+
+        replay = await command_result(
+            "cmd-uninstall-1",
+            payload,
+            identity=AGENT_IDENTITY,
+            db=db,
+        )
+
+        assert replay.accepted is True
+        assert replay.event_id == "evt-uninstall"
+        assert len(db.completed) == 1
+        assert db.unregistered == [
+            ("trusted-workspace", "trusted-cluster"),
+            ("trusted-workspace", "trusted-cluster"),
+        ]
 
     asyncio.run(run())
 

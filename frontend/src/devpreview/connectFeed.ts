@@ -1,7 +1,14 @@
 import { useEffect, useState } from "react";
 
-import { getClusterConnectStatus } from "../api/cluster-connect";
-import type { ClusterConnectStatusResponse } from "../api/cluster-connect-schemas";
+import {
+  connectCluster as connectClusterApi,
+  getClusterConnectStatus,
+} from "../api/cluster-connect";
+import type {
+  ClusterConnectProvider,
+  ClusterConnectResponse,
+  ClusterConnectStatusResponse,
+} from "../api/cluster-connect-schemas";
 import { getInventorySummary } from "../api/inventory-summary";
 import { getClusterUsage } from "../api/metrics";
 import {
@@ -65,6 +72,20 @@ export type ConnectFeedStatus = "loading" | "ready" | "unavailable" | "error";
 export type ClusterSummaryView = ClusterSummary;
 export type RepositoryBranchView = RepositoryBranch;
 export type RepositoryManifestCandidateView = RepositoryManifestCandidate;
+
+/**
+ * Explicit-click cluster registration boundary used by the demo shell.
+ * Keeping the mutation here preserves the authenticated API composition rule:
+ * view components never import the low-level product API directly.
+ */
+export type ClusterConnectResponseView = ClusterConnectResponse;
+
+export function connectCluster(
+  input: { name: string; provider?: ClusterConnectProvider },
+  signal?: AbortSignal,
+): Promise<ClusterConnectResponse> {
+  return connectClusterApi(input, signal);
+}
 
 export function connectApplication(
   input: ApplicationConnectInput,
@@ -340,9 +361,9 @@ interface ObservedActivation extends ClusterActivationReadinessView {
 
 /**
  * Waits for three independent, server-observed readiness signals after target
- * registration: agent heartbeat, an inventory snapshot, and timestamped CPU or
- * memory telemetry. A connected heartbeat alone never advances the wizard to
- * Ready, and failed reads remain visible while polling continues.
+ * registration. Heartbeat plus a real inventory snapshot is sufficient to
+ * finish registration. Telemetry warms up asynchronously after navigation and
+ * must never trap the connection wizard indefinitely.
  */
 export function useClusterActivationReadiness(
   clusterId: string | null,
@@ -389,9 +410,9 @@ export function useClusterActivationReadiness(
         ))
           ? "ready"
           : "waiting";
-      const status = inventory === "ready" && metrics === "ready"
+      const status = inventory === "ready"
         ? "ready"
-        : inventory === "error" || metrics === "error"
+        : inventory === "error"
           ? "error"
           : "waiting";
       setObserved({
