@@ -657,6 +657,9 @@ class ApplicationConnectRequest(StrictModel):
     name: str = Field(min_length=1, max_length=120)
     repo_ref: str = Field(min_length=1, max_length=240)
     token: str | None = Field(default=None, min_length=1, max_length=500)
+    # GitHub App 원클릭 연결 완료 시 전달되는 설치 id. 있으면 PAT/public 대신
+    # App 설치 참조를 자격증명으로 저장해 폴러/PR 이 단명 토큰을 발급하게 한다.
+    installation_id: str | None = Field(default=None, min_length=1, max_length=40)
     branch: str = Field(default=DEFAULT_REPO_BRANCH, min_length=1, max_length=200)
     manifest_path: str = Field(default=DEFAULT_MANIFEST_PATH, min_length=1, max_length=500)
     source_type: str = Field(default="", max_length=40)

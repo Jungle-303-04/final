@@ -43,6 +43,7 @@ from domains.identity.dependencies import (
     resolve_allowed_application_ids,
     resolve_allowed_cluster_ids,
 )
+from domains.scm.github_app_credentials import make_app_installation_ref
 from domains.target.connectivity import (
     AGENT_STATUS_ONLINE,
     AGENT_STATUS_STALE,
@@ -1192,6 +1193,10 @@ async def connect_application(
             body["credential_ref"] = existing_repository["credential_ref"]
         else:
             body["credential_ref"] = PUBLIC_GITHUB_CREDENTIAL_REF
+        # GitHub App 원클릭 연결이면 설치 참조가 최우선(PAT/public 대체). 폴러가
+        # 이 참조로 단명 설치 토큰을 발급한다. App 흐름은 토큰을 보내지 않는다.
+        if payload.installation_id and payload.installation_id.strip():
+            body["credential_ref"] = make_app_installation_ref(payload.installation_id.strip())
         repository = register_repository_or_404(db, body)
         body["repository_id"] = repository["repository_id"]
         require_application_manage_if_registered(db, current, workspace_id, body)
