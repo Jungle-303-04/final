@@ -586,6 +586,10 @@ export function buildClusterTargetRegisterInput(
     clusterId: slugId(fields.name),
     name: fields.name,
     environment: fields.environment,
+    // 위저드 등록도 관리 클러스터 에이전트(deploy/management/target-agent.yaml)와
+    // 동일한 5초 수집 주기를 쓴다. 생략하면 서버 기본 30초가 매니페스트에 박혀
+    // freshness 창(45초) 안에서도 갱신이 30초에 한 번으로 보인다.
+    evidenceIntervalSeconds: 5,
   };
 }
 
