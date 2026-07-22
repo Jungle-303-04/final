@@ -4,7 +4,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ConnectWizard } from "./devpreview-connect";
+import { ConnectWizard, toInteractiveSafePosixCommand } from "./devpreview-connect";
 import { connectCluster, type ClusterProvidersView } from "./devpreview/connectFeed";
 
 const PROVIDERS: ClusterProvidersView = {
@@ -83,11 +83,18 @@ describe("devpreview name-only cluster wizard", () => {
     await user.click(await screen.findByRole("tab", { name: "macOS/Linux" }));
     expect(screen.getByText((_, element) => (
       element?.tagName === "CODE"
-      && element.textContent === "curl https://kyro.example/install/token | kubectl apply -f -"
+      && element.textContent === "(curl https://kyro.example/install/token | kubectl apply -f -)"
     ))).toBeTruthy();
 
     await user.click(screen.getByRole("tab", { name: "Windows PowerShell" }));
     expect(screen.getByText(/Invoke-WebRequest https:\/\/kyro\.example\/install\/token/)).toBeTruthy();
+  });
+
+  it("contains an older ownership guard so it cannot close the interactive shell", () => {
+    const unsafe = 'existing="game-server-live"; if [ "$existing" != next ]; then exit 1; fi; curl example | kubectl apply -f -';
+
+    expect(toInteractiveSafePosixCommand(unsafe)).toBe(`(${unsafe})`);
+    expect(toInteractiveSafePosixCommand(`(${unsafe})`)).toBe(`(${unsafe})`);
   });
 
   it("surfaces a registration error without fabricating a command", async () => {

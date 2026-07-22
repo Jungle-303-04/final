@@ -646,6 +646,15 @@ export function toPowerShellCommand(posixCommand: string): string {
   return posixCommand; // heredoc 없는 단일 명령은 PowerShell 에서도 동일하게 유효
 }
 
+export function toInteractiveSafePosixCommand(command: string): string {
+  const trimmed = command.trim();
+  if (!trimmed) return "";
+  // Rolling deployments can still serve the older ownership guard containing
+  // `exit 1`. Preserve the rejection while keeping the user's terminal open.
+  if (/^\([\s\S]*\)$/.test(trimmed)) return trimmed;
+  return `(${trimmed})`;
+}
+
 function ClusterInstallStep({ platform, name, onBack, onConnected }: { platform: PlatformId; name: string; onBack: () => void; onConnected: (info: ConnectionStatusView) => void }) {
   const pf = PLATFORMS.find((p) => p.id === platform)!;
   const Icon = pf.icon;
@@ -685,7 +694,7 @@ function ClusterInstallStep({ platform, name, onBack, onConnected }: { platform:
       .catch((cause: unknown) => { if (controller.signal.aborted || isAbortError(cause)) return; setErrMsg(errorText(cause)); setPhase("error"); });
   };
 
-  const posixCmd = receipt?.install_command ?? "";
+  const posixCmd = toInteractiveSafePosixCommand(receipt?.install_command ?? "");
   const cmd = shell === "powershell"
     ? receipt?.powershell_install_command ?? toPowerShellCommand(posixCmd)
     : posixCmd;

@@ -550,12 +550,12 @@ def assert_guarded_install_command(
     manifest_url_prefix: str,
 ) -> None:
     assert "\n" not in command
-    assert command.startswith('existing="$(kubectl -n target get configmap ')
+    assert command.startswith('(existing="$(kubectl -n target get configmap ')
     assert "jsonpath='{.data.TARGET_CLUSTER_ID}'" in command
     assert f'[ "$existing" != {cluster_id} ]' in command
     assert "Kyro agent is already registered as" in command
     assert f"curl -fsSL {manifest_url_prefix}" in command
-    assert command.endswith("| kubectl apply -f -")
+    assert command.endswith("| kubectl apply -f -)")
 
 
 def test_target_install_manifest_sets_agent_and_telemetry_config() -> None:

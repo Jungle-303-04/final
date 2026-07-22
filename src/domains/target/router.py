@@ -661,7 +661,10 @@ def guarded_kubectl_apply_command(
         "then printf 'Kyro agent is already registered as %s; disconnect it before connecting "
         f'{expected_cluster_id}.\\n\' "$existing" >&2; exit 1; fi; '
     )
-    return f"{guard}curl -fsSL {shell_quote(manifest_url)} | {kubectl} apply -f -"
+    # The command is pasted into an already-open operator terminal. Keep the
+    # fail-closed ownership guard, but contain its `exit 1` in a subshell so a
+    # mismatch cannot terminate the interactive shell itself.
+    return f"({guard}curl -fsSL {shell_quote(manifest_url)} | {kubectl} apply -f -)"
 
 
 def kubectl_apply_command(
