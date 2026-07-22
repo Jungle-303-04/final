@@ -580,9 +580,6 @@ function ClusterInfoStep({
       {providers.status === "loading" && (
         <p className="flex items-center gap-2 px-0.5 text-[13px] c-2"><Spin c="size-3.5 c-accent" /> 제공자 목록 불러오는 중…</p>
       )}
-      {providers.status === "error" && (
-        <GapBanner>제공자 목록을 불러오지 못했습니다. 가용성 표시 없이 진행되며 실제 등록은 서버가 검증합니다.</GapBanner>
-      )}
       {providers.status === "unavailable" && (
         <GapBanner>서버가 등록 가능한 클러스터 제공자를 보고하지 않았습니다.</GapBanner>
       )}
@@ -722,24 +719,6 @@ function ClusterInstallStep({ platform, name, onBack, onConnected }: { platform:
       {/* 서버 생성 설치 명령 + 부트스트랩 단계 (토큰 포함 · 저장/로그 안 함) */}
       {receipt && (
         <>
-          {/* U3 · 연결 진행 4단계 — 전부 실상태 파생(발급=서버 영수증, 연결/heartbeat/Ready=폴링 관측) */}
-          <div className="inset flex items-center gap-1.5 overflow-x-auto" style={{ padding: "10px 12px" }} aria-label="연결 진행 단계">
-            {([
-              ["명령 발급", true, false],
-              ["에이전트 연결", conn.connection === "connected", conn.connection === "expired" || conn.status === "error"],
-              ["heartbeat 수신", activation.heartbeat === "ready", activation.heartbeat === "error"],
-              ["Ready", activation.status === "ready", activation.status === "error"],
-            ] as const).map(([label, done, failed], index) => (
-              <span key={label} className="flex items-center gap-1.5">
-                {index > 0 && <span className="c-3" aria-hidden>→</span>}
-                <span className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[11.5px] font-semibold"
-                  style={{ color: failed ? "var(--red)" : done ? "var(--green)" : "var(--ink-3)", background: failed ? "rgba(239,68,68,0.1)" : done ? "rgba(34,197,94,0.1)" : "rgba(17,19,24,0.04)" }}>
-                  {done ? <Check className="size-3" strokeWidth={3} /> : failed ? <AlertCircle className="size-3" /> : <Spin c="size-3" />}
-                  {label}
-                </span>
-              </span>
-            ))}
-          </div>
           <div className="cmd overflow-hidden" style={{ borderRadius: 16 }}>
             <div className="flex items-center justify-between" style={{ padding: "10px 14px", borderBottom: "1px solid var(--line)" }}>
               <span className="flex items-center gap-2 text-[12px] font-semibold c-2"><Icon size={15} stroke={2} style={{ color: pf.color }} />Kyro Agent · {pf.name}</span>

@@ -19,12 +19,14 @@ const PROVIDERS: ClusterProvidersView = {
   providerConfigFieldsFor: () => [],
 };
 
+let providerView: ClusterProvidersView = PROVIDERS;
+
 vi.mock("./devpreview/connectFeed", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./devpreview/connectFeed")>();
   return {
     ...actual,
     connectCluster: vi.fn(),
-    useClusterProviders: () => PROVIDERS,
+    useClusterProviders: () => providerView,
     useClusterConnectionStatus: () => ({
       status: "idle",
       connection: null,
@@ -44,6 +46,7 @@ afterEach(cleanup);
 
 beforeEach(() => {
   vi.clearAllMocks();
+  providerView = PROVIDERS;
   vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
   vi.mocked(connectCluster).mockResolvedValue({
     cluster_id: "game-server",
@@ -76,6 +79,8 @@ describe("devpreview name-only cluster wizard", () => {
     await reachInstallStep(user);
     await user.click(await screen.findByRole("button", { name: "설치 명령 생성" }));
 
+    expect(screen.queryByLabelText("연결 진행 단계")).toBeNull();
+
     expect(connectCluster).toHaveBeenCalledWith(
       { name: "game-server", provider: "aws" },
       expect.any(AbortSignal),
@@ -95,6 +100,15 @@ describe("devpreview name-only cluster wizard", () => {
 
     expect(toInteractiveSafePosixCommand(unsafe)).toBe(`(${unsafe})`);
     expect(toInteractiveSafePosixCommand(`(${unsafe})`)).toBe(`(${unsafe})`);
+  });
+
+  it("keeps provider lookup failures out of the primary registration flow", () => {
+    providerView = { ...PROVIDERS, status: "error" };
+    render(<ConnectWizard embedded initialView="cluster" />);
+
+    expect(screen.queryByText(/제공자 목록을 불러오지 못했습니다/)).toBeNull();
+    expect(screen.getByRole("button", { name: /Amazon EKS/ })).toBeTruthy();
+    expect(screen.getByRole("textbox", { name: "클러스터 표시 이름" })).toBeTruthy();
   });
 
   it("surfaces a registration error without fabricating a command", async () => {
