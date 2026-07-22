@@ -711,11 +711,13 @@ export function toInteractiveSafePowerShellCommand(command: string): string {
 
 // 설치 진행 표시: "설치 대기" 정적 배지 대신 단계 프로그레스로 진행을 보여주고,
 // 타임아웃(expired)·실패(failed) 시 재설치(토큰 재발급) 버튼을 노출한다.
-function InstallProgress({ conn, activation, reinstalling, onReinstall }: {
+function InstallProgress({ conn, activation, reinstalling, onReinstall, dense = false }: {
   conn: ConnectionStatusView;
   activation: ClusterActivationReadinessView;
   reinstalling: boolean;
   onReinstall: () => void;
+  /** 하단 행동 라인에 놓일 때 버튼과 비슷한 세로 크기로 축소한다. */
+  dense?: boolean;
 }) {
   const failed = conn.connection === "failed";
   const expired = conn.connection === "expired";
@@ -733,7 +735,7 @@ function InstallProgress({ conn, activation, reinstalling, onReinstall }: {
     : online ? "에이전트가 클러스터 상태를 수집하고 있어요."
     : "터미널에서 위 명령을 실행하면 자동으로 진행됩니다.";
   return (
-    <div className="inset grid gap-2.5" style={{ padding: "15px 16px" }}>
+    <div className="inset grid" style={{ padding: dense ? "10px 14px" : "15px 16px", gap: dense ? 7 : 10 }}>
       <div className="flex items-center gap-2.5">
         {terminal ? (
           <AlertCircle className="size-[18px] shrink-0" style={{ color }} />
@@ -867,24 +869,24 @@ function ClusterInstallStep({ platform, name, onBack, onConnected }: { platform:
         </>
       )}
 
-      {/* 하단 행동 라인 — [뒤로 ⅓ · 오른쪽 ⅔]. 오른쪽 슬롯은 상태에 따라
-          다시 시도(에러) 또는 연결 진행 상황(명령 발급 후)이 차지해, 뒤로
-          버튼이 홀로 줄바꿈된 것처럼 남지 않는다. 뒤로 버튼은 오른쪽 카드
-          높이에 늘어나지 않고 에러 상태의 버튼과 같은 고정 높이를 유지한다. */}
-      <div className="flex items-start gap-3">
-        <WizardBackButton onClick={onBack} />
-        {!receipt && phase === "error" ? (
-          <button onClick={runRegister} className="btn-primary flex items-center justify-center gap-1.5 text-[15px] font-semibold" style={{ flex: "2 1 0%", borderRadius: 14, paddingTop: 14, paddingBottom: 14 }}>
-            <RotateCw className="size-[16px]" /> 다시 시도
-          </button>
-        ) : receipt ? (
-          <div style={{ flex: "2 1 0%", minWidth: 0 }}>
-            <InstallProgress conn={conn} activation={activation} reinstalling={reinstalling} onReinstall={reinstall} />
-          </div>
-        ) : (
-          <span aria-hidden="true" style={{ flex: "2 1 0%" }} />
-        )}
-      </div>
+      {/* 하단 행동 라인. 명령 발급 전: [뒤로 ⅓ · 다시 시도/자리 ⅔].
+          명령 발급 후: 임시 클러스터 등록이 이미 생긴 시점이라 뒤로가 의미가
+          없으므로 버튼을 제거하고, 진행 카드가 그 줄 전체를 버튼과 비슷한
+          세로 크기(컴팩트)로 차지해 행동 라인과 일관되게 보인다. */}
+      {receipt ? (
+        <InstallProgress conn={conn} activation={activation} reinstalling={reinstalling} onReinstall={reinstall} dense />
+      ) : (
+        <div className="flex items-start gap-3">
+          <WizardBackButton onClick={onBack} />
+          {phase === "error" ? (
+            <button onClick={runRegister} className="btn-primary flex items-center justify-center gap-1.5 text-[15px] font-semibold" style={{ flex: "2 1 0%", borderRadius: 14, paddingTop: 14, paddingBottom: 14 }}>
+              <RotateCw className="size-[16px]" /> 다시 시도
+            </button>
+          ) : (
+            <span aria-hidden="true" style={{ flex: "2 1 0%" }} />
+          )}
+        </div>
+      )}
 
     </motion.div>
   );
