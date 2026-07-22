@@ -6,12 +6,14 @@ import { motion } from "motion/react";
 import {
   Rocket, Package, AlertTriangle, Bell, Clock, ShieldCheck, Coins,
   Building2, Globe, Check, Sparkles, X, Palette, RefreshCw, Lock, Pin,
+  ChevronRight, MapPin,
 } from "lucide-react";
 import { UI, BLUE, HP, TINT, MONO, TYPE, SOFT, DUR, PRESENT_SCALE, inkA, blueA, critA, BRAND } from "./devpreview/theme";
 import { GithubIcon } from "./devpreview/brandIcons";
 import { useCostOverview } from "./devpreview/costFeed";
 import { useChecksOverview } from "./devpreview/checksFeed";
 import { useRcaIssueDetails, useRecoveryPlan, type RcaIssueDetailView } from "./devpreview/rcaDetailFeed";
+import { isActiveRcaIssue } from "./devpreview/rcaIssuesFeed";
 import { useSession, sessionInitial } from "./devpreview/sessionFeed";
 import { useAiConversations, useConversationDetail } from "./devpreview/aiFeed";
 import { useAlertEvents, useAlertRules, useAlertChannels } from "./devpreview/alertsFeed";
@@ -706,25 +708,185 @@ export type RcaIncident = {
   evidenceSummary?: string | null;
   evidenceBundleSummary?: string | null;
 };
-export function IssuesSurface({ incidentClusterIds, sessionRules: _sessionRules = [], onOpenRef: _onOpenRef, onAskAi, onOpenRca }: {
+
+type IssueCardState = {
+  label: "상태 미확인" | "확인 필요" | "해결됨";
+  tone: "info" | "warn" | "ok";
+};
+
+type IssueSeverityFilter = "all" | "critical" | "warning";
+
+type RecoveryCardProgress = {
+  label: "복구 대기" | "복구 요청됨" | "복구 실행 중" | "검증 중" | "복구 완료" | "복구 실패";
+  step: number;
+  tone: "approval" | "active" | "completed" | "failed";
+};
+
+function issueCardState(issue: RcaIssueDetailView): IssueCardState {
+  if (!isActiveRcaIssue(issue)) return { label: "해결됨", tone: "ok" };
+  if (issue.missingEvidence.length > 0
+    || issue.rootCause
+    || issue.recommendedActionSummary
+    || issue.actionRoute
+    || issue.prUrl) {
+    return { label: "확인 필요", tone: "warn" };
+  }
+  return { label: "상태 미확인", tone: "info" };
+}
+
+function IssueSeverityFilters({ active, criticalCount, warningCount, onChange, totalCount }: {
+  active: IssueSeverityFilter;
+  criticalCount: number;
+  warningCount: number;
+  onChange: (filter: IssueSeverityFilter) => void;
+  totalCount: number;
+}) {
+  const filters: { id: IssueSeverityFilter; label: string; value: number }[] = [
+    { id: "all", label: "전체", value: totalCount },
+    { id: "critical", label: "장애", value: criticalCount },
+    { id: "warning", label: "주의", value: warningCount },
+  ];
+  return (
+    <div aria-label="진행 중 이슈 심각도 필터" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+      {filters.map((filter) => {
+        const selected = active === filter.id;
+        const selectedTone = filter.id === "critical" ? TINT.crit : filter.id === "warning" ? TINT.warn : TINT.blue;
+        return (
+          <button
+            key={filter.id}
+            type="button"
+            aria-pressed={selected}
+            onClick={() => onChange(filter.id)}
+            style={{ ...segStyle, borderColor: selected ? selectedTone.bd : UI.line, background: selected ? selectedTone.bg : UI.card, color: selected ? selectedTone.fg : UI.ink2, cursor: "pointer" }}
+          >
+            {filter.label} <b style={numStyle}>{filter.value}</b>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function recoveryCardProgress(): RecoveryCardProgress {
+  return { label: "복구 대기", step: 0, tone: "approval" };
+}
+
+function RecoveryProgress({ progress }: { progress: RecoveryCardProgress }) {
+  const activeColor = progress.tone === "failed" ? HP.crit
+    : progress.tone === "completed" ? HP.ok
+      : progress.tone === "approval" ? HP.warn
+        : BLUE;
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 7, color: UI.ink2 }}>
+      <span>{progress.label}</span>
+      <span aria-hidden="true" style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
+        {Array.from({ length: 5 }, (_, index) => (
+          <span key={index} style={{ width: 11, height: 5, borderRadius: 3, background: index < progress.step ? activeColor : HP.pending, opacity: index < progress.step ? 1 : 0.7 }} />
+        ))}
+      </span>
+      <span style={{ fontVariantNumeric: "tabular-nums" }}>{progress.step}/5</span>
+    </span>
+  );
+}
+
+function IssueCard({ issue, onOpen, onOpenTarget }: { issue: RcaIssueDetailView; onOpen: () => void; onOpenTarget: (() => void) | null }) {
+  const [targetActive, setTargetActive] = useState(false);
+  const state = issueCardState(issue);
+  const recovery = recoveryCardProgress();
+  const title = issue.resourceName ?? "대상 미확인";
+  const symptom = issue.symptom ?? "증상 미확인";
+  const rootCause = issue.rootCause ?? "원인 미확인";
+  const severityLabel = issue.severity === "critical" ? "장애" : issue.severity === "warning" ? "주의" : "정보";
+  const indicatorLabel = state.label === "해결됨" ? "해결됨" : severityLabel;
+  const indicatorColor = state.label === "해결됨"
+    ? HP.ok
+    : issue.severity === "critical" ? HP.crit : issue.severity === "warning" ? HP.warn : BLUE;
+  const symptomWithCode = issue.rawSymptom && issue.rawSymptom !== symptom
+    ? `${symptom} (${issue.rawSymptom})`
+    : symptom;
+  const evidenceCount = issue.supportingEvidence.length;
+  const target = [issue.resourceKind, issue.resourceName].filter(Boolean).join(" · ") || "대상 미확인";
+  const scope = [issue.clusterId, issue.namespace].filter(Boolean).join(" · ") || "범위 미확인";
+
+  return (
+    <motion.div
+      onClick={onOpen}
+      whileHover={{ y: -1 }}
+      transition={{ duration: DUR.micro }}
+      style={{
+        width: "100%", minWidth: 0, display: "block",
+        padding: 0, overflow: "hidden", textAlign: "left", cursor: "pointer",
+        border: `1px solid ${UI.line}`, borderRadius: 10, background: UI.card,
+        boxShadow: `0 1px 2px ${inkA(0.04)}`, color: UI.ink,
+      }}
+    >
+      <span style={{ minWidth: 0, display: "grid", gap: 10, padding: "13px 14px 12px" }}>
+        <span style={{ minWidth: 0, display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ minWidth: 0, flex: 1, display: "flex", alignItems: "center", gap: 8 }}>
+            <span role="img" aria-label={`상태: ${indicatorLabel}`} title={`상태: ${indicatorLabel}`} style={{ width: 12, height: 12, flexShrink: 0, alignSelf: "center", cursor: "help", borderRadius: 999, background: indicatorColor }} />
+            <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: TYPE.bodyStrong, lineHeight: 1.35, fontWeight: 700 }}>{title}</span>
+          </span>
+          <time dateTime={issue.updatedAt ?? undefined} style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 4, fontSize: TYPE.caption2, color: UI.ink3 }}>
+            <Clock size={12} />{fromNow(issue.updatedAt)}
+          </time>
+        </span>
+
+        <span style={{ minWidth: 0, display: "grid", gap: 5, fontSize: TYPE.label2, lineHeight: 1.45 }}>
+          <span style={{ color: UI.ink2 }}><strong style={{ color: UI.ink, fontWeight: 600 }}>증상</strong><span style={{ margin: "0 7px", color: UI.line }}>|</span>{symptomWithCode}</span>
+          <span style={{ color: UI.ink2 }}><strong style={{ color: UI.ink, fontWeight: 600 }}>원인</strong><span style={{ margin: "0 7px", color: UI.line }}>|</span>{rootCause}</span>
+          <span style={{ color: UI.ink2 }}>
+            <strong style={{ color: UI.ink, fontWeight: 600 }}>대상</strong><span style={{ margin: "0 7px", color: UI.line }}>|</span>
+            {onOpenTarget ? (
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  onOpenTarget();
+                }}
+                onMouseEnter={() => setTargetActive(true)}
+                onMouseLeave={() => setTargetActive(false)}
+                onFocus={() => setTargetActive(true)}
+                onBlur={() => setTargetActive(false)}
+                style={{ maxWidth: "100%", border: "none", borderRadius: 7, background: targetActive ? TINT.gray.bd : TINT.gray.bg, color: targetActive ? UI.ink : UI.ink2, padding: "2px 7px", fontSize: TYPE.caption2, fontWeight: 400, lineHeight: 1.35, cursor: "pointer", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", verticalAlign: "middle", transition: `background ${DUR.micro}s ease, color ${DUR.micro}s ease` }}
+                title={`${target} 리소스 상세 열기`}
+              >
+                {target}
+              </button>
+            ) : target}
+          </span>
+          <span style={{ color: UI.ink2 }}><strong style={{ color: UI.ink, fontWeight: 600 }}>복구</strong><span style={{ margin: "0 7px", color: UI.line }}>|</span><RecoveryProgress progress={recovery} /></span>
+        </span>
+
+        <span style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", paddingTop: 9, borderTop: `1px dashed ${UI.line}`, fontSize: TYPE.caption2, color: UI.ink3 }}>
+          <span style={{ minWidth: 0, display: "inline-flex", alignItems: "center", gap: 4 }}><MapPin size={12} /><span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{scope}</span></span>
+          <span>판단 근거 {evidenceCount}개</span>
+        </span>
+
+        <span style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+          <Pill tone={state.tone} label={state.label} />
+          <button type="button" onClick={(event) => { event.stopPropagation(); onOpen(); }} style={{ display: "inline-flex", alignItems: "center", gap: 3, border: "none", background: "transparent", padding: 0, color: BLUE, fontSize: TYPE.label2, fontWeight: 700, cursor: "pointer" }}>열기 <ChevronRight size={14} /></button>
+        </span>
+      </span>
+    </motion.div>
+  );
+}
+
+export function IssuesSurface({ incidentClusterIds, sessionRules: _sessionRules = [], onOpenRef, onAskAi, onOpenRca }: {
   incidentClusterIds: readonly string[]; sessionRules?: string[]; onOpenRef: (kind: string, name: string) => void; onAskAi: () => void; onOpenRca?: (i: RcaIncident) => void;
 }) {
   const [tab, setTab] = useState("진행 중");
+  const [severityFilter, setSeverityFilter] = useState<IssueSeverityFilter>("all");
   // 이슈 탭 — 실 RCA 이슈 큐(GET /api/dashboard/rca/issues, 홈 W2와 동일 소스).
   // 큐 항목이 관측 RCA 필드(원인/확신도/증거/AI 요약)를 이미 실어주므로 상세 드로어로 그대로 전달한다.
   const issues = useRcaIssueDetails(incidentClusterIds);
-  const openCount = issues.items.filter((i) => !/resolved/i.test(i.status)).length;
-  const critCount = issues.items.filter((i) => i.severity === "critical").length;
-  const warnCount = issues.items.filter((i) => i.severity === "warning").length;
-  const activeIssues = issues.items.filter((i) => !/resolved/i.test(i.status));
-  const rcaIssues = issues.items.filter((i) =>
-    /rca/i.test(i.status)
-    || Boolean(i.rootCause)
-    || i.confidence !== null
-    || i.supportingEvidence.length > 0
-    || i.missingEvidence.length > 0,
-  );
-  const visibleIssues = tab === "RCA" ? rcaIssues : activeIssues;
+  const activeIssues = issues.items.filter(isActiveRcaIssue);
+  const resolvedIssues = issues.items.filter((issue) => !isActiveRcaIssue(issue));
+  const critCount = activeIssues.filter((issue) => issue.severity === "critical").length;
+  const warnCount = activeIssues.filter((issue) => issue.severity === "warning").length;
+  const visibleIssues = tab === "해결됨"
+    ? resolvedIssues
+    : activeIssues.filter((issue) => severityFilter === "all" || issue.severity === severityFilter);
   const setRca = (iss: RcaIssueDetailView) => onOpenRca?.({
     name: iss.resourceName ?? iss.correlationId.slice(0, 12),
     symptom: iss.symptom ?? iss.status,
@@ -743,40 +905,33 @@ export function IssuesSurface({ incidentClusterIds, sessionRules: _sessionRules 
     evidenceSummary: iss.evidenceSummary,
     evidenceBundleSummary: iss.evidenceBundleSummary,
   });
-  const incCols: [string, string][] = [["심각도", "88px"], ["이슈", "minmax(230px,2fr)"], ["대상", "minmax(150px,1fr)"], ["네임스페이스", "96px"], ["상태", "104px"]];
   return (
-    <Page title="이슈" icon={AlertTriangle} tabs={["진행 중", "RCA", "예방 점검"]} tab={tab} onTab={setTab}
-      action={tab !== "예방 점검" ? <button onClick={onAskAi} style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${blueA(0.4)}`, background: blueA(0.07), color: BLUE, borderRadius: 9, padding: "6px 13px", fontSize: TYPE.label2, fontWeight: 700, cursor: "pointer" }}>AI로 원인 분석</button> : null}>
-      {tab !== "예방 점검" && <ChipRow chips={[
-        { label: "장애", value: critCount, crit: critCount > 0 },
-        { label: "주의", value: warnCount, warn: warnCount > 0 },
-        { label: "미해결", value: openCount },
-        { label: "RCA", value: rcaIssues.length },
-      ]} />}
+    <Page title="이슈" icon={AlertTriangle} tabs={["진행 중", "해결됨", "예방 점검"]} tab={tab} onTab={setTab}
+      action={tab === "진행 중" ? <button onClick={onAskAi} style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${blueA(0.4)}`, background: blueA(0.07), color: BLUE, borderRadius: 9, padding: "6px 13px", fontSize: TYPE.label2, fontWeight: 700, cursor: "pointer" }}>AI로 원인 분석</button> : null}>
+      {tab === "진행 중" && (
+        <IssueSeverityFilters active={severityFilter} criticalCount={critCount} warningCount={warnCount} onChange={setSeverityFilter} totalCount={activeIssues.length} />
+      )}
       {tab !== "예방 점검" && (
-        <Card pad={0}>
-          <THead cols={incCols} />
+        <div style={{ display: "grid", gap: 8 }}>
           {issues.status === "loading" ? (
-            <div style={{ padding: "14px 15px", fontSize: TYPE.label2, color: UI.ink3 }}>불러오는 중…</div>
+            <Card><div style={{ fontSize: TYPE.label2, color: UI.ink3 }}>불러오는 중…</div></Card>
           ) : issues.status === "unavailable" ? (
-            <div style={{ padding: "14px 15px", fontSize: TYPE.label2, color: UI.ink3 }}>이슈를 불러오지 못했습니다.</div>
+            <Card><div style={{ fontSize: TYPE.label2, color: UI.ink3 }}>이슈를 불러오지 못했습니다.</div></Card>
           ) : visibleIssues.length === 0 ? (
-            <div style={{ padding: "14px 15px", fontSize: TYPE.label2, color: UI.ink2 }}>{tab === "RCA" ? "RCA 분석이 필요한 이슈가 없습니다." : "진행 중인 이슈가 없습니다."}</div>
-          ) : visibleIssues.map((iss, i) => {
-            const resolved = /resolved/i.test(iss.status);
-            const label = iss.resourceName ?? iss.correlationId.slice(0, 12);
+            <Card><div style={{ fontSize: TYPE.label2, color: UI.ink2 }}>{tab === "해결됨" ? "해결된 이슈가 없습니다." : severityFilter === "all" ? "진행 중인 이슈가 없습니다." : `${severityFilter === "critical" ? "장애" : "주의"} 이슈가 없습니다.`}</div></Card>
+          ) : visibleIssues.map((iss) => {
+            const resourceKind = iss.resourceKind;
+            const resourceName = iss.resourceName;
             return (
-              <TRow key={iss.correlationId} cols={incCols} i={i}
-                onClick={() => setRca(iss)} cells={[
-                <Pill key="s" tone={iss.severity === "warning" ? "warn" : iss.severity === "critical" ? "crit" : "ok"} label={iss.severity ? koLabel(iss.severity) : "정보"} />,
-                <span key="t"><Mono>{label}</Mono><span style={{ fontSize: TYPE.label, color: UI.ink2 }}> · {iss.symptom ?? iss.status}</span></span>,
-                <Mono key="d" dim>{[iss.resourceKind, iss.clusterId].filter(Boolean).join(" · ") || "-"}</Mono>,
-                <Mono key="w" dim>{iss.namespace ?? "-"}</Mono>,
-                <Pill key="st" tone={resolved ? "ok" : "warn"} label={koLabel(iss.status)} />,
-              ]} />
+              <IssueCard
+                key={iss.correlationId}
+                issue={iss}
+                onOpen={() => setRca(iss)}
+                onOpenTarget={resourceKind && resourceName ? () => onOpenRef(resourceKind, resourceName) : null}
+              />
             );
           })}
-        </Card>
+        </div>
       )}
       {tab === "예방 점검" && <ChecksContent />}
     </Page>
