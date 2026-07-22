@@ -361,9 +361,9 @@ interface ObservedActivation extends ClusterActivationReadinessView {
 
 /**
  * Waits for three independent, server-observed readiness signals after target
- * registration: agent heartbeat, an inventory snapshot, and timestamped CPU or
- * memory telemetry. A connected heartbeat alone never advances the wizard to
- * Ready, and failed reads remain visible while polling continues.
+ * registration. Heartbeat plus a real inventory snapshot is sufficient to
+ * finish registration. Telemetry warms up asynchronously after navigation and
+ * must never trap the connection wizard indefinitely.
  */
 export function useClusterActivationReadiness(
   clusterId: string | null,
@@ -410,9 +410,9 @@ export function useClusterActivationReadiness(
         ))
           ? "ready"
           : "waiting";
-      const status = inventory === "ready" && metrics === "ready"
+      const status = inventory === "ready"
         ? "ready"
-        : inventory === "error" || metrics === "error"
+        : inventory === "error"
           ? "error"
           : "waiting";
       setObserved({

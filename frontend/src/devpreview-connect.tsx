@@ -655,11 +655,16 @@ export function toInteractiveSafePosixCommand(command: string): string {
 export function toInteractiveSafePowerShellCommand(command: string): string {
   const trimmed = command.trim();
   if (!trimmed) return "";
-  // Older receipts treated the expected first-install NotFound response as a
-  // terminating NativeCommandError under Windows PowerShell.
-  return trimmed.replace(
+  // Older receipts queried the ConfigMap before its namespace existed. Under
+  // Windows PowerShell that expected first-run NotFound can be terminating.
+  const compatible = trimmed.replace(
     /get configmap target-runtime-config(?! --ignore-not-found)/,
     "get configmap target-runtime-config --ignore-not-found",
+  );
+  if (compatible.includes("$targetNamespace=")) return compatible;
+  return compatible.replace(
+    /\$existing=\(& kubectl -n 'target' get configmap target-runtime-config --ignore-not-found -o 'jsonpath=\{\.data\.TARGET_CLUSTER_ID\}' 2>\$null\);/,
+    "$existing=''; $targetNamespace=(& kubectl get namespace 'target' --ignore-not-found -o name 2>$null); if ($targetNamespace) { $existing=(& kubectl -n 'target' get configmap target-runtime-config --ignore-not-found -o 'jsonpath={.data.TARGET_CLUSTER_ID}' 2>$null) };",
   );
 }
 
@@ -711,11 +716,6 @@ function ClusterInstallStep({ platform, name, onBack, onConnected }: { platform:
   const copy = () => { if (!cmd) return; navigator.clipboard?.writeText(cmd).catch(() => {}); setCopied(true); window.setTimeout(() => setCopied(false), 1600); };
   return (
     <motion.div key="cinstall" {...swap} className="grid gap-5">
-      <p className="break-words text-[14px] leading-[1.55] c-2">
-        서버가 생성한 설치 명령을 <b>대상 클러스터에 로그인된 본인 터미널</b>에서 실행하세요.
-        이 화면은 명령을 대신 실행하지 않습니다.
-      </p>
-
       {!receipt && (
         <button onClick={runRegister} disabled={phase === "registering"} className="btn-primary flex w-full items-center justify-center gap-1.5 text-[15px] font-semibold disabled:opacity-50" style={{ borderRadius: 14, paddingTop: 14, paddingBottom: 14 }}>
           {phase === "registering" ? <><Spin c="size-[17px]" /> 명령 생성 중…</> : <>설치 명령 생성</>}
@@ -767,45 +767,11 @@ function ClusterInstallStep({ platform, name, onBack, onConnected }: { platform:
               </>
             )}
           </div>
-          {conn.connection === "connected" ? (
-            <div className="inset grid gap-2.5" aria-label="등록 준비 상태" style={{ padding: "13px 16px" }}>
-              <ActivationEvidenceRow label="에이전트 heartbeat" status={activation.heartbeat} />
-              <ActivationEvidenceRow label="인벤토리 수신" status={activation.inventory} />
-              <ActivationEvidenceRow label="CPU·메모리 메트릭 수신" status={activation.metrics} />
-              {activation.status === "error" ? (
-                <p className="text-[11.5px] c-red">실제 관측 API 응답을 확인하지 못했습니다. 자동으로 다시 확인합니다.</p>
-              ) : null}
-            </div>
-          ) : null}
         </>
       )}
 
       <div className="flex"><BackBtn onClick={onBack} /></div>
     </motion.div>
-  );
-}
-
-function ActivationEvidenceRow({
-  label,
-  status,
-}: {
-  label: string;
-  status: "waiting" | "ready" | "error";
-}) {
-  return (
-    <div className="flex min-w-0 items-center gap-2 text-[12.5px]">
-      {status === "ready" ? (
-        <Check aria-hidden="true" className="size-4 shrink-0 c-green" strokeWidth={3} />
-      ) : status === "error" ? (
-        <AlertCircle aria-hidden="true" className="size-4 shrink-0 c-red" />
-      ) : (
-        <Spin c="size-4 shrink-0 c-accent" />
-      )}
-      <span className="min-w-0 flex-1 truncate c-ink">{label}</span>
-      <span className={status === "ready" ? "c-green" : status === "error" ? "c-red" : "c-3"}>
-        {status === "ready" ? "Ready" : status === "error" ? "확인 오류" : "대기"}
-      </span>
-    </div>
   );
 }
 

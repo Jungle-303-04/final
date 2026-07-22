@@ -109,8 +109,12 @@ describe("devpreview name-only cluster wizard", () => {
   it("allows a first install when the runtime ConfigMap does not exist in PowerShell", () => {
     const legacy = "$existing=(& kubectl -n 'target' get configmap target-runtime-config -o 'jsonpath={.data.TARGET_CLUSTER_ID}' 2>$null);";
 
-    expect(toInteractiveSafePowerShellCommand(legacy)).toContain(
+    const compatible = toInteractiveSafePowerShellCommand(legacy);
+    expect(compatible).toContain(
       "get configmap target-runtime-config --ignore-not-found -o",
+    );
+    expect(compatible).toContain(
+      "get namespace 'target' --ignore-not-found -o name",
     );
   });
 

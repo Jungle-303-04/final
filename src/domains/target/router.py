@@ -759,8 +759,11 @@ def powershell_install_command_for(payload: TargetRegisterRequest, agent_token: 
     expected_cluster_id = (payload.cluster_id or "").replace("'", "''")
     return (
         "$ErrorActionPreference='Stop'; "
-        f"$existing=(& kubectl -n '{namespace}' get configmap target-runtime-config "
-        "--ignore-not-found -o 'jsonpath={.data.TARGET_CLUSTER_ID}' 2>$null); "
+        "$existing=''; "
+        f"$targetNamespace=(& kubectl get namespace '{namespace}' --ignore-not-found -o name 2>$null); "
+        f"if ($targetNamespace) {{ $existing=(& kubectl -n '{namespace}' get configmap "
+        "target-runtime-config --ignore-not-found "
+        "-o 'jsonpath={.data.TARGET_CLUSTER_ID}' 2>$null) }; "
         f"if ($existing -and $existing -ne '{expected_cluster_id}') "
         f'{{ throw "Kyro agent is already registered as $existing; disconnect it before connecting {expected_cluster_id}." }}; '
         "$tmp=Join-Path ([IO.Path]::GetTempPath()) ('kyro-'+[guid]::NewGuid().ToString()+'.yaml'); "

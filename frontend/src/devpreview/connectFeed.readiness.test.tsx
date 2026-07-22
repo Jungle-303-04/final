@@ -65,7 +65,7 @@ describe("cluster activation readiness", () => {
     expect(mocks.getClusterUsage).not.toHaveBeenCalled();
   });
 
-  it("reports Ready only after real inventory and telemetry evidence are both observed", async () => {
+  it("reports Ready after real inventory and keeps telemetry evidence accurate", async () => {
     mocks.getInventorySummary
       .mockResolvedValueOnce(inventory(null))
       .mockResolvedValueOnce(inventory({ snapshot_id: "snapshot-1" }));
@@ -91,6 +91,21 @@ describe("cluster activation readiness", () => {
     });
     expect(mocks.getInventorySummary).toHaveBeenCalledTimes(2);
     expect(mocks.getClusterUsage).toHaveBeenCalledTimes(2);
+  });
+
+  it("finishes registration while the first telemetry sample is still warming up", async () => {
+    mocks.getInventorySummary.mockResolvedValue(inventory({ snapshot_id: "snapshot-1" }));
+    mocks.getClusterUsage.mockResolvedValue(usage(null));
+
+    const rendered = renderHook(() => useClusterActivationReadiness("game-server", "connected"));
+    await act(async () => { await Promise.resolve(); });
+
+    expect(rendered.result.current).toEqual({
+      status: "ready",
+      heartbeat: "ready",
+      inventory: "ready",
+      metrics: "waiting",
+    });
   });
 
   it("keeps failed API evidence visible and never invents readiness", async () => {
