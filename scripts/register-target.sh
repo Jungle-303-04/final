@@ -15,6 +15,7 @@ MANAGEMENT_BASE_URL="${MANAGEMENT_BASE_URL:-}"
 LOKI_BASE_URL="${LOKI_BASE_URL:-http://loki-gateway.target.svc}"
 EVIDENCE_INTERVAL_SECONDS="${EVIDENCE_INTERVAL_SECONDS:-8}"
 IMAGE_NAME="${IMAGE_NAME:-}"
+INSTALL_TELEMETRY="${INSTALL_TELEMETRY:-true}"
 INSTALL_NODE_COLLECTOR="${INSTALL_NODE_COLLECTOR:-true}"
 INSTALL_SAMPLE_WORKLOAD="${INSTALL_SAMPLE_WORKLOAD:-false}"
 SAMPLE_WORKLOAD_NAME="${SAMPLE_WORKLOAD_NAME:-}"
@@ -42,11 +43,30 @@ require_env TARGET_CLUSTER_ID
 require_env TARGET_NAME
 
 is_true() {
+  local normalized
   normalized="$(printf "%s" "$1" | tr "[:upper:]" "[:lower:]")"
   case "${normalized}" in
     1|true|yes|on) return 0 ;;
     *) return 1 ;;
   esac
+}
+
+is_false() {
+  local normalized
+  normalized="$(printf "%s" "$1" | tr "[:upper:]" "[:lower:]")"
+  case "${normalized}" in
+    0|false|no|off) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+require_boolean() {
+  local name="$1"
+  local value="$2"
+  if ! is_true "${value}" && ! is_false "${value}"; then
+    echo "${name} must be a boolean value" >&2
+    exit 1
+  fi
 }
 
 wait_for_node_collector() {
@@ -68,6 +88,7 @@ if [ -z "${IMAGE_NAME}" ]; then
   echo "IMAGE_NAME is required for cluster-agent and node-collector manifests" >&2
   exit 1
 fi
+require_boolean INSTALL_TELEMETRY "${INSTALL_TELEMETRY}"
 if is_true "${INSTALL_SAMPLE_WORKLOAD}" && { [ -z "${SAMPLE_WORKLOAD_NAME}" ] || [ -z "${SAMPLE_WORKLOAD_IMAGE}" ]; }; then
   echo "SAMPLE_WORKLOAD_NAME and SAMPLE_WORKLOAD_IMAGE are required when INSTALL_SAMPLE_WORKLOAD is true" >&2
   exit 1
@@ -102,6 +123,14 @@ resolve_api_base_url() {
 }
 
 API_BASE_URL="$(resolve_api_base_url)"
+
+if is_true "${INSTALL_TELEMETRY}"; then
+  echo "==> installing required target telemetry before cluster-agent registration"
+  TARGET_CONTEXT="${TARGET_CONTEXT}" \
+  bash "${SCRIPT_DIR}/install-telemetry.sh"
+else
+  echo "==> skipping target telemetry installation (INSTALL_TELEMETRY=${INSTALL_TELEMETRY})"
+fi
 
 echo "==> logging in operator for target registration"
 login_with_password "${API_BASE_URL}" "${COOKIE_JAR}"

@@ -87,6 +87,43 @@ def safe_pr_delivery_mode() -> str:
     if value == SAFE_PR_DELIVERY_DIRECT_COMMIT:
         return SAFE_PR_DELIVERY_DIRECT_COMMIT
     return SAFE_PR_DELIVERY_PULL_REQUEST
+
+
+def request_delivery_mode(request: SafePrRequestedBody) -> str:
+    """요청별 전달 방식 — 발행자가 위험도 기준으로 지정한 값이 최우선,
+    미지정이면 SAFE_PR_DELIVERY_MODE 기본값을 따른다."""
+    value = (getattr(request, "delivery", None) or "").strip().lower()
+    if value in (SAFE_PR_DELIVERY_DIRECT_COMMIT, SAFE_PR_DELIVERY_PULL_REQUEST):
+        return value
+    return safe_pr_delivery_mode()
+
+
+# 직접 커밋은 "우리 시스템이 스스로 만든 커밋"이라는 특수 상황이다 — 폴러의
+# 다음 주기를 기다리지 않도록 pg_notify 로 즉시 알려 버스트 폴링을 깨운다.
+# 알림 실패는 경고만 남긴다(fail-open): 30초 주기 폴링이 정확성을 보장한다.
+DIRECT_COMMIT_NOTIFY_CHANNEL = "gitops_direct_commit"
+NOTIFY_DATABASE_URL_ENV = "COMMAND_NOTIFY_DATABASE_URL"
+
+
+async def notify_direct_commit(repo: str, base_branch: str) -> None:
+    notify_url = env(NOTIFY_DATABASE_URL_ENV, "").strip()
+    if not notify_url:
+        return
+    try:
+        import psycopg
+
+        async with await psycopg.AsyncConnection.connect(
+            notify_url, autocommit=True
+        ) as conn:
+            await conn.execute(
+                "select pg_notify(%s, %s)",
+                (DIRECT_COMMIT_NOTIFY_CHANNEL, f"{repo}|{base_branch}"),
+            )
+    except Exception as exc:
+        LOGGER.warning(
+            "direct_commit_notify_failed",
+            extra={CONTEXT_KEY: {"exception_type": type(exc).__name__}},
+        )
 INVALID_SOURCE_RESPONSE_MESSAGE = "GitHub manifest source response is incomplete"
 BRANCH_COLLISION_MESSAGE = "safe pr head branch already exists without a matching open PR"
 AUTHORITY_MISMATCH_MESSAGE = "safe pr structured patch does not match workflow authority"
@@ -315,7 +352,7 @@ class GithubScmProvider:
                     manifest_edit_authority,
                     context,
                 )
-            direct_commit = safe_pr_delivery_mode() == SAFE_PR_DELIVERY_DIRECT_COMMIT
+            direct_commit = request_delivery_mode(request) == SAFE_PR_DELIVERY_DIRECT_COMMIT
             if structured and direct_commit:
                 expected_base_sha = patch_plans[0].expected_base_sha if patch_plans[0] else ""
                 if expected_base_sha != base_sha:
@@ -326,6 +363,7 @@ class GithubScmProvider:
                 await self.put_change_document(client, repo, base_branch, request, context)
                 await self.put_manifest_patches(client, repo, base_branch, patch_contents, context)
                 pr_url = await self.branch_head_commit_url(client, repo, base_branch, context)
+                await notify_direct_commit(repo, base_branch)
             elif structured:
                 existing = await self.find_existing_pr(
                     client,
@@ -386,6 +424,7 @@ class GithubScmProvider:
                 await self.put_change_document(client, repo, base_branch, request, context)
                 await self.put_manifest_patches(client, repo, base_branch, patch_contents, context)
                 pr_url = await self.branch_head_commit_url(client, repo, base_branch, context)
+                await notify_direct_commit(repo, base_branch)
             else:
                 patch_contents = await self.materialize_patch_contents(
                     client,

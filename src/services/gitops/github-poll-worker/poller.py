@@ -15,14 +15,17 @@ adapter 내부 최적화로 추가 가능.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import hashlib
 import hmac
 import json
 import random
+import time
 from dataclasses import dataclass
 from typing import Any
 
 import httpx
+import psycopg
 from settings import Settings
 
 from domains.scm.github_app import GithubAppNotConfigured
@@ -154,6 +157,16 @@ class GitHubPoller:
         self.db = db
         self.token_vault = token_vault or build_token_vault()
         self._last_sha_by_target: dict[str, str] = {}
+        # 직접 커밋 웨이크업 — NOTIFY 수신 시 set 되어 유휴 대기를 즉시 깨운다.
+        self._burst_wake = asyncio.Event()
+        self._notify_task: asyncio.Task | None = None
+        self.notify_url = env(Settings.NOTIFY_DATABASE_URL_ENV, "").strip()
+        self.burst_interval = float(
+            env(Settings.BURST_POLL_INTERVAL_SECONDS_ENV, Settings.DEFAULT_BURST_POLL_INTERVAL_SECONDS)
+        )
+        self.burst_window = float(
+            env(Settings.BURST_POLL_WINDOW_SECONDS_ENV, Settings.DEFAULT_BURST_POLL_WINDOW_SECONDS)
+        )
         # ETag 조건부 요청 — 변경 없으면 304 로 응답받아 GitHub rate limit 을 소모하지 않음
         # (SCM provider 를 압박하지 않는 폴링 원칙).
         self._etag_by_target: dict[str, str] = {}
@@ -170,7 +183,15 @@ class GitHubPoller:
         if self.once:
             await self.poll_once_with_retry(client)
             return
-        await self.loop(client)
+        if self.notify_url:
+            self._notify_task = asyncio.create_task(self._listen_direct_commits())
+        try:
+            await self.loop(client)
+        finally:
+            if self._notify_task is not None:
+                self._notify_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await self._notify_task
 
     async def poll_once_with_retry(self, client: httpx.AsyncClient) -> None:
         # once 모드는 곧 프로세스가 끝나므로 일시 네트워크 오류만 짧게 자체 재시도.
@@ -219,7 +240,70 @@ class GitHubPoller:
                 await asyncio.sleep(backoff)
                 continue
             failures = 0  # 성공 → 백오프 리셋
-            await asyncio.sleep(self.interval)
+            await self._idle_until_next_cycle(client)
+
+    async def _idle_until_next_cycle(self, client: httpx.AsyncClient) -> None:
+        """주기 대기 — 직접 커밋 알림이 오면 즉시 깨어나 버스트 폴링으로 전환."""
+        try:
+            await asyncio.wait_for(self._burst_wake.wait(), timeout=self.interval)
+        except asyncio.TimeoutError:
+            return  # 일반 주기 도래
+        self._burst_wake.clear()
+        await self.burst_poll(client)
+
+    async def burst_poll(self, client: httpx.AsyncClient) -> None:
+        """직접 커밋 직후의 특수 구간 — 창(기본 30초) 동안 짧은 간격(기본 0.5초)으로
+        조건부(ETag) 폴링해 우리 스스로 만든 커밋을 즉시 감지한다. 새 커밋을
+        반영한 순간 종료하고, 실패하면 일반 주기 루프의 백오프에 맡긴다."""
+        deadline = time.monotonic() + self.burst_window
+        LOGGER.info(
+            "github_burst_poll_started",
+            extra={CONTEXT_KEY: {
+                "interval_seconds": self.burst_interval,
+                "window_seconds": self.burst_window,
+            }},
+        )
+        while time.monotonic() < deadline:
+            seen_before = dict(self._last_sha_by_target)
+            try:
+                await self.poll_once(client)
+            except Exception as exc:
+                LOGGER.warning(
+                    "github_burst_poll_failed",
+                    extra={CONTEXT_KEY: {"exception_type": type(exc).__name__}},
+                )
+                return  # 일반 루프 주기·백오프로 복귀(fail-open)
+            if self._last_sha_by_target != seen_before:
+                LOGGER.info("github_burst_poll_detected")
+                return  # 목적 달성 — 새 커밋 감지·전달 완료
+            self._burst_wake.clear()  # 창 내 추가 알림은 현재 버스트가 흡수
+            await asyncio.sleep(self.burst_interval)
+        LOGGER.info("github_burst_poll_window_elapsed")
+
+    async def _listen_direct_commits(self) -> None:
+        """scm-worker 의 pg_notify(direct commit) 수신 루프 — command_wakeup 과 동일한
+        fail-open 원칙: 리스너 장애는 경고 후 재접속만 시도, 폴링 정확성엔 영향 없음."""
+        while True:
+            try:
+                async with await psycopg.AsyncConnection.connect(
+                    self.notify_url, autocommit=True
+                ) as conn:
+                    await conn.execute(f"LISTEN {Settings.DIRECT_COMMIT_NOTIFY_CHANNEL}")
+                    LOGGER.info("github_direct_commit_listening")
+                    async for notification in conn.notifies():
+                        LOGGER.info(
+                            "github_direct_commit_notified",
+                            extra={CONTEXT_KEY: {"payload": str(notification.payload)[:200]}},
+                        )
+                        self._burst_wake.set()
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                LOGGER.warning(
+                    "github_direct_commit_listener_failed",
+                    extra={CONTEXT_KEY: {"exception_type": type(exc).__name__}},
+                )
+                await asyncio.sleep(5)
 
     @staticmethod
     def retry_backoff_seconds(failures: int) -> float:

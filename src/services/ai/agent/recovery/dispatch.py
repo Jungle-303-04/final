@@ -267,6 +267,9 @@ def build_safe_pr_request_body(
         body=recovery_safe_pr_body(plan, selected),
         provider=GitHub.PROVIDER,
         patches=patches,
+        # 원설계 보존: 운영자 승인까지 끝난 복구는 직접 커밋으로 즉시 반영하고,
+        # high risk 변경만 PR 리뷰 게이트를 유지한다.
+        delivery="pull_request" if selected.risk_level == "high" else "direct_commit",
         pr_kind=safe_pr_kind(selected),
         workspace_id=workspace_id,
         repository_id=(

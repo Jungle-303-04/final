@@ -10,12 +10,15 @@ loki:
     allow_structured_metadata: true
   storage:
     type: s3
+    bucketNames:
+      chunks: loki-chunks
+      ruler: loki-ruler
+      admin: loki-admin
     s3:
       endpoint: http://minio.${TARGET_NAMESPACE}.svc:9000
-      bucketnames: loki-chunks
       region: us-east-1
-      access_key_id: ${MINIO_ROOT_USER}
-      secret_access_key: ${MINIO_ROOT_PASSWORD}
+      accessKeyId: ${MINIO_ROOT_USER}
+      secretAccessKey: ${MINIO_ROOT_PASSWORD}
       s3ForcePathStyle: true
       insecure: true
   schemaConfig:

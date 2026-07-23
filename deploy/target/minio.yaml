@@ -116,7 +116,7 @@ spec:
       restartPolicy: OnFailure
       containers:
         - name: create-buckets
-          image: minio/mc:RELEASE.2025-04-22T17-01-14Z
+          image: minio/mc:RELEASE.2025-05-21T01-59-54Z
           env:
             - name: MINIO_ROOT_USER
               valueFrom:
@@ -137,3 +137,4 @@ spec:
               done
               mc mb --ignore-existing local/loki-chunks
               mc mb --ignore-existing local/loki-ruler
+              mc mb --ignore-existing local/loki-admin

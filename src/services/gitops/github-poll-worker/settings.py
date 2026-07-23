@@ -64,6 +64,17 @@ class Settings:
     # POLL_ONCE=1 → 한 번 당기고 종료(CronJob 호환 모드). 미설정 → Deployment 내부 루프.
     POLL_ONCE_ENV = "POLL_ONCE"
 
+    # 직접 커밋(direct_commit) 웨이크업 — scm-worker 가 우리 시스템 스스로 만든
+    # 커밋을 pg_notify 로 알리면, 다음 주기를 기다리지 않고 짧은 간격으로
+    # 버스트 폴링해 즉시 감지한다. 리스너/URL 이 없으면 기존 주기 폴링과 동일
+    # (fail-open — 웨이크업은 최적화일 뿐 정확성 요건이 아님, command_wakeup 동일 원칙).
+    DIRECT_COMMIT_NOTIFY_CHANNEL = "gitops_direct_commit"
+    NOTIFY_DATABASE_URL_ENV = "COMMAND_NOTIFY_DATABASE_URL"  # LISTEN 은 직결 URL 필요
+    BURST_POLL_INTERVAL_SECONDS_ENV = "BURST_POLL_INTERVAL_SECONDS"
+    DEFAULT_BURST_POLL_INTERVAL_SECONDS = "0.5"
+    BURST_POLL_WINDOW_SECONDS_ENV = "BURST_POLL_WINDOW_SECONDS"
+    DEFAULT_BURST_POLL_WINDOW_SECONDS = "30"
+
     # 공개 repo 는 무인증도 되나 시간당 60회 제한 → 토큰 있으면 인증(5000회). 데모 30초=120회/시.
     GITHUB_TOKEN_ENV = CONTRACT_GITHUB_TOKEN_ENV
     GITHUB_TOKEN_REF_ENV = CONTRACT_GITHUB_TOKEN_REF_ENV

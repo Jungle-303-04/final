@@ -56,6 +56,11 @@ class SafePrRequestedBody(EventBody):
     approval_ref: str | None = None
     policy_decision_ref: str | None = None
     next_alert: AlertRequestedBody | None = None
+    # 요청별 전달 방식 — 발행자가 위험도에 따라 지정한다.
+    #   "direct_commit"  : 승인 완료된 안전 변경 → base 브랜치 직접 커밋
+    #   "pull_request"   : 위험(high risk)·무인 자동 변경 → 리뷰 게이트 유지
+    #   None             : scm-worker 의 SAFE_PR_DELIVERY_MODE 기본값을 따름
+    delivery: str | None = None
 
 
 @event(EventSubject.SAFE_PR_CREATED)
