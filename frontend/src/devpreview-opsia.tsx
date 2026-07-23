@@ -16,6 +16,8 @@ import { useDevpreviewContracts, type DevpreviewCluster } from "./devpreview/con
 import { isActiveIncidentCluster } from "./devpreview/rcaIssuesFeed";
 import { useFleetSummaries } from "./devpreview/fleetSummaryFeed";
 import { useClusterSummaries, type ClusterSummaryView } from "./devpreview/clusterSummaryFeed";
+import { NodeAliasTitle } from "./devpreview/NodeAliasTitle";
+import { useNodeAliases, type NodeAliasView } from "./devpreview/nodeAliasesFeed";
 import { HOME_CARD_GRID_CLASS, HOME_CARD_GRID_ITEM_CLASS, homeCardGridItemStyle, homeCardGridStyle } from "./devpreview/widgets";
 import {
   podsForNode,
@@ -529,8 +531,24 @@ export function HomeClusterSection({ meta: _meta, onOpen, pending = [] }: {
 }
 
 // ── 노드 카드 — 정본 physical topology 계약의 서버·측정값·pod count만 렌더한다.
-export function NodeCard({ node, pods, problemPodCount, onOpen, onTip }: {
-  node: InvNode; pods: readonly InvPod[]; problemPodCount: number | null; onOpen: () => void; onTip: (t: TipData) => void;
+export function NodeCard({
+  node,
+  pods,
+  problemPodCount,
+  nodeAlias,
+  onOpen,
+  onTip,
+  onSaveNodeAlias,
+  onDeleteNodeAlias,
+}: {
+  node: InvNode;
+  pods: readonly InvPod[];
+  problemPodCount: number | null;
+  nodeAlias?: NodeAliasView | null;
+  onOpen: () => void;
+  onTip: (t: TipData) => void;
+  onSaveNodeAlias?: (nodeName: string, alias: string) => Promise<NodeAliasView | null>;
+  onDeleteNodeAlias?: (nodeName: string) => Promise<void>;
 }) {
   const sev = healthSev(node.health);
   const statusText = node.status ? statusLabel(node.status) : "상태 관측 안 됨";
@@ -538,8 +556,18 @@ export function NodeCard({ node, pods, problemPodCount, onOpen, onTip }: {
   const showStatus = statusText !== healthText;
   const problemConditionCount = (node.conditions ?? []).filter((condition) => !/^ready$/i.test(condition)).length;
   const restartsRecent = node.restartsRecent ?? 0;
+  const nodeDisplayName = nodeAlias?.alias || node.name;
   return (
-    <motion.button transition={SPRING} onClick={onOpen}
+    <motion.div transition={SPRING} onClick={onOpen}
+      aria-label={`${nodeDisplayName} 노드 파드 보기`}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(event) => {
+        if (event.target !== event.currentTarget) return;
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        onOpen();
+      }}
       whileHover={{ boxShadow: `0 10px 26px -20px ${inkA(0.16)}`, borderColor: LINE3 }}
       onMouseMove={(event) => {
         if (event.target instanceof Element && event.target.closest("[data-slot-state]")) return;
@@ -555,7 +583,12 @@ export function NodeCard({ node, pods, problemPodCount, onOpen, onTip }: {
           <Monitor size={18} strokeWidth={2} style={{ color: UI.ink2 }} />
         </span>
         <div style={{ minWidth: 0, flex: 1 }}>
-          <div title={node.name} style={{ fontSize: TYPE.body, fontWeight: 600, letterSpacing: "-0.02em", color: UI.ink, fontFamily: MONO, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", lineHeight: 1.35 }}>{node.name}</div>
+          <NodeAliasTitle
+            alias={nodeAlias ?? null}
+            nodeName={node.name}
+            onDelete={onDeleteNodeAlias}
+            onSave={onSaveNodeAlias}
+          />
           {showStatus && <div style={{ fontSize: TYPE.caption, color: UI.ink3, marginTop: 2 }}>{statusText}</div>}
         </div>
         {sev !== "ok" && <span style={{ width: 8, height: 8, borderRadius: 999, background: sevColor(sev), flexShrink: 0, marginTop: 4 }} />}
@@ -589,7 +622,7 @@ export function NodeCard({ node, pods, problemPodCount, onOpen, onTip }: {
         <ClusterMiniUsage label="MEM" value={node.memoryPercent} />
       </div>
       <NodePodSlotGrid node={node} pods={pods} onTip={onTip} />
-    </motion.button>
+    </motion.div>
   );
 }
 
@@ -896,6 +929,9 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
   );
   const clusterSummaries = useClusterSummaries(summaryClusterIds);
   const topology = useClusterTopology(activeCluster);
+  const nodeAliasCluster = view.level === "clusters" ? null : activeCluster;
+  const nodeAliases = useNodeAliases(nodeAliasCluster);
+  const nodeAliasEditingAvailable = nodeAliasCluster !== null;
   const { nodes: topologyNodes, pods } = topology;
   const activeSummary = activeCluster ? clusterSummaries[activeCluster] : undefined;
   const nodes = useMemo(
@@ -1080,8 +1116,12 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
                               transition={reducedMotion ? { duration: 0 } : { ...SOFT, delay: Math.min(i, 4) * 0.015 }}
                             >
                               <NodeCard node={node} pods={observedPods ?? []}
+                                nodeAlias={nodeAliases.aliasesByNodeName.get(node.name) ?? null}
                                 problemPodCount={observedPods === null ? null : observedPods.filter((pod) => isBadHealth(pod.health)).length}
-                                onOpen={() => go({ level: "pods", cluster: view.cluster, node: node.name }, 1)} onTip={onTip} />
+                                onOpen={() => go({ level: "pods", cluster: view.cluster, node: node.name }, 1)}
+                                onTip={onTip}
+                                onSaveNodeAlias={nodeAliasEditingAvailable ? nodeAliases.saveAlias : undefined}
+                                onDeleteNodeAlias={nodeAliasEditingAvailable ? nodeAliases.deleteAlias : undefined} />
                             </motion.div>
                           );
                         })}
@@ -1094,9 +1134,16 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
                   <div style={{ background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 16, padding: 20 }}>
                     {/* 노드 귀속 판정(physical topology server_id)은 유지하되,
                         설명 카드는 UI에서 제거 — 파드 목록만 바로 보여준다. */}
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+                    <div style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 14, minWidth: 0 }}>
                       <Server size={14} style={{ color: UI.ink3 }} />
-                      <span style={{ fontSize: TYPE.body, fontWeight: 600, fontFamily: MONO, color: UI.ink }}>{view.node}</span>
+                      <span style={{ minWidth: 0, flex: 1 }}>
+                        <NodeAliasTitle
+                          alias={nodeAliases.aliasesByNodeName.get(view.node) ?? null}
+                          nodeName={view.node}
+                          onDelete={nodeAliasEditingAvailable ? nodeAliases.deleteAlias : undefined}
+                          onSave={nodeAliasEditingAvailable ? nodeAliases.saveAlias : undefined}
+                        />
+                      </span>
                     </div>
                     {topology.status === "loading" ? (
                       <PodSkeleton />

@@ -18,6 +18,7 @@ import domains.identity.models  # noqa: F401
 import domains.inventory.models  # noqa: F401
 import domains.rca.models  # noqa: F401
 import domains.scm.models  # noqa: F401
+import domains.shell_state.models  # noqa: F401
 import domains.target.models  # noqa: F401
 import domains.timeline.models  # noqa: F401
 import packages.storage.schema  # noqa: F401

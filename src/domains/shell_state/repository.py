@@ -10,10 +10,11 @@ from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from domains.shell_state.models import UserNamespaceScopeRecord, UserUiPreferenceRecord
+from domains.shell_state.node_aliases import NodeAliasRepositoryMixin
 from packages.storage.engine import DatabaseConnection, iso_or_none
 
 
-class ShellStateRepository(DatabaseConnection):
+class ShellStateRepository(NodeAliasRepositoryMixin, DatabaseConnection):
     def get_namespace_scope(
         self,
         *,

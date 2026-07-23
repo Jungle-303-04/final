@@ -1,4 +1,4 @@
-"""PostgreSQL authority for namespace scope and UI preferences."""
+"""PostgreSQL authority for user-scoped shell state."""
 
 from __future__ import annotations
 
@@ -32,6 +32,20 @@ class UserUiPreferenceRecord(Base):
     workspace_id: Mapped[str] = mapped_column(Text, nullable=False)
     user_id: Mapped[str] = mapped_column(Text, nullable=False)
     preferences: Mapped[dict[str, str]] = mapped_column(JSONB, nullable=False)
+    revision: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    created_at: Mapped[Any] = created_at_column()
+    updated_at: Mapped[Any] = updated_at_column()
+
+
+class UserNodeAliasRecord(Base):
+    __tablename__ = "user_node_aliases"
+    __table_args__ = (PrimaryKeyConstraint("workspace_id", "user_id", "cluster_id", "node_name"),)
+
+    workspace_id: Mapped[str] = mapped_column(Text, nullable=False)
+    user_id: Mapped[str] = mapped_column(Text, nullable=False)
+    cluster_id: Mapped[str] = mapped_column(Text, nullable=False)
+    node_name: Mapped[str] = mapped_column(Text, nullable=False)
+    alias: Mapped[str] = mapped_column(Text, nullable=False)
     revision: Mapped[int] = mapped_column(BigInteger, nullable=False)
     created_at: Mapped[Any] = created_at_column()
     updated_at: Mapped[Any] = updated_at_column()
