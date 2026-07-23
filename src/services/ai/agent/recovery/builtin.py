@@ -468,6 +468,51 @@ class ProbeRecoveryActions:
 
 
 @rca.recovery(
+    root_causes=("handoff_authority_stalled",),
+    actions=(
+        RecoveryActionSpec(
+            action_type="handoff_authority_recovery",
+            title="커밋된 Candidate 권위 forward-reconcile",
+            description=(
+                "현재 Candidate와 Gateway가 같은 endpoint/checkpoint를 가리키는지 확인한 뒤, "
+                "더 높은 fencing epoch로 권위를 승격하고 stale verification을 대체·완료합니다. "
+                "probe 완화나 무조건 재시작은 수행하지 않습니다."
+            ),
+            route=routes.approval_required,
+            risk_level="high",
+            score=0.92,
+            blast_radius="target_workload",
+            approval_required=True,
+            prerequisites=(
+                "Candidate ready/caughtUp 및 checksum 확인",
+                "Gateway route가 같은 endpoint와 현재 epoch를 가리킴",
+                "live session 수와 stale verification operation 확인",
+                "핸드오프 checksum 경합 수정 PR 검토",
+            ),
+            validation_checks=(
+                "권위와 Gateway route가 동일한 상향 epoch로 정렬",
+                "stale verification 제거 및 새 verification 완료",
+                "healthz 200과 Pod Ready 회복",
+                "연속 두 evidence window에서 kubernetes/metrics/logs/traces/metadata 수집 확인",
+                "5~10분 재관찰 동안 readiness 503 재발 없음",
+            ),
+            rollback_plan=(
+                "승격 전에는 freeze를 abort합니다. 승격 후에는 Candidate를 삭제하거나 단순 "
+                "restart하지 않고 현재 권위를 유지한 채 별도 상향 epoch 복구로 전환합니다."
+            ),
+            params={
+                "manual": True,
+                "strategy": "forward_reconcile_committed_candidate",
+                "forbid": ["probe_relaxation", "blind_rollout_restart"],
+            },
+        ),
+    ),
+)
+class HandoffAuthorityRecoveryActions:
+    pass
+
+
+@rca.recovery(
     root_causes=("selector_label_mismatch",),
     actions=(
         RecoveryActionSpec(

@@ -6,7 +6,6 @@ from services.ai.agent.causes.signals import extract_bundle_signals
 from services.ai.agent.defaults import ActionRoutes
 from services.ai.agent.playbooks.recovery import registered_recovery_rules
 
-
 HANDOFF_ROLE_FACT = "pod_label:opsia.dev/game-role=candidate"
 READINESS_503 = "Readiness probe failed: HTTP probe failed with statuscode: 503"
 

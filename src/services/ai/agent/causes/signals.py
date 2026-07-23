@@ -10,7 +10,8 @@ DSL(카탈로그 YAML `signals`) — 그룹 목록이며, 그룹마다 `any_of` 
 matcher 종류(정확히 하나의 키만 사용):
 - `fact`: kubernetes snapshot 에서 뽑은 정규화 토큰과 일치.
   토큰 어휘: `waiting_reason=<r>`, `terminated_reason=<r>`, `event_reason=<r>`,
-  `exit_code=<n>`, 그리고 파생 토큰 `exit_code=non_oom`(0/137 이 아닌 종료 코드 관측).
+  `exit_code=<n>`, `pod_label:<key>=<value>`, 그리고 파생 토큰
+  `exit_code=non_oom`(0/137 이 아닌 종료 코드 관측).
 - `log_pattern`: 수집 로그 라인(단순 line + Loki streams.values.line) 대소문자 무시 부분일치.
 - `event_pattern`: warning 이벤트 "reason message" 문자열 대소문자 무시 부분일치.
 """
@@ -32,6 +33,7 @@ FACT_EXIT_CODE = "exit_code"
 # Alertmanager firing 알림 — Prometheus 가 실제 평가한 관측 결과를 fact 로 승격한다.
 # 토큰 어휘: `alert_name=<alertname>`.
 FACT_ALERT_NAME = "alert_name"
+FACT_POD_LABEL_PREFIX = "pod_label:"
 # OOM(137)도 정상 종료(0)도 아닌 종료 코드 — 일반 앱/설정 크래시(exit 1 등) 판별용.
 FACT_EXIT_CODE_NON_OOM = "exit_code=non_oom"
 OOM_EXIT_CODE = 137
@@ -72,6 +74,7 @@ def extract_bundle_signals(evidence_bundle: EvidenceBundle) -> BundleSignals:
 
 def collect_kubernetes_signals(value: JsonObject, collector: _SignalCollector) -> None:
     for pod in dict_items(value.get("pods")):
+        collect_pod_label_facts(pod, collector)
         for reason in text_items(pod.get("waiting_reasons")):
             collector.facts.add(f"{FACT_WAITING_REASON}={reason}")
         for reason in text_items(pod.get("terminated_reasons")):
@@ -85,6 +88,18 @@ def collect_kubernetes_signals(value: JsonObject, collector: _SignalCollector) -
             collector.facts.add(f"{FACT_EVENT_REASON}={reason}")
         if reason or message:
             collector.event_texts.append(f"{reason} {message}".strip())
+
+
+def collect_pod_label_facts(pod: JsonObject, collector: _SignalCollector) -> None:
+    """Promote bounded, non-secret Pod labels into exact-match RCA facts."""
+    labels = pod.get("labels")
+    if not isinstance(labels, dict):
+        return
+    for raw_key, raw_value in labels.items():
+        key = str(raw_key).strip()
+        value = str(raw_value).strip()
+        if key and value:
+            collector.facts.add(f"{FACT_POD_LABEL_PREFIX}{key}={value}")
 
 
 def add_exit_code_facts(container: JsonObject, collector: _SignalCollector) -> None:

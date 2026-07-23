@@ -38,10 +38,8 @@ rules:
         signals:
           - id: "probe_path_failure_signal"
             any_of:
-              - event_pattern: "readiness probe"
-              - event_pattern: "liveness probe"
-              - event_pattern: "startup probe"
-              - event_pattern: "http probe failed"
+              - event_pattern: "statuscode: 404"
+              - event_pattern: "http probe failed with statuscode 404"
               - log_pattern: "404"
               - log_pattern: "not found"
       - candidate_id: "probe_port_wrong"
@@ -117,6 +115,29 @@ rules:
               - log_pattern: "unhealthy"
               - log_pattern: "500"
               - log_pattern: "dependency"
+      - candidate_id: "handoff_authority_stalled"
+        title: "핸드오프 권위 전환 정지"
+        description: "배포 Candidate가 준비됐지만 권위 승격·Gateway 검증·rollback 중 하나가 멈춰 실제 health endpoint가 503을 반환하는 상태입니다."
+        expected_evidence:
+          - "kubernetes:cluster_resource_state"
+          - "metadata:current_workload_snapshots"
+        checks:
+          - "현재 Pod의 opsia.dev/game-role=candidate 라벨과 Ready=False를 함께 확인"
+          - "Gateway route endpoint/epoch와 Candidate handoff status의 endpoint/epoch를 비교"
+          - "stale verification 또는 post-cutover rollback 실패가 있는지 확인"
+          - "단순 restart나 probe 완화 전에 권위 owner와 live session 수를 확인"
+        signals:
+          - id: "handoff_candidate_authority_signal"
+            any_of:
+              - fact: "pod_label:opsia.dev/game-role=candidate"
+              - log_pattern: "post_cutover_verification_failed"
+              - log_pattern: "rollback_old_authority_not_promoted"
+              - log_pattern: "verification_stale"
+          - id: "handoff_readiness_blocked_signal"
+            any_of:
+              - event_pattern: "statuscode: 503"
+              - log_pattern: "handoff-waiting"
+              - log_pattern: "candidate_not_public"
 
   - id: "service_no_ready_endpoints"
     symptoms:
