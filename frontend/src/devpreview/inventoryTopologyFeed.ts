@@ -35,7 +35,11 @@ export interface InvPod {
   key: string;
   serverId: string | null;
   cpuMillicores: number | null;
+  cpuRequestMillicores: number | null;
+  cpuLimitMillicores: number | null;
   memoryMebibytes: number | null;
+  memoryRequestMebibytes: number | null;
+  memoryLimitMebibytes: number | null;
   restartCount: number;
 }
 
@@ -152,7 +156,11 @@ export function toClusterTopologyView(topology: PhysicalTopologyEndpoint): Clust
       key: pod.id,
       serverId: pod.server_id,
       cpuMillicores: pod.cpu_mcores,
+      cpuRequestMillicores: pod.cpu_request_mcores,
+      cpuLimitMillicores: pod.cpu_limit_mcores,
       memoryMebibytes: pod.mem_mib,
+      memoryRequestMebibytes: pod.mem_request_mib,
+      memoryLimitMebibytes: pod.mem_limit_mib,
       restartCount: pod.restarts,
     })),
     nodesReady: topology.servers.filter((server) => server.status.toLowerCase() === "ready").length,

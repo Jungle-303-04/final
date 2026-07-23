@@ -1767,8 +1767,10 @@ class PhysicalTopologyPod(StrictModel):
     usage_pct: float | None = Field(default=None, ge=0)
     cpu_mcores: float | None = Field(default=None, ge=0)
     cpu_request_mcores: float | None = Field(default=None, gt=0)
+    cpu_limit_mcores: float | None = Field(default=None, gt=0)
     mem_mib: float | None = Field(default=None, ge=0)
     mem_request_mib: float | None = Field(default=None, gt=0)
+    mem_limit_mib: float | None = Field(default=None, gt=0)
     phase: str
     health: str
     restarts: int = Field(ge=0)

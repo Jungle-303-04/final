@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { Activity, AlertTriangle, Box, Check, ChevronLeft, ChevronRight, Clock3, Cpu, EllipsisVertical, ExternalLink, FileCog, Plug, RotateCcw, Server, Settings, Unplug } from "lucide-react";
+import { Activity, AlertTriangle, Box, Check, ChevronLeft, ChevronRight, Clock3, Cpu, EllipsisVertical, ExternalLink, FileCog, Monitor, Plug, RotateCcw, Server, Settings, Unplug } from "lucide-react";
 import { UI, BLUE, HP, TINT, MONO, TYPE, SOFT, SPRING, PAGE, PRESENT_SCALE, DUR, inkA, blueA, LINE3, INK4, BRAND, cardA } from "./devpreview/theme";
 import { AwsIcon, GithubIcon } from "./devpreview/brandIcons";
 import { statusLabel, reasonLabel } from "./devpreview/statusLabel";
@@ -43,11 +43,47 @@ function healthSev(health: string): Sev {
 }
 const sevColor = (s: Sev) => (s === "crit" ? HP.crit : s === "warn" ? HP.warn : s === "ok" ? HP.ok : UI.ink3);
 const isBadHealth = (health: string) => healthSev(health) === "crit";
+type TipMetric = {
+  label: string;
+  usage: string;
+  request?: string;
+  limit?: string;
+  limitSeverity?: "warn" | "crit";
+};
+const usageMetric = (
+  label: string,
+  used: number | null,
+  requested: number | null,
+  limit: number | null,
+  unit: string,
+): TipMetric => {
+  const limitPercent = used != null && limit != null
+    ? Math.round((used / limit) * 100)
+    : null;
+  return {
+    label,
+    usage: used == null
+      ? "사용량 관측 안 됨"
+      : `사용 ${Math.round(used)}${unit}${limitPercent === null ? "" : `(${limitPercent}%)`}`,
+    request: requested == null ? "요청 없음" : `요청 ${Math.round(requested)}${unit}`,
+    limit: limit == null ? "제한 없음" : `제한 ${Math.round(limit)}${unit}`,
+    limitSeverity: limitPercent !== null && limitPercent >= 90
+      ? "crit"
+      : limitPercent !== null && limitPercent >= 80
+        ? "warn"
+        : undefined,
+  };
+};
+const podTipMetrics = (pod: InvPod): TipMetric[] => [
+  usageMetric("CPU", pod.cpuMillicores, pod.cpuRequestMillicores, pod.cpuLimitMillicores, "m"),
+  usageMetric("메모리", pod.memoryMebibytes, pod.memoryRequestMebibytes, pod.memoryLimitMebibytes, "Mi"),
+  { label: "재시작", usage: `${pod.restartCount}회` },
+];
 
 type View = { level: "clusters" } | { level: "nodes"; cluster: string } | { level: "pods"; cluster: string; node: string };
 export type MapScope = View;
 
-type TipData = { x: number; y: number; label: string; status: string; health: string } | null;
+type TipData = { x: number; y: number; label: string; status: string; health: string; metrics?: TipMetric[] } | null;
 const NODE_METRIC_ANIMATION_SECONDS = 0.28;
 const NODE_METRIC_MAX_FRAMES_PER_SECOND = 60;
 
@@ -504,15 +540,19 @@ export function NodeCard({ node, pods, problemPodCount, onOpen, onTip }: {
   return (
     <motion.button transition={SPRING} onClick={onOpen}
       whileHover={{ boxShadow: `0 10px 26px -20px ${inkA(0.16)}`, borderColor: LINE3 }}
-      onMouseEnter={(e) => onTip({ x: e.clientX, y: e.clientY, label: node.name, status: node.status, health: node.health })}
-      onMouseMove={(e) => onTip({ x: e.clientX, y: e.clientY, label: node.name, status: node.status, health: node.health })}
+      onMouseMove={(event) => {
+        if (event.target instanceof Element && event.target.closest("[data-slot-state]")) return;
+        onTip(null);
+      }}
       onMouseLeave={() => onTip(null)}
       style={{
         display: "flex", flexDirection: "column", gap: 10, width: "100%", height: "100%", textAlign: "left", cursor: "pointer",
         background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 16, padding: 16, boxShadow: "none", boxSizing: "border-box", overflow: "hidden", minHeight: 0,
       }}>
       <div style={{ display: "flex", alignItems: "flex-start", gap: 8, minWidth: 0 }}>
-        <Server size={13} strokeWidth={2} style={{ color: UI.ink3, flexShrink: 0, marginTop: 2 }} />
+        <span style={{ width: 30, height: 30, borderRadius: 8, background: UI.bg2, display: "grid", placeItems: "center", flexShrink: 0 }}>
+          <Monitor size={18} strokeWidth={2} style={{ color: UI.ink2 }} />
+        </span>
         <div style={{ minWidth: 0, flex: 1 }}>
           <div title={node.name} style={{ fontSize: TYPE.body, fontWeight: 600, letterSpacing: "-0.02em", color: UI.ink, fontFamily: MONO, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", lineHeight: 1.35 }}>{node.name}</div>
           {showStatus && <div style={{ fontSize: TYPE.caption, color: UI.ink3, marginTop: 2 }}>{statusText}</div>}
@@ -547,12 +587,12 @@ export function NodeCard({ node, pods, problemPodCount, onOpen, onTip }: {
         <ClusterMiniUsage label="CPU" value={node.cpuPercent} />
         <ClusterMiniUsage label="MEM" value={node.memoryPercent} />
       </div>
-      <NodePodSlotGrid node={node} pods={pods} />
+      <NodePodSlotGrid node={node} pods={pods} onTip={onTip} />
     </motion.button>
   );
 }
 
-type NodePodSlotState = "occupied" | "critical" | "pending" | "empty";
+type NodePodSlotState = "occupied" | "warning" | "critical" | "pending" | "empty";
 
 /**
  * Compact capacity map restored from the original node drill. Every square is
@@ -561,7 +601,11 @@ type NodePodSlotState = "occupied" | "critical" | "pending" | "empty";
  * occupied square; unreturned occupied Pods stay green because `pods_running`
  * is itself observed evidence. Empty capacity is neutral and never fabricated.
  */
-export function NodePodSlotGrid({ node, pods }: { node: InvNode; pods: readonly InvPod[] }) {
+export function NodePodSlotGrid({ node, pods, onTip }: {
+  node: InvNode;
+  pods: readonly InvPod[];
+  onTip?: (tip: TipData) => void;
+}) {
   const reducedMotion = useReducedMotion();
   const capacity = node.totalPodCount;
   const occupied = node.matchedPodCount;
@@ -571,44 +615,69 @@ export function NodePodSlotGrid({ node, pods }: { node: InvNode; pods: readonly 
   const safeOccupied = Math.min(safeCapacity, Math.max(0, Math.floor(occupied)));
   const span = nodeCardColumnSpan(node);
   const visibleCapacity = Math.min(safeCapacity, span * NODE_SLOT_COUNT_PER_COLUMN, NODE_SLOT_RENDER_LIMIT);
-  const hiddenCapacity = Math.max(0, safeCapacity - visibleCapacity);
-  const observedStates = [...pods]
+  const hiddenPodCount = Math.max(0, safeOccupied - visibleCapacity);
+  const observedPods = [...pods]
     .sort((left, right) => slotRank(left) - slotRank(right)
       || left.namespace?.localeCompare(right.namespace ?? "")
       || left.name.localeCompare(right.name))
-    .slice(0, Math.min(safeOccupied, visibleCapacity))
-    .map(podSlotState);
+    .slice(0, Math.min(safeOccupied, visibleCapacity));
   const columns = span * NODE_SLOT_COLUMNS_PER_UNIT;
-  const states = Array.from({ length: visibleCapacity }, (_, index): NodePodSlotState => {
-    if (index >= safeOccupied) return "empty";
-    return observedStates[index] ?? "occupied";
+  const slots = Array.from({ length: visibleCapacity }, (_, index): { state: NodePodSlotState; pod: InvPod | null } => {
+    if (index >= safeOccupied) return { state: "empty", pod: null };
+    const pod = observedPods[index] ?? null;
+    return { state: pod ? podSlotState(pod) : "occupied", pod };
   });
 
   return (
     <div
       role="img"
-      aria-label={`파드 슬롯 ${safeOccupied}/${safeCapacity}${hiddenCapacity > 0 ? `, ${visibleCapacity}개 표시, ${hiddenCapacity}개 더 있음` : ""}`}
-      title={`파드 슬롯 ${safeOccupied}/${safeCapacity} · 실제 관측 상태${hiddenCapacity > 0 ? ` · ${visibleCapacity}개 표시, ${hiddenCapacity}개 생략` : ""}`}
+      aria-label={`파드 슬롯 ${safeOccupied}/${safeCapacity}${hiddenPodCount > 0 ? `, ${visibleCapacity}개 표시, 파드 ${hiddenPodCount}개 더 있음` : ""}`}
+      title={`파드 슬롯 ${safeOccupied}/${safeCapacity} · 실제 관측 상태${hiddenPodCount > 0 ? ` · 파드 ${visibleCapacity}개 표시, ${hiddenPodCount}개 생략` : ""}`}
       data-slot-columns={columns}
       data-visible-slot-count={visibleCapacity}
-      data-hidden-slot-count={hiddenCapacity}
+      data-hidden-pod-count={hiddenPodCount}
       style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}
     >
       <span className="node-slot-grid" aria-hidden="true" style={{ display: "grid", gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, gap: 4, flex: 1, minWidth: 0 }}>
-        {states.map((state, index) => (
+        {slots.map(({ state, pod }, index) => (
           <motion.span
             data-slot-state={state}
-            key={index}
+            data-pod-name={pod?.name}
+            data-pod-cpu-millicores={pod?.cpuMillicores ?? undefined}
+            data-pod-memory-mebibytes={pod?.memoryMebibytes ?? undefined}
+            data-pod-limit-utilization={pod ? podLimitUtilizationPercent(pod) ?? undefined : undefined}
+            key={pod?.key ?? index}
             initial={reducedMotion ? false : { opacity: 0, scale: 0.76 }}
-            animate={{ opacity: 1, scale: 1, backgroundColor: state === "empty" ? HP.ghost : slotColor(state) }}
+            animate={{ opacity: 1, scale: 1 }}
+            whileHover={state === "empty" || reducedMotion ? undefined : { scale: 1.08 }}
             transition={reducedMotion ? { duration: 0 } : { duration: 0.1, delay: Math.min(index, NODE_SLOT_RENDER_LIMIT - 1) * 0.0045, ease: "easeOut" }}
+            onMouseEnter={(event) => {
+              if (state === "empty" || !onTip) return;
+              event.stopPropagation();
+              onTip(pod
+                ? { x: event.clientX, y: event.clientY, label: pod.name, status: pod.status, health: pod.health, metrics: podTipMetrics(pod) }
+                : { x: event.clientX, y: event.clientY, label: "파드 정보 관측 안 됨", status: "슬롯 사용 중", health: "" });
+            }}
+            onMouseMove={(event) => {
+              if (state === "empty" || !onTip) return;
+              event.stopPropagation();
+              onTip(pod
+                ? { x: event.clientX, y: event.clientY, label: pod.name, status: pod.status, health: pod.health, metrics: podTipMetrics(pod) }
+                : { x: event.clientX, y: event.clientY, label: "파드 정보 관측 안 됨", status: "슬롯 사용 중", health: "" });
+            }}
+            onMouseLeave={(event) => {
+              if (state === "empty" || !onTip) return;
+              event.stopPropagation();
+              onTip(null);
+            }}
             style={{
               position: "relative",
               aspectRatio: "1",
               minWidth: 0,
               borderRadius: 3,
-              border: `1px solid ${state === "empty" ? UI.line2 : slotColor(state)}`,
-              background: state === "empty" ? HP.ghost : slotColor(state),
+              border: `1px solid ${state === "empty" ? UI.line2 : slotColor(state, pod)}`,
+              background: state === "empty" ? HP.ghost : slotColor(state, pod),
+              transition: reducedMotion ? "none" : "background-color .3s ease, border-color .3s ease, filter .1s ease, box-shadow .1s ease",
             }}
           >
             {state === "pending" && (
@@ -617,13 +686,13 @@ export function NodePodSlotGrid({ node, pods }: { node: InvNode; pods: readonly 
           </motion.span>
         ))}
       </span>
-      {hiddenCapacity > 0 && (
+      {hiddenPodCount > 0 && (
         <span
           aria-hidden="true"
-          data-slot-overflow={hiddenCapacity}
+          data-slot-overflow={hiddenPodCount}
           style={{ flexShrink: 0, fontVariantNumeric: "tabular-nums", fontSize: TYPE.caption, fontWeight: 600, color: UI.ink3, whiteSpace: "nowrap" }}
         >
-          +{hiddenCapacity}
+          +{hiddenPodCount}
         </span>
       )}
     </div>
@@ -633,21 +702,66 @@ export function NodePodSlotGrid({ node, pods }: { node: InvNode; pods: readonly 
 function podSlotState(pod: InvPod): NodePodSlotState {
   if (isBadHealth(pod.health) || /crash|error|fail|evict/i.test(`${pod.status} ${pod.health}`)) return "critical";
   if (!/running/i.test(pod.status) || /pending|unknown|progress|creating/i.test(pod.health)) return "pending";
+  if (healthSev(pod.health) === "warn" || (podLimitUtilizationPercent(pod) ?? 0) >= POD_SLOT_WARNING_PERCENT) return "warning";
   return "occupied";
 }
 
 function slotRank(pod: InvPod): number {
   const state = podSlotState(pod);
-  return state === "critical" ? 0 : state === "pending" ? 1 : 2;
+  return state === "critical" ? 0 : state === "warning" ? 1 : state === "pending" ? 2 : 3;
 }
 
-function slotColor(state: Exclude<NodePodSlotState, "empty">): string {
-  return state === "critical" ? HP.crit : state === "pending" ? HP.pending : HP.ok;
+function podLimitUtilizationPercent(pod: InvPod): number | null {
+  const ratios = [
+    pod.cpuMillicores != null && pod.cpuLimitMillicores != null
+      ? pod.cpuMillicores / pod.cpuLimitMillicores * 100
+      : null,
+    pod.memoryMebibytes != null && pod.memoryLimitMebibytes != null
+      ? pod.memoryMebibytes / pod.memoryLimitMebibytes * 100
+      : null,
+  ].filter((value): value is number => value !== null && Number.isFinite(value));
+  return ratios.length > 0 ? Math.max(...ratios) : null;
 }
 
+function slotColor(state: Exclude<NodePodSlotState, "empty">, pod: InvPod | null): string {
+  if (state === "pending") return HP.pending;
+  const base = state === "critical" ? HP.crit : state === "warning" ? HP.warn : HP.ok;
+  const utilization = pod ? podLimitUtilizationPercent(pod) : null;
+  const mix = state === "critical"
+    ? 94
+    : state === "warning"
+      ? utilization === null ? 70 : Math.min(92, 66 + Math.max(0, utilization - POD_SLOT_WARNING_PERCENT) * 1.3)
+      : utilization === null ? 58 : Math.min(82, 36 + Math.max(0, utilization) * 0.52);
+  return `color-mix(in srgb, ${base} ${Math.round(mix)}%, ${UI.card})`;
+}
+
+const POD_SLOT_WARNING_PERCENT = 80;
 const NODE_SLOT_COUNT_PER_COLUMN = 10;
 const NODE_SLOT_COLUMNS_PER_UNIT = 5;
 const NODE_SLOT_RENDER_LIMIT = 40;
+
+function PodSlotLegend() {
+  const states = [
+    ["정상", HP.ok],
+    ["주의", HP.warn],
+    ["장애", HP.crit],
+    ["대기", HP.pending],
+  ] as const;
+  return (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 12, minHeight: 20, flexWrap: "wrap", fontSize: TYPE.caption, color: UI.ink3 }}>
+      {states.map(([label, color]) => (
+        <span key={label} style={{ display: "inline-flex", alignItems: "center", gap: 5, whiteSpace: "nowrap" }}>
+          <span style={{ width: 8, height: 8, borderRadius: 2, background: color }} />
+          {label}
+        </span>
+      ))}
+      <span style={{ display: "inline-flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}>
+        <span style={{ width: 28, height: 6, borderRadius: 2, background: `linear-gradient(90deg, color-mix(in srgb, ${HP.ok} 36%, ${UI.card}), color-mix(in srgb, ${HP.ok} 82%, ${UI.card}))` }} />
+        농도 · 제한 대비 사용률
+      </span>
+    </div>
+  );
+}
 
 /**
  * Node cards share the same four-column geometry as dashboard widgets. One
@@ -707,16 +821,16 @@ function observedPodsForNode(
   return podsForNode(pods, topologyNode.key);
 }
 
-// ── 파드 행 — 관측된 파드 하나. name/ns/status/health 만. CPU/MEM/재시작/나이/QoS는
-// 인벤토리 계약이 노출하지 않으므로 표기하지 않는다(no backfill).
+// ── 파드 행 — 목록은 name/ns/status/health에 집중하고,
+// hover에서 계약이 제공하는 CPU/MEM/재시작 관측값을 보완한다.
 function PodRow({ pod, onClick, onTip }: {
   pod: InvPod; onClick: () => void; onTip: (t: TipData) => void;
 }) {
   const sev = healthSev(pod.health);
   return (
     <motion.button data-pod={pod.key} onClick={(e) => { e.stopPropagation(); onClick(); }}
-      onMouseEnter={(e) => onTip({ x: e.clientX, y: e.clientY, label: pod.name, status: pod.status, health: pod.health })}
-      onMouseMove={(e) => onTip({ x: e.clientX, y: e.clientY, label: pod.name, status: pod.status, health: pod.health })}
+      onMouseEnter={(e) => onTip({ x: e.clientX, y: e.clientY, label: pod.name, status: pod.status, health: pod.health, metrics: podTipMetrics(pod) })}
+      onMouseMove={(e) => onTip({ x: e.clientX, y: e.clientY, label: pod.name, status: pod.status, health: pod.health, metrics: podTipMetrics(pod) })}
       onMouseLeave={() => onTip(null)}
       whileTap={{ scale: 0.995 }}
       className="podrow"
@@ -858,7 +972,7 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
                 {(pendingClusters?.length ?? 0) > 0 && <span style={{ color: TINT.blue.fg }}>· 연결 중 {pendingClusters!.length}</span>}
               </span>
               {drilled && (
-                <span style={seg}><Cpu size={11} style={{ color: UI.ink3 }} />노드 <b style={num}>{observing ? `${nodesReady ?? "—"}/${nodesTotal ?? "—"}` : topology.status === "loading" || activeSummary?.status === "loading" ? "…" : "—"}</b></span>
+                <span style={seg}><Monitor size={12} style={{ color: UI.ink3 }} />노드 <b style={num}>{observing ? `${nodesReady ?? "—"}/${nodesTotal ?? "—"}` : topology.status === "loading" || activeSummary?.status === "loading" ? "…" : "—"}</b></span>
               )}
               {drilled && (
                 <span style={seg}><Box size={11} style={{ color: UI.ink3 }} />파드 <b style={num}>{observing ? activeSummary?.podsTotal ?? topology.podsTotal ?? "—" : topology.status === "loading" ? "…" : "—"}</b></span>
@@ -947,27 +1061,30 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
                         : "이 클러스터에서 준비된 노드가 아직 관측되지 않았습니다."} />
                   ) : (
                     /* 노드: 대시보드와 같은 4단위 격자. 슬롯 10개마다 카드가 한 칸씩 확장된다. */
-                    <div className="node-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gridAutoFlow: "row dense", gap: 12 }}>
-                      {nodes.map((node, i) => {
-                        const observedPods = observedPodsForNode(node, topologyNodes, pods);
-                        const span = nodeCardColumnSpan(node);
-                        return (
-                          <motion.div
-                            className="node-card-shell"
-                            data-node-card-span={span}
-                            key={node.key}
-                            style={{ minWidth: 0, maxWidth: "100%", gridColumn: `span ${span}`, contain: "layout" }}
-                            layout={reducedMotion ? false : "position"}
-                            initial={reducedMotion ? false : { opacity: 0, y: 8 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={reducedMotion ? { duration: 0 } : { ...SOFT, delay: Math.min(i, 4) * 0.015 }}
-                          >
-                            <NodeCard node={node} pods={observedPods ?? []}
-                              problemPodCount={observedPods === null ? null : observedPods.filter((pod) => isBadHealth(pod.health)).length}
-                              onOpen={() => go({ level: "pods", cluster: view.cluster, node: node.name }, 1)} onTip={onTip} />
-                          </motion.div>
-                        );
-                      })}
+                    <div style={{ display: "grid", gap: 8 }}>
+                      <PodSlotLegend />
+                      <div className="node-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gridAutoFlow: "row dense", gap: 12 }}>
+                        {nodes.map((node, i) => {
+                          const observedPods = observedPodsForNode(node, topologyNodes, pods);
+                          const span = nodeCardColumnSpan(node);
+                          return (
+                            <motion.div
+                              className="node-card-shell"
+                              data-node-card-span={span}
+                              key={node.key}
+                              style={{ minWidth: 0, maxWidth: "100%", gridColumn: `span ${span}`, contain: "layout" }}
+                              layout={reducedMotion ? false : "position"}
+                              initial={reducedMotion ? false : { opacity: 0, y: 8 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={reducedMotion ? { duration: 0 } : { ...SOFT, delay: Math.min(i, 4) * 0.015 }}
+                            >
+                              <NodeCard node={node} pods={observedPods ?? []}
+                                problemPodCount={observedPods === null ? null : observedPods.filter((pod) => isBadHealth(pod.health)).length}
+                                onOpen={() => go({ level: "pods", cluster: view.cluster, node: node.name }, 1)} onTip={onTip} />
+                            </motion.div>
+                          );
+                        })}
+                      </div>
                     </div>
                   )}
                 </>)}
@@ -1015,17 +1132,50 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
         {tip && (
           <motion.div key="tip" initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.98 }} transition={{ duration: DUR.micro }}
             style={{
-              position: "fixed", left: Math.min(tip.x + 14, window.innerWidth - 200), top: Math.min(tip.y + 16, window.innerHeight - 90), zIndex: 60, pointerEvents: "none",
+              position: "fixed", left: Math.max(8, Math.min(tip.x + 14, window.innerWidth - 280)), top: Math.min(tip.y + 16, window.innerHeight - 110), zIndex: 60, pointerEvents: "none",
               background: cardA(0.96), backdropFilter: "blur(10px)", border: `1px solid ${UI.line}`, borderRadius: 11, padding: "9px 11px",
-              boxShadow: `0 10px 30px -12px ${inkA(0.22)}`, minWidth: 160,
+              boxShadow: `0 10px 30px -12px ${inkA(0.22)}`, width: 368, maxWidth: "calc(100vw - 16px)",
             }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <span style={{ width: 7, height: 7, borderRadius: 999, background: sevColor(healthSev(tip.health)), flexShrink: 0 }} />
               <span style={{ fontSize: TYPE.label, fontWeight: 600, fontFamily: MONO, color: UI.ink, letterSpacing: "-0.01em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tip.label}</span>
             </div>
             <div style={{ fontSize: TYPE.caption, color: UI.ink3, marginTop: 3, marginLeft: 13 }}>
-              {(tip.status ? statusLabel(tip.status) : "상태 관측 안 됨")} · {tip.health ? statusLabel(tip.health) : "헬스 관측 안 됨"}
+              <span style={{ color: sevColor(healthSev(tip.health)), fontWeight: 600 }}>{tip.health ? statusLabel(tip.health) : "헬스 관측 안 됨"}</span>
+              <span> · {tip.status ? statusLabel(tip.status) : "상태 관측 안 됨"}</span>
             </div>
+            {tip.metrics && (
+              <div style={{ display: "grid", gridTemplateColumns: "52px minmax(0, 1fr)", columnGap: 10, rowGap: 3, alignItems: "baseline", fontSize: TYPE.caption, marginTop: 7, marginLeft: 13, fontVariantNumeric: "tabular-nums" }}>
+                {tip.metrics.map((metric) => (
+                  <div key={metric.label} style={{ display: "contents" }}>
+                    <span style={{ color: UI.ink3 }}>{metric.label}</span>
+                    <span style={{
+                      display: "grid",
+                      gridTemplateColumns: "minmax(108px, 1fr) 8px 78px 8px 62px",
+                      columnGap: 4,
+                      alignItems: "baseline",
+                      whiteSpace: "nowrap",
+                    }}>
+                      <span style={{ color: metric.limitSeverity === "crit" ? HP.crit : metric.limitSeverity === "warn" ? TINT.warn.fg : UI.ink, fontWeight: 600 }}>
+                        {metric.usage}
+                      </span>
+                      {metric.request ? (
+                        <>
+                          <span style={{ color: UI.ink3, textAlign: "center" }}>·</span>
+                          <span style={{ color: UI.ink3 }}>{metric.request}</span>
+                        </>
+                      ) : <><span /><span /></>}
+                      {metric.limit ? (
+                        <>
+                          <span style={{ color: UI.ink3, textAlign: "center" }}>·</span>
+                          <span style={{ color: UI.ink2 }}>{metric.limit}</span>
+                        </>
+                      ) : <><span /><span /></>}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
@@ -1035,7 +1185,12 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
         .op { min-height: 100vh; background: ${UI.bg}; font-family: var(--font-sans); font-weight: var(--font-weight-body); -webkit-font-smoothing: antialiased; }
         .op .opsia-content-layout { container: opsia-content / inline-size; }
         .op .opsia-main-pane { container: opsia-main / inline-size; }
-        .op .node-slot-grid { grid-template-columns: repeat(auto-fit, 48px) !important; justify-content: start; }
+        .op .node-slot-grid { justify-content: start; }
+        .op [data-slot-state]:not([data-slot-state="empty"]):hover {
+          z-index: 2;
+          filter: brightness(1.04);
+          box-shadow: 0 5px 12px ${inkA(0.2)};
+        }
         .op .podrow { position: relative; transition: background .15s ease; }
         .op .podrow:hover { background: ${inkA(0.035)} !important; }
         @container opsia-content (max-width: 1000px) {
