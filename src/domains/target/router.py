@@ -175,6 +175,9 @@ NOT_FOUND_CODE = 404
 EVIDENCE_JOB_NOT_FOUND = "evidence job not found"
 RELEASE_WORKFLOW_FAILURE_SOURCE_ID = "release-workflow-failure"
 TARGET_AGENT_IMAGE_ENV = "TARGET_AGENT_IMAGE"
+# 비공개 레지스트리 에이전트 이미지를 아무 클러스터에서나 pull 하기 위한 옵트인
+# dockerconfigjson 자격증명. 미설정이면 매니페스트에 pull secret 을 넣지 않는다(회귀 0).
+TARGET_AGENT_IMAGE_PULL_SECRET_ENV = "TARGET_AGENT_IMAGE_PULL_SECRET"
 TARGET_DEFAULT_CONTROL_NAMESPACES_ENV = "TARGET_DEFAULT_CONTROL_NAMESPACES"
 GITOPS_WEBHOOK_IMAGE_ENV = "GITOPS_WEBHOOK_IMAGE"
 PUBLIC_MANAGEMENT_BASE_URL_ENV = "PUBLIC_MANAGEMENT_BASE_URL"
@@ -248,6 +251,11 @@ def public_management_base_url() -> str:
         if base:
             return base
     return ""
+
+
+def agent_image_pull_secret() -> str:
+    """옵트인 dockerconfigjson 자격증명(server env). 없으면 빈 문자열(=매니페스트 불변)."""
+    return env(TARGET_AGENT_IMAGE_PULL_SECRET_ENV, "").strip()
 
 
 def management_access_response() -> ManagementAccessResponse:
@@ -1234,6 +1242,7 @@ async def register_target(
         scoped_payload,
         agent_token,
         agent_envelope_private_key,
+        image_pull_secret=agent_image_pull_secret(),
     )
     status_updater = getattr(db, "update_cluster_registration_status", None)
     if scoped_payload.apply and not callable(status_updater):
@@ -1509,7 +1518,12 @@ async def install_manifest_by_token(
     except CredentialEncryptionError as exc:
         raise HTTPException(status_code=NOT_FOUND_CODE, detail="install link not found") from exc
     payload = target_register_payload_from_settings(registration.get("settings") or {})
-    manifest = target_install_manifest(payload, agent_token, agent_envelope_private_key)
+    manifest = target_install_manifest(
+        payload,
+        agent_token,
+        agent_envelope_private_key,
+        image_pull_secret=agent_image_pull_secret(),
+    )
     return PlainTextResponse(
         manifest,
         media_type="text/yaml",

@@ -45,16 +45,20 @@ def target_install_manifest(
     payload: TargetRegisterRequest,
     agent_token: str,
     agent_envelope_private_key: str = "",
+    image_pull_secret: str = "",
 ) -> str:
     namespace = agent_namespace(payload)
     role = payload.cluster_role
+    pull_secret = image_pull_secret.strip()
+    pull_secret_name = IMAGE_PULL_SECRET_NAME if pull_secret else ""
     return "\n---\n".join(
         block.strip()
         for block in [
             namespace_manifest(namespace),
             namespace_manifest(SANDBOX_NAMESPACE) if role != MANAGEMENT_CLUSTER_ROLE else "",
             priority_class_manifest(),
-            service_account_manifest(namespace),
+            service_account_manifest(namespace, pull_secret_name),
+            image_pull_secret_manifest(pull_secret, namespace) if pull_secret else "",
             target_rbac_manifest(payload),
             runtime_config_manifest(payload),
             runtime_secret_manifest(agent_token, namespace, agent_envelope_private_key),
@@ -127,13 +131,41 @@ def agent_namespace(payload: TargetRegisterRequest) -> str:
     return "management" if payload.cluster_role == MANAGEMENT_CLUSTER_ROLE else TARGET_NAMESPACE
 
 
-def service_account_manifest(namespace: str) -> str:
+# 비공개 레지스트리 에이전트 이미지를 아무 클러스터에서나 pull 하기 위한 옵트인
+# image pull secret 이름. 서버에 자격증명이 설정된 경우에만 매니페스트에 포함된다.
+IMAGE_PULL_SECRET_NAME = "target-agent-image-pull"
+
+
+def service_account_manifest(namespace: str, image_pull_secret_name: str = "") -> str:
+    pull_secrets_block = (
+        f"\nimagePullSecrets:\n  - name: {image_pull_secret_name}"
+        if image_pull_secret_name
+        else ""
+    )
     return f"""
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: cluster-agent
+  namespace: {namespace}{pull_secrets_block}
+"""
+
+
+def image_pull_secret_manifest(dockerconfigjson: str, namespace: str) -> str:
+    """비공개 레지스트리 자격증명(dockerconfigjson)을 담은 pull secret.
+
+    서버 env(TARGET_AGENT_IMAGE_PULL_SECRET)에 값이 있을 때만 발급된다. ServiceAccount
+    가 이 secret 을 참조해, 에이전트 파드가 비공개 이미지도 어떤 클러스터에서든 pull 한다.
+    """
+    return f"""
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {IMAGE_PULL_SECRET_NAME}
   namespace: {namespace}
+type: kubernetes.io/dockerconfigjson
+stringData:
+  .dockerconfigjson: {yaml_string(dockerconfigjson)}
 """
 
 
