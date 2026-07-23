@@ -14,9 +14,9 @@ from domains.dashboard.repository import (
     OPEN_INCIDENT_STATUSES,
     effective_confidence_column,
     effective_root_cause_column,
+    fetch_latest_rca_issue_report_summaries,
     issue_detail_projection_columns,
     issue_severity_projection,
-    latest_rca_issue_report_summary,
     serialize_timeline_row,
 )
 from domains.gitops.models import Application
@@ -88,6 +88,22 @@ class IssueFilterRepository(DatabaseConnection):
                 permission_scope_limited=permission_scope_limited,
             )
             facets, facets_truncated = _queue_facets(conn, filtered)
+            report_summaries = fetch_latest_rca_issue_report_summaries(
+                conn,
+                workspace_id=workspace_id,
+                correlation_ids=[
+                    str(row["correlation_id"])
+                    for row in rows
+                    if row.get("correlation_id")
+                ],
+            )
+        for row in rows:
+            correlation_id = row.get("correlation_id")
+            row["rca_issue_report_summary"] = (
+                report_summaries.get(correlation_id)
+                if isinstance(correlation_id, str)
+                else None
+            )
         if facets_truncated:
             visibility["state"] = "partial"
             visibility["completeness"] = "partial"
@@ -374,7 +390,6 @@ def _authorized_issues(workspace_id: str, cluster_ids: set[str]) -> Select[Any]:
             effective_root_cause_column(table),
             effective_confidence_column(table),
             *issue_detail_projection_columns(table),
-            latest_rca_issue_report_summary(table).label("rca_issue_report_summary"),
             table.c.evidence_ref,
             table.c.supporting_evidence,
             table.c.missing_evidence,

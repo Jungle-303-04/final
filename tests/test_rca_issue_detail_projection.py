@@ -11,6 +11,7 @@ from domains.dashboard.repository import (
     latest_rca_issue_report_summaries_statement,
 )
 from domains.dashboard.router import issue_item
+from domains.issue_filter.repository import _authorized_issues
 
 
 def test_issue_scan_does_not_probe_reports_for_every_candidate_row() -> None:
@@ -27,6 +28,19 @@ def test_issue_scan_does_not_probe_reports_for_every_candidate_row() -> None:
     assert "rca_timeline.payload" in sql
 
 
+def test_filtered_issue_scan_does_not_probe_reports_before_page_limit() -> None:
+    statement = _authorized_issues("default", {"cluster-1"})
+    sql = str(
+        statement.compile(
+            dialect=postgresql.dialect(),
+            compile_kwargs={"literal_binds": True},
+        )
+    )
+
+    assert "rca_reports" not in sql
+    assert "row_number()" in sql
+
+
 def test_latest_report_summary_is_one_bounded_batch_without_internal_action() -> None:
     correlation_ids = [f"correlation-{index}" for index in range(500)]
     statement = latest_rca_issue_report_summaries_statement(
@@ -35,13 +49,19 @@ def test_latest_report_summary_is_one_bounded_batch_without_internal_action() ->
     )
     compiled = statement.compile(dialect=postgresql.dialect())
     sql = str(compiled)
+    literal_sql = str(
+        statement.compile(
+            dialect=postgresql.dialect(),
+            compile_kwargs={"literal_binds": True},
+        )
+    )
 
     assert "rca_reports" in sql
     assert "DISTINCT ON" in sql
-    assert "executive_summary" in sql
-    assert "recommended_action" in sql
-    assert "evidence_bundle_summary" in sql
-    assert "rca_issue_report_summary" in sql
+    assert "executive_summary" in literal_sql
+    assert "recommended_action" in literal_sql
+    assert "evidence_bundle_summary" in literal_sql
+    assert "rca_issue_report_summary" in literal_sql
     assert "rca_reports.action" not in sql
     assert len(compiled.params["correlation_id_1"]) == MAX_RCA_REPORT_SUMMARY_BATCH
 
@@ -64,9 +84,7 @@ def test_recommended_action_projection_never_uses_internal_workflow_tokens() -> 
         }
     )
 
-    assert projection["recommended_action_summary"] == (
-        "문제 배포를 직전 안정 버전으로 되돌리세요."
-    )
+    assert projection["recommended_action_summary"] == "배포 롤백"
     assert ("action",) not in RECOMMENDED_ACTION_SUMMARY_PATHS
     assert ("recommendation",) not in RECOMMENDED_ACTION_SUMMARY_PATHS
 
