@@ -7,13 +7,24 @@ import {
   Rocket, Package, AlertTriangle, Bell, Clock, ShieldCheck, Coins,
   Building2, Globe, Check, Sparkle, Sparkles, X, Palette, RefreshCw, Lock, Pin,
   ChevronRight, MapPin, ShieldAlert, ArrowLeft, ArrowRight, ExternalLink, CircleAlert, CircleCheck,
+  Lightbulb,
 } from "lucide-react";
 import { UI, BLUE, HP, TINT, MONO, TYPE, SOFT, DUR, PRESENT_SCALE, inkA, blueA, critA } from "./devpreview/theme";
 import { GithubIcon } from "./devpreview/brandIcons";
 import { useCostOverview } from "./devpreview/costFeed";
 import { useChecksOverview } from "./devpreview/checksFeed";
-import { useEvidenceWindowPayload, useIncidentRecentChanges, useLatestRcaReport, useRcaIssueDetails, useRecoveryPlan, type RcaIssueDetailView } from "./devpreview/rcaDetailFeed";
+import {
+  useEvidenceWindowPayload,
+  useIncidentRecentChanges,
+  useLatestRcaReport,
+  useRcaIssueDetails,
+  useRecoveryAudit,
+  useRecoveryPlan,
+  type RcaIssueDetailView,
+} from "./devpreview/rcaDetailFeed";
 import type { RcaReport } from "./api/evidence-schemas";
+import type { RecoveryActionCandidate, RecoveryPlan } from "./api/recovery-schemas";
+import { selectRecoveryAction } from "./api/recovery";
 import { isActiveRcaIssue } from "./devpreview/rcaIssuesFeed";
 import { useSession, sessionInitial } from "./devpreview/sessionFeed";
 import { useAiConversations, useConversationDetail } from "./devpreview/aiFeed";
@@ -33,6 +44,7 @@ import { statusLabel } from "./devpreview/statusLabel";
 import { RepositoryConnections } from "./devpreview/RepositoryConnections";
 import { groupApplicationsByRepository } from "./devpreview/repositoryRegistry";
 import { selectScenarioRuns } from "./devpreview/scenarioGateSelection";
+import { recoveryProgressState, type RecoveryProgressState } from "./devpreview/recoveryProgress";
 
 // ── 상대 시간 포맷 — 서버 타임스탬프(ISO 또는 epoch ms)를 사람이 읽는 근사치로 ──
 function fromNow(input: string | number | null): string {
@@ -583,13 +595,271 @@ function issueAnalysisState(issue: { status?: string | null; rootCause?: string 
   }
   return { label: "분석 중", tone: "info" };
 }
-// 서버가 준 위험도 문자열을 방어적으로 톤에 매핑(미지의 값은 정보 톤).
-function recoveryRiskTone(risk: string): { fg: string; bg: string; bd: string } {
-  const r = risk.toLowerCase();
-  if (r.includes("high") || risk.includes("높") || r.includes("crit")) return TINT.crit;
-  if (r.includes("medium") || r.includes("moderate") || risk.includes("보통") || risk.includes("중")) return TINT.warn;
-  if (r.includes("low") || risk.includes("낮")) return TINT.ok;
-  return TINT.blue;
+const RECOVERY_STEP_LABELS = ["승인", "제출", "실행", "검증", "완료"] as const;
+const ISSUE_DETAIL_TYPE = {
+  sectionTitle: TYPE.bodyStrong,
+  itemTitle: TYPE.label2,
+  body: TYPE.label2,
+  label: TYPE.caption,
+} as const;
+
+function RecoveryPlanProgress({ progress }: { progress: RecoveryProgressState }) {
+  const activeColor = progress.tone === "failed" ? HP.crit
+    : progress.tone === "completed" ? HP.ok
+      : progress.tone === "approval" ? HP.warn
+        : BLUE;
+  const progressPercent = progress.phase === "completed" ? 100 : Math.min(80, progress.step * 20);
+  return (
+    <section aria-live="polite" style={{ display: "grid", gap: 13, border: `1px solid ${UI.line}`, borderRadius: 10, background: UI.card, padding: 14, boxShadow: `0 6px 16px -10px ${inkA(0.26)}, 0 1px 3px ${inkA(0.06)}` }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <div style={{ minWidth: 0, flex: 1, display: "grid", gap: 3 }}>
+          <strong style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: ISSUE_DETAIL_TYPE.itemTitle, color: UI.ink }}>{progress.label}</strong>
+          <span style={{ fontSize: ISSUE_DETAIL_TYPE.label, color: UI.ink3 }}>복구 진행 상태</span>
+        </div>
+        <span style={{ flexShrink: 0, fontSize: ISSUE_DETAIL_TYPE.itemTitle, fontVariantNumeric: "tabular-nums", color: progress.tone === "failed" ? HP.crit : UI.ink2 }}>
+          {progress.tone === "failed" ? "중단" : `${progress.step}/5`}
+        </span>
+      </div>
+      <div aria-label="복구 진행률" style={{ height: 5, overflow: "hidden", borderRadius: 999, background: HP.pending }}>
+        <div style={{ width: `${progressPercent}%`, height: "100%", borderRadius: 999, background: activeColor, transition: `width ${DUR.micro}s ease` }} />
+      </div>
+      <ol aria-label="복구 진행 단계" style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(0, 1fr))", gap: 5, margin: 0, padding: "11px 0 0", borderTop: `1px dashed ${UI.line}`, listStyle: "none" }}>
+        {RECOVERY_STEP_LABELS.map((label, index) => {
+          const completed = progress.phase === "completed" || index < progress.step;
+          const active = progress.phase !== "waiting" && index === Math.min(progress.step, 4);
+          const markerColor = active ? activeColor : completed ? HP.ok : HP.pending;
+          return (
+            <li key={label} style={{ minWidth: 0, display: "grid", justifyItems: "center", gap: 5, textAlign: "center" }}>
+              <span aria-hidden="true" style={{ width: 22, height: 22, display: "grid", placeItems: "center", borderRadius: 6, border: `1px solid ${active ? markerColor : UI.line}`, background: active ? markerColor : completed ? TINT.ok.bg : UI.card, color: active ? UI.card : completed ? TINT.ok.fg : UI.ink3, fontSize: TYPE.micro, fontWeight: 700 }}>
+                {completed ? <Check size={12} /> : index + 1}
+              </span>
+              <span title={label} style={{ width: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: TYPE.micro, color: active ? UI.ink : UI.ink3, fontWeight: active ? 700 : 500 }}>{label}</span>
+            </li>
+          );
+        })}
+      </ol>
+      {progress.latestEvent && (
+        <span title={progress.latestEvent.subject} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: TYPE.micro, color: UI.ink3 }}>
+          최근 기록 · {koLabel(progress.latestEvent.subject)} · {fromNow(progress.latestEvent.created_at)}
+        </span>
+      )}
+    </section>
+  );
+}
+
+function RecoveryCandidateDetails({
+  candidate,
+  recommended = false,
+  selected,
+  pending,
+  onSelect,
+  onOpenTarget,
+}: {
+  candidate: RecoveryActionCandidate;
+  recommended?: boolean;
+  selected: boolean;
+  pending: boolean;
+  onSelect: () => void;
+  onOpenTarget?: (() => void) | null;
+}) {
+  return (
+    <div style={{ display: "grid", gap: 16 }}>
+      <dl style={{ display: "grid", gridTemplateColumns: "72px minmax(0, 1fr)", alignItems: "center", gap: "8px 10px", margin: 0, paddingBottom: 14 }}>
+        <dt style={{ fontSize: TYPE.caption, color: UI.ink2 }}>조치 위험도</dt>
+        <dd style={{ margin: 0, fontSize: TYPE.caption2, lineHeight: 1.5, color: UI.ink }}>{candidate.risk_level || "미확인"}</dd>
+        <dt style={{ fontSize: TYPE.caption, color: UI.ink2 }}>영향 범위</dt>
+        <dd style={{ minWidth: 0, maxWidth: "100%", margin: 0 }}>
+          {onOpenTarget ? (
+            <button
+              type="button"
+              title={`${candidate.blast_radius || "대상 리소스"} 상세 열기`}
+              onClick={onOpenTarget}
+              style={{ maxWidth: "100%", border: "none", borderRadius: 7, background: TINT.gray.bg, color: UI.ink2, padding: "2px 7px", fontSize: TYPE.caption2, fontWeight: 400, lineHeight: 1.35, cursor: "pointer", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", transition: `background ${DUR.micro}s ease, color ${DUR.micro}s ease` }}
+              onMouseEnter={(event) => { event.currentTarget.style.background = TINT.gray.bd; event.currentTarget.style.color = UI.ink; }}
+              onMouseLeave={(event) => { event.currentTarget.style.background = TINT.gray.bg; event.currentTarget.style.color = UI.ink2; }}
+              onFocus={(event) => { event.currentTarget.style.background = TINT.gray.bd; event.currentTarget.style.color = UI.ink; }}
+              onBlur={(event) => { event.currentTarget.style.background = TINT.gray.bg; event.currentTarget.style.color = UI.ink2; }}
+            >
+              {candidate.blast_radius || "미확인"}
+            </button>
+          ) : (
+            <span title={candidate.blast_radius} style={{ display: "block", width: "fit-content", maxWidth: "100%", borderRadius: 7, background: TINT.gray.bg, color: UI.ink2, padding: "2px 7px", fontSize: TYPE.caption2, lineHeight: 1.35, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{candidate.blast_radius || "미확인"}</span>
+          )}
+        </dd>
+      </dl>
+      {candidate.recommendation_reason && <RecoveryCandidateSection title="추천 이유" text={candidate.recommendation_reason} />}
+      {candidate.risk_explanation && <RecoveryCandidateSection title="위험도 설명" text={candidate.risk_explanation} />}
+      <RecoveryCandidateSection title="실행할 조치" text={candidate.description || "조치 설명이 없습니다."} />
+      {recommended
+        ? <RecommendedRecoveryChecks candidate={candidate} />
+        : <RecoveryCandidateSupplement candidate={candidate} />}
+      <div style={{ display: "flex", justifyContent: "flex-end", paddingTop: 2 }}>
+        <button
+          type="button"
+          disabled={selected || pending}
+          onClick={onSelect}
+          style={{ border: selected ? `1px solid ${TINT.ok.bd}` : "none", borderRadius: 8, background: selected ? TINT.ok.bg : pending ? UI.bg2 : BLUE, color: selected ? TINT.ok.fg : pending ? UI.ink3 : UI.card, padding: "7px 13px", fontSize: TYPE.label2, fontWeight: 700, cursor: selected || pending ? "default" : "pointer", boxShadow: selected || pending ? "none" : `0 2px 6px ${blueA(0.2)}` }}
+        >
+          {selected ? "선택됨" : pending ? "선택 중…" : "복구 조치 선택"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function RecommendedRecoveryChecks({ candidate }: { candidate: RecoveryActionCandidate }) {
+  return (
+    <>
+      {candidate.validation_checks.length > 0 && <RecoveryCandidateList title="성공 조건" items={candidate.validation_checks} />}
+      <RecoveryRollbackSection candidate={candidate} />
+    </>
+  );
+}
+
+function RecoveryCandidateSupplement({ candidate }: { candidate: RecoveryActionCandidate }) {
+  return (
+    <>
+      {candidate.expected_outcome && <RecoveryCandidateSection title="기대 효과" text={candidate.expected_outcome} />}
+      {candidate.validation_checks.length > 0 && <RecoveryCandidateList title="성공 조건" items={candidate.validation_checks} />}
+      <RecoveryRollbackSection candidate={candidate} />
+    </>
+  );
+}
+
+function RecoveryRollbackSection({ candidate }: { candidate: RecoveryActionCandidate }) {
+  if (!candidate.rollback_plan) return null;
+  return (
+    <section style={{ display: "grid", gap: 7, paddingTop: 14, borderTop: `1px dashed ${UI.line}` }}>
+      <h4 style={{ margin: 0, fontSize: ISSUE_DETAIL_TYPE.sectionTitle, fontWeight: 700, color: UI.ink }}>실패 시 복원</h4>
+      {candidate.rollback_reason && (
+        <div style={{ display: "grid", gridTemplateColumns: "64px minmax(0, 1fr)", gap: 8, alignItems: "start" }}>
+          <span style={{ fontSize: TYPE.caption, lineHeight: 1.55, color: UI.ink3 }}>복원 조건</span>
+          <p style={{ margin: 0, fontSize: ISSUE_DETAIL_TYPE.body, lineHeight: 1.55, color: UI.ink2 }}>{candidate.rollback_reason}</p>
+        </div>
+      )}
+      <div style={{ display: "grid", gridTemplateColumns: "64px minmax(0, 1fr)", gap: 8, alignItems: "start" }}>
+        <span style={{ fontSize: TYPE.caption, lineHeight: 1.55, color: UI.ink3 }}>복원 방법</span>
+        <p style={{ margin: 0, fontSize: ISSUE_DETAIL_TYPE.body, lineHeight: 1.55, color: UI.ink2 }}>{candidate.rollback_plan}</p>
+      </div>
+    </section>
+  );
+}
+
+function RecoveryCandidateSection({ title, text }: { title: string; text: string }) {
+  return (
+    <section style={{ display: "grid", gap: 7, paddingTop: 14, borderTop: `1px dashed ${UI.line}` }}>
+      <h4 style={{ margin: 0, fontSize: ISSUE_DETAIL_TYPE.sectionTitle, fontWeight: 700, color: UI.ink }}>{title}</h4>
+      <p style={{ margin: 0, fontSize: ISSUE_DETAIL_TYPE.body, lineHeight: 1.6, color: UI.ink2 }}>{text}</p>
+    </section>
+  );
+}
+
+function RecoveryCandidateList({ title, items }: { title: string; items: readonly string[] }) {
+  return (
+    <section style={{ display: "grid", gap: 7, paddingTop: 14, borderTop: `1px dashed ${UI.line}` }}>
+      <h4 style={{ margin: 0, fontSize: ISSUE_DETAIL_TYPE.sectionTitle, fontWeight: 700, color: UI.ink }}>{title}</h4>
+      <ul style={{ display: "grid", gap: 5, margin: 0, padding: 0, listStyle: "none" }}>
+        {items.map((item, index) => <li key={`${item}-${index}`} style={{ display: "grid", gridTemplateColumns: "14px minmax(0, 1fr)", gap: 5, fontSize: ISSUE_DETAIL_TYPE.body, lineHeight: 1.5, color: UI.ink2 }}><Check size={12} style={{ marginTop: 2, color: TINT.ok.fg }} /><span>{item}</span></li>)}
+      </ul>
+    </section>
+  );
+}
+
+function RecoveryAlternativeCandidate({
+  candidate,
+  selected,
+  pending,
+  onSelect,
+  onOpenTarget,
+}: {
+  candidate: RecoveryActionCandidate;
+  selected: boolean;
+  pending: boolean;
+  onSelect: () => void;
+  onOpenTarget?: (() => void) | null;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={{ borderTop: `1px dashed ${UI.line}`, background: open ? UI.bg2 : UI.card }}>
+      <button type="button" aria-expanded={open} onClick={() => setOpen((current) => !current)}
+        style={{ width: "100%", minWidth: 0, display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto auto", alignItems: "center", gap: 10, border: "none", background: "transparent", padding: 12, textAlign: "left", cursor: "pointer" }}>
+        <span style={{ minWidth: 0, display: "flex", alignItems: "center", gap: 7 }}>
+          <Lightbulb size={14} style={{ flexShrink: 0, color: UI.ink3 }} />
+          <strong title={candidate.title} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: TYPE.label2, color: UI.ink }}>{candidate.title}</strong>
+        </span>
+        <span style={{ fontSize: TYPE.caption2, color: UI.ink2, fontVariantNumeric: "tabular-nums" }}>{Math.round(candidate.score * 100)}%</span>
+        <Sparkle size={14} style={{ color: UI.ink3, transform: open ? "rotate(45deg)" : "none", transition: `transform ${DUR.micro}s ease` }} />
+      </button>
+      {open && <div style={{ padding: "0 12px 14px" }}><RecoveryCandidateDetails candidate={candidate} selected={selected} pending={pending} onSelect={onSelect} onOpenTarget={onOpenTarget} /></div>}
+    </div>
+  );
+}
+
+function RecoveryPlanPanel({
+  plan,
+  progress,
+  selectedActionId,
+  pendingActionId,
+  selectionError,
+  onSelect,
+  onOpenTarget,
+}: {
+  plan: RecoveryPlan;
+  progress: RecoveryProgressState;
+  selectedActionId: string | null;
+  pendingActionId: string | null;
+  selectionError: string | null;
+  onSelect: (actionId: string) => void;
+  onOpenTarget?: (() => void) | null;
+}) {
+  const recommended = plan.candidates.find((candidate) => candidate.action_id === plan.recommended_action_id) ?? plan.candidates[0] ?? null;
+  const alternatives = plan.candidates.filter((candidate) => candidate.action_id !== recommended?.action_id);
+  return (
+    <div style={{ display: "grid", gap: 16 }}>
+      <RecoveryPlanProgress progress={progress} />
+      {selectionError && <div role="alert" style={{ display: "flex", alignItems: "flex-start", gap: 7, border: `1px solid ${TINT.crit.bd}`, borderRadius: 8, background: TINT.crit.bg, color: TINT.crit.fg, padding: 11, fontSize: TYPE.caption2, lineHeight: 1.45 }}><CircleAlert size={14} style={{ flexShrink: 0, marginTop: 1 }} />{selectionError}</div>}
+      {recommended ? (
+        <RcaCardSection title="권장 복구 조치">
+          <div style={{ display: "grid", gap: 13, padding: 15 }}>
+            <div style={{ minWidth: 0, display: "flex", alignItems: "center", gap: 8 }}>
+              <Lightbulb size={15} style={{ flexShrink: 0, color: UI.ink3 }} />
+              <strong title={recommended.title} style={{ minWidth: 0, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: ISSUE_DETAIL_TYPE.itemTitle, color: UI.ink }}>{recommended.title}</strong>
+              <span style={{ border: `1px solid ${TINT.blue.bd}`, borderRadius: 999, background: TINT.blue.bg, color: TINT.blue.fg, padding: "2px 7px", fontSize: TYPE.micro, fontWeight: 700 }}>권장</span>
+              <span style={{ fontSize: ISSUE_DETAIL_TYPE.label, color: UI.ink2, fontVariantNumeric: "tabular-nums" }}>{Math.round(recommended.score * 100)}%</span>
+            </div>
+            <RecoveryCandidateDetails
+              candidate={recommended}
+              recommended
+              selected={selectedActionId === recommended.action_id}
+              pending={pendingActionId === recommended.action_id}
+              onSelect={() => onSelect(recommended.action_id)}
+              onOpenTarget={onOpenTarget}
+            />
+          </div>
+        </RcaCardSection>
+      ) : <div style={{ fontSize: TYPE.label2, color: UI.ink3 }}>관측된 복구 후보 없음</div>}
+      {alternatives.length > 0 && (
+        <section style={{ display: "grid", gap: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+            <h3 style={{ margin: 0, fontSize: TYPE.caption2, fontWeight: 700, color: UI.ink3 }}>다른 복구 후보</h3>
+            <span style={{ fontSize: TYPE.micro, color: UI.ink3 }}>{alternatives.length}개</span>
+          </div>
+          <div style={{ overflow: "hidden", borderBottom: `1px dashed ${UI.line}` }}>
+            {alternatives.map((candidate) => (
+              <RecoveryAlternativeCandidate
+                key={candidate.action_id}
+                candidate={candidate}
+                selected={selectedActionId === candidate.action_id}
+                pending={pendingActionId === candidate.action_id}
+                onSelect={() => onSelect(candidate.action_id)}
+                onOpenTarget={onOpenTarget}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+    </div>
+  );
 }
 
 // ── RCA 상세 모달 — 자체 백드롭·중앙정렬·스크롤(연결 모달과 동일 문법) ──
@@ -605,7 +875,7 @@ function RcaSection({ title, children }: { title: string; children: React.ReactN
 function RcaCardSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section style={{ flexShrink: 0, overflow: "hidden", border: `1px solid ${UI.line}`, borderRadius: 10, background: UI.card }}>
-      <h2 style={{ margin: 0, padding: "12px 15px", borderBottom: `1px solid ${UI.line}`, background: inkA(0.018), fontSize: TYPE.label2, fontWeight: 700, color: UI.ink }}>{title}</h2>
+      <h2 style={{ margin: 0, padding: "12px 15px", borderBottom: `1px solid ${UI.line}`, background: inkA(0.018), fontSize: ISSUE_DETAIL_TYPE.sectionTitle, fontWeight: 700, color: UI.ink }}>{title}</h2>
       {children}
     </section>
   );
@@ -902,8 +1172,8 @@ function RcaCandidateList({ report, fallbackCause, onEvidenceSelect }: { report:
     </div>
   );
 }
-export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resourceKind, incidentId, currentSubject, updatedAt, onClose, onOpenRef, onAskAi, onRecovered: _onRecovered, correlationId, status, severity, rootCause, confidence, supportingEvidence, missingEvidence, situationSummary, recommendedActionSummary, evidenceSummary, evidenceBundleSummary, topInset = 0, leftInset = 0, rightInset = 0 }: {
-  name: string; symptom: string; cluster: string; svc: string; ns: string; onClose: () => void; onOpenRef: (kind: string, n: string) => void; onAskAi: () => void; onRecovered?: (svc: string) => void;
+export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resourceKind, incidentId, currentSubject, updatedAt, onClose, onOpenRef, onAskAi, onRecoverySelected, correlationId, status, severity, rootCause, confidence, supportingEvidence, missingEvidence, situationSummary, recommendedActionSummary, evidenceSummary, evidenceBundleSummary, topInset = 0, leftInset = 0, rightInset = 0 }: {
+  name: string; symptom: string; cluster: string; svc: string; ns: string; onClose: () => void; onOpenRef: (kind: string, n: string) => void; onAskAi: () => void; onRecoverySelected?: (correlationId: string) => void;
   rawSymptom?: string | null; resourceKind?: string | null; incidentId?: string | null; currentSubject?: string | null; updatedAt?: string | null;
   correlationId?: string; status?: string; severity?: "critical" | "warning" | null;
   rootCause?: string | null; confidence?: number | null; supportingEvidence?: string[]; missingEvidence?: string[];
@@ -914,6 +1184,10 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
   const [evidenceChipActive, setEvidenceChipActive] = useState(false);
   const [deploymentLinkActive, setDeploymentLinkActive] = useState<string | null>(null);
   const [highlightedEvidenceIndex, setHighlightedEvidenceIndex] = useState<number | null>(null);
+  const [selectedRecoveryActionId, setSelectedRecoveryActionId] = useState<string | null>(null);
+  const [recoverySelectionPendingId, setRecoverySelectionPendingId] = useState<string | null>(null);
+  const [recoverySelectionAccepted, setRecoverySelectionAccepted] = useState(false);
+  const [recoverySelectionError, setRecoverySelectionError] = useState<string | null>(null);
   const evidenceSummaryRef = useRef<HTMLElement | null>(null);
   useEffect(() => {
     const root = document.documentElement;
@@ -936,6 +1210,7 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
   // 복구 후보는 실 계약(GET /api/rca/recovery-plans/by-correlation)에서만. 상관관계
   // id가 없으면(예: 지도 파생 진입) idle로 두고 관측 안 됨을 정직하게 표시한다.
   const recovery = useRecoveryPlan(correlationId ?? null);
+  const recoveryAudit = useRecoveryAudit(correlationId ?? null);
   const recentChanges = useIncidentRecentChanges(incidentId ?? null);
   const latestReport = useLatestRcaReport(correlationId ?? null);
   const report = latestReport.report;
@@ -956,6 +1231,39 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
   const reportAnalysisAt = report?.created_at ?? updatedAt;
   const reportElapsed = reportElapsedLabel(reportFirstSeenAt, reportAnalysisAt);
   const reportImpact = report?.narrative?.impact?.trim() || null;
+  const recoveryTarget = recovery.plan?.target;
+  const recoveryTargetKind = typeof recoveryTarget?.resource_kind === "string" && recoveryTarget.resource_kind.trim()
+    ? recoveryTarget.resource_kind
+    : resourceKind;
+  const recoveryTargetName = typeof recoveryTarget?.resource_name === "string" && recoveryTarget.resource_name.trim()
+    ? recoveryTarget.resource_name
+    : svc;
+  const recoveryProgress = recoveryProgressState({
+    status,
+    currentSubject,
+    plan: recovery.plan,
+    audit: recoveryAudit.items,
+    selectionPending: recoverySelectionPendingId !== null,
+    selectionAccepted: recoverySelectionAccepted,
+    selectionFailed: recoverySelectionError !== null,
+  });
+  const effectiveSelectedActionId = selectedRecoveryActionId ?? recovery.plan?.selected_action_id ?? null;
+  const handleRecoverySelection = async (actionId: string) => {
+    if (!correlationId || !recovery.plan || recoverySelectionPendingId !== null) return;
+    setRecoverySelectionPendingId(actionId);
+    setRecoverySelectionError(null);
+    try {
+      const receipt = await selectRecoveryAction(correlationId, recovery.plan.plan_id, actionId);
+      if (!receipt.accepted) throw new Error("recovery selection was not accepted");
+      setSelectedRecoveryActionId(actionId);
+      setRecoverySelectionAccepted(true);
+      onRecoverySelected?.(correlationId);
+    } catch {
+      setRecoverySelectionError("복구 조치를 선택하지 못했습니다. 권한과 현재 플랜 상태를 확인해 주세요.");
+    } finally {
+      setRecoverySelectionPendingId(null);
+    }
+  };
   const openEvidenceDetail = (item: string) => {
     const index = report?.supporting_evidence_refs.findIndex((evidence) => evidenceReferenceMatches(item, evidence)) ?? -1;
     if (index < 0) return;
@@ -1004,7 +1312,7 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
           <div role="tablist" aria-label="이슈 상세 보기" style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", padding: "0 20px", borderBottom: `1px solid ${UI.line}` }}>
             {([
               ["detail", "이슈 상세"],
-              ["recovery", "복구 계획"],
+              ["recovery", "복구 플랜"],
             ] as const).map(([id, label]) => {
               const selected = activeTab === id;
               return (
@@ -1019,7 +1327,7 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
           <div style={{ flex: 1, minHeight: 0, overflowY: "auto", overscrollBehavior: "contain", scrollbarGutter: "stable", display: "flex", flexDirection: "column", gap: 20, padding: "18px 20px" }}>
             {activeTab === "detail" ? <>
             <section aria-labelledby="issue-summary-heading" style={{ flexShrink: 0, display: "grid", gap: 14, border: `1px solid ${UI.line}`, borderRadius: 10, background: UI.card, padding: 16, boxShadow: `0 6px 16px -10px ${inkA(0.26)}, 0 1px 3px ${inkA(0.06)}` }}>
-              <h2 id="issue-summary-heading" style={{ margin: 0, fontSize: TYPE.caption, fontWeight: 700, color: UI.ink2 }}>상황 요약</h2>
+              <h2 id="issue-summary-heading" style={{ margin: 0, fontSize: ISSUE_DETAIL_TYPE.itemTitle, fontWeight: 700, color: UI.ink }}>상황 요약</h2>
               <p style={{ margin: 0, fontSize: TYPE.body, fontWeight: 600, color: UI.ink, lineHeight: 1.65 }}>{situationSummary?.trim() || "상황 요약 정보가 아직 없습니다."}</p>
               {(reportFirstSeenAt || reportElapsed || reportImpact) && <dl style={{ display: "grid", gridTemplateColumns: "86px minmax(0, 1fr)", gap: "7px 10px", margin: 0, paddingTop: 12, borderTop: `1px solid ${UI.line2}`, fontSize: TYPE.caption2, lineHeight: 1.5 }}>
                 {reportFirstSeenAt && <><dt style={{ color: UI.ink3 }}>장애 시작</dt><dd style={{ margin: 0, color: UI.ink2 }}>{reportTimeLabel(reportFirstSeenAt)}</dd></>}
@@ -1126,55 +1434,33 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
                 </ReportNumberedSection>
                 <ReportNumberedSection number="05" title="권장 조치">
                   <p style={{ margin: 0, fontSize: TYPE.label2, color: UI.ink2, lineHeight: 1.55 }}>{recommendedActionSummary || report?.narrative?.recommended_action || "권장 조치가 아직 없습니다."}</p>
-                  <button type="button" onClick={() => setActiveTab("recovery")} style={{ justifySelf: "end", border: `1px solid ${blueA(0.32)}`, borderRadius: 8, background: blueA(0.07), color: BLUE, padding: "7px 12px", fontSize: TYPE.caption2, fontWeight: 700, cursor: "pointer" }}>복구 조치 보기</button>
+                  <button type="button" onClick={() => setActiveTab("recovery")} style={{ justifySelf: "end", border: `1px solid ${blueA(0.32)}`, borderRadius: 8, background: blueA(0.07), color: BLUE, padding: "7px 12px", fontSize: TYPE.caption2, fontWeight: 700, cursor: "pointer" }}>복구 플랜 보기</button>
                 </ReportNumberedSection>
               </div>
             </RcaCardSection>
             </> : <>
-            {/* 복구 계획 — 실 계약의 후보만. 실제 실행은 서버 실행(capability/CSRF) 미배선 → 컨트롤 비활성 */}
-            <RcaSection title="복구 계획">
+            {/* 복구 플랜 — 실 후보 조회, 선택 API, 감사 이벤트를 동일 진행 상태에 연결한다. */}
+            <div style={{ display: "grid", gap: 16 }}>
               {recovery.status === "idle" ? (
-                <div style={{ fontSize: TYPE.label2, color: UI.ink3 }}>복구 계획 없음</div>
+                <div style={{ fontSize: TYPE.label2, color: UI.ink3 }}>복구 플랜 없음</div>
               ) : recovery.status === "loading" ? (
-                <div style={{ fontSize: TYPE.label2, color: UI.ink3 }}>복구 계획 불러오는 중…</div>
+                <div style={{ fontSize: TYPE.label2, color: UI.ink3 }}>복구 플랜 불러오는 중…</div>
               ) : recovery.status === "unavailable" || recovery.plan === null ? (
-                <div style={{ fontSize: TYPE.label2, color: UI.ink3 }}>복구 계획을 불러오지 못했습니다.</div>
+                <div style={{ fontSize: TYPE.label2, color: UI.ink3 }}>복구 플랜을 불러오지 못했습니다.</div>
               ) : recovery.plan.candidates.length === 0 ? (
                 <div style={{ fontSize: TYPE.label2, color: UI.ink3 }}>관측된 복구 후보 없음</div>
               ) : (
-                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  {recovery.plan.candidates.map((r) => { const rt = recoveryRiskTone(r.risk_level); const picked = r.action_id === recovery.plan!.recommended_action_id; return (
-                    <div key={r.action_id} style={{ border: `1px solid ${picked ? blueA(0.35) : UI.line}`, background: picked ? blueA(0.03) : UI.card, borderRadius: 12, padding: 13 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 6 }}>
-                        <span style={{ fontSize: TYPE.body, fontWeight: 700, color: UI.ink }}>{r.title}</span>
-                        {picked && <span style={{ fontSize: TYPE.micro, fontWeight: 700, color: BLUE, background: blueA(0.1), borderRadius: 4, padding: "1px 6px" }}>권고</span>}
-                        {r.risk_level && <span style={{ marginLeft: "auto", fontSize: TYPE.caption, fontWeight: 700, color: rt.fg, background: rt.bg, border: `1px solid ${rt.bd}`, borderRadius: 999, padding: "2px 9px" }}>위험 {r.risk_level}</span>}
-                        {r.approval_required && <span style={{ fontSize: TYPE.caption, fontWeight: 700, color: TINT.warn.fg, background: TINT.warn.bg, border: `1px solid ${TINT.warn.bd}`, borderRadius: 999, padding: "2px 9px" }}>승인 필요</span>}
-                      </div>
-                      {r.description && <div style={{ fontSize: TYPE.label2, color: UI.ink2, lineHeight: 1.5 }}>{r.description}</div>}
-                      <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginTop: 10 }}>
-                        {r.blast_radius && <span style={{ fontSize: TYPE.caption, color: UI.ink3 }}>폭발 반경 · <b style={{ color: UI.ink2, fontWeight: 600 }}>{r.blast_radius}</b></span>}
-                        {r.rollback_plan && <span style={{ fontSize: TYPE.caption, color: UI.ink3 }}>롤백 · <b style={{ color: UI.ink2, fontWeight: 600 }}>{r.rollback_plan}</b></span>}
-                      </div>
-                      {(r.prerequisites.length > 0 || r.validation_checks.length > 0) && (
-                        <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginTop: 8 }}>
-                          {r.prerequisites.length > 0 && <span style={{ flex: "1 1 200px", minWidth: 0 }}><span style={{ fontSize: TYPE.caption, fontWeight: 700, color: UI.ink3 }}>전제조건</span><ul style={{ margin: "4px 0 0", paddingLeft: 15 }}>{r.prerequisites.map((p, pi) => <li key={pi} style={{ fontSize: TYPE.caption2, color: UI.ink2 }}>{p}</li>)}</ul></span>}
-                          {r.validation_checks.length > 0 && <span style={{ flex: "1 1 200px", minWidth: 0 }}><span style={{ fontSize: TYPE.caption, fontWeight: 700, color: UI.ink3 }}>검증</span><ul style={{ margin: "4px 0 0", paddingLeft: 15 }}>{r.validation_checks.map((c, ci) => <li key={ci} style={{ fontSize: TYPE.caption2, color: UI.ink2 }}>{c}</li>)}</ul></span>}
-                        </div>
-                      )}
-                      {/* 실 복구 실행 경로(capability 게이트 + CSRF)가 이 데모에 배선되어 있지 않다.
-                          타이머로 성공을 위조하지 않고 실행 컨트롤을 비활성 + 정직한 미지원 상태로 둔다. */}
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
-                        <button disabled title="복구 실행 불가"
-                          style={{ border: "none", background: inkA(0.1), color: UI.ink3, borderRadius: 9, padding: "7px 14px", fontSize: TYPE.label2, fontWeight: 700, cursor: "not-allowed" }}>복구 실행</button>
-                        <span style={{ fontSize: TYPE.caption2, color: UI.ink3 }}>실행 불가</span>
-                        {picked && <button onClick={onAskAi} style={{ marginLeft: "auto", border: `1px solid ${blueA(0.4)}`, background: blueA(0.06), color: BLUE, borderRadius: 9, padding: "7px 14px", fontSize: TYPE.label2, fontWeight: 700, cursor: "pointer" }}>AI에게 계속 질문</button>}
-                      </div>
-                    </div>
-                  ); })}
-                </div>
+                <RecoveryPlanPanel
+                  plan={recovery.plan}
+                  progress={recoveryProgress}
+                  selectedActionId={effectiveSelectedActionId}
+                  pendingActionId={recoverySelectionPendingId}
+                  selectionError={recoverySelectionError}
+                  onSelect={(actionId) => void handleRecoverySelection(actionId)}
+                  onOpenTarget={recoveryTargetKind && recoveryTargetName ? () => onOpenRef(recoveryTargetKind, recoveryTargetName) : null}
+                />
               )}
-            </RcaSection>
+            </div>
             </>}
           </div>
       </motion.div>
@@ -1206,12 +1492,6 @@ export type RcaIncident = {
 };
 
 type IssueSeverityFilter = "all" | "critical" | "warning";
-
-type RecoveryCardProgress = {
-  label: "복구 대기" | "복구 요청됨" | "복구 실행 중" | "검증 중" | "복구 완료" | "복구 실패";
-  step: number;
-  tone: "approval" | "active" | "completed" | "failed";
-};
 
 function IssueSeverityFilters({ active, criticalCount, warningCount, onChange, totalCount }: {
   active: IssueSeverityFilter;
@@ -1246,11 +1526,7 @@ function IssueSeverityFilters({ active, criticalCount, warningCount, onChange, t
   );
 }
 
-function recoveryCardProgress(): RecoveryCardProgress {
-  return { label: "복구 대기", step: 0, tone: "approval" };
-}
-
-function RecoveryProgress({ progress }: { progress: RecoveryCardProgress }) {
+function RecoveryProgress({ progress }: { progress: RecoveryProgressState }) {
   const activeColor = progress.tone === "failed" ? HP.crit
     : progress.tone === "completed" ? HP.ok
       : progress.tone === "approval" ? HP.warn
@@ -1268,10 +1544,14 @@ function RecoveryProgress({ progress }: { progress: RecoveryCardProgress }) {
   );
 }
 
-function IssueCard({ issue, onOpen, onOpenTarget }: { issue: RcaIssueDetailView; onOpen: () => void; onOpenTarget: (() => void) | null }) {
+function IssueCard({ issue, recoverySelectionAccepted, onOpen, onOpenTarget }: { issue: RcaIssueDetailView; recoverySelectionAccepted: boolean; onOpen: () => void; onOpenTarget: (() => void) | null }) {
   const [targetActive, setTargetActive] = useState(false);
   const state = issueAnalysisState(issue);
-  const recovery = recoveryCardProgress();
+  const recovery = recoveryProgressState({
+    status: issue.status,
+    currentSubject: issue.currentSubject,
+    selectionAccepted: recoverySelectionAccepted,
+  });
   const title = issue.resourceName ?? "대상 미확인";
   const symptom = issue.symptom ?? "증상 미확인";
   const rootCause = issue.rootCause ?? "원인 미확인";
@@ -1351,16 +1631,17 @@ function IssueCard({ issue, onOpen, onOpenTarget }: { issue: RcaIssueDetailView;
   );
 }
 
-export function IssuesSurface({ incidentClusterIds, sessionRules: _sessionRules = [], onOpenRef, onAskAi, onOpenRca }: {
-  incidentClusterIds: readonly string[]; sessionRules?: string[]; onOpenRef: (kind: string, name: string) => void; onAskAi: () => void; onOpenRca?: (i: RcaIncident) => void;
+export function IssuesSurface({ incidentClusterIds, recoverySelectionCorrelations = new Set<string>(), sessionRules: _sessionRules = [], onOpenRef, onAskAi, onOpenRca }: {
+  incidentClusterIds: readonly string[]; recoverySelectionCorrelations?: ReadonlySet<string>; sessionRules?: string[]; onOpenRef: (kind: string, name: string) => void; onAskAi: () => void; onOpenRca?: (i: RcaIncident) => void;
 }) {
   const [tab, setTab] = useState("진행 중");
   const [severityFilter, setSeverityFilter] = useState<IssueSeverityFilter>("all");
   // 이슈 탭 — 실 RCA 이슈 큐(GET /api/dashboard/rca/issues, 홈 W2와 동일 소스).
   // 큐 항목이 관측 RCA 필드(원인/확신도/증거/AI 요약)를 이미 실어주므로 상세 드로어로 그대로 전달한다.
   const issues = useRcaIssueDetails(incidentClusterIds);
-  const activeIssues = issues.items.filter(isActiveRcaIssue);
-  const resolvedIssues = issues.items.filter((issue) => !isActiveRcaIssue(issue));
+  const issueItems = issues.items;
+  const activeIssues = issueItems.filter(isActiveRcaIssue);
+  const resolvedIssues = issueItems.filter((issue) => !isActiveRcaIssue(issue));
   const critCount = activeIssues.filter((issue) => issue.severity === "critical").length;
   const warnCount = activeIssues.filter((issue) => issue.severity === "warning").length;
   const visibleIssues = tab === "해결됨"
@@ -1397,9 +1678,9 @@ export function IssuesSurface({ incidentClusterIds, sessionRules: _sessionRules 
       )}
       {tab !== "예방 점검" && (
         <div style={{ display: "grid", gap: 8 }}>
-          {issues.status === "loading" ? (
+          {issues.status === "loading" && visibleIssues.length === 0 ? (
             <Card><div style={{ fontSize: TYPE.label2, color: UI.ink3 }}>불러오는 중…</div></Card>
-          ) : issues.status === "unavailable" ? (
+          ) : issues.status === "unavailable" && visibleIssues.length === 0 ? (
             <Card><div style={{ fontSize: TYPE.label2, color: UI.ink3 }}>이슈를 불러오지 못했습니다.</div></Card>
           ) : visibleIssues.length === 0 ? (
             <Card><div style={{ fontSize: TYPE.label2, color: UI.ink2 }}>{tab === "해결됨" ? "해결된 이슈가 없습니다." : severityFilter === "all" ? "진행 중인 이슈가 없습니다." : `${severityFilter === "critical" ? "장애" : "주의"} 이슈가 없습니다.`}</div></Card>
@@ -1410,6 +1691,7 @@ export function IssuesSurface({ incidentClusterIds, sessionRules: _sessionRules 
               <IssueCard
                 key={iss.correlationId}
                 issue={iss}
+                recoverySelectionAccepted={recoverySelectionCorrelations.has(iss.correlationId)}
                 onOpen={() => setRca(iss)}
                 onOpenTarget={resourceKind && resourceName ? () => onOpenRef(resourceKind, resourceName) : null}
               />
