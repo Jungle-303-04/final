@@ -121,9 +121,10 @@ def tempo_search_params(
 ) -> dict[str, str | int]:
     """Build a bounded Tempo search request.
 
-    Tempo treats a search without ``start``/``end`` as a search across all
-    retained blocks. The Agent runs this every evidence interval, so an omitted
-    range turns retention growth into repeated query-memory growth.
+    Tempo 2.9 searches only ingesters when ``start``/``end`` are omitted.
+    Supplying the policy range makes the RCA evidence horizon deterministic and
+    permits bounded recent-block lookup without expanding to the full retention
+    window.
     """
     params: dict[str, str | int] = {
         "q": telemetry_query.traceql,
