@@ -89,6 +89,15 @@ def safe_pr_delivery_mode() -> str:
     return SAFE_PR_DELIVERY_PULL_REQUEST
 
 
+def request_delivery_mode(request: SafePrRequestedBody) -> str:
+    """요청별 전달 방식 — 발행자가 위험도 기준으로 지정한 값이 최우선,
+    미지정이면 SAFE_PR_DELIVERY_MODE 기본값을 따른다."""
+    value = (getattr(request, "delivery", None) or "").strip().lower()
+    if value in (SAFE_PR_DELIVERY_DIRECT_COMMIT, SAFE_PR_DELIVERY_PULL_REQUEST):
+        return value
+    return safe_pr_delivery_mode()
+
+
 # 직접 커밋은 "우리 시스템이 스스로 만든 커밋"이라는 특수 상황이다 — 폴러의
 # 다음 주기를 기다리지 않도록 pg_notify 로 즉시 알려 버스트 폴링을 깨운다.
 # 알림 실패는 경고만 남긴다(fail-open): 30초 주기 폴링이 정확성을 보장한다.
@@ -343,7 +352,7 @@ class GithubScmProvider:
                     manifest_edit_authority,
                     context,
                 )
-            direct_commit = safe_pr_delivery_mode() == SAFE_PR_DELIVERY_DIRECT_COMMIT
+            direct_commit = request_delivery_mode(request) == SAFE_PR_DELIVERY_DIRECT_COMMIT
             if structured and direct_commit:
                 expected_base_sha = patch_plans[0].expected_base_sha if patch_plans[0] else ""
                 if expected_base_sha != base_sha:

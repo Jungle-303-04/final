@@ -482,6 +482,8 @@ def safe_pr_request(
         return None
     instruction_id = hashlib.sha256(context.workflow_run_id.encode()).hexdigest()[:32]
     return SafePrRequestedBody(
+        # 무인 자동 원복은 사람 확인 없이 만들어지는 변경 — PR 리뷰 게이트를 유지한다.
+        delivery="pull_request",
         title=f"{AUTO_REVERT_TITLE_PREFIX} {resource_name} rollout recovery",
         body=body,
         provider=GitHub.PROVIDER,
