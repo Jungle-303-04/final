@@ -515,7 +515,10 @@ export function AiPanel({ onClose, embedded = false, contextView = "resources", 
             {turns.length === 0 && !thinking ? (
               <div className="mx-auto mt-8 grid max-w-[85%] place-items-center gap-2 text-center">
                 <span className="grid size-11 place-items-center rounded-2xl bg-black/[0.04] text-muted-foreground"><Sparkles className="size-5" /></span>
-                <p className="text-body text-muted-foreground">현재 화면 맥락으로 질문해 보세요. 답변은 관측된 근거에 기반합니다.</p>
+                <p className="text-body leading-relaxed text-muted-foreground">
+                  <span className="block">현재 화면 맥락으로 질문해 보세요.</span>
+                  <span className="block">답변은 관측된 근거에 기반합니다.</span>
+                </p>
               </div>
             ) : null}
             {turns.map(renderTurn)}
