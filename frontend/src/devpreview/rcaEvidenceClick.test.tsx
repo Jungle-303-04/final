@@ -66,6 +66,6 @@ describe("legacy metadata evidence navigation", () => {
     expect(screen.getAllByText(
       "트레이스 근거를 추가로 수집해 확인하세요.",
     )).toHaveLength(1);
-    expect(screen.queryByText(/traces related traces/u)).not.toBeInTheDocument();
+    expect(screen.queryByText(/traces related traces/u)).toBeNull();
   });
 });

@@ -8,6 +8,10 @@ export interface MissingEvidencePresentation {
   metadata: string | null;
 }
 
+export interface MissingEvidenceListPresentation extends MissingEvidencePresentation {
+  item: string;
+}
+
 export interface RcaSummaryPresentationInput {
   report?: {
     narrativeExecutiveSummary?: string | null;
@@ -131,11 +135,41 @@ export function missingEvidencePresentation(
       metadata: null,
     };
   }
+  const legacySource = normalizedEvidenceSource(normalized.split(":", 1)[0] ?? normalized);
+  if (
+    normalized.includes(":")
+    && ["kubernetes", "metrics", "logs", "traces", "metadata"].includes(legacySource)
+  ) {
+    return {
+      message: `${evidenceSourceMetadataLabel(legacySource)} 근거를 추가로 수집해 확인하세요.`,
+      metadata: null,
+    };
+  }
   const readable = item.trim().replace(/[_:.]+/gu, " ").replace(/\s+/gu, " ");
   return {
     message: readable ? `${readable}을 확인하세요.` : "추가 진단 근거를 확인하세요.",
     metadata: null,
   };
+}
+
+/**
+ * Collapse equivalent legacy gaps without hiding distinct backend-authored
+ * reasons or source/status metadata.
+ */
+export function missingEvidencePresentations(
+  items: readonly string[],
+  checks: readonly MissingEvidenceCheck[] = [],
+): MissingEvidenceListPresentation[] {
+  const seen = new Set<string>();
+  const presentations: MissingEvidenceListPresentation[] = [];
+  for (const item of items) {
+    const presentation = missingEvidencePresentation(item, checks);
+    const key = `${presentation.message}\u0000${presentation.metadata ?? ""}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    presentations.push({ item, ...presentation });
+  }
+  return presentations;
 }
 
 /** Backward-compatible string adapter for the few legacy call sites. */

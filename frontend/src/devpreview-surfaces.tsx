@@ -63,7 +63,7 @@ import {
   evidencePreviewLines,
   evidenceReferenceMatches,
   mergeEvidenceReferences,
-  missingEvidencePresentation,
+  missingEvidencePresentations,
   rcaSummaryPresentation,
 } from "./devpreview/rcaPresentation";
 
@@ -1420,17 +1420,20 @@ export function CandidateEvidenceTokens({ label, items, tone, references = [], m
   onEvidenceSelect?: (item: string) => void;
 }) {
   if (items.length === 0) return null;
+  const entries = tone === "warn"
+    ? missingEvidencePresentations(items, missingChecks).map((presentation) => ({
+      item: presentation.item,
+      missingPresentation: presentation,
+    }))
+    : items.map((item) => ({ item, missingPresentation: null }));
   return (
     <div style={{ display: "grid", gap: 4 }}>
       <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: TYPE.caption, fontWeight: 600, color: tone === "ok" ? TINT.ok.fg : TINT.warn.fg }}>
         {tone === "warn" && <ShieldAlert size={13} />}{label}
       </span>
       <span style={{ display: "grid", justifyItems: "start", gap: 3, fontSize: TYPE.caption, color: UI.ink2, lineHeight: 1.5 }}>
-        {items.map((item, index) => {
+        {entries.map(({ item, missingPresentation }, index) => {
           const linked = tone === "ok" && references.some((reference) => evidenceReferenceMatches(item, reference));
-          const missingPresentation = tone === "warn"
-            ? missingEvidencePresentation(item, missingChecks)
-            : null;
           const content = missingPresentation?.message
             ?? evidenceReferenceLabel(item, references);
           return linked ? (
@@ -1611,6 +1614,10 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
         : TINT.blue;
   const support = supportingEvidence ?? [];
   const missing = missingEvidence ?? [];
+  const missingPresentations = missingEvidencePresentations(
+    missing,
+    report?.missing_evidence_checks,
+  );
   const resolvedObjectEvidence = useEvidenceObjectReferences(support);
   const evidenceReferences = useMemo(() => {
     return mergeEvidenceReferences([
@@ -1819,27 +1826,21 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
                   onMouseEnter={() => setEvidenceChipActive(true)} onMouseLeave={() => setEvidenceChipActive(false)} onFocus={() => setEvidenceChipActive(true)} onBlur={() => setEvidenceChipActive(false)}
                   style={{ border: `1px solid ${evidenceChipActive ? UI.ink3 : UI.line}`, borderRadius: 999, padding: "3px 9px", fontSize: TYPE.caption, color: evidenceChipActive ? UI.ink : UI.ink2, background: evidenceChipActive ? inkA(0.055) : UI.card, cursor: "pointer", transition: `background ${DUR.micro}s ease, color ${DUR.micro}s ease, border-color ${DUR.micro}s ease` }}>확인된 근거 {Math.max(support.length, evidenceReferences.length)}</button>
               </div>
-              {missing.length > 0 && (
+              {missingPresentations.length > 0 && (
                 <div style={{ display: "grid", gap: 8, border: `1px solid ${UI.line}`, borderRadius: 8, background: UI.bg2, padding: 11 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: TYPE.caption, fontWeight: 600, color: UI.ink2 }}><ShieldAlert size={14} style={{ color: TINT.warn.fg }} />추가 확인 필요</div>
                   <ul style={{ display: "grid", gap: 5, margin: 0, padding: 0, listStyle: "none" }}>
-                    {missing.map((item, index) => {
-                      const presentation = missingEvidencePresentation(
-                        item,
-                        report?.missing_evidence_checks,
-                      );
-                      return (
-                        <li key={`${item}-${index}`} style={{ display: "grid", gridTemplateColumns: "10px minmax(0, 1fr)", gap: 4, fontSize: TYPE.caption, color: UI.ink2, lineHeight: 1.45 }}>
-                          <span aria-hidden="true">-</span>
-                          <span style={{ display: "grid", gap: 1 }}>
-                            <span>{presentation.message}</span>
-                            {presentation.metadata && (
-                              <span style={{ fontSize: 10, color: UI.ink3 }}>{presentation.metadata}</span>
-                            )}
-                          </span>
-                        </li>
-                      );
-                    })}
+                    {missingPresentations.map((presentation, index) => (
+                      <li key={`${presentation.message}-${presentation.metadata ?? ""}-${index}`} style={{ display: "grid", gridTemplateColumns: "10px minmax(0, 1fr)", gap: 4, fontSize: TYPE.caption, color: UI.ink2, lineHeight: 1.45 }}>
+                        <span aria-hidden="true">-</span>
+                        <span style={{ display: "grid", gap: 1 }}>
+                          <span>{presentation.message}</span>
+                          {presentation.metadata && (
+                            <span style={{ fontSize: 10, color: UI.ink3 }}>{presentation.metadata}</span>
+                          )}
+                        </span>
+                      </li>
+                    ))}
                   </ul>
                 </div>
               )}
