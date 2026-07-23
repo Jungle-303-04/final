@@ -588,6 +588,8 @@ jobs:
           uv run python scripts/verify_dev_auth_bypass.py rendered \
             --manifest "${RUNNER_TEMP}/management.yaml"
 
+      # Cluster-scoped PriorityClasses are reconciled by management bootstrap.
+      # This deploy identity intentionally remains scoped to the management namespace.
       - name: Run pre-deploy smoke
         id: pre_smoke
         if: steps.release_lease.outputs.mode == 'deploy'
