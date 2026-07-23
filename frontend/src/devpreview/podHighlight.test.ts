@@ -49,6 +49,23 @@ const expectedPod = podHighlightIdentity(
 
 // 호버 대상과 이름이 비슷한 파드를 혼동하지 않는지 exact identity 계약으로 고정한다.
 describe("resolveHighlightedPodIdentities", () => {
+  it("uses exact Pod identities resolved from inventory evidence", () => {
+    const result = resolveHighlightedPodIdentities(
+      {
+        type: "pods",
+        pods: [{
+          clusterId: "management-server",
+          namespace: "management",
+          name: "api-gateway-7d8f",
+        }],
+      },
+      [],
+      [],
+    );
+
+    expect([...result]).toEqual([expectedPod]);
+  });
+
   it("highlights only Pods selected by the exact hovered Service", () => {
     const nodes = [
       node("svc", "service", "Service", "management", "api-gateway"),

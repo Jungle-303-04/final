@@ -2,14 +2,16 @@ import { useEffect, useState } from "react";
 import { AlertTriangle, FileCog, KeyRound } from "lucide-react";
 
 import { listConfigReferences } from "../api/config-references";
+import { listInventoryResourcesByType } from "../api/inventory-query";
 import type {
   ConfigReferenceCoverage,
   ConfigReferenceItem,
-  ConfigReferenceKind,
   ConfigReferenceList,
 } from "../api/config-references-schemas";
+import type { InventoryResource } from "../api/inventory-schemas";
 import type { PodHighlightTarget } from "./podHighlight";
-import { BLUE, HP, MONO, TYPE, UI } from "./theme";
+import { podsOwnedByWorkloads } from "./podInventoryHighlight";
+import { HP, MONO, TYPE, UI } from "./theme";
 
 type ConfigPanelStatus = "loading" | "ready" | "unavailable";
 
@@ -22,12 +24,11 @@ interface OpsiaConfigPanelProps {
 interface OpsiaConfigPanelView {
   status: ConfigPanelStatus;
   data: ConfigReferenceList | null;
+  pods: InventoryResource[];
+  replicaSets: InventoryResource[];
 }
 
-const KIND_LABELS: Record<ConfigReferenceKind, string> = {
-  ConfigMap: "ConfigMap",
-  Secret: "Secret",
-};
+const CONFIG_INVENTORY_QUERY_LIMIT = 1000;
 
 const COVERAGE_REASON_LABELS: Record<string, string> = {
   inventory_snapshot_unavailable: "인벤토리 스냅샷이 아직 없습니다",
@@ -66,6 +67,8 @@ function useOpsiaConfigReferences(
   const [view, setView] = useState<OpsiaConfigPanelView & { key: string }>({
     status: "loading",
     data: null,
+    pods: [],
+    replicaSets: [],
     key: "",
   });
   const cid = clusterId?.trim() ?? "";
@@ -76,22 +79,54 @@ function useOpsiaConfigReferences(
     if (!key) return;
     const [requestedClusterId, requestedNamespace = ""] = key.split("\u0000");
     const controller = new AbortController();
-    void listConfigReferences(
-      requestedClusterId,
-      { namespace: requestedNamespace || null },
-      controller.signal,
-    ).then((response) => {
+    const optionalInventory = (resourceType: string): Promise<InventoryResource[]> => (
+      listInventoryResourcesByType(
+        requestedClusterId,
+        {
+          resourceType,
+          namespace: requestedNamespace || null,
+          limit: CONFIG_INVENTORY_QUERY_LIMIT,
+        },
+        controller.signal,
+      ).then((response) => response.resources).catch((cause: unknown) => {
+        if (controller.signal.aborted || isAbortError(cause)) throw cause;
+        return [];
+      })
+    );
+    void Promise.all([
+      listConfigReferences(
+        requestedClusterId,
+        { namespace: requestedNamespace || null },
+        controller.signal,
+      ),
+      optionalInventory("pod"),
+      optionalInventory("replicaset"),
+    ]).then(([response, pods, replicaSets]) => {
       if (controller.signal.aborted) return;
-      setView({ status: "ready", data: response, key });
+      setView({
+        status: "ready",
+        data: response,
+        pods,
+        replicaSets,
+        key,
+      });
     }).catch((cause: unknown) => {
       if (controller.signal.aborted || isAbortError(cause)) return;
-      setView({ status: "unavailable", data: null, key });
+      setView({
+        status: "unavailable",
+        data: null,
+        pods: [],
+        replicaSets: [],
+        key,
+      });
     });
     return () => controller.abort();
   }, [key]);
 
-  if (!key) return { status: "ready", data: null };
-  return view.key === key ? view : { status: "loading", data: null };
+  if (!key) return { status: "ready", data: null, pods: [], replicaSets: [] };
+  return view.key === key
+    ? view
+    : { status: "loading", data: null, pods: [], replicaSets: [] };
 }
 
 function PanelEmptyState({ label, hint }: { label: string; hint: string }) {
@@ -130,15 +165,6 @@ function CoverageNote({ coverage }: { coverage: ConfigReferenceCoverage }) {
   );
 }
 
-function ConfigKindChip({ kind }: { kind: ConfigReferenceKind }) {
-  const color = kind === "Secret" ? HP.warn : BLUE;
-  return (
-    <span style={{ fontSize: TYPE.caption, fontWeight: 700, color, background: `${color}14`, border: `1px solid ${color}33`, borderRadius: 5, padding: "1px 6px", whiteSpace: "nowrap" }}>
-      {KIND_LABELS[kind]}
-    </span>
-  );
-}
-
 function referencedWorkloadCount(item: ConfigReferenceItem): number {
   return new Set(
     item.referenced_by.map((usage) => (
@@ -147,13 +173,29 @@ function referencedWorkloadCount(item: ConfigReferenceItem): number {
   ).size;
 }
 
+function PodCount({ count }: { count: number }) {
+  return (
+    <span
+      title={`연결된 파드 ${count}개`}
+      aria-label={`연결된 파드 ${count}개`}
+      style={{ minWidth: 22, flexShrink: 0, textAlign: "right", fontFamily: MONO, fontSize: TYPE.label, fontWeight: 700, color: UI.ink3 }}
+    >
+      {count}
+    </span>
+  );
+}
+
 function ConfigReferenceRow({
   item,
   clusterId,
+  pods,
+  replicaSets,
   onHighlightTarget,
 }: {
   item: ConfigReferenceItem;
   clusterId: string;
+  pods: readonly InventoryResource[];
+  replicaSets: readonly InventoryResource[];
   onHighlightTarget?: (target: PodHighlightTarget | null) => void;
 }) {
   const Icon = item.kind === "Secret" ? KeyRound : FileCog;
@@ -168,11 +210,19 @@ function ConfigReferenceRow({
       },
     ]),
   ).values()];
-  const highlightTarget: PodHighlightTarget = {
-    type: "workloads",
+  const matchedPods = podsOwnedByWorkloads(
     clusterId,
     workloads,
-  };
+    replicaSets,
+    pods,
+  );
+  const highlightTarget: PodHighlightTarget = matchedPods.length > 0
+    ? { type: "pods", pods: matchedPods }
+    : {
+        type: "workloads",
+        clusterId,
+        workloads,
+      };
 
   return (
     <div className="rrow"
@@ -189,7 +239,7 @@ function ConfigReferenceRow({
           <span data-pod-highlight-primary title={item.name} style={{ display: "block", fontSize: TYPE.label, fontWeight: 700, fontFamily: MONO, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.name}</span>
           <span style={{ display: "block", fontSize: TYPE.caption, color: UI.ink3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.namespace} · Deployment {workloadCount}개 참조</span>
         </span>
-        <ConfigKindChip kind={item.kind} />
+        <PodCount count={matchedPods.length} />
       </div>
     </div>
   );
@@ -226,41 +276,47 @@ export function OpsiaConfigPanel({
     : "클러스터 선택 필요";
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "2px 2px 4px" }}>
-        <span style={{ fontSize: TYPE.body, fontWeight: 700, color: UI.ink }}>구성</span>
-        <span style={{ fontSize: TYPE.caption, color: UI.ink3 }}>
-          {configStatusLabel(configView.status, items.length, coverage)}
+    <div style={{ display: "flex", flexDirection: "column", gap: 8, height: "100%", minHeight: 0 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8, flexShrink: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "2px 2px 4px" }}>
+          <span style={{ fontSize: TYPE.body, fontWeight: 700, color: UI.ink }}>구성</span>
+          <span style={{ fontSize: TYPE.caption, color: UI.ink3 }}>
+            {configStatusLabel(configView.status, items.length, coverage)}
+          </span>
+        </div>
+        <span style={{ fontSize: TYPE.caption, color: UI.ink3, padding: "0 2px 3px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {scopeLabel}
         </span>
       </div>
-      <span style={{ fontSize: TYPE.caption, color: UI.ink3, padding: "0 2px 3px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-        {scopeLabel}
-      </span>
-      {!activeCluster ? (
-        <PanelEmptyState label="클러스터를 선택하세요" hint="구성 참조는 클러스터 범위에서 표시됩니다." />
-      ) : configView.status === "loading" ? (
-        <ConfigSkeletonList />
-      ) : configView.status === "unavailable" ? (
-        <PanelEmptyState label="구성 참조를 불러오지 못했습니다" hint="인벤토리 응답을 다시 확인하세요." />
-      ) : coverageUnavailable ? (
-        <PanelEmptyState label="구성 참조를 확인할 수 없습니다" hint={coverageReasonText(coverage)} />
-      ) : items.length === 0 ? (
-        <PanelEmptyState label="참조된 ConfigMap·Secret이 없습니다" hint={emptyHint(namespaceFilter, coverage)} />
-      ) : (
-        <>
-          {coverage && <CoverageNote coverage={coverage} />}
-          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-            {items.map((item) => (
-              <ConfigReferenceRow
-                key={`${item.kind}:${item.namespace}/${item.name}`}
-                item={item}
-                clusterId={activeCluster}
-                onHighlightTarget={onHighlightTarget}
-              />
-            ))}
-          </div>
-        </>
-      )}
+      <div style={{ flex: 1, minHeight: 0, overflowY: "auto", scrollbarGutter: "stable", overscrollBehavior: "contain", paddingRight: 8 }}>
+        {!activeCluster ? (
+          <PanelEmptyState label="클러스터를 선택하세요" hint="구성 참조는 클러스터 범위에서 표시됩니다." />
+        ) : configView.status === "loading" ? (
+          <ConfigSkeletonList />
+        ) : configView.status === "unavailable" ? (
+          <PanelEmptyState label="구성 참조를 불러오지 못했습니다" hint="인벤토리 응답을 다시 확인하세요." />
+        ) : coverageUnavailable ? (
+          <PanelEmptyState label="구성 참조를 확인할 수 없습니다" hint={coverageReasonText(coverage)} />
+        ) : items.length === 0 ? (
+          <PanelEmptyState label="참조된 ConfigMap·Secret이 없습니다" hint={emptyHint(namespaceFilter, coverage)} />
+        ) : (
+          <>
+            {coverage && <CoverageNote coverage={coverage} />}
+            <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+              {items.map((item) => (
+                <ConfigReferenceRow
+                  key={`${item.kind}:${item.namespace}/${item.name}`}
+                  item={item}
+                  clusterId={activeCluster}
+                  pods={configView.pods}
+                  replicaSets={configView.replicaSets}
+                  onHighlightTarget={onHighlightTarget}
+                />
+              ))}
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }

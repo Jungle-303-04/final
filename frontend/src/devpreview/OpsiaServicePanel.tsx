@@ -3,13 +3,25 @@ import { Network, Plug } from "lucide-react";
 
 import { listInventoryResourcesByType } from "../api/inventory-query";
 import type { InventoryResource } from "../api/inventory-schemas";
-import type { PodHighlightTarget } from "./podHighlight";
-import { HP, MONO, TYPE, UI } from "./theme";
+import type {
+  PodHighlightIdentity,
+  PodHighlightTarget,
+} from "./podHighlight";
+import { podsSelectedByService } from "./podInventoryHighlight";
+import { MONO, TYPE, UI } from "./theme";
 import { statusLabel } from "./statusLabel";
 
 type ServicePanelStatus = "loading" | "ready" | "unavailable";
-type OpsiaServiceRow = Record<string, unknown>;
 const SERVICE_RESOURCE_TYPE = "service";
+const POD_RESOURCE_TYPE = "pod";
+
+interface OpsiaServiceRow {
+  name: string;
+  ns: string | undefined;
+  status: string;
+  _key: string;
+  matchedPods: PodHighlightIdentity[];
+}
 
 interface OpsiaServicePanelProps {
   activeCluster: string | null;
@@ -26,25 +38,15 @@ function textValue(value: unknown, fallback = "-"): string {
   return typeof value === "string" && value.trim() !== "" ? value : fallback;
 }
 
-function serviceHealthSeverity(health: string): "ok" | "warn" | "crit" | "unknown" {
-  const normalized = health.toLowerCase();
-  if (normalized === "healthy" || normalized === "ready") return "ok";
-  if (normalized === "degraded" || normalized === "warning") return "warn";
-  if (normalized === "critical" || normalized === "failed" || normalized === "unhealthy") return "crit";
-  return "unknown";
-}
-
-// 레퍼런스 목업 문법 — 상태 칩 대신 우측 점 하나. 정상은 초록 점으로 조용히,
-// 이상만 주황/빨강으로 드러나며, 라벨 폭을 칩이 잡아먹지 않는다.
-function ServiceHealthDot({ health }: { health: string }) {
-  const severity = serviceHealthSeverity(health);
-  const color = severity === "crit" ? HP.crit : severity === "warn" ? HP.warn : severity === "ok" ? HP.ok : UI.ink3;
+function PodCount({ count }: { count: number }) {
   return (
     <span
-      title={statusLabel(health)}
-      aria-label={`헬스 ${statusLabel(health)}`}
-      style={{ width: 8, height: 8, borderRadius: 999, background: color, flexShrink: 0, opacity: severity === "unknown" ? 0.5 : 1 }}
-    />
+      title={`연결된 파드 ${count}개`}
+      aria-label={`연결된 파드 ${count}개`}
+      style={{ minWidth: 22, flexShrink: 0, textAlign: "right", fontFamily: MONO, fontSize: TYPE.label, fontWeight: 700, color: UI.ink3 }}
+    >
+      {count}
+    </span>
   );
 }
 
@@ -87,18 +89,17 @@ function isAbortError(error: unknown): boolean {
     && (error as { name?: unknown }).name === "AbortError";
 }
 
-function toServiceRow(resource: InventoryResource): OpsiaServiceRow {
+function toServiceRow(
+  resource: InventoryResource,
+  clusterId: string,
+  pods: readonly InventoryResource[],
+): OpsiaServiceRow {
   return {
     name: resource.name,
     ns: resource.namespace ?? undefined,
-    kind: resource.kind,
     status: resource.status,
-    health: resource.health,
-    resource_type: resource.resource_type,
-    uid: resource.uid ?? undefined,
-    created: resource.created_at ?? undefined,
-    cluster: resource.cluster_id,
     _key: resource.inventory_key,
+    matchedPods: podsSelectedByService(clusterId, resource, pods),
   };
 }
 
@@ -119,15 +120,37 @@ function useOpsiaServices(
     if (!key) return;
     const [requestedClusterId, requestedNamespace = ""] = key.split("\u0000");
     const controller = new AbortController();
-    void listInventoryResourcesByType(
+    const podResources = listInventoryResourcesByType(
       requestedClusterId,
-      { resourceType: SERVICE_RESOURCE_TYPE, namespace: requestedNamespace || null, limit: SERVICE_QUERY_LIMIT },
+      {
+        resourceType: POD_RESOURCE_TYPE,
+        namespace: requestedNamespace || null,
+        limit: SERVICE_QUERY_LIMIT,
+      },
       controller.signal,
-    ).then((response) => {
+    ).then((response) => response.resources).catch((cause: unknown) => {
+      if (controller.signal.aborted || isAbortError(cause)) throw cause;
+      return [];
+    });
+    void Promise.all([
+      listInventoryResourcesByType(
+        requestedClusterId,
+        {
+          resourceType: SERVICE_RESOURCE_TYPE,
+          namespace: requestedNamespace || null,
+          limit: SERVICE_QUERY_LIMIT,
+        },
+        controller.signal,
+      ),
+      podResources,
+    ]).then(([response, pods]) => {
       if (controller.signal.aborted) return;
+      const observedPods = pods.filter(
+        (resource) => resource.kind.toLowerCase() === POD_RESOURCE_TYPE,
+      );
       const rows = response.resources
         .filter((resource) => resource.kind.toLowerCase() === SERVICE_RESOURCE_TYPE)
-        .map(toServiceRow);
+        .map((resource) => toServiceRow(resource, requestedClusterId, observedPods));
       setView({ status: "ready", rows, key });
     }).catch((cause: unknown) => {
       if (controller.signal.aborted || isAbortError(cause)) return;
@@ -152,37 +175,44 @@ export function OpsiaServicePanel({
     : "클러스터 선택 필요";
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "2px 2px 4px" }}>
-        <span style={{ fontSize: TYPE.body, fontWeight: 600, color: UI.heading }}>서비스</span>
-        <span style={{ fontSize: TYPE.caption, color: UI.ink3 }}>
-          {serviceStatusLabel(serviceView.status, serviceView.rows.length)}
+    <div style={{ display: "flex", flexDirection: "column", gap: 8, height: "100%", minHeight: 0 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8, flexShrink: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "2px 2px 4px" }}>
+          <span style={{ fontSize: TYPE.body, fontWeight: 600, color: UI.heading }}>서비스</span>
+          <span style={{ fontSize: TYPE.caption, color: UI.ink3 }}>
+            {serviceStatusLabel(serviceView.status, serviceView.rows.length)}
+          </span>
+        </div>
+        <span style={{ fontSize: TYPE.caption, color: UI.ink3, padding: "0 2px 3px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {scopeLabel}
         </span>
       </div>
-      <span style={{ fontSize: TYPE.caption, color: UI.ink3, padding: "0 2px 3px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-        {scopeLabel}
-      </span>
-      {!activeCluster ? (
-        <PanelEmptyState label="클러스터를 선택하세요" hint="서비스 목록은 클러스터 범위에서 표시됩니다." />
-      ) : serviceView.status === "loading" ? (
-        <ServiceSkeletonList />
-      ) : serviceView.status === "unavailable" ? (
-        <PanelEmptyState label="서비스를 불러오지 못했습니다" hint="인벤토리 응답을 다시 확인하세요." />
-      ) : serviceView.rows.length === 0 ? (
-        <PanelEmptyState
-          label="관측된 서비스가 없습니다"
-          hint={namespaceFilter ? `${namespaceFilter} 네임스페이스에서 관측된 Service가 없습니다.` : "선택한 클러스터에서 관측된 Service가 없습니다."}
-        />
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+      <div style={{ flex: 1, minHeight: 0, overflowY: "auto", scrollbarGutter: "stable", overscrollBehavior: "contain", paddingRight: 8 }}>
+        {!activeCluster ? (
+          <PanelEmptyState label="클러스터를 선택하세요" hint="서비스 목록은 클러스터 범위에서 표시됩니다." />
+        ) : serviceView.status === "loading" ? (
+          <ServiceSkeletonList />
+        ) : serviceView.status === "unavailable" ? (
+          <PanelEmptyState label="서비스를 불러오지 못했습니다" hint="인벤토리 응답을 다시 확인하세요." />
+        ) : serviceView.rows.length === 0 ? (
+          <PanelEmptyState
+            label="관측된 서비스가 없습니다"
+            hint={namespaceFilter ? `${namespaceFilter} 네임스페이스에서 관측된 Service가 없습니다.` : "선택한 클러스터에서 관측된 Service가 없습니다."}
+          />
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
           {serviceView.rows.map((service) => {
             const name = textValue(service.name, "이름 없음");
             const namespace = textValue(service.ns, "클러스터 범위");
             const relationNamespace = typeof service.ns === "string" ? service.ns : "";
             const status = textValue(service.status);
-            const health = textValue(service.health, "unknown");
             const highlightTarget: PodHighlightTarget | null = activeCluster
-              ? {
+              ? service.matchedPods.length > 0
+                ? {
+                    type: "pods",
+                    pods: service.matchedPods,
+                  }
+                : {
                   type: "service",
                   clusterId: activeCluster,
                   namespace: relationNamespace,
@@ -203,12 +233,13 @@ export function OpsiaServicePanel({
                   <span data-pod-highlight-primary title={name} style={{ display: "block", fontSize: TYPE.label, fontWeight: 600, fontFamily: MONO, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
                   <span style={{ display: "block", fontSize: TYPE.caption, color: UI.ink3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{namespace} · {statusLabel(status)}</span>
                 </span>
-                <ServiceHealthDot health={health} />
+                <PodCount count={service.matchedPods.length} />
               </div>
             );
           })}
-        </div>
-      )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

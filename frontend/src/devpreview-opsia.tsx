@@ -1431,11 +1431,11 @@ function SidePanel({ forcedTab, scaled, onAddRepo, onOpenRepository, stickyTop, 
 }) {
   const [tab, setTab] = useState<"svc" | "cfg" | "git">(forcedTab ?? "svc");
   return (
-    <aside className="opsia-side-panel" style={{ width: 270, flexShrink: 0, alignSelf: "flex-start", background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 16, position: "static", top: stickyTop ?? 24, maxHeight: scaled ? `calc(100vh / ${PRESENT_SCALE} - ${(stickyTop ?? 24) + 16}px)` : "calc(100vh - 60px)", overflow: "hidden", display: "flex" }}>
-    <div style={{ flex: 1, minWidth: 0, padding: "14px 6px 14px 14px", display: "flex", flexDirection: "column", gap: 12, overflowY: "auto", scrollbarGutter: "stable" }}>
-      {/* P1: 중복 "연결 보기" heading 제거. 서비스/구성/저장소 탭을 사이드바 최상단에 고정하고
-          결과 목록만 내부 스크롤한다(탭 sticky). */}
-      <div style={{ display: "flex", gap: 3, background: UI.bg2, borderRadius: 10, padding: 3, position: "sticky", top: 0, zIndex: 2, boxShadow: `0 6px 12px -12px ${inkA(0.3)}` }}>
+    <aside className="opsia-side-panel" style={{ width: 270, flexShrink: 0, alignSelf: "flex-start", background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 16, position: "static", top: stickyTop ?? 24, height: scaled ? `calc(100vh / ${PRESENT_SCALE} - ${(stickyTop ?? 24) + 16}px)` : "calc(100vh - 60px)", maxHeight: scaled ? `calc(100vh / ${PRESENT_SCALE} - ${(stickyTop ?? 24) + 16}px)` : "calc(100vh - 60px)", overflow: "hidden", display: "flex" }}>
+    <div style={{ flex: 1, minWidth: 0, minHeight: 0, padding: "14px 6px 14px 14px", display: "flex", flexDirection: "column", gap: 12, overflow: "hidden" }}>
+      {/* 서비스/구성/저장소 탭과 각 패널의 제목·범위는 고정하고,
+          실제 결과 목록만 패널 내부에서 스크롤한다. */}
+      <div style={{ display: "flex", gap: 3, flexShrink: 0, background: UI.bg2, borderRadius: 10, padding: 3, zIndex: 2, boxShadow: `0 6px 12px -12px ${inkA(0.3)}` }}>
         {([["svc", "서비스", Plug], ["cfg", "구성", FileCog], ["git", "저장소", GithubIcon]] as const).map(([id, label, I]) => {
           const on = tab === id;
           return (
@@ -1447,24 +1447,25 @@ function SidePanel({ forcedTab, scaled, onAddRepo, onOpenRepository, stickyTop, 
         })}
       </div>
 
-      {tab === "svc" && (
-        <OpsiaServicePanel
-          activeCluster={activeCluster ?? null}
-          selectedNamespace={selectedNamespace ?? null}
-          onHighlightTarget={onHighlightTarget}
-        />
-      )}
+      <div style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
+        {tab === "svc" && (
+          <OpsiaServicePanel
+            activeCluster={activeCluster ?? null}
+            selectedNamespace={selectedNamespace ?? null}
+            onHighlightTarget={onHighlightTarget}
+          />
+        )}
 
-      {tab === "cfg" && (
-        <OpsiaConfigPanel
-          activeCluster={activeCluster ?? null}
-          selectedNamespace={selectedNamespace ?? null}
-          onHighlightTarget={onHighlightTarget}
-        />
-      )}
+        {tab === "cfg" && (
+          <OpsiaConfigPanel
+            activeCluster={activeCluster ?? null}
+            selectedNamespace={selectedNamespace ?? null}
+            onHighlightTarget={onHighlightTarget}
+          />
+        )}
 
-      {tab === "git" && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+        {tab === "git" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 1, height: "100%", minHeight: 0, overflowY: "auto", scrollbarGutter: "stable", overscrollBehavior: "contain", paddingRight: 8 }}>
           {repositoryGroups ? <RepositoryConnections
             groups={repositoryGroups}
             onOpenRepository={onOpenRepository}
@@ -1509,8 +1510,9 @@ function SidePanel({ forcedTab, scaled, onAddRepo, onOpenRepository, stickyTop, 
               + 저장소 연결
             </button>
           )}
-        </div>
-      )}
+          </div>
+        )}
+      </div>
     </div>
     </aside>
   );

@@ -9,7 +9,17 @@ export interface WorkloadHighlightIdentity {
   name: string;
 }
 
+export interface PodHighlightIdentity {
+  clusterId: string;
+  namespace: string | null;
+  name: string;
+}
+
 export type PodHighlightTarget =
+  | {
+      type: "pods";
+      pods: PodHighlightIdentity[];
+    }
   | {
       type: "service";
       clusterId: string;
@@ -68,6 +78,14 @@ export function resolveHighlightedPodIdentities(
   edges: readonly RelationEdgeView[],
 ): Set<string> {
   if (target === null) return new Set();
+
+  if (target.type === "pods") {
+    return new Set(
+      target.pods.map((pod) => (
+        podHighlightIdentity(pod.clusterId, pod.namespace, pod.name)
+      )),
+    );
+  }
 
   const nodesById = new Map(nodes.map((node) => [node.id, node]));
   const outgoing = new Map<string, RelationEdgeView[]>();
