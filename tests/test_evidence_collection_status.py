@@ -26,6 +26,7 @@ AGENT_ROOT = (
 sys.path.insert(0, str(AGENT_ROOT))
 try:
     EvidenceCollector = importlib.import_module("evidence.collector").EvidenceCollector
+    EvidenceJobScheduler = importlib.import_module("evidence.jobs").EvidenceJobScheduler
 finally:
     sys.path.remove(str(AGENT_ROOT))
 
@@ -68,6 +69,67 @@ class StubMetricsProvider:
 
     def build_response(self, results: dict) -> dict:
         return {"source": self.source, "results": results}
+
+
+class StubEvidenceSource:
+    async def collect(self, *_evidence_keys: str) -> dict:
+        return {}
+
+
+def evidence_scheduler(
+    *provider_keys: str,
+) -> EvidenceJobScheduler:
+    return EvidenceJobScheduler(
+        cluster_id="cluster-1",
+        workspace_id="workspace-1",
+        agent_id="agent-1",
+        source_id="cluster-snapshot",
+        collector=StubEvidenceSource(),
+        provider_keys=provider_keys,
+        provider_worker_counts={provider_key: 1 for provider_key in provider_keys},
+        interval_seconds=30,
+    )
+
+
+def test_policy_provider_change_aligns_the_next_evidence_window() -> None:
+    scheduler = evidence_scheduler("kubernetes", "logs", "traces")
+    scheduler.enabled_provider_keys = {"kubernetes", "logs"}
+    scheduler.next_provider_runs.update(
+        {"kubernetes": 100.0, "logs": 101.0, "traces": 0.0}
+    )
+
+    scheduler.configure_schedule(
+        provider_intervals={"kubernetes": 30, "logs": 30, "traces": 30},
+        enabled_provider_keys={"kubernetes", "logs", "traces"},
+    )
+
+    assert scheduler.due_provider_keys(1.0) == ("kubernetes", "logs", "traces")
+
+
+def test_unchanged_policy_keeps_existing_provider_deadlines() -> None:
+    scheduler = evidence_scheduler("kubernetes", "logs")
+    scheduler.next_provider_runs.update({"kubernetes": 100.0, "logs": 101.0})
+
+    scheduler.configure_schedule(
+        provider_intervals={"kubernetes": 30, "logs": 30},
+        enabled_provider_keys={"kubernetes", "logs"},
+    )
+
+    assert scheduler.next_provider_runs == {"kubernetes": 100.0, "logs": 101.0}
+
+
+def test_runtime_provider_registration_aligns_existing_providers() -> None:
+    scheduler = evidence_scheduler("kubernetes", "logs")
+    scheduler.next_provider_runs.update({"kubernetes": 100.0, "logs": 101.0})
+
+    scheduler.register_provider(
+        "metrics",
+        worker_count=1,
+        interval_seconds=30,
+        enabled=True,
+    )
+
+    assert scheduler.due_provider_keys(1.0) == ("kubernetes", "logs", "metrics")
 
 
 def collect_stub(

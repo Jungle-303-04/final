@@ -238,7 +238,9 @@ class EvidenceJobScheduler:
         unknown_keys = set(provider_intervals) - set(self.provider_keys)
         if unknown_keys:
             raise ValueError(f"unknown evidence providers in schedule: {sorted(unknown_keys)}")
-        self.enabled_provider_keys = {
+        previous_enabled_provider_keys = set(self.enabled_provider_keys)
+        previous_provider_intervals = dict(self.provider_intervals)
+        next_enabled_provider_keys = {
             provider_key
             for provider_key in enabled_provider_keys
             if provider_key in self.provider_keys
@@ -246,6 +248,17 @@ class EvidenceJobScheduler:
         for provider_key, interval_seconds in provider_intervals.items():
             self.provider_intervals[provider_key] = max(1, interval_seconds)
             self.next_provider_runs.setdefault(provider_key, 0.0)
+        schedule_changed = (
+            next_enabled_provider_keys != previous_enabled_provider_keys
+            or any(
+                previous_provider_intervals.get(provider_key)
+                != self.provider_intervals.get(provider_key)
+                for provider_key in next_enabled_provider_keys
+            )
+        )
+        self.enabled_provider_keys = next_enabled_provider_keys
+        if schedule_changed:
+            self.align_enabled_provider_runs()
 
     def register_provider(
         self,
@@ -258,6 +271,8 @@ class EvidenceJobScheduler:
         """Register or update one provider added by a revision-bound runtime integration."""
         if not provider_key.strip():
             raise ValueError("evidence provider key is required")
+        previous_enabled = provider_key in self.enabled_provider_keys
+        previous_interval = self.provider_intervals.get(provider_key)
         if provider_key not in self.provider_keys:
             self.provider_keys = (*self.provider_keys, provider_key)
             self._worker_tasks[provider_key] = []
@@ -269,8 +284,23 @@ class EvidenceJobScheduler:
             self.enabled_provider_keys.add(provider_key)
         else:
             self.enabled_provider_keys.discard(provider_key)
+        if previous_enabled != enabled or (
+            enabled and previous_interval != self.provider_intervals[provider_key]
+        ):
+            self.align_enabled_provider_runs()
         if self._client is not None:
             self.reconcile_worker_pool(provider_key, self._client)
+
+    def align_enabled_provider_runs(self) -> None:
+        """Make a changed provider set enter the next evidence window atomically.
+
+        Provider workers may finish before another provider's independently scheduled job
+        is inserted. Resetting all enabled due-times together makes the scheduler queue the
+        full changed set in one transaction, so the first completed provider cannot seal a
+        partial window that later results are unable to enrich.
+        """
+        for provider_key in self.enabled_provider_keys:
+            self.next_provider_runs[provider_key] = 0.0
 
     def unregister_provider(self, provider_key: str) -> None:
         """Disable and remove one runtime provider from future schedules."""
