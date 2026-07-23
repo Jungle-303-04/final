@@ -9,6 +9,7 @@ import {
   HardDrive, Cpu, Folder, Activity, UserCog, Eye, Radio, ChevronDown, Pin,
   Home, ListTree, AlertTriangle, Clock, Coins, Settings, Sparkles, PanelLeftClose, PanelLeftOpen,
   Bell, Pencil, Check, Hourglass, Webhook, SignalHigh, Building2, LogOut, RefreshCw,
+  Maximize2, Minimize2, X,
 } from "lucide-react";
 import { HomeClustersWidget, OpsiaMap } from "./devpreview-opsia";
 import { DASHBOARD_WIDGET_GRID_CLASS, DASHBOARD_WIDGET_GRID_ITEM_CLASS, WidgetFrame, RatioBar, Donut, RankList, MultiLine, MiniTimeline, dashboardWidgetGridStyle, dashboardWidgetItemStyle, type DashboardWidgetSpan } from "./devpreview/widgets";
@@ -889,8 +890,8 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
               <span title="YAML 탭에서 실제 Git 소스·권한·에이전트 적용 가능성을 확인합니다" style={{ display: "flex", alignItems: "center", gap: 5, border: `1px solid ${UI.line}`, background: UI.bg2, borderRadius: 8, padding: "5px 10px", fontSize: TYPE.label, fontWeight: 600, color: UI.ink3 }}>
                 소스·권한 검증
               </span>
-              <button type="button" className="product-focusable product-control" aria-label={forceFull ? "AI 대화 중에는 전체 화면 유지" : full ? "상세 패널 축소" : "상세 패널 전체 화면"} title={forceFull ? "AI 대화 중에는 전체 화면 유지" : full ? "패널로 축소" : "전체 화면"} disabled={forceFull} onClick={() => setFull(!fullSelf)} style={{ width: 26, height: 26, borderRadius: 999, border: "none", background: inkA(0.06), color: UI.ink3, fontSize: TYPE.label, lineHeight: 1 }}>{full ? "⤡" : "⤢"}</button>
-              <button type="button" className="product-focusable product-control" aria-label="상세 패널 닫기" onClick={onClose} style={{ width: 26, height: 26, borderRadius: 999, border: "none", background: inkA(0.06), color: UI.ink3, cursor: "pointer", fontSize: TYPE.body, lineHeight: 1 }}>✕</button>
+              <button type="button" className="product-focusable product-control" aria-label={forceFull ? "AI 대화 중에는 전체 화면 유지" : full ? "상세 패널 축소" : "상세 패널 전체 화면"} title={forceFull ? "AI 대화 중에는 전체 화면 유지" : full ? "패널로 축소" : "전체 화면"} disabled={forceFull} onClick={() => setFull(!fullSelf)} style={{ width: 28, height: 28, borderRadius: 999, border: "none", background: inkA(0.06), color: UI.ink2, display: "grid", placeItems: "center", cursor: forceFull ? "not-allowed" : "pointer" }}>{full ? <Minimize2 size={14} strokeWidth={2.2} /> : <Maximize2 size={14} strokeWidth={2.2} />}</button>
+              <button type="button" className="product-focusable product-control" aria-label="상세 패널 닫기" onClick={onClose} style={{ width: 28, height: 28, borderRadius: 999, border: "none", background: inkA(0.06), color: UI.ink2, cursor: "pointer", display: "grid", placeItems: "center" }}><X size={15} strokeWidth={2.2} /></button>
             </div>
           </div>
           <div style={{ display: "flex", gap: 2, marginTop: 14 }}>
