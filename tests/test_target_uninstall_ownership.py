@@ -51,14 +51,15 @@ def test_install_still_reconciles_canonical_shared_priority_classes() -> None:
     }
 
 
-def test_management_deploy_restores_priority_class_before_rollout() -> None:
+def test_namespace_scoped_management_deploy_does_not_mutate_priority_classes() -> None:
     workflow = (ROOT / ".github" / "workflows" / "dev-deploy.yml").read_text(encoding="utf-8")
-    reconcile = workflow.index("Reconcile shared management scheduling")
-    auth_rollout = workflow.index("Enforce live auth bypass zero")
-    image_rollout = workflow.index("Roll out immutable service digest")
+    management_kustomization = (
+        ROOT / "deploy" / "management" / "kustomization.yaml"
+    ).read_text(encoding="utf-8")
 
-    assert "--filename deploy/management/scheduling.yaml" in workflow
-    assert reconcile < auth_rollout < image_rollout
+    assert "Reconcile shared management scheduling" not in workflow
+    assert "--filename deploy/management/scheduling.yaml" not in workflow
+    assert "- scheduling.yaml" in management_kustomization
 
 
 def test_local_kind_management_overlay_includes_scheduling() -> None:
