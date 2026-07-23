@@ -20,6 +20,8 @@ export interface ResourceEventsView {
 }
 
 const IDLE = { status: "idle" as const, items: [] as ResourceEventView[] };
+export const RESOURCE_DETAIL_RELATED_LIMIT = 1;
+export const RESOURCE_DETAIL_EVENT_LIMIT = 100;
 
 function text(value: unknown): string | null {
   return typeof value === "string" && value.trim() !== "" ? value : null;
@@ -29,7 +31,7 @@ function number(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-function toEvent(resource: InventoryResource): ResourceEventView {
+export function toResourceEvent(resource: InventoryResource): ResourceEventView {
   const summary = resource.summary;
   return {
     id: resource.inventory_key,
@@ -64,8 +66,8 @@ export function useResourceEvents(
     const controller = new AbortController();
     getInventoryResourceDetail(cid, {
       resourceType: kindToResourceType(kind), kind, name: resourceName, namespace: ns,
-    }, { relatedLimit: 1, eventLimit: 100 }, controller.signal).then((detail) => {
-      if (!controller.signal.aborted) setState({ key, status: "ready", items: detail.events.map(toEvent) });
+    }, { relatedLimit: RESOURCE_DETAIL_RELATED_LIMIT, eventLimit: RESOURCE_DETAIL_EVENT_LIMIT }, controller.signal).then((detail) => {
+      if (!controller.signal.aborted) setState({ key, status: "ready", items: detail.events.map(toResourceEvent) });
     }).catch((error: unknown) => {
       if (controller.signal.aborted || isAbortError(error)) return;
       const unavailable = typeof error === "object" && error !== null && "status" in error

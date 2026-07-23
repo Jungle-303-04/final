@@ -81,6 +81,7 @@ import { useResourceUsageSeries, type ResourceUsagePoint } from "./devpreview/re
 import { useResourceAccess } from "./devpreview/resourceAccessFeed";
 import { ResourceAccessPanel } from "./devpreview/resourceAccessPanel";
 import { EventMessageText } from "./devpreview/EventMessageText";
+import { usePodResourceDetail } from "./devpreview/podResourceDetailFeed";
 import { useResourceEvents } from "./devpreview/resourceEventsFeed";
 import { useResourceIdentity } from "./devpreview/resourceIdentityFeed";
 import { getRepositoryConnectionStatus } from "./api/repository-connection";
@@ -807,11 +808,19 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
   const name = String(row.name ?? "");
   const ns = String(row.ns ?? "–");
   const bad = !!row.bad;
-  // 관측된 상태/헬스/클러스터만 표시 — 노드명·호스트/파드 IP·QoS·소유관계는 라이브 인벤토리 계약에 없어 지어내지 않는다.
+  // Pod placement/network facts come from resource-detail summary; unsupported fields stay honest.
   const phase = row.status != null && String(row.status) ? statusLabel(String(row.status)) : "관측 안 됨";
   const healthVal = row.health != null && String(row.health) ? statusLabel(String(row.health)) : "관측 안 됨";
   const clusterVal = row.cluster != null && String(row.cluster) ? String(row.cluster) : "관측 안 됨";
+  const isPodKind = kind.id === "Pod";
+  const isNodeKind = kind.id === "Node";
   const observedResourceId = row._key != null ? String(row._key) : "";
+  const podResourceDetail = usePodResourceDetail(
+    isPodKind,
+    row.cluster != null && String(row.cluster) ? String(row.cluster) : null,
+    row.ns != null && String(row.ns) ? String(row.ns) : null,
+    name,
+  );
   const resolvedIdentity = useResourceIdentity(
     observedResourceId === "",
     row.cluster != null && String(row.cluster) ? String(row.cluster) : null,
@@ -832,8 +841,6 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
   );
   // M14: 파드·노드 상세는 `GET /api/clusters/{id}/usage`에서 관측된 CPU/메모리
   // 시계열을 표시한다. 지원하지 않는 kind이거나 스코프가 비면 요청하지 않는다.
-  const isPodKind = kind.id === "Pod";
-  const isNodeKind = kind.id === "Node";
   const supportsUsageSeries = isPodKind || isNodeKind;
   const usage = useResourceUsageSeries(
     supportsUsageSeries && row.cluster != null && String(row.cluster) ? String(row.cluster) : null,
@@ -849,16 +856,17 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
     row.ns != null && String(row.ns) ? String(row.ns) : null,
     name,
   );
-  const resourceEvents = useResourceEvents(
-    tab === "events" && row.cluster != null && String(row.cluster) ? String(row.cluster) : null,
+  const fallbackResourceEvents = useResourceEvents(
+    !isPodKind && tab === "events" && row.cluster != null && String(row.cluster) ? String(row.cluster) : null,
     kind.id,
     row.ns != null && String(row.ns) ? String(row.ns) : null,
     name,
   );
+  const resourceEvents = isPodKind ? podResourceDetail.events : fallbackResourceEvents;
   // 재시작/스케일처럼 이 드로어가 지원하지 않는 변경 컨트롤은 노출하지 않는다.
   // YAML 변경은 source/content SHA를 고정하고 권한·CSRF·감사 계약을 거치는 전용 편집기에서만 수행한다.
   const isWorkload = ["Deployment", "StatefulSet", "DaemonSet", "ReplicaSet", "Job", "CronJob"].includes(kind.id);
-  const isPod = kind.id === "Pod";
+  const isPod = isPodKind;
   const wp = isWorkload || isPod;                 // 워크로드·파드 전용 섹션
   // 합성 YAML은 만들지 않는다. 실제 인벤토리 key로 원본을 조회하고, 원본이 없는 리소스는
   // Git 바인딩 누락 상태를 명시해 잘못된 매니페스트를 편집·적용하지 않도록 한다.
@@ -939,11 +947,20 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
                         <KV key={k} k={k} v={v} mono tone={k === "헬스" && v !== "관측 안 됨" && v !== "불러오는 중…" ? (bad ? TINT.crit.fg : TINT.ok.fg) : undefined} />
                       ));
                     })()
-                  : ([["상태", phase], ["헬스", healthVal], ["클러스터", clusterVal], ["노드", "관측 안 됨"], ["파드 IP", "관측 안 됨"], ["호스트 IP", "관측 안 됨"], ["QoS 클래스", "관측 안 됨"], ["ServiceAccount", "관측 안 됨"]] as const).map(([k, v]) => <KV key={k} k={k} v={v} mono tone={k === "상태" ? (bad ? TINT.crit.fg : v === "관측 안 됨" ? undefined : TINT.ok.fg) : undefined} />)}
+                  : (() => {
+                      const podSummary = podResourceDetail.summary;
+                      const podCell = (value: string | null) =>
+                        podSummary.status === "loading" ? "불러오는 중…" : value ?? "관측 안 됨";
+                      const rows = isPodKind
+                        ? [["상태", phase], ["헬스", healthVal], ["클러스터", clusterVal], ["노드", podCell(podSummary.nodeName)], ["파드 IP", podCell(podSummary.podIp)], ["호스트 IP", podCell(podSummary.hostIp)], ["QoS 클래스", "관측 안 됨"], ["ServiceAccount", podCell(podSummary.serviceAccountName)]] as const
+                        : [["상태", phase], ["헬스", healthVal], ["클러스터", clusterVal], ["노드", "관측 안 됨"], ["파드 IP", "관측 안 됨"], ["호스트 IP", "관측 안 됨"], ["QoS 클래스", "관측 안 됨"], ["ServiceAccount", "관측 안 됨"]] as const;
+                      return rows.map(([k, v]) => <KV key={k} k={k} v={v} mono tone={k === "상태" ? (bad ? TINT.crit.fg : v === "관측 안 됨" ? undefined : TINT.ok.fg) : undefined} />);
+                    })()}
                 {isWorkload && wd.coverageAvailability === "partial" && (
                   <div style={{ fontSize: TYPE.caption, color: UI.ink3, marginTop: 8 }}>일부 범위만 관측된 부분 스냅샷입니다.</div>
                 )}
                 {isWorkload && wd.status === "error" && <RetryNote onRetry={wd.retry} label="상세 관측값을 불러오지 못했습니다." />}
+                {isPodKind && podResourceDetail.status === "error" && <RetryNote onRetry={podResourceDetail.retry} label="Pod 상세 관측값을 불러오지 못했습니다." />}
                 <div style={{ display: "flex", gap: 7, marginTop: 12 }}>
                   {isWorkload && <button className="product-focusable product-control" onClick={onShowPods ? () => onShowPods(name) : undefined}
                     style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${UI.line}`, background: UI.card, borderRadius: 8, padding: "6px 11px", fontSize: TYPE.label, fontWeight: 600, color: BLUE, cursor: "pointer" }}><Boxes size={12} />관리 중인 파드 보기</button>}

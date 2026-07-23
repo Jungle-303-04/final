@@ -1,0 +1,166 @@
+import { useCallback, useEffect, useMemo, useState } from "react";
+
+import { getInventoryResourceDetail } from "../api/inventory";
+import type { InventoryResourceDetail } from "../api/inventory-schemas";
+import { kindToResourceType } from "./inventoryResourcesFeed";
+import {
+  RESOURCE_DETAIL_EVENT_LIMIT,
+  RESOURCE_DETAIL_RELATED_LIMIT,
+  toResourceEvent,
+  type ResourceEventView,
+  type ResourceEventsView,
+} from "./resourceEventsFeed";
+
+type PodResourceDetailStatus = ResourceEventsView["status"];
+
+export interface PodResourceSummaryView {
+  status: PodResourceDetailStatus;
+  nodeName: string | null;
+  podIp: string | null;
+  hostIp: string | null;
+  serviceAccountName: string | null;
+}
+
+export interface PodResourceDetailView {
+  status: PodResourceDetailStatus;
+  summary: PodResourceSummaryView;
+  events: ResourceEventsView;
+  retry: () => void;
+}
+
+interface PodResourceDetailState {
+  key: string;
+  status: PodResourceDetailStatus;
+  summary: Omit<PodResourceSummaryView, "status">;
+  events: ResourceEventView[];
+}
+
+const POD_KIND = "Pod";
+const POD_RESOURCE_TYPE = kindToResourceType(POD_KIND);
+const DETAIL_KEY_SEPARATOR = "\u0000";
+const POD_SUMMARY_KEYS = {
+  nodeName: "node_name",
+  podIp: "pod_ip",
+  hostIp: "host_ip",
+  serviceAccountName: "service_account_name",
+} as const;
+const EMPTY_SUMMARY = {
+  nodeName: null,
+  podIp: null,
+  hostIp: null,
+  serviceAccountName: null,
+};
+const EMPTY_EVENTS: ResourceEventView[] = [];
+const NOOP = () => undefined;
+
+const IDLE_SUMMARY: PodResourceSummaryView = { status: "idle", ...EMPTY_SUMMARY };
+const LOADING_SUMMARY: PodResourceSummaryView = { status: "loading", ...EMPTY_SUMMARY };
+const IDLE_EVENTS: ResourceEventsView = { status: "idle", items: EMPTY_EVENTS, retry: NOOP };
+const LOADING_EVENTS: ResourceEventsView = { status: "loading", items: EMPTY_EVENTS, retry: NOOP };
+
+function text(value: unknown): string | null {
+  return typeof value === "string" && value.trim() !== "" ? value : null;
+}
+
+function isAbortError(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "name" in error
+    && (error as { name?: unknown }).name === "AbortError";
+}
+
+function isUnavailable(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "status" in error
+    && (error as { status?: unknown }).status === 404;
+}
+
+function toSummary(detail: InventoryResourceDetail): Omit<PodResourceSummaryView, "status"> {
+  const summary = detail.resource.summary;
+  return {
+    nodeName: text(summary[POD_SUMMARY_KEYS.nodeName]),
+    podIp: text(summary[POD_SUMMARY_KEYS.podIp]),
+    hostIp: text(summary[POD_SUMMARY_KEYS.hostIp]),
+    serviceAccountName: text(summary[POD_SUMMARY_KEYS.serviceAccountName]),
+  };
+}
+
+export function usePodResourceDetail(
+  enabled: boolean,
+  clusterId: string | null,
+  namespace: string | null,
+  name: string,
+): PodResourceDetailView {
+  const cid = clusterId?.trim() ?? "";
+  const ns = namespace?.trim() || null;
+  const resourceName = name.trim();
+  const key = enabled && cid && ns && resourceName
+    ? [cid, ns, resourceName].join(DETAIL_KEY_SEPARATOR)
+    : "";
+  const [nonce, setNonce] = useState(0);
+  const [state, setState] = useState<PodResourceDetailState>({
+    key: "",
+    status: "idle",
+    summary: EMPTY_SUMMARY,
+    events: EMPTY_EVENTS,
+  });
+
+  useEffect(() => {
+    if (!key || ns === null) return;
+    const controller = new AbortController();
+    void getInventoryResourceDetail(cid, {
+      resourceType: POD_RESOURCE_TYPE,
+      kind: POD_KIND,
+      namespace: ns,
+      name: resourceName,
+    }, { relatedLimit: RESOURCE_DETAIL_RELATED_LIMIT, eventLimit: RESOURCE_DETAIL_EVENT_LIMIT }, controller.signal)
+      .then((detail) => {
+        if (controller.signal.aborted) return;
+        setState({
+          key,
+          status: "ready",
+          summary: toSummary(detail),
+          events: detail.events.map(toResourceEvent),
+        });
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted || isAbortError(error)) return;
+        setState({
+          key,
+          status: isUnavailable(error) ? "unavailable" : "error",
+          summary: EMPTY_SUMMARY,
+          events: EMPTY_EVENTS,
+        });
+      });
+    return () => controller.abort();
+  }, [cid, key, nonce, ns, resourceName]);
+
+  const retry = useCallback(() => {
+    setState((previous) => ({
+      key: previous.key,
+      status: "loading",
+      summary: EMPTY_SUMMARY,
+      events: EMPTY_EVENTS,
+    }));
+    setNonce((value) => value + 1);
+  }, []);
+
+  return useMemo(() => {
+    if (!key) return {
+      status: "idle",
+      summary: IDLE_SUMMARY,
+      events: IDLE_EVENTS,
+      retry,
+    };
+    if (state.key !== key) return {
+      status: "loading",
+      summary: LOADING_SUMMARY,
+      events: LOADING_EVENTS,
+      retry,
+    };
+    const items = state.status === "ready" ? state.events : EMPTY_EVENTS;
+    return {
+      status: state.status,
+      summary: { status: state.status, ...state.summary },
+      events: { status: state.status, items, retry },
+      retry,
+    };
+  }, [key, retry, state]);
+}
