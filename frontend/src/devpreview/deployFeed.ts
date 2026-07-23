@@ -22,9 +22,11 @@ import { useVisibleRefreshClock } from "../shared/data/useVisibleRefreshClock";
 export const DEPLOY_LIST_POLL_MS = 15_000;
 /** 배포가 진행 중(관측된 활성 상태)일 때의 가속 폴링 주기. */
 export const DEPLOY_LIST_ACTIVE_POLL_MS = 5_000;
-/** 서버가 보고한 진행형 상태 — 이 상태가 하나라도 관측되면 폴링을 가속한다. */
+/** 폴링을 가속할 일시적 진행 상태 — pending·waiting_for_approval 은 몇 시간씩
+ * 지속될 수 있는 대기 상태라 제외한다(useApplications 는 셸 전역에서도 쓰여
+ * 가속이 앱 전체 요청량으로 번진다). */
 const ACTIVE_DELIVERY_STATUSES = new Set([
-  "pending", "progressing", "running", "waiting_for_approval",
+  "progressing", "running", "starting", "in_progress",
 ]);
 const HELM_LIST_MIN_POLL_MS = 5_000;
 const HELM_LIST_MAX_POLL_MS = 60_000;

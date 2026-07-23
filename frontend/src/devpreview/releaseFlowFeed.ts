@@ -16,9 +16,13 @@ import { DEPLOY_LIST_ACTIVE_POLL_MS, DEPLOY_LIST_POLL_MS } from "./deployFeed";
 // 사용자 확인 후 executeRunAction/startPlan 을 통해서만 발생한다. 응답 외의
 // 어떤 낙관적 상태도 만들지 않는다 — 성공 후 즉시 서버를 재조회한다.
 
-/** 서버가 보고하는 진행형 런 상태 — 하나라도 관측되면 폴링을 가속한다. */
+/** 목록 상단 고정 등 "진행 중" 분류용 런 상태. */
 const ACTIVE_RUN_STATUSES = new Set([
   "running", "in_progress", "pending", "starting", "progressing", "waiting_for_approval",
+]);
+/** 폴링 가속용 일시적 실행 상태 — 장기 대기(pending·approval)는 15초 유지. */
+const TRANSIENT_RUN_STATUSES = new Set([
+  "running", "in_progress", "starting", "progressing",
 ]);
 
 export function isActiveRunStatus(status: string | null | undefined): boolean {
@@ -51,7 +55,8 @@ export function useReleaseFlow(enabled: boolean): ReleaseFlowFeed {
     runs: ReleaseRunApi[];
   }>({ status: "loading", plans: [], runs: [] });
   const [manualRevision, setManualRevision] = useState(0);
-  const active = state.runs.some((run) => isActiveRunStatus(runEffectiveStatus(run)));
+  const active = state.runs.some((run) =>
+    TRANSIENT_RUN_STATUSES.has(runEffectiveStatus(run).trim().toLowerCase()));
   const { revision } = useVisibleRefreshClock(
     enabled,
     active ? DEPLOY_LIST_ACTIVE_POLL_MS : DEPLOY_LIST_POLL_MS,
