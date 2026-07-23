@@ -1653,6 +1653,10 @@ function App() {
   const contract = useDevpreviewContracts();
   // 헤더 계정/워크스페이스/로그아웃 — 실 GET /api/auth/session(하드코딩 세션 제거).
   const session = useSession();
+  // 인증 세션이 워크스페이스 정체성의 기준이다. 클러스터 목록은 비어 있거나 늦게
+  // 도착할 수 있으므로 보조 근거로만 사용하고, 값이 확정되기 전에는 운영 스모크가
+  // 완성된 identity로 오인하지 않도록 별도의 loading slot을 노출한다.
+  const workspaceIdentityId = session.workspaceId ?? contract.workspaceId;
   const clusterIds = useMemo(() => contract.clusters.map((cluster) => cluster.id), [contract.clusters]);
   const incidentClusterIds = useMemo(
     () => activeIncidentClusterIds(contract.clusters),
@@ -2138,11 +2142,11 @@ function App() {
       <header ref={headerRef} style={{ position: "sticky", top: 0, zIndex: 74, display: "flex", alignItems: "center", flexWrap: "wrap", gap: 10, padding: "12px 18px", borderBottom: `1px solid ${UI.line}`, background: UI.card }}>
         {/* 워크스페이스 — 정체성은 항상 맨 왼쪽(D20). 데모 세계는 워크스페이스 1개라 사실 표시만 */}
         <span
-          data-slot="workspace-identity"
-          data-workspace-id={contract.workspaceId ?? ""}
+          data-slot={workspaceIdentityId ? "workspace-identity" : "workspace-identity-loading"}
+          data-workspace-id={workspaceIdentityId ?? ""}
           style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0, maxWidth: "30%", fontSize: TYPE.body, fontWeight: 600, color: UI.ink, paddingRight: 12, borderRight: `1px solid ${UI.line2}`, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
         >
-          <Building2 size={14} style={{ color: UI.ink3 }} />{workspaceLabel(contract.workspaceId)}
+          <Building2 size={14} style={{ color: UI.ink3 }} />{workspaceLabel(workspaceIdentityId)}
         </span>
         {/* 새로고침 — 내부/기술 표기("실제 계약") 텍스트 제거, 상태점 + 아이콘만(P1-10) */}
         <button type="button" className="product-focusable product-control" aria-label="라이브 데이터 새로고침" onClick={contract.refresh}
