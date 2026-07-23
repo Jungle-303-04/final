@@ -1326,6 +1326,7 @@ export function ConnectWizard({
         .modal-surface { background: var(--surface); }
         .notif { background: var(--surface); box-shadow: 0 14px 34px -10px rgba(17,19,24,0.24), 0 2px 8px rgba(17,19,24,0.06); }
         .field { background: var(--fill); border: 1px solid transparent; transition: background .18s, border-color .18s, box-shadow .18s; }
+        .field:hover { background: var(--fill-2); }
         .field:focus-within { background: ${UI.card}; border-color: var(--soft-b); box-shadow: 0 0 0 4px rgba(10,132,255,0.12); }
         /* 트레이형 리스트: 회색 트레이 + 선택 시 흰 카드가 떠오름 */
         .inset { background: var(--fill); border-radius: 18px; padding: 6px; display: flex; flex-direction: column; gap: 4px; }
@@ -1341,11 +1342,12 @@ export function ConnectWizard({
         .card-on, .card-on:hover { background: ${UI.card}; border-color: var(--soft-b); box-shadow: 0 1px 2px rgba(17,19,24,0.06), 0 6px 16px -8px rgba(17,19,24,0.14); }
         .cmd { background: var(--fill); border: none; }
         .stat { display: flex; background: var(--fill); border-radius: 16px; overflow: hidden; }
-        .btn-primary { background: var(--blue); color: ${UI.card}; box-shadow: 0 8px 18px -8px rgba(10,132,255,0.55); transition: background .16s, transform .12s; }
+        .btn-primary { background: var(--blue); color: ${UI.card}; box-shadow: 0 8px 18px -8px rgba(10,132,255,0.55); cursor: pointer; transition: background .16s, transform .12s; }
         .btn-primary:not(:disabled):hover { background: var(--action-hover); }
         .btn-primary:not(:disabled):active { transform: scale(0.99); }
-        .btn-ghost { background: var(--fill); border: none; transition: background .16s; }
-        .btn-ghost:hover { background: var(--fill-2); }
+        .btn-ghost { background: var(--fill); border: none; cursor: pointer; transition: background .16s, transform .12s; }
+        .btn-ghost:not(:disabled):hover { background: var(--fill-2); }
+        .btn-ghost:not(:disabled):active { transform: translateY(1px); }
         .opsia-connect button:focus-visible {
           outline: none;
           box-shadow: 0 0 0 3px var(--focus-ring) !important;

@@ -197,7 +197,6 @@ function RepositoryRow({
                       color: UI.card,
                       fontSize: TYPE.label,
                       fontWeight: 600,
-                      cursor: busy ? "default" : "pointer",
                     }}
                   >
                     {busy ? "해제 중…" : "해제 확정"}
@@ -216,7 +215,6 @@ function RepositoryRow({
                       color: UI.ink2,
                       fontSize: TYPE.label,
                       fontWeight: 600,
-                      cursor: busy ? "default" : "pointer",
                     }}
                   >
                     취소
