@@ -216,7 +216,7 @@ function ClusterRow({ cl, summary, topology, onOpen }: {
         display: "flex", flexDirection: "column", gap: 12, width: "100%", height: "100%", textAlign: "left", cursor: "pointer",
         background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 16, padding: 16, boxShadow: "none", boxSizing: "border-box",
       }}>
-      <div style={{ display: "flex", alignItems: "flex-start", gap: 10, minWidth: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
         <span style={{ width: 30, height: 30, borderRadius: 9, background: `linear-gradient(135deg, ${BRAND.awsA}, ${BRAND.awsB})`, display: "grid", placeItems: "center", flexShrink: 0 }}>
           <AwsIcon size={17} style={{ color: UI.card }} />
         </span>
@@ -550,15 +550,15 @@ export function NodeCard({ node, pods, problemPodCount, onOpen, onTip }: {
         display: "flex", flexDirection: "column", gap: 10, width: "100%", height: "100%", textAlign: "left", cursor: "pointer",
         background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 16, padding: 16, boxShadow: "none", boxSizing: "border-box", overflow: "hidden", minHeight: 0,
       }}>
-      <div style={{ display: "flex", alignItems: "flex-start", gap: 8, minWidth: 0 }}>
-        <span style={{ width: 30, height: 30, borderRadius: 8, background: UI.bg2, display: "grid", placeItems: "center", flexShrink: 0 }}>
-          <Monitor size={18} strokeWidth={2} style={{ color: UI.ink2 }} />
+      <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+        <span style={{ width: 38, height: 38, borderRadius: 9, background: UI.bg2, display: "grid", placeItems: "center", flexShrink: 0 }}>
+          <Monitor size={24} strokeWidth={2} style={{ color: UI.ink2 }} />
         </span>
         <div style={{ minWidth: 0, flex: 1 }}>
-          <div title={node.name} style={{ fontSize: TYPE.body, fontWeight: 600, letterSpacing: "-0.02em", color: UI.ink, fontFamily: MONO, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", lineHeight: 1.35 }}>{node.name}</div>
-          {showStatus && <div style={{ fontSize: TYPE.caption, color: UI.ink3, marginTop: 2 }}>{statusText}</div>}
+          <div title={node.name} style={{ fontSize: TYPE.section, fontWeight: 600, letterSpacing: "-0.02em", color: UI.ink, fontFamily: MONO, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", lineHeight: 1.35 }}>{node.name}</div>
+          {showStatus && <div style={{ fontSize: TYPE.label, color: UI.ink3, marginTop: 1 }}>{statusText}</div>}
         </div>
-        {sev !== "ok" && <span style={{ width: 8, height: 8, borderRadius: 999, background: sevColor(sev), flexShrink: 0, marginTop: 4 }} />}
+        {sev !== "ok" && <span style={{ width: 8, height: 8, borderRadius: 999, background: sevColor(sev), flexShrink: 0, alignSelf: "flex-start", marginTop: 4 }} />}
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
         {sev !== "ok" && <HealthChip health={node.health} />}
