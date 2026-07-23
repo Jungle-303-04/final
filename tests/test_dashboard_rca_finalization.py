@@ -1,0 +1,161 @@
+from __future__ import annotations
+
+from domains.dashboard.repository import (
+    OPEN_INCIDENT_STATUSES,
+    issue_detail_projection,
+    timeline_update_from_event,
+)
+from domains.rca.models import RcaReport
+from domains.rca.repository import rca_report_storage_projection
+from packages.contracts.event_bus.interfaces import EventEnvelope
+from packages.contracts.event_bus.subjects import EventSubject
+
+
+def event(subject: EventSubject, payload: dict[str, object]) -> EventEnvelope:
+    return EventEnvelope(
+        event_id="event-1",
+        subject=subject.value,
+        source="test",
+        correlation_id="correlation-1",
+        causation_id=None,
+        created_at="2026-07-23T21:30:03Z",
+        payload=payload,
+        workspace_id="default",
+    )
+
+
+def test_rca_report_storage_projection_drops_payload_only_first_seen_at() -> None:
+    projection = rca_report_storage_projection(
+        {
+            "incident": {
+                "incident_id": "incident-1",
+                "cluster_id": "cluster-1",
+                "symptom": "Readiness probe response failure",
+                "severity": "medium",
+                "first_seen_at": "2026-07-23T20:27:24Z",
+                "resource_kind": "ReplicaSet",
+                "resource_name": "game-room-0-774544b4fb",
+                "namespace": "sandbox",
+            },
+            "rca_detail": {
+                "confidence": 1.0,
+                "reason": "candidate authority stayed unready after committed cutover",
+            },
+        }
+    )
+
+    assert "first_seen_at" not in projection
+    assert set(projection).issubset(set(RcaReport.__table__.c.keys()))
+
+
+def test_analysis_blocked_projects_its_diagnosis_before_recovery_events() -> None:
+    row = timeline_update_from_event(
+        event(
+            EventSubject.RCA_ANALYSIS_BLOCKED,
+            {
+                "workspace_id": "default",
+                "evidence_ref": "object://evidence/tempo.json",
+                "incident": {
+                    "incident_id": "incident-tempo",
+                    "cluster_id": "cluster-1",
+                    "namespace": "target",
+                    "resource_kind": "StatefulSet",
+                    "resource_name": "tempo",
+                    "symptom": "CrashLoopBackOff",
+                },
+                "rca_detail": {
+                    "root_cause": "oom_killed",
+                    "confidence": 0.75,
+                    "supporting_evidence": [
+                        "kubernetes:cluster_resource_state",
+                        "logs:related_logs",
+                    ],
+                    "missing_evidence": ["metrics:telemetry_metrics"],
+                },
+            },
+        )
+    )
+
+    assert row is not None
+    assert row["status"] == "analysis_blocked"
+    assert row["root_cause"] == "oom_killed"
+    assert row["confidence"] == 0.75
+    assert row["supporting_evidence"] == [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+    ]
+    assert "analysis_blocked" in OPEN_INCIDENT_STATUSES
+
+
+def test_approval_payload_promotes_nested_diagnosis_and_operator_copy() -> None:
+    payload = {
+        "workspace_id": "default",
+        "recommendation": "user_selection_required",
+        "details": {
+            "plan": {
+                "summary": (
+                    "oom_killed 후보가 가장 높은 점수로 평가되었고 추가 근거 수집이 필요합니다."
+                ),
+                "candidates": [
+                    {
+                        "title": "대상 워크로드 재시작",
+                        "description": "낮은 위험도의 임시 완화 조치입니다.",
+                        "draft": {
+                            "reason": "Kubernetes 상태와 로그가 OOM 후보를 지지합니다.",
+                            "params": {
+                                "root_cause": "oom_killed",
+                                "confidence": 0.75,
+                            },
+                        },
+                    }
+                ],
+            },
+            "approval_summary": {
+                "recommended_candidate": {
+                    "title": "대상 워크로드 재시작",
+                }
+            },
+        },
+    }
+
+    row = timeline_update_from_event(event(EventSubject.APPROVAL_RECOMMENDED, payload))
+    detail = issue_detail_projection(payload)
+
+    assert row is not None
+    assert row["root_cause"] == "oom_killed"
+    assert row["confidence"] == 0.75
+    assert detail == {
+        "situation_summary": (
+            "oom_killed 후보가 가장 높은 점수로 평가되었고 추가 근거 수집이 필요합니다."
+        ),
+        "recommended_action_summary": "대상 워크로드 재시작",
+        "evidence_summary": "Kubernetes 상태와 로그가 OOM 후보를 지지합니다.",
+        "evidence_bundle_summary": (
+            "oom_killed 후보가 가장 높은 점수로 평가되었고 추가 근거 수집이 필요합니다."
+        ),
+    }
+
+
+def test_completed_payload_projects_narrative_copy_for_issue_detail() -> None:
+    detail = issue_detail_projection(
+        {
+            "incident": {"summary": "room-0 authority handoff is stalled"},
+            "root_cause": "handoff_authority_stalled",
+            "action": "approval_required",
+            "narrative": {
+                "executive_summary": "커밋된 Candidate 권위가 Ready로 확정되지 않았습니다.",
+                "recommended_action": "동일 Pod를 다음 epoch로 전진 복구합니다.",
+            },
+            "rca_detail": {
+                "evidence_summary": "candidate label과 readiness 503이 함께 관측됐습니다.",
+                "evidence_bundle_summary": "5개 provider가 같은 창에서 완료됐습니다.",
+            },
+        }
+    )
+
+    assert detail == {
+        "situation_summary": "커밋된 Candidate 권위가 Ready로 확정되지 않았습니다.",
+        "recommended_action_summary": "동일 Pod를 다음 epoch로 전진 복구합니다.",
+        "evidence_summary": "candidate label과 readiness 503이 함께 관측됐습니다.",
+        "evidence_bundle_summary": "5개 provider가 같은 창에서 완료됐습니다.",
+    }
