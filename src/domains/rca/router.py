@@ -45,6 +45,7 @@ from packages.contracts.auth import Actor
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.requests import (
     AgentEvidenceRequest,
+    AlertmanagerAlert,
     AlertmanagerWebhookRequest,
     RcaRuleValidateRequest,
     RcaTestRunCreateRequest,
@@ -681,7 +682,140 @@ def build_alertmanager_evidence_body(
     )
 
 
+def alertmanager_alert_event_id(
+    workspace_id: str,
+    cluster_id: str,
+    alert: AlertmanagerAlert,
+) -> str:
+    labels = alert.labels
+    identity = "|".join(
+        (
+            workspace_id,
+            cluster_id,
+            alert.fingerprint,
+            alert.startsAt,
+            str(labels.get("alertname") or ""),
+        )
+    )
+    return f"ale-am-{hashlib.sha256(identity.encode()).hexdigest()[:32]}"
+
+
+def build_alertmanager_alert_event(
+    workspace_id: str,
+    cluster_id: str,
+    alert: AlertmanagerAlert,
+    *,
+    incident_id: str | None,
+    observed_at: datetime | None = None,
+) -> dict[str, Any]:
+    labels = {str(key): str(value) for key, value in alert.labels.items()}
+    annotations = {str(key): str(value) for key, value in alert.annotations.items()}
+    alert_name = (labels.get("alertname") or "External alert")[:120]
+    namespace = (labels.get("namespace") or "").strip()[:253] or None
+    if labels.get("pod"):
+        kind, name = "Pod", labels["pod"]
+    elif labels.get("deployment"):
+        kind, name = "Deployment", labels["deployment"]
+    elif labels.get("statefulset"):
+        kind, name = "StatefulSet", labels["statefulset"]
+    elif labels.get("service"):
+        kind, name = "Service", labels["service"]
+    elif labels.get("room"):
+        kind, name = "GameRoom", labels["room"]
+    else:
+        kind = labels.get("kind") or "Workload"
+        name = labels.get("instance") or alert_name
+    subject = {
+        "cluster": cluster_id[:512],
+        "namespace": namespace,
+        "kind": kind[:253],
+        "name": name[:253],
+    }
+    severity = (labels.get("severity") or "warning").strip().lower()
+    if severity not in {"critical", "high", "medium", "low", "warning", "info"}:
+        severity = "warning"
+    status = "resolved" if alert.status.strip().lower() == "resolved" else "firing"
+    fired_at = _alertmanager_timestamp(alert.startsAt) or observed_at or datetime.now(UTC)
+    resolved_at = (
+        (_alertmanager_timestamp(alert.endsAt) or observed_at or datetime.now(UTC))
+        if status == "resolved"
+        else None
+    )
+    summary = (
+        annotations.get("summary")
+        or annotations.get("description")
+        or f"{alert_name} reported by Alertmanager"
+    )[:1000]
+    subject_key = hashlib.sha256(
+        json.dumps(subject, ensure_ascii=True, separators=(",", ":"), sort_keys=True).encode()
+    ).hexdigest()
+    return {
+        "event_id": alertmanager_alert_event_id(workspace_id, cluster_id, alert),
+        "workspace_id": workspace_id,
+        "rule_id": None,
+        "rule_name": alert_name,
+        "source": "alertmanager",
+        "severity": severity,
+        "subject_key": subject_key,
+        "subject": subject,
+        "fired_at": fired_at,
+        "resolved_at": resolved_at,
+        "status": status,
+        "observed_value": None,
+        "threshold": None,
+        "evidence": [
+            {
+                "type": "alertmanager",
+                "metric": alert_name,
+                "observed_at": fired_at.isoformat(),
+                "subject": subject,
+                "value": None,
+                "summary": summary,
+                "link": None,
+            }
+        ],
+        "incident_id": incident_id,
+    }
+
+
+def _alertmanager_timestamp(value: str) -> datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed.replace(tzinfo=UTC) if parsed.tzinfo is None else parsed
+
+
+async def persist_alertmanager_alert_events(
+    db: Any,
+    workspace_id: str,
+    cluster_id: str,
+    payload: AlertmanagerWebhookRequest,
+    *,
+    incident_id: str | None,
+) -> None:
+    upsert = getattr(db, "upsert_external_alert_event", None)
+    if not callable(upsert):
+        raise RuntimeError("external alert event repository is unavailable")
+    observed_at = datetime.now(UTC)
+    for alert in payload.alerts:
+        await db_call(
+            upsert,
+            build_alertmanager_alert_event(
+                workspace_id,
+                cluster_id,
+                alert,
+                incident_id=incident_id,
+                observed_at=observed_at,
+            ),
+        )
+
+
 @router.post(gateway_routes.ALERTMANAGER_WEBHOOK_PATH, response_model=AcceptedResponse)
+@router.post("/rca/alertmanager", response_model=AcceptedResponse, include_in_schema=False)
+@router.post("/api/rca/alertmanager", response_model=AcceptedResponse, include_in_schema=False)
 async def alertmanager_webhook(
     payload: AlertmanagerWebhookRequest,
     request: Request,
@@ -695,7 +829,14 @@ async def alertmanager_webhook(
     if registration is None:
         raise HTTPException(status_code=HTTP_NOT_FOUND, detail=CLUSTER_NOT_REGISTERED)
 
-    if not any(alert.status == "firing" for alert in payload.alerts):
+    if not any(alert.status.strip().lower() == "firing" for alert in payload.alerts):
+        await persist_alertmanager_alert_events(
+            db,
+            workspace_id,
+            cluster_id,
+            payload,
+            incident_id=None,
+        )
         # resolved 만 담긴 통지는 수락만 하고 인시던트를 열지 않는다.
         return AcceptedResponse(accepted=True, event_id="", correlation_id="")
 
@@ -711,6 +852,13 @@ async def alertmanager_webhook(
     )
     existing = await db_call(db.get_evidence_window, evidence_key)
     if existing:
+        await persist_alertmanager_alert_events(
+            db,
+            workspace_id,
+            cluster_id,
+            payload,
+            incident_id=str(existing["correlation_id"]),
+        )
         return AcceptedResponse(
             accepted=True,
             event_id=existing["event_id"],
@@ -726,6 +874,13 @@ async def alertmanager_webhook(
         agent_id=None,
         event_envelope=event_envelope,
         payload=evidence_body.to_body(),
+    )
+    await persist_alertmanager_alert_events(
+        db,
+        workspace_id,
+        cluster_id,
+        payload,
+        incident_id=str(recorded["correlation_id"]),
     )
     return AcceptedResponse(
         accepted=True,

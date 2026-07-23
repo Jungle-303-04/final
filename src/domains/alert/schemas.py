@@ -187,7 +187,7 @@ class AlertEventResponse(StrictModel):
     event_id: str = Field(min_length=1, max_length=120)
     rule_id: str | None = Field(default=None, max_length=120)
     rule_name: str | None = Field(default=None, max_length=120)
-    source: Literal["opsia", "alertmanager"]
+    source: Literal["opsia", "alertmanager", "incident"]
     severity: AlertEventSeverity
     subject: AlertEventSubject
     fired_at: datetime

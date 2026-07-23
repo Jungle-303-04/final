@@ -1,7 +1,7 @@
 // ⚠ 데모 · 통합 리소스 — 리소스 종류 인덱스(전체 택소노미) + 종류별 표 + 물리/관계 관점.
 // 병합 규칙: 좌측 = 무엇을(종류) · 상단 관점 = 어떻게(물리/관계/목록).
 // 워크로드·노드 계열은 관점 전환이 가능하고, 나머지는 종류별 전용 표로 정보를 잃지 않게 표시.
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import {
   Server, FileCog, Network, Globe, Search, KeyRound,
@@ -39,7 +39,12 @@ import { useSession, sessionInitial } from "./devpreview/sessionFeed";
 import { useInventoryNamespaces } from "./devpreview/inventoryNamespacesFeed";
 import { useChangeTimeline } from "./devpreview/changeTimelineFeed";
 import { useApplications } from "./devpreview/deployFeed";
-import { useAlertEvents } from "./devpreview/alertsFeed";
+import {
+  isIncidentNotification,
+  useAlertEvents,
+  type AlertEventView,
+} from "./devpreview/alertsFeed";
+import { acknowledgeAlertEvent } from "./api/alert-events";
 import { useRelationTopology, type RelationNodeView } from "./devpreview/relationTopologyFeed";
 import { logout as logoutApi } from "./devpreview/sessionFeed";
 import { useInventoryResourcesAcrossClusters, useInventoryKindCounts, kindToResourceType } from "./devpreview/inventoryResourcesFeed";
@@ -1635,15 +1640,97 @@ function App() {
   // 세션 알림 — 위저드 연결·AI 규칙 생성 등 실제 사용자 행동의 결과
   const [notes, setNotes] = useState<SessionNote[]>([]);
   const noteSeq = useRef(0);
-  const liveAlerts = alertEvents.status === "ready" ? alertEvents.items : [];
-  const alertTotal = liveAlerts.length + notes.length;
+  const [readAlertIds, setReadAlertIds] = useState<Set<string>>(() => new Set());
+  const liveAlerts = useMemo(
+    () => (alertEvents.status === "ready" ? alertEvents.items : []),
+    [alertEvents],
+  );
+  const unreadAlerts = useMemo(
+    () => liveAlerts.filter(
+      (event) => event.status === "firing" && !readAlertIds.has(event.eventId),
+    ),
+    [liveAlerts, readAlertIds],
+  );
+  const alertTotal = unreadAlerts.length + notes.length;
+  const alertBadge = alertTotal > 5 ? "5+" : String(alertTotal);
+  const [bellRingVersion, setBellRingVersion] = useState(0);
   const [toasts, setToasts] = useState<{ id: number; title: string; sub: string; tone: "ok" | "crit" }[]>([]);
   const toastSeq = useRef(0);
-  const pushToast = (t: { title: string; sub: string; tone: "ok" | "crit" }) => {
+  const pushToast = useCallback((t: { title: string; sub: string; tone: "ok" | "crit" }) => {
     const id = ++toastSeq.current;
-    setToasts((cur) => [...cur, { id, ...t }]);
+    setToasts((cur) => [...cur, { id, ...t }].slice(-5));
     window.setTimeout(() => setToasts((cur) => cur.filter((x) => x.id !== id)), 3800);
-  };
+  }, []);
+  const ringBell = useCallback(() => {
+    setBellRingVersion((version) => version + 1);
+  }, []);
+  const markAlertRead = useCallback((event: AlertEventView) => {
+    setReadAlertIds((current) => {
+      const next = new Set(current);
+      next.add(event.eventId);
+      return next;
+    });
+    void acknowledgeAlertEvent(event.eventId).catch(() => {
+      setReadAlertIds((current) => {
+        const next = new Set(current);
+        next.delete(event.eventId);
+        return next;
+      });
+      pushToast({
+        title: "알림 읽음 처리 실패",
+        sub: "잠시 후 다시 시도해 주세요.",
+        tone: "crit",
+      });
+    });
+  }, [pushToast]);
+  const markAllAlertsRead = useCallback(() => {
+    const allIds = unreadAlerts.map((event) => event.eventId);
+    setReadAlertIds((current) => new Set([...current, ...allIds]));
+    setNotes([]);
+    if (unreadAlerts.length === 0) return;
+    void Promise.allSettled(
+      unreadAlerts.map((event) => acknowledgeAlertEvent(event.eventId)),
+    ).then((results) => {
+      const failedIds = results.flatMap((result, index) =>
+        result.status === "rejected" ? [unreadAlerts[index].eventId] : []
+      );
+      if (failedIds.length === 0) return;
+      setReadAlertIds((current) => {
+        const next = new Set(current);
+        for (const eventId of failedIds) next.delete(eventId);
+        return next;
+      });
+      pushToast({
+        title: "일부 알림을 읽음 처리하지 못했습니다",
+        sub: "잠시 후 다시 시도해 주세요.",
+        tone: "crit",
+      });
+    });
+  }, [pushToast, unreadAlerts]);
+  const notifiedIncidentAlerts = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    if (alertEvents.status !== "ready") return;
+    const currentIds = new Set(liveAlerts.map((event) => event.eventId));
+    if (notifiedIncidentAlerts.current === null) {
+      notifiedIncidentAlerts.current = currentIds;
+      return;
+    }
+    let receivedNewIncident = false;
+    for (const event of liveAlerts) {
+      if (
+        notifiedIncidentAlerts.current.has(event.eventId)
+        || !isIncidentNotification(event)
+      ) continue;
+      receivedNewIncident = true;
+      pushToast({
+        title: `장애 발생 · ${event.ruleName ?? event.name}`,
+        sub: `${event.cluster} · ${event.kind} ${event.name}`,
+        tone: "crit",
+      });
+    }
+    if (receivedNewIncident) ringBell();
+    for (const eventId of currentIds) notifiedIncidentAlerts.current.add(eventId);
+  }, [alertEvents.status, liveAlerts, pushToast, ringBell]);
   // 목록(⋮ 메뉴)에서 연 연결 해제 대상 — 상세 뷰와 같은 다이얼로그를 제어형으로 연다.
   const [listDisconnectClusterId, setListDisconnectClusterId] = useState<string | null>(null);
   const listDisconnectChoice = useMemo(() => {
@@ -1722,7 +1809,7 @@ function App() {
       }
       window.setTimeout(() => setConnectModal(null), 400); // 연결 완료 → 모달 닫힘
     }
-  }), []);
+  }), [pushToast]);
   // 실 알림 이벤트의 절대 발생시각(월/일 HH:MM). Date.now() 상대시각은 렌더 순수성 위반이라 금지.
   const alertTime = (iso: string) => {
     const d = new Date(iso);
@@ -1851,20 +1938,32 @@ function App() {
         <span style={{ position: "relative" }}>
           <button type="button" className="gnav product-focusable product-control" aria-label="알림 센터 열기" aria-expanded={bellOpen} onClick={() => { setBellOpen((open) => !open); setMeOpen(false); }}
             style={{ width: 30, height: 30, borderRadius: 999, border: "none", background: bellOpen ? blueA(0.1) : inkA(0.045), color: bellOpen ? BLUE : UI.ink2, cursor: "pointer", display: "grid", placeItems: "center" }}>
-            <Bell size={14} />
+            <motion.span key={bellRingVersion}
+              initial={{ rotate: 0, scale: 1 }}
+              animate={bellRingVersion > 0 ? { rotate: [0, -20, 18, -14, 10, -6, 0], scale: [1, 1.12, 1.08, 1.1, 1.04, 1] } : { rotate: 0, scale: 1 }}
+              transition={{ duration: 0.72, ease: "easeInOut" }}
+              style={{ display: "grid", placeItems: "center", transformOrigin: "50% 12%" }}>
+              <Bell size={14} />
+            </motion.span>
           </button>
           {alertTotal > 0 && (
-            <span style={{ position: "absolute", top: -3, right: -3, minWidth: 15, height: 15, borderRadius: 999, background: liveAlerts.some((e) => e.severity === "critical") ? HP.crit : HP.warn, color: UI.card, fontSize: TYPE.caption, fontWeight: 600, display: "grid", placeItems: "center", padding: "0 4px", border: `2px solid ${UI.card}`, boxSizing: "content-box" }}>{alertTotal}</span>
+            <span style={{ position: "absolute", top: -3, right: -3, minWidth: 15, height: 15, borderRadius: 999, background: unreadAlerts.some((e) => e.severity === "critical") ? HP.crit : HP.warn, color: UI.card, fontSize: TYPE.caption, fontWeight: 600, display: "grid", placeItems: "center", padding: "0 4px", border: `2px solid ${UI.card}`, boxSizing: "content-box" }}>{alertBadge}</span>
           )}
           <AnimatePresence>
             {/* 애플 알림 센터 스타일 — 반투명 블러 패널 위 카드 스택 */}
             {bellOpen && (
               <motion.div key="bell" initial={{ opacity: 0, y: -8, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -5, scale: 0.98 }} transition={SOFT}
                 style={{ position: "absolute", top: 38, right: 0, width: 344, zIndex: 65, background: GLASS, backdropFilter: "blur(26px)", WebkitBackdropFilter: "blur(26px)",
-                  border: `1px solid ${inkA(0.08)}`, borderRadius: RADIUS.sheet, boxShadow: `0 28px 70px -24px ${inkA(0.38)}`, padding: 10, maxHeight: `min(calc(70vh / ${PRESENT_SCALE}), 560px)`, overflowY: "auto", scrollbarGutter: "stable" }}>
-                <div style={{ display: "flex", alignItems: "baseline", gap: 7, padding: "2px 8px 8px" }}>
+                  border: `1px solid ${inkA(0.08)}`, borderRadius: RADIUS.sheet, boxShadow: `0 28px 70px -24px ${inkA(0.38)}`, padding: 10, maxHeight: `min(calc(70vh / ${PRESENT_SCALE}), 560px)`, overflowY: "auto", overscrollBehavior: "contain", scrollbarGutter: "stable", scrollbarWidth: "thin" }}>
+                <div style={{ position: "sticky", top: -10, zIndex: 2, display: "flex", alignItems: "center", gap: 7, margin: "-2px -2px 4px", padding: "4px 10px 10px", background: GLASS, backdropFilter: "blur(26px)", WebkitBackdropFilter: "blur(26px)" }}>
                   <span style={{ fontSize: TYPE.section, fontWeight: 700, letterSpacing: "-0.02em", color: UI.heading }}>알림</span>
                   <span style={{ fontSize: TYPE.caption, fontWeight: 600, color: UI.ink3 }}>{alertTotal}</span>
+                  {alertTotal > 0 && (
+                    <button type="button" onClick={markAllAlertsRead}
+                      style={{ marginLeft: "auto", border: "none", background: "transparent", color: BLUE, padding: "3px 4px", fontSize: TYPE.caption, fontWeight: 600, cursor: "pointer" }}>
+                      모두 읽음
+                    </button>
+                  )}
                 </div>
                 {(pendingCl.length + pendingRepo.length > 0) && (
                   <div style={{ padding: "0 8px 8px" }}>
@@ -1908,14 +2007,25 @@ function App() {
                       {notes.map((nn) => (
                         <Card key={`note-${nn.id}`} icon={nn.icon === "rule" ? Bell : Plug} tint={nn.icon === "rule" ? BLUE : HP.ok} title={nn.title} time="방금" body={nn.body} />
                       ))}
-                      {liveAlerts.map((ev) => (
+                      {unreadAlerts.map((ev) => (
                         <Card key={ev.eventId} icon={ev.severity === "critical" ? Activity : Server}
                           tint={ev.severity === "critical" ? HP.crit : HP.warn} title={ev.name} time={alertTime(ev.firedAt)}
                           body={[statusLabel(ev.severity), statusLabel(ev.status), ev.kind, ev.namespace, ev.ruleName].filter(Boolean).join(" · ")}
-                          right={ev.cluster} onClick={() => { setBellOpen(false); openRef(ev.kind, ev.name); }} />
+                          right={ev.cluster} onClick={() => {
+                            markAlertRead(ev);
+                            setBellOpen(false);
+                            if (ev.incidentId) {
+                              setSurface("issues");
+                              return;
+                            }
+                            openRef(ev.kind, ev.name);
+                          }} />
                       ))}
-                      {alertEvents.status === "unavailable" && notes.length === 0 && (
+                      {alertEvents.status === "unavailable" && unreadAlerts.length === 0 && notes.length === 0 && (
                         <div style={{ padding: "10px 12px", fontSize: TYPE.caption, color: UI.ink3 }}>알림 이벤트 관측 안 됨</div>
+                      )}
+                      {alertEvents.status !== "unavailable" && unreadAlerts.length === 0 && notes.length === 0 && (
+                        <div style={{ padding: "18px 12px", textAlign: "center", fontSize: TYPE.caption, color: UI.ink3 }}>새 알림이 없습니다</div>
                       )}
                     </>
                   );
@@ -2197,9 +2307,10 @@ function App() {
 
       {/* 작업 토스트 — 우측 상단 스택 */}
       <div style={{ position: "fixed", top: topH + 10, right: 16, zIndex: 80, display: "flex", flexDirection: "column", gap: 8, pointerEvents: "none" }}>
-        <AnimatePresence>
+        <AnimatePresence initial={false} mode="popLayout">
           {toasts.map((t) => (
-            <motion.div key={t.id} layout initial={{ opacity: 0, y: -14, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -8, scale: 0.98 }} transition={SOFT}
+            <motion.div key={t.id} layout="position" initial={{ opacity: 0, y: -14, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -8, scale: 0.98 }}
+              transition={{ ...SOFT, layout: { duration: 0.24, ease: [0.32, 0.72, 0, 1] } }}
               style={{ display: "flex", alignItems: "center", gap: 10, width: 340, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 13, padding: "11px 13px", boxShadow: `0 16px 44px -16px ${inkA(0.3)}`, pointerEvents: "auto" }}>
               <span style={{ width: 26, height: 26, borderRadius: 9, background: t.tone === "ok" ? HP.ok : HP.crit, display: "grid", placeItems: "center", flexShrink: 0 }}>
                 {t.tone === "ok" ? <Check size={14} color={UI.card} strokeWidth={3} /> : <AlertTriangle size={13} color={UI.card} />}

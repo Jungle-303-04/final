@@ -282,6 +282,93 @@ class AlertRuleRepository(DatabaseConnection):
             rows = conn.execute(statement).mappings().all()
         return [serialize_alert_event(dict(row)) for row in rows]
 
+    def upsert_external_alert_event(self, payload: JsonObject) -> JsonObject:
+        """Persist one Alertmanager occurrence using its deterministic event id.
+
+        Alertmanager repeats firing notifications until an alert resolves.  The
+        primary-key upsert keeps those repeats as one durable in-app alert and
+        lets the eventual resolved webhook update that same record.
+        """
+        table = AlertEvent.__table__
+        insert = pg_insert(table).values(**payload, updated_at=func.now())
+        statement = insert.on_conflict_do_update(
+            index_elements=[table.c.event_id],
+            set_={
+                "workspace_id": insert.excluded.workspace_id,
+                "rule_name": insert.excluded.rule_name,
+                "source": insert.excluded.source,
+                "severity": insert.excluded.severity,
+                "subject_key": insert.excluded.subject_key,
+                "subject": insert.excluded.subject,
+                "resolved_at": insert.excluded.resolved_at,
+                "status": insert.excluded.status,
+                "evidence": insert.excluded.evidence,
+                "incident_id": func.coalesce(insert.excluded.incident_id, table.c.incident_id),
+                "updated_at": func.now(),
+            },
+        ).returning(table)
+        with self.connection() as conn:
+            row = conn.execute(statement).mappings().one()
+        return serialize_alert_event(dict(row))
+
+    def upsert_incident_alert_event(self, payload: JsonObject) -> JsonObject:
+        """Persist one confirmed incident without duplicating its external alert.
+
+        Alertmanager writes its alert event before the asynchronous RCA pipeline
+        confirms the incident.  Reuse that earlier row when both records carry
+        the same incident id; otherwise create one replay-safe incident event.
+        Existing rows are intentionally left untouched so an event-bus replay
+        cannot undo an acknowledgement or a resolution.
+        """
+        table = AlertEvent.__table__
+        workspace_id = str(payload["workspace_id"])
+        incident_id = str(payload["incident_id"])
+        event_id = str(payload["event_id"])
+        with self.unit_of_work() as conn:
+            existing = (
+                conn.execute(
+                    select(table)
+                    .where(
+                        table.c.workspace_id == workspace_id,
+                        table.c.incident_id == incident_id,
+                    )
+                    .order_by(table.c.fired_at, table.c.event_id)
+                    .limit(1)
+                    .with_for_update()
+                )
+                .mappings()
+                .first()
+            )
+            if existing is not None:
+                return serialize_alert_event(dict(existing))
+
+            inserted = (
+                conn.execute(
+                    pg_insert(table)
+                    .values(**payload, updated_at=func.now())
+                    .on_conflict_do_nothing(index_elements=[table.c.event_id])
+                    .returning(table)
+                )
+                .mappings()
+                .first()
+            )
+            if inserted is not None:
+                return serialize_alert_event(dict(inserted))
+
+            replayed = (
+                conn.execute(
+                    select(table)
+                    .where(
+                        table.c.workspace_id == workspace_id,
+                        table.c.event_id == event_id,
+                    )
+                    .limit(1)
+                )
+                .mappings()
+                .one()
+            )
+        return serialize_alert_event(dict(replayed))
+
     def acknowledge_alert_event(
         self,
         workspace_id: str,
