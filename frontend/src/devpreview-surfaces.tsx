@@ -40,8 +40,8 @@ import {
   useApplications,
   useHelmReleases,
   type ApplicationRunView,
-  type WorkflowStepView,
 } from "./devpreview/deployFeed";
+import { ProgressNodeRail, type ProgressNode } from "./devpreview/ProgressNodeRail";
 import { DeployDetailHost, type DeployDetailTarget } from "./devpreview/DeployDetailPanel";
 import { DetailDrawer, DetailDrawerTabs } from "./devpreview/DetailDrawer";
 import { isActiveRunStatus, runEffectiveStatus, useReleaseActions, useReleaseFlow } from "./devpreview/releaseFlowFeed";
@@ -336,40 +336,14 @@ function workflowStepLabel(name: string): string {
   return WORKFLOW_STEP_KO[normalized] ?? name;
 }
 
-function workflowStepState(status: string | null): "done" | "observed" | "pending" {
+function isCompletedWorkflowStep(status: string | null): boolean {
   const normalized = status?.trim().toLowerCase() ?? "";
-  if (["succeeded", "completed", "ready"].includes(normalized)) return "done";
-  if (["failed", "error", "degraded", "blocked"].includes(normalized)) return "observed";
-  return "pending";
+  return ["succeeded", "completed", "ready"].includes(normalized);
 }
 
-function GateStage({ label, state, evidence, href, actionLabel, onAction }: {
-  label: string;
-  state: "done" | "observed" | "pending";
-  evidence: string;
-  href?: string | null;
-  actionLabel?: string | null;
-  onAction?: (() => void) | null;
-}) {
-  const tone = state === "done" ? TINT.ok : state === "observed" ? TINT.warn : { fg: UI.ink3, bg: UI.bg2, bd: UI.line };
-  const content = (
-    <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0, border: `1px solid ${tone.bd}`, background: tone.bg, borderRadius: 10, padding: "10px 12px" }}>
-      <span style={{ width: 22, height: 22, borderRadius: 999, display: "grid", placeItems: "center", flexShrink: 0, background: state === "done" ? TINT.ok.fg : state === "observed" ? TINT.warn.fg : inkA(0.08), color: UI.card }}>
-        {state === "done" ? <Check size={13} strokeWidth={3} /> : state === "observed" ? <AlertTriangle size={12} /> : <span style={{ width: 6, height: 6, borderRadius: 999, background: UI.ink3 }} />}
-      </span>
-      <div style={{ minWidth: 0, flex: 1 }}>
-        <div title={label} style={{ fontSize: TYPE.label, fontWeight: 600, color: state === "pending" ? UI.ink2 : tone.fg, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</div>
-        <div title={evidence} style={{ marginTop: 2, fontFamily: MONO, fontSize: TYPE.caption, color: UI.ink3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{evidence}</div>
-      </div>
-      {actionLabel && onAction ? (
-        <button type="button" className="product-focusable product-control" onClick={(event) => { event.preventDefault(); event.stopPropagation(); onAction(); }}
-          style={{ flexShrink: 0, border: `1px solid ${tone.bd}`, background: UI.card, color: tone.fg, borderRadius: 7, padding: "5px 8px", fontSize: TYPE.caption, fontWeight: 600, cursor: "pointer" }}>
-          {actionLabel}
-        </button>
-      ) : null}
-    </div>
-  );
-  return href ? <a href={href} target="_blank" rel="noreferrer" style={{ textDecoration: "none" }}>{content}</a> : content;
+function isFailedWorkflowStep(status: string | null): boolean {
+  const normalized = status?.trim().toLowerCase() ?? "";
+  return ["failed", "error", "degraded", "blocked"].includes(normalized);
 }
 
 function WorkflowEvidencePanel({ runs, repositoryRef, status, onRefresh, onOpenRef, onOpenIssues, onAskAi }: {
@@ -393,64 +367,76 @@ function WorkflowEvidencePanel({ runs, repositoryRef, status, onRefresh, onOpenR
       ?? detailString(failureStep.details, "resource_name")
       ?? detailString(failureStep.details, "name")
     : null;
+  const explicitCurrentIndex = latest?.currentStep
+    ? latest.steps.findIndex((step) => step.name.toLowerCase() === latest.currentStep?.toLowerCase())
+    : -1;
+  const firstIncompleteIndex = latest?.steps.findIndex((step) => !isCompletedWorkflowStep(step.status)) ?? -1;
+  const currentIndex = explicitCurrentIndex >= 0 ? explicitCurrentIndex : firstIncompleteIndex;
+  const progressSteps: ProgressNode[] = latest?.steps.map((step, index) => {
+    const failed = isFailedWorkflowStep(step.status)
+      || (index === currentIndex && isFailedWorkflowStep(latest.status));
+    const active = index === currentIndex && !isCompletedWorkflowStep(step.status) && !failed;
+    const isFailureStep = step === failureStep;
+    const waitingForApproval = active && latest.status === "waiting_for_approval";
+    const prUrl = step.name === "safe_pr" ? detailString(step.details, "pr_url") : null;
+    return {
+      id: `${step.name || "unnamed"}-${step.updatedAt ?? index}`,
+      label: workflowStepLabel(step.name),
+      state: isCompletedWorkflowStep(step.status) ? "complete"
+        : failed ? "failed"
+          : active ? "active"
+            : "pending",
+      statusLabel: koLabel(step.status),
+      description: step.message ? operationalMessageLabel(step.message) : null,
+      observedAt: step.updatedAt ? fromNow(step.updatedAt) : null,
+      activity: waitingForApproval ? "waiting" : active ? "running" : undefined,
+      tone: waitingForApproval ? "warning" : "info",
+      href: prUrl,
+      actionLabel: isFailureStep ? (failureResource ? "파드 상세" : "AI 분석")
+        : waitingForApproval ? "이슈/RCA"
+          : null,
+      onAction: isFailureStep ? (failureResource ? () => onOpenRef("Pod", failureResource) : onAskAi)
+        : waitingForApproval ? onOpenIssues
+          : null,
+    };
+  }) ?? [];
 
   return (
-    <Card pad={12}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 10 }}>
+    <Card pad={16}>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: TYPE.body, fontWeight: 600, color: UI.heading }}>최근 워크플로 실행</div>
-          <div style={{ marginTop: 2, fontFamily: MONO, fontSize: TYPE.caption, color: UI.ink3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {latest?.workflowRunId ?? (status === "loading" ? "실행 기록 확인 중" : "실행 기록 없음")}
-          </div>
+          <div style={{ fontSize: TYPE.section, fontWeight: 700, color: UI.heading }}>워크플로 진행</div>
+          <div style={{ marginTop: 4, fontSize: TYPE.caption, color: UI.ink3 }}>관측된 실행 단계와 현재 위치</div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           {latest && deliveryPill(latest.status)}
-          {latest?.status === "waiting_for_approval" && (
-            <button type="button" className="product-focusable product-control" onClick={onOpenIssues}
-              style={{ border: `1px solid ${TINT.warn.bd}`, background: TINT.warn.bg, color: TINT.warn.fg, borderRadius: 7, padding: "5px 8px", fontSize: TYPE.caption, fontWeight: 600, cursor: "pointer" }}>
-              이슈/RCA
-            </button>
-          )}
           <button className="product-focusable product-control" onClick={onRefresh} aria-label="워크플로 실행 새로고침" style={{ width: 30, height: 30, borderRadius: 8, border: `1px solid ${UI.line}`, background: UI.card, color: UI.ink2, cursor: "pointer", display: "grid", placeItems: "center" }}><RefreshCw size={14} /></button>
         </div>
       </div>
       {latest ? (
-        <>
-          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: latest.steps.length > 0 ? 10 : 0, fontSize: TYPE.caption, color: UI.ink3 }}>
-            <span>{latest.applicationName}</span>
-            {latest.repositoryRef && <span style={{ fontFamily: MONO }}>{latest.repositoryRef}</span>}
-            {latest.commitSha && <span style={{ fontFamily: MONO }}>commit {latest.commitSha}</span>}
-            {latest.updatedAt && <span>{fromNow(latest.updatedAt)}</span>}
+        <div style={{ display: "grid", gap: 14, marginTop: 14 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0, flexWrap: "wrap", borderTop: `1px solid ${UI.line2}`, paddingTop: 12 }}>
+            <span title={latest.workflowRunId} style={{ maxWidth: 360, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: UI.ink2, fontFamily: MONO, fontSize: TYPE.caption }}>
+              {latest.workflowRunId}
+            </span>
+            <span aria-hidden="true" style={{ color: UI.line }}>·</span>
+            <span style={{ color: UI.ink2, fontSize: TYPE.caption }}>{latest.applicationName}</span>
+            {latest.repositoryRef ? <span style={{ color: UI.ink2, fontFamily: MONO, fontSize: TYPE.caption }}>{latest.repositoryRef}</span> : null}
+            {latest.commitSha ? (
+              <span title={latest.commitSha} style={{ color: UI.ink2, fontFamily: MONO, fontSize: TYPE.caption }}>
+                commit {latest.commitSha.slice(0, 12)}
+              </span>
+            ) : null}
+            {latest.updatedAt ? <span style={{ marginLeft: "auto", color: UI.ink2, fontSize: TYPE.caption }}>{fromNow(latest.updatedAt)}</span> : null}
           </div>
-          {latest.steps.length > 0 ? (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 8 }}>
-              {latest.steps.map((step, index) => {
-                const prUrl = step.name === "safe_pr" ? detailString(step.details, "pr_url") : null;
-                const isFailureStep = step === failureStep;
-                const evidence = [
-                  koLabel(step.status),
-                  step.message ? operationalMessageLabel(step.message) : null,
-                  step.updatedAt ? fromNow(step.updatedAt) : null,
-                ].filter((value): value is string => value !== null && value !== "");
-                return (
-                  <GateStage
-                    key={`${step.name || "unnamed"}-${step.updatedAt ?? index}`}
-                    label={workflowStepLabel(step.name)}
-                    state={workflowStepState(step.status)}
-                    evidence={evidence.join(" · ") || "—"}
-                    href={prUrl}
-                    actionLabel={isFailureStep ? (failureResource ? "파드 상세" : "AI 분석") : null}
-                    onAction={isFailureStep ? (failureResource ? () => onOpenRef("Pod", failureResource) : onAskAi) : null}
-                  />
-                );
-              })}
-            </div>
+          {progressSteps.length > 0 ? (
+            <ProgressNodeRail steps={progressSteps} ariaLabel="워크플로 진행 단계" />
           ) : (
             <div style={{ fontSize: TYPE.label, color: UI.ink3 }}>단계 데이터 관측 안 됨</div>
           )}
-        </>
+        </div>
       ) : (
-        <div style={{ fontSize: TYPE.label, color: UI.ink3 }}>
+        <div style={{ marginTop: 14, borderTop: `1px solid ${UI.line2}`, paddingTop: 14, fontSize: TYPE.label, color: UI.ink3 }}>
           {status === "loading" ? "불러오는 중…" : status === "unavailable" ? "워크플로 실행을 불러오지 못했습니다." : "관측된 워크플로 실행 없음"}
         </div>
       )}
@@ -599,6 +585,12 @@ export function DeploySurface({ pendingRepos = [], repositoryFilter = null, onOp
             onRefresh={() => setRepositoryRefreshKey((key) => key + 1)}
             onOpenRef={onOpenRef} onOpenIssues={onOpenIssues} onAskAi={onAskAi} />
           <Card pad={0}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "13px 15px", borderBottom: `1px solid ${UI.line2}` }}>
+              <span style={{ color: UI.heading, fontSize: TYPE.body, fontWeight: 700 }}>실행 기록</span>
+              <span style={{ color: UI.ink3, fontFamily: MONO, fontSize: TYPE.caption }}>
+                {workflowStatus === "ready" ? `${visibleWorkflowRuns.length}건` : "—"}
+              </span>
+            </div>
             <THead cols={wfCols} />
             {workflowStatus === "loading" ? emptyRow("불러오는 중…")
               : workflowStatus === "unavailable" ? emptyRow("워크플로우 실행을 불러오지 못했습니다.")
