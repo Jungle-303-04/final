@@ -1,9 +1,11 @@
 import asyncio
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
 
+from domains.target import router as target_router
 from domains.target.router import (
     DEFAULT_OTEL_TRACES_URL,
     DEFAULT_PROMETHEUS_URL,
@@ -12,7 +14,7 @@ from domains.target.router import (
     install_telemetry_script_by_token,
     powershell_install_command_for,
 )
-from packages.contracts.gateway.requests import TargetRegisterRequest
+from packages.contracts.gateway.requests import ClusterConnectRequest, TargetRegisterRequest
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -21,14 +23,16 @@ def script(name: str) -> str:
     return (ROOT / "scripts" / name).read_text(encoding="utf-8")
 
 
-def test_target_registration_installs_telemetry_before_registering_agent() -> None:
+def test_target_registration_installs_telemetry_after_agent_is_online() -> None:
     register = script("register-target.sh")
 
     install = register.index('bash "${SCRIPT_DIR}/install-telemetry.sh"')
     registration = register.index('echo "==> registering target in operations tool"')
+    agent_online = register.index("rollout status deploy/cluster-agent")
 
     assert 'INSTALL_TELEMETRY="${INSTALL_TELEMETRY:-true}"' in register
-    assert install < registration
+    # 에이전트-우선: 관측 스택은 에이전트가 온라인(승인/명령 가능)이 된 뒤 순차 합류한다.
+    assert install > agent_online > registration
     assert "/integrations/prometheus" in register
     assert "clusterrole/cluster-agent-uninstall" in register
     assert "OTEL_TRACES_ENDPOINT" in register
@@ -104,6 +108,24 @@ def test_ui_powershell_connect_command_installs_telemetry_before_agent_manifest(
     assert "cluster-agent-uninstall" in command
 
 
+def test_management_agent_install_does_not_install_target_telemetry() -> None:
+    payload = TargetRegisterRequest(
+        cluster_id="management-cluster",
+        cluster_role="management",
+        management_base_url="https://ops.example.test/api",
+    )
+
+    shell = install_command_for(payload, "agent-token")
+    powershell = powershell_install_command_for(payload, "agent-token")
+
+    assert "/telemetry/" not in shell
+    assert "/telemetry/" not in powershell
+    assert "cluster-agent-uninstall" not in shell
+    assert "cluster-agent-uninstall" not in powershell
+    assert "/install/agent-token" in shell
+    assert "/install/agent-token" in powershell
+
+
 def test_connect_defaults_route_all_four_telemetry_signals() -> None:
     assert DEFAULT_PROMETHEUS_URL == "http://prometheus.target.svc.cluster.local:9090"
     assert DEFAULT_OTEL_TRACES_URL == ("http://opentelemetry-collector.target.svc:4318/v1/traces")
@@ -120,6 +142,9 @@ def test_remote_install_artifacts_are_packaged_in_service_image() -> None:
 
     assert "TELEMETRY_ASSET_BASE_URL" in installer
     assert "AssetBaseUrl" in powershell
+    assert "RNGCryptoServiceProvider" in powershell
+    assert "RandomNumberGenerator]::Fill" not in powershell
+    assert "Convert]::ToHexString" not in powershell
     assert "scripts/install-telemetry.sh ./scripts/install-telemetry.sh" in dockerfile
     assert "scripts/install-telemetry.ps1 ./scripts/install-telemetry.ps1" in dockerfile
     assert "deploy/target ./deploy/target" in dockerfile
@@ -151,6 +176,45 @@ def test_installer_token_serves_only_allowlisted_telemetry_artifacts() -> None:
     with pytest.raises(HTTPException) as exc:
         asyncio.run(install_telemetry_asset_by_token("agent-token", "../secrets", db=db))
     assert exc.value.status_code == 404
+
+
+def test_connect_revokes_new_registration_when_prometheus_setup_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    revoked: list[tuple[str, str]] = []
+
+    class Db:
+        def unregister_target_cluster(self, workspace_id: str, cluster_id: str) -> bool:
+            revoked.append((workspace_id, cluster_id))
+            return True
+
+    async def register(*_args: object, **_kwargs: object) -> SimpleNamespace:
+        return SimpleNamespace(
+            cluster_id="cluster-1",
+            install_command="install",
+            powershell_install_command="install-powershell",
+            connect_expires_at="2026-07-24T05:00:00+00:00",
+        )
+
+    async def fail_prometheus(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("prometheus setup failed")
+
+    monkeypatch.setattr(target_router, "require_unique_cluster_display_name", lambda *_: None)
+    monkeypatch.setattr(target_router, "register_target", register)
+    monkeypatch.setattr(target_router, "update_prometheus_integration", fail_prometheus)
+
+    with pytest.raises(RuntimeError, match="prometheus setup failed"):
+        asyncio.run(
+            target_router.connect_cluster(
+                ClusterConnectRequest(name="cluster"),
+                current=SimpleNamespace(workspace_id="workspace-1"),
+                db=Db(),
+                events=object(),
+                operation_events=object(),
+            )
+        )
+
+    assert revoked == [("workspace-1", "cluster-1")]
 
 
 def test_loki_object_store_declares_every_required_bucket() -> None:

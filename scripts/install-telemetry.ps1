@@ -47,8 +47,14 @@ function Require-ReleaseWorkload([string]$Release) {
 
 function New-RandomHex {
   $bytes = New-Object byte[] 32
-  [Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
-  return [Convert]::ToHexString($bytes).ToLowerInvariant()
+  $generator = New-Object Security.Cryptography.RNGCryptoServiceProvider
+  try {
+    $generator.GetBytes($bytes)
+  }
+  finally {
+    $generator.Dispose()
+  }
+  return ([BitConverter]::ToString($bytes)).Replace("-", "").ToLowerInvariant()
 }
 
 Require-Command "helm"

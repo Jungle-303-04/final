@@ -9,6 +9,7 @@ import shlex
 import shutil
 import subprocess
 import time
+from contextlib import suppress
 from dataclasses import fields
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -668,11 +669,16 @@ def install_command_for(payload: TargetRegisterRequest, agent_token: str) -> str
     if not base:
         return ""
     path = gateway_routes.INSTALL_MANIFEST_PATH.format(agent_token=agent_token)
+    telemetry_enabled = payload.cluster_role != MANAGEMENT_CLUSTER_ROLE
     return guarded_kubectl_apply_command(
         payload,
         f"{base}{path}",
-        telemetry_script_url=telemetry_script_url(base, agent_token, "bash"),
-        telemetry_asset_base_url=telemetry_asset_base_url(base, agent_token),
+        telemetry_script_url=(
+            telemetry_script_url(base, agent_token, "bash") if telemetry_enabled else ""
+        ),
+        telemetry_asset_base_url=(
+            telemetry_asset_base_url(base, agent_token) if telemetry_enabled else ""
+        ),
     )
 
 
@@ -698,8 +704,8 @@ def guarded_kubectl_apply_command(
     manifest_url: str,
     context: str = "",
     *,
-    telemetry_script_url: str,
-    telemetry_asset_base_url: str,
+    telemetry_script_url: str = "",
+    telemetry_asset_base_url: str = "",
 ) -> str:
     """관측 스택을 먼저 준비하고 기존 에이전트 소유권을 안전하게 교체한다."""
     kubectl = "kubectl"
@@ -721,22 +727,30 @@ def guarded_kubectl_apply_command(
         else 'target_context="$(kubectl config current-context)"; '
     )
     install_telemetry = (
-        'telemetry_script="$(mktemp "${TMPDIR:-/tmp}/kyro-telemetry.XXXXXX")"; '
-        "trap 'rm -f \"$telemetry_script\"' EXIT; "
-        f'curl -fsSL {shell_quote(telemetry_script_url)} -o "$telemetry_script"; '
-        f"{target_context}"
-        f'TARGET_CONTEXT="$target_context" TARGET_NAMESPACE={shell_quote(namespace)} '
-        f"TELEMETRY_ASSET_BASE_URL={shell_quote(telemetry_asset_base_url)} "
-        'bash "$telemetry_script"; '
+        (
+            'telemetry_script="$(mktemp "${TMPDIR:-/tmp}/kyro-telemetry.XXXXXX")"; '
+            "trap 'rm -f \"$telemetry_script\"' EXIT; "
+            f'curl -fsSL {shell_quote(telemetry_script_url)} -o "$telemetry_script"; '
+            f"{target_context}"
+            f'TARGET_CONTEXT="$target_context" TARGET_NAMESPACE={shell_quote(namespace)} '
+            f"TELEMETRY_ASSET_BASE_URL={shell_quote(telemetry_asset_base_url)} "
+            'bash "$telemetry_script"; '
+        )
+        if telemetry_script_url and telemetry_asset_base_url
+        else ""
     )
     wait_for_uninstall = (
-        'if [ -z "$existing" ]; then '
-        "for attempt in $(seq 1 60); do "
-        f"if ! {kubectl} get clusterrole cluster-agent-uninstall >/dev/null 2>&1; "
-        "then break; fi; sleep 2; done; "
-        f"if {kubectl} get clusterrole cluster-agent-uninstall >/dev/null 2>&1; "
-        "then printf 'previous Kyro agent uninstall is still running.\\n' >&2; exit 1; fi; "
-        "fi; "
+        (
+            'if [ -z "$existing" ]; then '
+            "for attempt in $(seq 1 60); do "
+            f"if ! {kubectl} get clusterrole cluster-agent-uninstall >/dev/null 2>&1; "
+            "then break; fi; sleep 2; done; "
+            f"if {kubectl} get clusterrole cluster-agent-uninstall >/dev/null 2>&1; "
+            "then printf 'previous Kyro agent uninstall is still running.\\n' >&2; exit 1; fi; "
+            "fi; "
+        )
+        if payload.cluster_role != MANAGEMENT_CLUSTER_ROLE
+        else ""
     )
     # The command is pasted into an already-open operator terminal. Keep the
     # fail-closed ownership guard, but contain its `exit 1` in a subshell so a
@@ -754,12 +768,17 @@ def kubectl_apply_command(
     if not base:
         return ""
     path = gateway_routes.INSTALL_MANIFEST_PATH.format(agent_token=agent_token)
+    telemetry_enabled = payload.cluster_role != MANAGEMENT_CLUSTER_ROLE
     return guarded_kubectl_apply_command(
         payload,
         f"{base}{path}",
         context,
-        telemetry_script_url=telemetry_script_url(base, agent_token, "bash"),
-        telemetry_asset_base_url=telemetry_asset_base_url(base, agent_token),
+        telemetry_script_url=(
+            telemetry_script_url(base, agent_token, "bash") if telemetry_enabled else ""
+        ),
+        telemetry_asset_base_url=(
+            telemetry_asset_base_url(base, agent_token) if telemetry_enabled else ""
+        ),
     )
 
 
@@ -841,10 +860,25 @@ def powershell_install_command_for(payload: TargetRegisterRequest, agent_token: 
         return ""
     path = gateway_routes.INSTALL_MANIFEST_PATH.format(agent_token=agent_token)
     manifest_url = f"{base}{path}".replace("'", "''")
-    script_url = telemetry_script_url(base, agent_token, "powershell").replace("'", "''")
-    asset_base_url = telemetry_asset_base_url(base, agent_token).replace("'", "''")
     namespace = agent_namespace(payload).replace("'", "''")
     expected_cluster_id = (payload.cluster_id or "").replace("'", "''")
+    telemetry_block = ""
+    uninstall_wait_block = ""
+    if payload.cluster_role != MANAGEMENT_CLUSTER_ROLE:
+        script_url = telemetry_script_url(base, agent_token, "powershell").replace("'", "''")
+        asset_base_url = telemetry_asset_base_url(base, agent_token).replace("'", "''")
+        telemetry_block = (
+            f"Invoke-WebRequest -UseBasicParsing -Uri '{script_url}' -OutFile $script; "
+            f"& $script -TargetContext $context -TargetNamespace '{namespace}' "
+            f"-AssetBaseUrl '{asset_base_url}'; "
+        )
+        uninstall_wait_block = (
+            "if (-not $existing) { for ($attempt=0; $attempt -lt 60; $attempt++) { "
+            "$old=(& kubectl get clusterrole cluster-agent-uninstall "
+            "--ignore-not-found -o name 2>$null); "
+            "if (-not $old) { break }; Start-Sleep -Seconds 2 }; "
+            "if ($old) { throw 'previous Kyro agent uninstall is still running' } }; "
+        )
     return (
         "$ErrorActionPreference='Stop'; "
         "$existing=''; "
@@ -857,12 +891,7 @@ def powershell_install_command_for(payload: TargetRegisterRequest, agent_token: 
         "$context=(& kubectl config current-context).Trim(); "
         "$script=Join-Path ([IO.Path]::GetTempPath()) ('kyro-'+[guid]::NewGuid().ToString()+'.ps1'); "
         "$manifest=Join-Path ([IO.Path]::GetTempPath()) ('kyro-'+[guid]::NewGuid().ToString()+'.yaml'); "
-        f"try {{ Invoke-WebRequest -UseBasicParsing -Uri '{script_url}' -OutFile $script; "
-        f"& $script -TargetContext $context -TargetNamespace '{namespace}' -AssetBaseUrl '{asset_base_url}'; "
-        "if (-not $existing) { for ($attempt=0; $attempt -lt 60; $attempt++) { "
-        "$old=(& kubectl get clusterrole cluster-agent-uninstall --ignore-not-found -o name 2>$null); "
-        "if (-not $old) { break }; Start-Sleep -Seconds 2 }; "
-        "if ($old) { throw 'previous Kyro agent uninstall is still running' } }; "
+        f"try {{ {telemetry_block}{uninstall_wait_block}"
         f"Invoke-WebRequest -UseBasicParsing -Uri '{manifest_url}' -OutFile $manifest; "
         "& kubectl apply -f $manifest; "
         "if ($LASTEXITCODE -ne 0) { throw 'manifest installation failed' } } "
@@ -1495,19 +1524,29 @@ async def connect_cluster(
                 detail=cluster_name_conflict_detail(),
             ) from exc
         raise
-    if not receipt.install_command or not receipt.connect_expires_at:
-        raise HTTPException(status_code=503, detail="cluster install command is unavailable")
-    await update_prometheus_integration(
-        PrometheusIntegrationUpdateRequest(
-            cluster_id=receipt.cluster_id,
-            prometheus_url=DEFAULT_PROMETHEUS_URL,
-            headers={},
-        ),
-        current=current,
-        db=db,
-        events=events,
-        operation_events=operation_events,
-    )
+    try:
+        if not receipt.install_command or not receipt.connect_expires_at:
+            raise HTTPException(status_code=503, detail="cluster install command is unavailable")
+        await update_prometheus_integration(
+            PrometheusIntegrationUpdateRequest(
+                cluster_id=receipt.cluster_id,
+                prometheus_url=DEFAULT_PROMETHEUS_URL,
+                headers={},
+            ),
+            current=current,
+            db=db,
+            events=events,
+            operation_events=operation_events,
+        )
+    except Exception:
+        # No install command has been returned yet, so this newly-created registration
+        # cannot have a live agent. Revoke its token and active-name claim to make an
+        # immediate retry safe while retaining the audit row.
+        unregister = getattr(db, "unregister_target_cluster", None)
+        if callable(unregister):
+            with suppress(Exception):
+                unregister(workspace_id, receipt.cluster_id)
+        raise
     return ClusterConnectResponse(
         cluster_id=receipt.cluster_id,
         install_command=receipt.install_command,
