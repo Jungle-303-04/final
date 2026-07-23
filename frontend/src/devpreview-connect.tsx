@@ -635,7 +635,7 @@ function RepoStep({ providers, onNext }: { providers: ClusterProvidersView; onNe
                 {/* 권장: GitHub App(원클릭) — 미설정이면 어드민 자동등록 / 비어드민 안내 */}
                 <GithubAppConnect repoRef={repo.full} config={appConfig} registerNote={appRegisterNote} />
                 {/* App이 구성되면 토큰 칸을 숨긴다(App 기본). 미구성 시에만 토큰 폴백 노출. */}
-                {!appAvailable && (
+                {access === "auth" && (
                   <>
                     <div className="flex items-center gap-2 px-0.5 text-[11px] c-3">
                       <span className="h-px flex-1" style={{ background: "rgba(120,120,120,0.22)" }} />또는 액세스 토큰<span className="h-px flex-1" style={{ background: "rgba(120,120,120,0.22)" }} />
@@ -675,7 +675,7 @@ function RepoStep({ providers, onNext }: { providers: ClusterProvidersView; onNe
         </motion.div>
       )}
       {/* 토큰 경로 버튼: 공개는 항상, 비공개는 App 미가용일 때만(App 가용 시 App 버튼이 경로). */}
-      {resolved && (access === "public" || !appAvailable) && (
+      {resolved && (access === "public" || !appAvailable || token.trim().length > 0) && (
         <motion.button key="confirm" layout {...REVEAL} disabled={!ready || probeStatus === "submitting"} onClick={() => void verify()} className="btn-primary flex w-full items-center justify-center gap-2 rounded-[14px] py-3.5 text-[15px] font-semibold disabled:cursor-not-allowed disabled:opacity-60">
           {probeStatus === "submitting" ? <><Spin c="size-4 text-white" /> 저장소·브랜치 확인 중…</> : <>저장소 확인 · 배포 대상 선택 <ArrowRight className="size-[17px]" /></>}
         </motion.button>
