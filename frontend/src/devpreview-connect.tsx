@@ -1222,12 +1222,25 @@ function InstallProgress({ conn, activation, reinstalling, onReinstall }: {
   );
 }
 
-function ClusterInstallStep({ platform, name, onConnected }: { platform: PlatformId; name: string; onConnected: (info: ConnectionStatusView) => void }) {
+function ClusterInstallStep({
+  platform,
+  name,
+  receipt,
+  onReceiptChange,
+  onConnected,
+}: {
+  platform: PlatformId;
+  name: string;
+  receipt: ClusterConnectResponseView | null;
+  onReceiptChange: (receipt: ClusterConnectResponseView) => void;
+  onConnected: (info: ConnectionStatusView) => void;
+}) {
   const pf = PLATFORMS.find((p) => p.id === platform)!;
   const Icon = pf.icon;
 
-  const [phase, setPhase] = useState<"idle" | "registering" | "registered" | "error">("idle");
-  const [receipt, setReceipt] = useState<ClusterConnectResponseView | null>(null);
+  const [phase, setPhase] = useState<"idle" | "registering" | "registered" | "error">(
+    receipt ? "registered" : "idle",
+  );
   const [errMsg, setErrMsg] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [reinstalling, setReinstalling] = useState(false);
@@ -1253,7 +1266,7 @@ function ClusterInstallStep({ platform, name, onConnected }: { platform: Platfor
     if (!receipt || reinstalling) return;
     setReinstalling(true); setErrMsg(null);
     void reissueClusterConnectCommand(receipt.cluster_id)
-      .then((fresh) => setReceipt(fresh))
+      .then(onReceiptChange)
       .catch((cause: unknown) => { if (!isAbortError(cause)) setErrMsg(errorText(cause)); })
       .finally(() => setReinstalling(false));
   };
@@ -1269,7 +1282,7 @@ function ClusterInstallStep({ platform, name, onConnected }: { platform: Platfor
       name: name.trim(),
       provider: platform === "docker" ? "onprem" : platform,
     }, controller.signal)
-      .then((res) => { if (controller.signal.aborted) return; setReceipt(res); setPhase("registered"); })
+      .then((res) => { if (controller.signal.aborted) return; onReceiptChange(res); setPhase("registered"); })
       .catch((cause: unknown) => { if (controller.signal.aborted || isAbortError(cause)) return; setErrMsg(errorText(cause)); setPhase("error"); });
   };
 
@@ -1294,18 +1307,20 @@ function ClusterInstallStep({ platform, name, onConnected }: { platform: Platfor
       {receipt && (
         <>
           <div className="cmd overflow-hidden" style={{ borderRadius: 16 }}>
-            <div className="flex items-center justify-between" style={{ padding: "10px 14px", borderBottom: "1px solid var(--line)" }}>
-              <span className="flex items-center gap-2 text-label font-semibold c-2"><Icon size={15} stroke={2} style={{ color: pf.color }} />Kyro Agent · {pf.name}</span>
-              <span className="flex items-center gap-1" role="tablist" aria-label="설치 명령 셸 선택">
-                {([["posix", "macOS/Linux"], ["powershell", "Windows PowerShell"]] as const).map(([id, label]) => (
-                  <button key={id} role="tab" aria-selected={shell === id} onClick={() => setShell(id)}
-                    className="rounded-full px-2.5 py-1 text-caption font-semibold"
-                    style={{ color: shell === id ? "var(--ink)" : "var(--ink-3)", background: shell === id ? inkA(0.07) : "transparent" }}>{label}</button>
-                ))}
+            <div className="grid gap-2.5" style={{ padding: "10px 14px", borderBottom: "1px solid var(--line)" }}>
+              <span className="flex min-w-0 items-center gap-2 text-label font-semibold c-2"><Icon size={15} stroke={2} style={{ color: pf.color }} />Kyro Agent · {pf.name}</span>
+              <span className="flex min-w-0 items-center justify-between gap-2">
+                <span className="flex items-center gap-1" role="tablist" aria-label="설치 명령 셸 선택">
+                  {([["posix", "macOS/Linux"], ["powershell", "Windows PowerShell"]] as const).map(([id, label]) => (
+                    <button key={id} role="tab" aria-selected={shell === id} onClick={() => setShell(id)}
+                      className="whitespace-nowrap rounded-full px-2.5 py-1 text-caption font-semibold"
+                      style={{ color: shell === id ? "var(--ink)" : "var(--ink-3)", background: shell === id ? inkA(0.07) : "transparent" }}>{label}</button>
+                  ))}
+                </span>
+                <button onClick={copy} className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-label font-semibold transition-colors" style={{ color: copied ? "var(--green)" : "var(--ink-2)", background: copied ? okA(0.12) : inkA(0.05) }}>
+                  {copied ? <><Check className="size-3.5" strokeWidth={3} />복사됨</> : <><Copy className="size-3.5" />복사</>}
+                </button>
               </span>
-              <button onClick={copy} className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-label font-semibold transition-colors" style={{ color: copied ? "var(--green)" : "var(--ink-2)", background: copied ? okA(0.12) : inkA(0.05) }}>
-                {copied ? <><Check className="size-3.5" strokeWidth={3} />복사됨</> : <><Copy className="size-3.5" />복사</>}
-              </button>
             </div>
             <pre className="max-w-full whitespace-pre-wrap break-words font-mono text-label leading-[1.7] c-ink [overflow-wrap:anywhere]" style={{ padding: "14px 16px" }}><code>{cmd}</code></pre>
           </div>
@@ -1353,10 +1368,20 @@ function ClusterWizard({ providers, onClose, onComplete }: { providers: ClusterP
   const [name, setName] = useState("game-server");
   const [platform, setPlatform] = useState<PlatformId>("aws");
   const [connection, setConnection] = useState<ConnectionStatusView | null>(null);
+  const [installSession, setInstallSession] = useState<{
+    key: string;
+    receipt: ClusterConnectResponseView;
+  } | null>(null);
+  const installKey = `${platform}\u0000${name.trim()}`;
+  const receipt = installSession?.key === installKey ? installSession.receipt : null;
+  const openInstallStep = () => {
+    setStep(1);
+  };
   const el = {
     0: <ClusterInfoStep key="c0" providers={providers} name={name} setName={setName} platform={platform} setPlatform={setPlatform}
-      onNext={() => setStep(1)} />,
-    1: <ClusterInstallStep key="c1" platform={platform} name={name}
+      onNext={openInstallStep} />,
+    1: <ClusterInstallStep key="c1" platform={platform} name={name} receipt={receipt}
+      onReceiptChange={(nextReceipt) => setInstallSession({ key: installKey, receipt: nextReceipt })}
       onConnected={(info) => { setConnection(info); setStep(2); }} />,
     2: connection ? <ClusterDoneStep key="c2" name={name} connection={connection} onDone={() => onComplete(name)} /> : null,
   }[step];

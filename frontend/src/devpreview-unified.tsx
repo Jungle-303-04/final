@@ -1,7 +1,7 @@
 // ⚠ 데모 · 통합 리소스 — 리소스 종류 인덱스(전체 택소노미) + 종류별 표 + 물리/관계 관점.
 // 병합 규칙: 좌측 = 무엇을(종류) · 상단 관점 = 어떻게(물리/관계/목록).
 // 워크로드·노드 계열은 관점 전환이 가능하고, 나머지는 종류별 전용 표로 정보를 잃지 않게 표시.
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import {
   Server, FileCog, Network, Globe, Search, KeyRound,
@@ -13,7 +13,9 @@ import {
 import { HomeClustersWidget, OpsiaMap } from "./devpreview-opsia";
 import { DASHBOARD_WIDGET_GRID_CLASS, DASHBOARD_WIDGET_GRID_ITEM_CLASS, WidgetFrame, RatioBar, Donut, RankList, MultiLine, MiniTimeline, dashboardWidgetGridStyle, dashboardWidgetItemStyle, type DashboardWidgetSpan } from "./devpreview/widgets";
 import { DeploySurface, IssuesSurface, TimelineSurface, ChecksSurface, CostSurface, SettingsSurface, AlertsSurface, AiHistorySurface, IssueDetail, type RcaIncident } from "./devpreview-surfaces";
-import { AiPanel } from "./devpreview-ai";
+import { AiPanel, type RecoveryReviewState } from "./devpreview-ai";
+import type { AiRecoveryHandoff } from "./features/ai-assistant/aiRecoveryHandoff";
+import { isSafePrRoute } from "./devpreview/recoveryRoute";
 import { onAction, type DemoAction } from "./devpreview/bus";
 import { ConnectWizard, type RepositoryConnectionContext } from "./devpreview-connect";
 import { TopologyView } from "./devpreview-topology";
@@ -26,6 +28,19 @@ import { createClusterDisconnectPort } from "./app/composition/surfaces/clusters
 // 목록(⋮ 메뉴) 연결 해제도 상세 뷰와 같은 캐논 계약 port 를 공유한다 —
 // 두 번째 unregister 구현이 생기지 않게 하는 ClusterLifecycleControl 원칙 준수.
 const LIST_CLUSTER_DISCONNECT_PORT = createClusterDisconnectPort();
+
+function recoveryReviewStatusLabel(state: RecoveryReviewState, route?: string | null): string {
+  if (state === "reviewing") return "복구 플랜 검토 중";
+  if (state === "ready") return "복구 플랜 검토 완료";
+  if (state === "executing") return "복구 요청 중";
+  if (state === "executed") {
+    if (route === "auto") return "자동 복구 요청됨";
+    if (isSafePrRoute(route)) return "PR 생성 요청됨";
+    return "복구 요청됨";
+  }
+  if (state === "error") return "복구 플랜 검토 실패";
+  return "복구 플랜 검토";
+}
 import {
   PENDING_CLUSTER_STORAGE_KEY,
   reconcilePendingClusters,
@@ -49,7 +64,7 @@ import { useRelationTopology, type RelationNodeView } from "./devpreview/relatio
 import { logout as logoutApi } from "./devpreview/sessionFeed";
 import { useInventoryResourcesAcrossClusters, useInventoryKindCounts, kindToResourceType } from "./devpreview/inventoryResourcesFeed";
 import { useWorkloadDetail } from "./devpreview/workloadDetailFeed";
-import { useResourceUsageSeries } from "./devpreview/resourceUsageFeed";
+import { useResourceUsageSeries, type ResourceUsagePoint } from "./devpreview/resourceUsageFeed";
 import { useResourceAccess } from "./devpreview/resourceAccessFeed";
 import { ResourceAccessPanel } from "./devpreview/resourceAccessPanel";
 import { EventMessageText } from "./devpreview/EventMessageText";
@@ -423,39 +438,321 @@ function Empty({ children }: { children: React.ReactNode }) {
 
 const TOPBAR_H = 57; // 상단 크롬 높이 — 오버레이는 이 아래부터 시작한다
 
-// UsageMiniChart(M14) — 관측된 사용량 시계열만 그린다. null 표본(미관측)에서는
-// 선을 끊어 gap을 정직하게 표시하고, 값 자체를 보간·합성하지 않는다.
-function UsageMiniChart({ title, unit, values, observed, total }: { title: string; unit: string; values: (number | null)[]; observed: number; total: number }) {
-  const nums = values.filter((v): v is number => v !== null);
-  if (nums.length === 0) return null;
-  const max = Math.max(...nums);
-  const min = Math.min(...nums);
-  const range = max - min || 1;
-  const W = 240, H = 44;
-  const n = values.length;
-  const px = (i: number) => (n <= 1 ? 0 : (i / (n - 1)) * W);
-  const py = (v: number) => H - ((v - min) / range) * H;
-  let d = "";
-  let pen = false;
-  values.forEach((v, i) => {
-    if (v === null) { pen = false; return; }
-    d += `${pen ? "L" : "M"}${px(i).toFixed(1)} ${py(v).toFixed(1)} `;
-    pen = true;
-  });
-  const last = [...values].reverse().find((v): v is number => v !== null);
+type ResourceMetricKey = "cpu" | "memory";
+
+const RESOURCE_METRICS = {
+  cpu: {
+    label: "CPU",
+    value: (point: ResourceUsagePoint) => point.cpuMcores,
+    unit: "mcores",
+  },
+  memory: {
+    label: "메모리",
+    value: (point: ResourceUsagePoint) => point.memMib,
+    unit: "MiB",
+  },
+} satisfies Record<ResourceMetricKey, {
+  label: string;
+  value: (point: ResourceUsagePoint) => number | null;
+  unit: string;
+}>;
+
+function metricValue(value: number, unit: string): string {
+  const digits = value >= 100 ? 0 : value >= 10 ? 1 : 2;
+  return `${value.toFixed(digits)} ${unit}`;
+}
+
+function metricTime(value: string | null): string {
+  if (!value) return "관측 시각 없음";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "관측 시각 없음";
+  return new Intl.DateTimeFormat("ko-KR", {
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
+// 실제 표본만 시각화한다. null 표본은 선을 끊고, 임의 보간이나 합성값은 만들지 않는다.
+function ResourceMetricsChart({ points }: { points: ResourceUsagePoint[] }) {
+  const [selected, setSelected] = useState<ResourceMetricKey>("cpu");
+  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+  const gradientId = useId().replace(/:/g, "");
+  const metric = RESOURCE_METRICS[selected];
+  const values = useMemo(() => points.map(metric.value), [metric, points]);
+  const observed = useMemo(
+    () => values.flatMap((value, index) => value === null ? [] : [{ value, index }]),
+    [values],
+  );
+  const W = 520;
+  const H = 176;
+  const PT = 14;
+  const PB = 28;
+  const PL = 48;
+  const PR = 14;
+  const chartW = W - PL - PR;
+  const chartH = H - PT - PB;
+  const rawMin = observed.length > 0 ? Math.min(...observed.map((point) => point.value)) : 0;
+  const rawMax = observed.length > 0 ? Math.max(...observed.map((point) => point.value)) : 0;
+  const padding = rawMax === rawMin ? Math.max(rawMax * 0.12, 1) : (rawMax - rawMin) * 0.12;
+  const min = Math.max(0, rawMin - padding);
+  const max = Math.max(rawMax + padding, min + 1);
+  const x = (index: number) => PL + (values.length <= 1 ? 0 : index / (values.length - 1) * chartW);
+  const y = (value: number) => PT + (1 - (value - min) / (max - min)) * chartH;
+  const paths = useMemo(() => {
+    const result: string[] = [];
+    let current = "";
+    values.forEach((value, index) => {
+      if (value === null) {
+        if (current) result.push(current.trim());
+        current = "";
+        return;
+      }
+      current += `${current ? "L" : "M"} ${x(index).toFixed(2)} ${y(value).toFixed(2)} `;
+    });
+    if (current) result.push(current.trim());
+    return result;
+  }, [max, min, values]);
+  const gapPaths = useMemo(() => {
+    const result: string[] = [];
+    for (let index = 1; index < observed.length; index += 1) {
+      const previous = observed[index - 1]!;
+      const current = observed[index]!;
+      if (current.index - previous.index <= 1) continue;
+      result.push(
+        `M ${x(previous.index).toFixed(2)} ${y(previous.value).toFixed(2)} `
+        + `L ${x(current.index).toFixed(2)} ${y(current.value).toFixed(2)}`,
+      );
+    }
+    return result;
+  }, [max, min, observed, values.length]);
+  const hovered = hoverIndex === null || values[hoverIndex] === null
+    ? null
+    : { index: hoverIndex, value: values[hoverIndex] as number };
+  const current = observed.length > 0 ? observed[observed.length - 1] : undefined;
+  const average = observed.length > 0
+    ? observed.reduce((sum, point) => sum + point.value, 0) / observed.length
+    : null;
+  const peak = observed.length > 0 ? rawMax : null;
+  const observedAt = hovered
+    ? points[hovered.index]?.sampledAt ?? null
+    : current ? points[current.index]?.sampledAt ?? null : null;
+  const metricCounts = {
+    cpu: points.filter((point) => point.cpuMcores !== null).length,
+    memory: points.filter((point) => point.memMib !== null).length,
+  };
+  const displayValue = hovered?.value ?? current?.value ?? null;
+  const hoveredX = hovered ? x(hovered.index) : 0;
+  const hoveredY = hovered ? y(hovered.value) : 0;
+  const tooltipWidth = 126;
+  const tooltipHeight = 38;
+  const tooltipX = hovered
+    ? Math.max(PL + 4, Math.min(hoveredX + 8, W - PR - tooltipWidth))
+    : 0;
+  const tooltipY = hovered
+    ? hoveredY - tooltipHeight - 8 >= PT
+      ? hoveredY - tooltipHeight - 8
+      : hoveredY + 10
+    : 0;
+
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 6 }}>
-        <span style={{ fontSize: TYPE.label, fontWeight: 600, color: UI.ink2 }}>{title}</span>
-        {last !== undefined && <span style={{ fontSize: TYPE.label, fontVariantNumeric: "tabular-nums", color: UI.ink }}>{last.toFixed(0)} {unit}</span>}
+      <div role="tablist" aria-label="메트릭 종류" style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 3, padding: 3, borderRadius: RADIUS.control, background: UI.bg2, marginBottom: 14 }}>
+        {(Object.keys(RESOURCE_METRICS) as ResourceMetricKey[]).map((key) => {
+          const active = selected === key;
+          return (
+            <button
+              type="button"
+              role="tab"
+              aria-selected={active}
+              className="product-focusable product-control"
+              key={key}
+              onClick={() => { setSelected(key); setHoverIndex(null); }}
+              style={{
+                border: "none",
+                borderRadius: RADIUS.control - 2,
+                background: active ? UI.card : "transparent",
+                boxShadow: active ? `0 1px 3px ${inkA(0.12)}` : "none",
+                color: active ? UI.ink : UI.ink3,
+                cursor: "pointer",
+                fontSize: TYPE.label,
+                fontWeight: active ? 700 : 600,
+                padding: "7px 10px",
+              }}
+            >
+              {RESOURCE_METRICS[key].label}
+              <span style={{ marginLeft: 5, color: active ? UI.ink3 : inkA(0.32), fontWeight: 500 }}>
+                {metricCounts[key]}/{points.length}
+              </span>
+            </button>
+          );
+        })}
       </div>
-      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" width="100%" height={44} style={{ display: "block", overflow: "visible" }} role="img" aria-label={`${title} 사용량 추이`}>
-        <path d={d.trim()} fill="none" stroke={BLUE} strokeWidth={1.5} vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />
-      </svg>
-      <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4, fontSize: TYPE.caption, color: UI.ink3 }}>
-        <span>표본 {observed}/{total}{observed < total ? " · 부분 관측" : ""}</span>
-        <span>최대 {max.toFixed(0)} · 최소 {min.toFixed(0)} {unit}</span>
-      </div>
+
+      {observed.length === 0 ? (
+        <Empty>{metric.label} 시계열이 관측되지 않았습니다.</Empty>
+      ) : (
+        <>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 12, marginBottom: 10 }}>
+            {([
+              [hovered ? "선택" : "현재", displayValue],
+              ["평균", average],
+              ["최대", peak],
+            ] as const).map(([label, value]) => (
+              <div key={label}>
+                <div style={{ fontSize: TYPE.caption, color: UI.ink3, marginBottom: 2 }}>{label}</div>
+                <div style={{ color: label === "현재" || label === "선택" ? BLUE : UI.ink, fontSize: TYPE.body, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>
+                  {value === null ? "관측 안 됨" : metricValue(value, metric.unit)}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ border: `1px solid ${UI.line2}`, borderRadius: RADIUS.card, background: UI.bg2, padding: "6px 4px 2px" }}>
+            <svg
+              viewBox={`0 0 ${W} ${H}`}
+              width="100%"
+              role="img"
+              aria-label={`${metric.label} 사용량 추이`}
+              style={{ display: "block", cursor: "crosshair" }}
+              onMouseMove={(event) => {
+                const rect = event.currentTarget.getBoundingClientRect();
+                const cursor = (event.clientX - rect.left) / rect.width * W;
+                const targetIndex = Math.max(
+                  0,
+                  Math.min(
+                    values.length - 1,
+                    Math.round((cursor - PL) / chartW * Math.max(values.length - 1, 0)),
+                  ),
+                );
+                const nearest = observed.reduce(
+                  (candidate, point) => (
+                    candidate === null
+                    || Math.abs(point.index - targetIndex) < Math.abs(candidate.index - targetIndex)
+                      ? point
+                      : candidate
+                  ),
+                  null as { value: number; index: number } | null,
+                );
+                setHoverIndex(nearest?.index ?? null);
+              }}
+              onMouseLeave={() => setHoverIndex(null)}
+            >
+              <defs>
+                <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={BLUE} stopOpacity="0.18" />
+                  <stop offset="100%" stopColor={BLUE} stopOpacity="0.02" />
+                </linearGradient>
+              </defs>
+              {[0, 0.5, 1].map((ratio) => {
+                const lineY = PT + ratio * chartH;
+                const lineValue = max - ratio * (max - min);
+                return (
+                  <g key={ratio}>
+                    <line x1={PL} x2={W - PR} y1={lineY} y2={lineY} stroke={UI.line} strokeDasharray="3 5" />
+                    <text x={PL - 7} y={lineY + 3.5} textAnchor="end" fontSize="9.5" fill={UI.ink3} fontFamily={MONO}>
+                      {lineValue.toFixed(lineValue >= 100 ? 0 : 1)}
+                    </text>
+                  </g>
+                );
+              })}
+              {paths.map((path, index) => (
+                <motion.path
+                  key={`${selected}-${index}`}
+                  initial={{ pathLength: 0, opacity: 0.4 }}
+                  animate={{ pathLength: 1, opacity: 1 }}
+                  transition={{ duration: 0.55, ease: "easeOut" }}
+                  d={path}
+                  fill="none"
+                  stroke={BLUE}
+                  strokeWidth={2}
+                  strokeLinejoin="round"
+                  strokeLinecap="round"
+                  vectorEffect="non-scaling-stroke"
+                />
+              ))}
+              {gapPaths.map((path, index) => (
+                <motion.path
+                  key={`${selected}-gap-${index}`}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.35, delay: 0.15 }}
+                  d={path}
+                  fill="none"
+                  stroke={BLUE}
+                  strokeDasharray="4 5"
+                  strokeOpacity={0.42}
+                  strokeWidth={1.5}
+                  vectorEffect="non-scaling-stroke"
+                />
+              ))}
+              {observed.map((point) => (
+                <circle
+                  key={`${selected}-point-${point.index}`}
+                  cx={x(point.index)}
+                  cy={y(point.value)}
+                  r={1.8}
+                  fill={BLUE}
+                  opacity={0.74}
+                />
+              ))}
+              {hovered && (
+                <g>
+                  <line x1={hoveredX} x2={hoveredX} y1={PT} y2={H - PB} stroke={UI.ink3} strokeDasharray="2 3" />
+                  <circle cx={hoveredX} cy={hoveredY} r={4} fill={UI.card} stroke={BLUE} strokeWidth={2} />
+                  <rect
+                    x={tooltipX}
+                    y={tooltipY}
+                    width={tooltipWidth}
+                    height={tooltipHeight}
+                    rx={6}
+                    fill={UI.card}
+                    stroke={UI.line2}
+                  />
+                  <text
+                    x={tooltipX + 9}
+                    y={tooltipY + 15}
+                    fontSize="10"
+                    fontWeight="700"
+                    fill={UI.ink}
+                    fontFamily={MONO}
+                  >
+                    {metricValue(hovered.value, metric.unit)}
+                  </text>
+                  <text
+                    x={tooltipX + 9}
+                    y={tooltipY + 29}
+                    fontSize="9"
+                    fill={UI.ink3}
+                  >
+                    {metricTime(points[hovered.index]?.sampledAt ?? null)}
+                  </text>
+                </g>
+              )}
+              <text x={PL} y={H - 8} textAnchor="start" fontSize="9.5" fill={UI.ink3}>
+                {metricTime(points[0]?.sampledAt ?? null)}
+              </text>
+              <text x={W - PR} y={H - 8} textAnchor="end" fontSize="9.5" fill={UI.ink3}>
+                {metricTime(points.length > 0 ? points[points.length - 1]?.sampledAt ?? null : null)}
+              </text>
+            </svg>
+          </div>
+
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, marginTop: 7, fontSize: TYPE.caption, color: UI.ink3 }}>
+            <span>
+              표본 {observed.length}/{points.length}
+              {observed.length < points.length ? " · 부분 관측" : ""}
+            </span>
+            <span style={{ fontVariantNumeric: "tabular-nums" }}>{metricTime(observedAt)}</span>
+          </div>
+          {observed.length < points.length && (
+            <div style={{ marginTop: 5, fontSize: TYPE.caption, color: UI.ink3 }}>
+              점선은 관측되지 않은 구간 사이의 추세 연결입니다.
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }
@@ -504,14 +801,16 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
     row.ns != null && String(row.ns) ? String(row.ns) : null,
     name,
   );
-  // M14: 파드 상세는 `GET /api/clusters/{id}/usage`에서 관측된 CPU/메모리 시계열을
-  // 차트로 표시한다. 파드가 아니거나 스코프가 비면 idle이라 요청하지 않는다.
+  // M14: 파드·노드 상세는 `GET /api/clusters/{id}/usage`에서 관측된 CPU/메모리
+  // 시계열을 표시한다. 지원하지 않는 kind이거나 스코프가 비면 요청하지 않는다.
   const isPodKind = kind.id === "Pod";
+  const isNodeKind = kind.id === "Node";
+  const supportsUsageSeries = isPodKind || isNodeKind;
   const usage = useResourceUsageSeries(
-    isPodKind && row.cluster != null && String(row.cluster) ? String(row.cluster) : null,
-    "pod",
+    supportsUsageSeries && row.cluster != null && String(row.cluster) ? String(row.cluster) : null,
+    isNodeKind ? "node" : "pod",
     isPodKind && row.ns != null && String(row.ns) ? String(row.ns) : null,
-    isPodKind ? name : "",
+    supportsUsageSeries ? name : "",
   );
   // M18: 실제 retained RBAC reverse-index 계약. ServiceAccount/Role은 정확한 주체·역할을,
   // 워크로드·파드는 리소스별 권한으로 꾸미지 않고 해당 네임스페이스 요약을 조회한다.
@@ -690,22 +989,15 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
               </Sec>
               )}
 
-              {/* 메트릭(M14) — 파드는 관측된 CPU/메모리 시계열을 차트로, 워크로드는 파드 단위 관측 안내 */}
-              {isPod && (
+              {/* 메트릭(M14) — 파드·노드는 관측된 CPU/메모리 시계열을 표시하고,
+                  워크로드는 직접 시계열 계약이 없어 관리 파드에서 확인하도록 안내한다. */}
+              {supportsUsageSeries && (
               <Sec title="메트릭" icon={Activity}>
                 {usage.status === "loading" ? <Empty>불러오는 중…</Empty>
                   : usage.status === "error" ? <RetryNote onRetry={usage.retry} label="메트릭을 불러오지 못했습니다." />
                   : usage.status === "unavailable" ? <Empty>메트릭 없음</Empty>
-                  : usage.status === "ready" ? (
-                    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-                      {usage.hasMemory
-                        ? <UsageMiniChart title="메모리" unit="MiB" values={usage.points.map((p) => p.memMib)} observed={usage.memObserved} total={usage.sampleCount} />
-                        : <KV k="메모리" v="관측 안 됨" mono />}
-                      {usage.hasCpu
-                        ? <UsageMiniChart title="CPU" unit="mcores" values={usage.points.map((p) => p.cpuMcores)} observed={usage.cpuObserved} total={usage.sampleCount} />
-                        : <KV k="CPU" v="메트릭 없음" mono />}
-                    </div>
-                  ) : <Empty>메트릭 관측 안 됨</Empty>}
+                  : usage.status === "ready" ? <ResourceMetricsChart points={usage.points} />
+                  : <Empty>메트릭 관측 안 됨</Empty>}
               </Sec>
               )}
               {isWorkload && (
@@ -1373,9 +1665,14 @@ function App() {
   const [meOpen, setMeOpen] = useState(false); // 계정 메뉴 (헤더 맨 오른쪽, D20)
   const [detail, setDetail] = useState<{ kind: Kind; row: Row } | null>(null);
   const [rcaIncident, setRcaIncident] = useState<RcaIncident | null>(null); // 이슈 RCA 사이드바 — 셸 레벨 렌더(transform 조상 밖)
-  const [recoverySelectionCorrelations, setRecoverySelectionCorrelations] = useState<ReadonlySet<string>>(() => new Set());
+  const [recoverySelectionRoutes, setRecoverySelectionRoutes] = useState<ReadonlyMap<string, string>>(() => new Map());
+  const [previewCompletedRecoveryIds, setPreviewCompletedRecoveryIds] = useState<ReadonlySet<string>>(() => new Set());
+  const notifiedRecoveryCompletionIds = useRef(new Set<string>());
   const [navCollapsed, setNavCollapsed] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
+  const [aiMounted, setAiMounted] = useState(false);
+  const [aiRecoveryRequest, setAiRecoveryRequest] = useState<AiRecoveryHandoff | null>(null);
+  const [aiRecoveryReviewState, setAiRecoveryReviewState] = useState<RecoveryReviewState>("idle");
   const [aiFull, setAiFull] = useState(false);         // AI 패널 전체 화면 (헤더 ⤢ 토글)
   const [aiW, setAiW] = useState(440);                 // 실제 제품처럼 리사이즈 가능한 도킹 폭
   const [aiDragging, setAiDragging] = useState(false);
@@ -1383,6 +1680,15 @@ function App() {
   const [connectView, setConnectView] = useState<null | "repo" | "cluster">(null); // 연결 위저드 딥오픈 대상 (설정 서피스)
   const [connectModal, setConnectModal] = useState<null | "repo" | "cluster">(null); // 문맥 진입 = 모달 팝업
   const [repositoryConnectContext, setRepositoryConnectContext] = useState<RepositoryConnectionContext | null>(null);
+  const showAi = useCallback(() => {
+    setAiMounted(true);
+    setAiOpen(true);
+  }, []);
+  const openAi = useCallback((request?: AiRecoveryHandoff) => {
+    if (request !== undefined) setAiRecoveryRequest(request);
+    setAiMounted(true);
+    setAiOpen(true);
+  }, []);
   // GitHub App 설치 복귀(?github_app_installation_id=...)가 홈으로 떨어져도
   // 연결 위저드를 자동으로 다시 열어 RepoStep 복귀 핸들러가 이어받게 한다.
   useEffect(() => { const p = new URLSearchParams(window.location.search); if (p.get("github_app_installation_id")) setConnectModal("repo"); }, []);
@@ -1887,7 +2193,7 @@ function App() {
           <span style={{ fontSize: TYPE.caption, fontFamily: MONO, color: UI.ink3, border: `1px solid ${UI.line}`, borderRadius: 4, padding: "1px 5px" }}>⌘K</span>
         </div>
         {narrowList && !aiOpen && (
-          <button type="button" className="product-focusable product-control" aria-label="AI 어시스턴트 열기" title="AI 어시스턴트" onClick={() => setAiOpen(true)}
+          <button type="button" className="product-focusable product-control" aria-label="AI 어시스턴트 열기" title="AI 어시스턴트" onClick={showAi}
             style={{ width: 30, height: 30, flexShrink: 0, borderRadius: 9, border: "none", cursor: "pointer", background: blueA(0.1), color: BLUE, display: "grid", placeItems: "center" }}>
             <Sparkles size={15} />
           </button>
@@ -2028,10 +2334,10 @@ function App() {
         </div>
       ) : surface === "deploy" ? (
         <DeploySurface pendingRepos={pendingRepo} repositoryFilter={deployRepositoryFilter} onOpenRef={openRef}
-          onOpenIssues={() => setSurface("issues")} onAskAi={() => setAiOpen(true)} onAddRepo={() => setConnectModal("repo")}
+          onOpenIssues={() => setSurface("issues")} onAskAi={showAi} onAddRepo={() => setConnectModal("repo")}
           topInset={topH} leftInset={navCollapsed ? 60 : 208} rightInset={aiOpen ? aiW : 0} />
       ) : surface === "issues" ? (
-        <IssuesSurface incidentClusterIds={incidentClusterIds} recoverySelectionCorrelations={recoverySelectionCorrelations} sessionRules={notes.filter((n) => n.icon === "rule").map((n) => n.body.split(" · ")[0])} onOpenRef={openRef} onAskAi={() => setAiOpen(true)} onOpenRca={setRcaIncident} />
+        <IssuesSurface incidentClusterIds={incidentClusterIds} recoverySelectionRoutes={recoverySelectionRoutes} previewCompletedRecoveryIds={previewCompletedRecoveryIds} sessionRules={notes.filter((n) => n.icon === "rule").map((n) => n.body.split(" · ")[0])} onOpenRef={openRef} onAskAi={() => openAi()} onOpenRca={setRcaIncident} />
       ) : surface === "timeline" ? (
         <TimelineSurface onOpenRef={openRef} />
       ) : surface === "checks" ? (
@@ -2041,7 +2347,7 @@ function App() {
       ) : surface === "alerts" ? (
         <AlertsSurface onOpenRef={openRef} />
       ) : surface === "ai" ? (
-        <AiHistorySurface onOpenPanel={() => setAiOpen(true)} />
+        <AiHistorySurface onOpenPanel={showAi} />
       ) : surface === "settings" ? (
         <SettingsSurface />
       ) : surface === "home" ? (
@@ -2169,16 +2475,26 @@ function App() {
 
       {/* AI 어시스턴트 — 상세 페이지 위까지 덮는 우측 오버레이 + 폭 조절 핸들 */}
       <AnimatePresence>
-        {aiOpen && (
-          <motion.div key="ai" initial={{ x: aiW + 30 }} animate={{ x: 0 }} exit={{ x: (aiFull ? window.innerWidth : aiW) + 30 }} transition={{ type: "spring", bounce: 0.06, visualDuration: 0.34 }}
-            style={{ position: "fixed", top: topH, right: 0, bottom: 0, width: aiFull ? "100vw" : aiW, zIndex: 72, display: "flex", boxShadow: `-28px 0 70px -32px ${inkA(0.3)}`, transition: "width .28s cubic-bezier(0.32,0.72,0,1)" }}>
+        {aiMounted && (
+          <motion.div key="ai" initial={{ x: aiW + 30 }} animate={{ x: aiOpen ? 0 : (aiFull ? window.innerWidth : aiW) + 30 }} transition={{ type: "spring", bounce: 0.06, visualDuration: 0.34 }}
+            aria-hidden={!aiOpen}
+            style={{ position: "fixed", top: topH, right: 0, bottom: 0, width: aiFull ? "100vw" : aiW, zIndex: 72, display: "flex", pointerEvents: aiOpen ? "auto" : "none", boxShadow: aiOpen ? `-28px 0 70px -32px ${inkA(0.3)}` : "none", transition: "width .28s cubic-bezier(0.32,0.72,0,1)" }}>
             {/* 전체 화면 중에는 폭 조절 핸들 비활성 */}
             {!aiFull && (
               <div role="separator" aria-label="AI 패널 폭 조절" aria-orientation="vertical" onPointerDown={onAiHandleDown} title="드래그해서 폭 조절"
                 style={{ width: 1, flexShrink: 0, cursor: "col-resize", background: aiDragging ? blueA(0.35) : UI.line, transition: "background .15s" }} />
             )}
             <div style={{ flex: 1, minWidth: 0 }}>
-              <AiPanel embedded full={aiFull} onToggleFull={() => setAiFull((v) => !v)} onClose={() => { setAiOpen(false); setAiFull(false); }} contextView={surface === "connect" ? "연결 설정" : surface === "home" ? "홈" : surface === "deploy" ? "배포" : surface === "issues" ? "이슈" : surface === "timeline" ? "타임라인" : surface === "checks" ? "점검" : surface === "cost" ? "비용" : surface === "alerts" ? "알림" : surface === "ai" ? "AI 대화" : surface === "settings" ? "설정" : resView === "flow" ? "트래픽" : resView === "list" ? "쿠버네티스 리소스" : "인프라 지도"} contextScope={scope.cluster ?? "전체 클러스터"} />
+              <AiPanel embedded full={aiFull} recoveryRequest={aiRecoveryRequest}
+                onToggleFull={() => setAiFull((v) => !v)}
+                onClose={() => { setAiOpen(false); setAiFull(false); }}
+                onCancelRecovery={() => {
+                  setAiRecoveryRequest(null);
+                  setAiRecoveryReviewState("idle");
+                }}
+                onRecoveryReviewStateChange={setAiRecoveryReviewState}
+                contextView={aiRecoveryRequest?.contextView ?? (surface === "connect" ? "연결 설정" : surface === "home" ? "홈" : surface === "deploy" ? "배포" : surface === "issues" ? "이슈" : surface === "timeline" ? "타임라인" : surface === "checks" ? "점검" : surface === "cost" ? "비용" : surface === "alerts" ? "알림" : surface === "ai" ? "AI 대화" : surface === "settings" ? "설정" : resView === "flow" ? "트래픽" : resView === "list" ? "쿠버네티스 리소스" : "인프라 지도")}
+                contextScope={aiRecoveryRequest?.contextScope ?? scope.cluster ?? "전체 클러스터"} />
             </div>
           </motion.div>
         )}
@@ -2187,14 +2503,50 @@ function App() {
       {/* AI 플로팅 버튼 — 항상 최상위(상세 위 포함) · AI 창이 열리면 사라진다 */}
       <AnimatePresence>
         {!aiOpen && !narrowList && (
-          <motion.button type="button" aria-label="AI 어시스턴트 열기" key="fab" onClick={() => setAiOpen(true)} whileHover={{ scale: 1.06 }} whileTap={{ scale: 0.93 }}
-            initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.5, opacity: 0 }} transition={SOFT}
-            title="AI 어시스턴트"
-            style={{ position: "fixed", right: surface === "resources" && resView === "flow" && !narrowFlow ? 284 : 22, bottom: 22, zIndex: 75, width: 48, height: 48, borderRadius: 999, border: "none", cursor: "pointer",
-              background: `linear-gradient(135deg, ${BLUE}, ${BLUE2})`, color: UI.card, display: "grid", placeItems: "center",
-              boxShadow: `0 10px 26px -8px ${blueA(0.55)}, 0 2px 8px ${inkA(0.12)}` }}>
-            <Sparkles size={20} />
-          </motion.button>
+          <motion.div
+            key="fab"
+            initial={{ scale: 0.5, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.5, opacity: 0 }}
+            transition={SOFT}
+            className="group"
+            style={{
+              position: "fixed",
+              right: surface === "resources" && resView === "flow" && !narrowFlow ? 284 : 22,
+              bottom: 22,
+              zIndex: 75,
+              width: 48,
+              height: 48,
+            }}
+          >
+            <motion.button type="button" aria-label="AI 어시스턴트 열기" onClick={showAi} whileHover={{ scale: 1.06 }} whileTap={{ scale: 0.93 }}
+              title={aiRecoveryRequest !== null ? recoveryReviewStatusLabel(aiRecoveryReviewState, aiRecoveryRequest.actionRoute) : "AI 어시스턴트"}
+              style={{ position: "absolute", right: 0, bottom: 0, width: 48, height: 48, borderRadius: 999, border: "none", cursor: "pointer",
+                background: `linear-gradient(135deg, ${BLUE}, ${BLUE2})`, color: UI.card, display: "grid", placeItems: "center",
+                boxShadow: `0 10px 26px -8px ${blueA(0.55)}, 0 2px 8px ${inkA(0.12)}` }}>
+              {aiRecoveryRequest !== null && (aiRecoveryReviewState === "reviewing" || aiRecoveryReviewState === "executing") ? (
+                <motion.span
+                  aria-label="복구 AI 진행 중"
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 1.6, ease: "linear", repeat: Number.POSITIVE_INFINITY }}
+                  style={{ display: "grid", placeItems: "center" }}
+                >
+                  <Sparkles size={20} />
+                </motion.span>
+              ) : <Sparkles size={20} />}
+              {aiRecoveryRequest !== null && aiRecoveryReviewState !== "reviewing" && aiRecoveryReviewState !== "executing" ? (
+                <span
+                  aria-label="확인할 복구 AI 대화 1건"
+                  style={{
+                    position: "absolute", top: -4, right: -4, minWidth: 18, height: 18,
+                    borderRadius: 999, padding: "0 4px", display: "grid", placeItems: "center",
+                    border: `2px solid ${UI.card}`, background: HP.crit, color: UI.card,
+                    fontSize: 10, lineHeight: 1, fontWeight: 700,
+                  }}
+                >1</span>
+              ) : null}
+            </motion.button>
+          </motion.div>
         )}
       </AnimatePresence>
 
@@ -2259,8 +2611,37 @@ function App() {
         {rcaIncident && <IssueDetail key={rcaIncident.name} {...rcaIncident} topInset={topH} leftInset={navCollapsed ? 60 : 208}
           onClose={() => setRcaIncident(null)}
           onOpenRef={(k, n) => openRef(k, n)}
-          onAskAi={() => { setAiOpen(true); }}
-          onRecoverySelected={(correlationId) => setRecoverySelectionCorrelations((current) => new Set(current).add(correlationId))}
+          onAskAi={openAi}
+          previewRecoveryCompleted={previewCompletedRecoveryIds.has(rcaIncident.correlationId ?? "")}
+          onRecoveryCompleted={(correlationId) => {
+            if (!notifiedRecoveryCompletionIds.current.has(correlationId)) {
+              notifiedRecoveryCompletionIds.current.add(correlationId);
+              pushToast({
+                title: "복구가 완료되었습니다",
+                sub: "성공 조건 검증을 마쳐 이슈 상태를 해결됨으로 변경했습니다.",
+                tone: "ok",
+              });
+            }
+            setPreviewCompletedRecoveryIds((current) => {
+              const next = new Set(current);
+              next.add(correlationId);
+              return next;
+            });
+          }}
+          onRecoverySelected={(correlationId, route, source) => {
+            setRecoverySelectionRoutes((current) => {
+              const next = new Map(current);
+              next.set(correlationId, route);
+              return next;
+            });
+            if (source === "direct") {
+              setAiOpen(false);
+              setAiMounted(false);
+              setAiFull(false);
+              setAiRecoveryRequest(null);
+              setAiRecoveryReviewState("idle");
+            }
+          }}
           rightInset={aiOpen ? aiW : 0} />}
       </AnimatePresence>
 

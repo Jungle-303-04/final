@@ -218,7 +218,7 @@ function ClusterRow({ cl, summary, topology, onOpen }: {
         display: "flex", flexDirection: "column", gap: 12, width: "100%", height: "100%", textAlign: "left", cursor: "pointer",
         background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 16, padding: 16, boxShadow: "none", boxSizing: "border-box",
       }}>
-      <div style={{ display: "flex", alignItems: "flex-start", gap: 10, minWidth: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
         <span style={{ width: 30, height: 30, borderRadius: 9, background: `linear-gradient(135deg, ${BRAND.awsA}, ${BRAND.awsB})`, display: "grid", placeItems: "center", flexShrink: 0 }}>
           <AwsIcon size={17} style={{ color: UI.card }} />
         </span>
@@ -366,7 +366,10 @@ function CompactClusterRow({ cl, summary, onOpen, onSettings, onDisconnect }: {
       <span style={{ display: "flex", alignItems: "center", gap: 9, minWidth: 0 }}>
         <span style={{ width: 27, height: 27, borderRadius: 8, background: `linear-gradient(135deg, ${BRAND.awsA}, ${BRAND.awsB})`, display: "grid", placeItems: "center", flexShrink: 0 }}><AwsIcon size={15} style={{ color: UI.card }} /></span>
         <span style={{ minWidth: 0 }}>
-          <span title={cl.displayName} style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: TYPE.label, fontWeight: 600, color: UI.ink }}>{cl.displayName}</span>
+          <span style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+            <span title={cl.displayName} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: TYPE.label, fontWeight: 600, color: UI.ink }}>{cl.displayName}</span>
+            {cl.readOnly && <span style={{ fontSize: TYPE.caption, fontWeight: 600, color: UI.ink2, border: `1px solid ${UI.line}`, background: UI.bg2, borderRadius: 5, padding: "1px 6px", flexShrink: 0 }}>읽기 전용</span>}
+          </span>
           <span style={{ display: "block", marginTop: 1, fontSize: TYPE.caption, color: UI.ink3 }}>{cl.environment ?? cl.provider.toUpperCase()}</span>
         </span>
         {incidents > 0 ? (
@@ -580,9 +583,9 @@ export function NodeCard({
         display: "flex", flexDirection: "column", gap: 10, width: "100%", height: "100%", textAlign: "left", cursor: "pointer",
         background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 16, padding: 16, boxShadow: "none", boxSizing: "border-box", overflow: "hidden", minHeight: 0,
       }}>
-      <div style={{ display: "flex", alignItems: "flex-start", gap: 8, minWidth: 0 }}>
-        <span style={{ width: 30, height: 30, borderRadius: 8, background: UI.bg2, display: "grid", placeItems: "center", flexShrink: 0 }}>
-          <Monitor size={18} strokeWidth={2} style={{ color: UI.ink2 }} />
+      <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+        <span style={{ width: 38, height: 38, borderRadius: 9, background: UI.bg2, display: "grid", placeItems: "center", flexShrink: 0 }}>
+          <Monitor size={24} strokeWidth={2} style={{ color: UI.ink2 }} />
         </span>
         <div style={{ minWidth: 0, flex: 1 }}>
           <NodeAliasTitle
@@ -960,6 +963,15 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
   const crumbs: { label: string; onClick?: () => void }[] = [{ label: "클러스터", onClick: view.level !== "clusters" ? () => go({ level: "clusters" }, -1) : undefined }];
   if (view.level !== "clusters") crumbs.push({ label: view.cluster, onClick: view.level === "pods" ? () => go({ level: "nodes", cluster: view.cluster }, -1) : undefined });
   if (view.level === "pods") crumbs.push({ label: view.node });
+  const tipWidth = tip?.metrics ? 468 : 280;
+  const tipHeight = tip?.metrics ? 176 : 88;
+  const tipViewportWidth = typeof window === "undefined" ? tipWidth : Math.min(tipWidth, window.innerWidth - 16);
+  const tipLeft = tip && typeof window !== "undefined"
+    ? Math.max(8, Math.min(tip.x + 14, window.innerWidth - tipViewportWidth - 8))
+    : 8;
+  const tipTop = tip && typeof window !== "undefined"
+    ? Math.max(8, Math.min(tip.y + 16, window.innerHeight - tipHeight - 8))
+    : 8;
 
   return (
     <div className="op">
@@ -1160,11 +1172,12 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
         {tip && (
           <motion.div key="tip" initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.98 }} transition={{ duration: DUR.micro }}
             style={{
+              position: "fixed", left: tipLeft, top: tipTop, zIndex: 60, pointerEvents: "none",
               // 카드 폭은 내용(max-content)에 맞춰 늘어난다 — 고정 368px + 고정 컬럼 트랙에서
               // "제한 1000m"/"사용량 관측 안 됨" 같은 값이 카드 밖으로 넘치던 문제의 교정.
-              position: "fixed", left: Math.max(8, Math.min(tip.x + 14, window.innerWidth - 476)), top: Math.min(tip.y + 16, window.innerHeight - 110), zIndex: 60, pointerEvents: "none",
               background: cardA(0.96), backdropFilter: "blur(10px)", border: `1px solid ${UI.line}`, borderRadius: 11, padding: "9px 12px",
-              boxShadow: `0 10px 30px -12px ${inkA(0.22)}`, width: "max-content", minWidth: 260, maxWidth: "min(468px, calc(100vw - 16px))",
+              boxShadow: `0 10px 30px -12px ${inkA(0.22)}`, width: "max-content", minWidth: tip.metrics ? 420 : 260,
+              maxWidth: "min(468px, calc(100vw - 16px))", boxSizing: "border-box",
             }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
               <span style={{ width: 7, height: 7, borderRadius: 999, background: sevColor(healthSev(tip.health)), flexShrink: 0 }} />
