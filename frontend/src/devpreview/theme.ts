@@ -65,7 +65,7 @@ export const TINT = {
 export const BRAND = { github: "#24292F", awsA: "#FF9900", awsB: "#F76F00" } as const;
 
 // 타이포 — 한 단계 큰 애플 스케일 (500 웨이트 금지 → 600)
-export const SANS = `-apple-system, BlinkMacSystemFont, "SF Pro Text", "Pretendard", "Apple SD Gothic Neo", "Helvetica Neue", sans-serif`;
+export const SANS = `"Pretendard Variable", "Pretendard", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
 export const MONO = "ui-monospace, 'SF Mono', SFMono-Regular, Menlo, monospace";
 export const TYPE = {
   micro: 10.5, caption: 11, caption2: 11.5, label: 12, label2: 12.5,

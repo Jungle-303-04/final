@@ -176,10 +176,10 @@ export function KpiValue({ value, unit, delta, deltaTone, summary }: {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
       <span style={{ display: "flex", alignItems: "baseline", gap: 7 }}>
-        <span style={{ fontSize: TYPE.kpi, fontWeight: 700, letterSpacing: "-0.02em", fontFamily: MONO, color: UI.ink, fontVariantNumeric: "tabular-nums" }}>{value}</span>
+        <span style={{ fontSize: TYPE.kpi, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink, fontVariantNumeric: "tabular-nums" }}>{value}</span>
         {unit && <span style={{ fontSize: TYPE.label2, fontWeight: 600, color: UI.ink3 }}>{unit}</span>}
         {delta && (
-          <span style={{ fontSize: TYPE.caption2, fontWeight: 700, fontFamily: MONO, color: deltaTone === "warn" ? TINT.warn.fg : TINT.ok.fg, background: deltaTone === "warn" ? warnA(0.14) : okA(0.12), borderRadius: 999, padding: "2px 8px" }}>{delta}</span>
+          <span style={{ fontSize: TYPE.caption2, fontWeight: 700, fontVariantNumeric: "tabular-nums", color: deltaTone === "warn" ? TINT.warn.fg : TINT.ok.fg, background: deltaTone === "warn" ? warnA(0.14) : okA(0.12), borderRadius: 999, padding: "2px 8px" }}>{delta}</span>
         )}
       </span>
       {summary && <span style={{ fontSize: TYPE.label, color: UI.ink2, lineHeight: 1.5 }}>{summary}</span>}
@@ -202,8 +202,8 @@ export function RatioBar({ a, b, aLabel, bLabel, aColor = HP.ok, bColor = HP.war
       {([[aColor, aLabel, a, ap], [bColor, bLabel, b, 100 - ap]] as const).map(([c, l, v, p]) => (
         <span key={l} style={{ display: "flex", alignItems: "center", gap: 7, fontSize: TYPE.label, color: UI.ink2 }}>
           <span style={{ width: 4, height: 13, borderRadius: 2, background: c }} />
-          <b style={{ fontFamily: MONO, color: UI.ink, fontVariantNumeric: "tabular-nums" }}>{v}</b>{l}
-          <span style={{ marginLeft: "auto", fontFamily: MONO, fontSize: TYPE.caption2, color: UI.ink3 }}>{p}%</span>
+          <b style={{ color: UI.ink, fontVariantNumeric: "tabular-nums" }}>{v}</b>{l}
+          <span style={{ marginLeft: "auto", fontVariantNumeric: "tabular-nums", fontSize: TYPE.caption2, color: UI.ink3 }}>{p}%</span>
         </span>
       ))}
     </div>
@@ -222,7 +222,7 @@ export function MiniBars({ values, labels, currentIndex, tone = BLUE }: {
         <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", gap: 4, minWidth: 0 }}>
           <motion.span initial={{ height: 0 }} animate={{ height: Math.max((v / max) * barArea, 3) }} transition={{ ...SOFT, delay: i * 0.04 }}
             style={{ width: "100%", maxWidth: 22, borderRadius: 5, background: i === currentIndex ? tone : inkA(0.09), minHeight: 3 }} />
-          {labels && <span style={{ fontSize: TYPE.micro, fontFamily: MONO, color: i === currentIndex ? UI.ink : UI.ink3, fontWeight: i === currentIndex ? 700 : 500 }}>{labels[i]}</span>}
+          {labels && <span style={{ fontSize: TYPE.micro, fontVariantNumeric: "tabular-nums", color: i === currentIndex ? UI.ink : UI.ink3, fontWeight: i === currentIndex ? 700 : 500 }}>{labels[i]}</span>}
         </div>
       ))}
     </div>
@@ -260,8 +260,8 @@ export function Donut({ items, onPick }: { items: { label: string; value: number
             style={{ display: "flex", alignItems: "center", gap: 7, width: "100%", maxWidth: "100%", fontSize: TYPE.label, color: UI.ink2, border: "none", background: "transparent", padding: "1px 4px", borderRadius: 6, cursor: pickable ? "pointer" : "default", textAlign: "left", minWidth: 0 }}>
             <span style={{ width: 8, height: 8, borderRadius: 999, background: DONUT_COLORS[i % DONUT_COLORS.length], flexShrink: 0 }} />
             <span title={it.label} style={{ flex: "1 1 auto", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.label}</span>
-            <b style={{ width: 44, marginLeft: "auto", textAlign: "right", fontFamily: MONO, color: UI.ink, fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{it.value}</b>
-            <span style={{ fontFamily: MONO, fontSize: TYPE.caption, color: UI.ink3, width: 38, textAlign: "right", flexShrink: 0 }}>{Math.round((it.value / total) * 100)}%</span>
+            <b style={{ width: 44, marginLeft: "auto", textAlign: "right", color: UI.ink, fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{it.value}</b>
+            <span style={{ fontVariantNumeric: "tabular-nums", fontSize: TYPE.caption, color: UI.ink3, width: 38, textAlign: "right", flexShrink: 0 }}>{Math.round((it.value / total) * 100)}%</span>
           </button>
           );
         })}
@@ -287,7 +287,7 @@ export function RankList({ rows, onPick }: {
             <span style={{ display: "block", fontSize: TYPE.label2, fontWeight: 600, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.title}</span>
             {r.sub && <span style={{ display: "block", fontSize: TYPE.caption, fontFamily: MONO, color: UI.ink3, marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.sub}</span>}
           </span>
-          {r.right && <span style={{ fontSize: TYPE.caption, fontFamily: MONO, color: UI.ink3, flexShrink: 0 }}>{r.right}</span>}
+          {r.right && <span style={{ fontSize: TYPE.caption, fontVariantNumeric: "tabular-nums", color: UI.ink3, flexShrink: 0 }}>{r.right}</span>}
         </motion.button>
       ))}
     </div>
@@ -315,7 +315,7 @@ export function MultiLine({ series, height = 92 }: {
         {series.map((s) => (
           <span key={s.label} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: TYPE.caption, color: UI.ink2 }}>
             <span style={{ width: 8, height: 2.5, borderRadius: 2, background: s.color }} />{s.label}
-            <b style={{ fontFamily: MONO, color: UI.ink, fontVariantNumeric: "tabular-nums" }}>{s.values[s.values.length - 1]}</b>
+            <b style={{ color: UI.ink, fontVariantNumeric: "tabular-nums" }}>{s.values[s.values.length - 1]}</b>
           </span>
         ))}
       </div>
@@ -335,7 +335,7 @@ export function RingGauge({ label, value }: { label: string; value: number }) {
           <motion.circle cx={26} cy={26} r={R} fill="none" stroke={tone} strokeWidth={5} strokeLinecap="round"
             strokeDasharray={C} initial={{ strokeDashoffset: C }} animate={{ strokeDashoffset: C * (1 - value / 100) }} transition={{ duration: DUR.meter, ease: "easeInOut" }} />
         </svg>
-        <span style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", fontSize: TYPE.caption2, fontWeight: 700, fontFamily: MONO, color: UI.ink, fontVariantNumeric: "tabular-nums" }}>{value}%</span>
+        <span style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", fontSize: TYPE.caption2, fontWeight: 700, color: UI.ink, fontVariantNumeric: "tabular-nums" }}>{value}%</span>
       </div>
       <span style={{ fontSize: TYPE.micro, fontWeight: 600, letterSpacing: "0.05em", color: UI.ink3 }}>{label}</span>
     </div>
@@ -358,7 +358,7 @@ export function MiniTimeline({ items, onPick, columns = 1 }: {
       {stack.map((it, i) => (
         <motion.div key={it.id} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} transition={{ ...SOFT, delay: Math.min(i, 8) * 0.04 }}
           style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-          <span style={{ width: 52, flexShrink: 0, whiteSpace: "nowrap", fontSize: TYPE.micro, fontFamily: MONO, color: UI.ink3, paddingTop: 2, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{it.time}</span>
+          <span style={{ width: 52, flexShrink: 0, whiteSpace: "nowrap", fontSize: TYPE.micro, color: UI.ink3, paddingTop: 2, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{it.time}</span>
           <span style={{ display: "flex", flexDirection: "column", alignItems: "center", alignSelf: "stretch", flexShrink: 0 }}>
             <span style={{ width: 9, height: 9, borderRadius: 999, border: `2px solid ${HP[it.tone]}`, background: it.tone === "crit" ? HP.crit : "transparent", marginTop: 3 }} />
             {i < stack.length - 1 && <span style={{ flex: 1, width: 1, borderLeft: `1.5px dashed ${UI.line}`, minHeight: 14 }} />}

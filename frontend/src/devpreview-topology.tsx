@@ -278,7 +278,7 @@ export function TopologyView({ embedded = false, onOpenService, focusId, onFocus
                 </div>
                 {tel ? (
                   <div style={{ marginTop: 11, borderTop: `1px solid ${UI.line}`, paddingTop: 10 }}>
-                    <div style={{ display: "flex", gap: 12, fontSize: TYPE.caption2, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>
+                    <div style={{ display: "flex", gap: 12, fontSize: TYPE.caption2, fontVariantNumeric: "tabular-nums" }}>
                       <span style={{ color: UI.ink2 }}>연결 <b style={{ color: UI.ink }}>{tel.connections.toLocaleString()}</b></span>
                       <span style={{ color: UI.ink2 }}>판정 <b style={{ color: bad ? ST.crit : UI.ink }}>{VERDICT_LABEL[tel.verdict]}</b></span>
                       <span style={{ color: UI.ink2 }}>{tel.protocol}</span>
@@ -389,7 +389,7 @@ export function TopologyView({ embedded = false, onOpenService, focusId, onFocus
             </div>
             <div style={{ marginTop: 6, fontSize: TYPE.micro, color: UI.ink3 }}>관계 · {KIND_LABEL[etip.e.kind]}</div>
             {tel ? (
-              <div style={{ display: "flex", gap: 12, marginTop: 7, fontSize: TYPE.caption2, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>
+              <div style={{ display: "flex", gap: 12, marginTop: 7, fontSize: TYPE.caption2, fontVariantNumeric: "tabular-nums" }}>
                 <span style={{ color: UI.ink2 }}>연결 <b style={{ color: UI.ink }}>{tel.connections.toLocaleString()}</b></span>
                 <span style={{ color: UI.ink2 }}>판정 <b style={{ color: bad ? ST.crit : UI.ink }}>{VERDICT_LABEL[tel.verdict]}</b></span>
               </div>

@@ -227,7 +227,7 @@ function TRow({ cols, cells, onClick, i = 0 }: { cols: [string, string][]; cells
 }
 // 서피스 요약 칩 — 홈·지도 상태 요약 줄과 같은 칩 문법(제품 P2에서 공용 컴포넌트로 수렴)
 const segStyle: React.CSSProperties = { display: "flex", alignItems: "center", gap: 5, fontSize: TYPE.label, fontWeight: 600, color: UI.ink2, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 999, padding: "5px 11px", whiteSpace: "nowrap" };
-const numStyle: React.CSSProperties = { fontFamily: MONO, fontWeight: 700, color: UI.ink, fontVariantNumeric: "tabular-nums" };
+const numStyle: React.CSSProperties = { fontWeight: 700, color: UI.ink, fontVariantNumeric: "tabular-nums" };
 function ChipRow({ chips }: { chips: { label: string; value: React.ReactNode; warn?: boolean; crit?: boolean }[] }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
@@ -241,7 +241,7 @@ function ChipRow({ chips }: { chips: { label: string; value: React.ReactNode; wa
 }
 
 const Mono = ({ children, dim }: { children: React.ReactNode; dim?: boolean }) => (
-  <span style={{ fontFamily: MONO, fontSize: TYPE.label, color: dim ? UI.ink3 : UI.ink, fontVariantNumeric: "tabular-nums" }}>{children}</span>
+  <span style={{ fontSize: TYPE.label, color: dim ? UI.ink3 : UI.ink, fontVariantNumeric: "tabular-nums" }}>{children}</span>
 );
 
 
@@ -1768,7 +1768,7 @@ export function TimelineSurface({ onOpenRef: _onOpenRef }: { onOpenRef: (kind: s
         {(["전체", "배포", "이슈", "구성"] as const).map((c) => (
           <button key={c} onClick={() => { setCat(c); setPage(0); }}
             style={{ display: "flex", alignItems: "center", gap: 5, border: `1px solid ${cat === c ? blueA(0.45) : UI.line}`, background: cat === c ? blueA(0.07) : UI.card, color: cat === c ? BLUE : UI.ink2, borderRadius: 999, padding: "4px 13px", fontSize: TYPE.label, fontWeight: 700, cursor: "pointer" }}>{c}
-            <span style={{ fontFamily: MONO, fontSize: TYPE.micro, color: cat === c ? BLUE : UI.ink3 }}>{c === "전체" ? items.length : items.filter((i) => i.cat === c).length}</span>
+            <span style={{ fontVariantNumeric: "tabular-nums", fontSize: TYPE.micro, color: cat === c ? BLUE : UI.ink3 }}>{c === "전체" ? items.length : items.filter((i) => i.cat === c).length}</span>
           </button>
         ))}
       </div>
@@ -1860,7 +1860,7 @@ function ChecksContent() {
           : checks.scopes.map((s) => (
             <div key={s.clusterId} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "10px 15px", borderTop: `1px solid ${UI.line2}` }}>
               <span style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
-                <span style={{ fontSize: TYPE.label2, fontWeight: 700, fontFamily: MONO, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.clusterId}</span>
+                <span style={{ fontSize: TYPE.label2, fontWeight: 700, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.clusterId}</span>
                 <span style={{ fontSize: TYPE.caption2, color: UI.ink3 }}>{s.namespaces.length ? `${s.namespaces.length}개 네임스페이스` : "전체 네임스페이스"}</span>
               </span>
               <Pill tone={s.freshness === "live" ? "ok" : s.freshness === "disconnected" ? "crit" : "warn"} label={koLabel(s.freshness)} />
@@ -2010,7 +2010,7 @@ export function SettingsSurface() {
                   <Mono>{koLabel(p.key)}</Mono>
                   <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     {p.eventInvalidation && <Pill tone="info" label="이벤트 무효화" />}
-                    <span style={{ fontSize: TYPE.caption2, color: UI.ink3, fontFamily: MONO }}>{p.staleAfterSeconds !== null ? `오래됨 ${p.staleAfterSeconds}초 · ` : ""}갱신 {p.refreshAfterSeconds}초</span>
+                    <span style={{ fontSize: TYPE.caption2, color: UI.ink3, fontVariantNumeric: "tabular-nums" }}>{p.staleAfterSeconds !== null ? `오래됨 ${p.staleAfterSeconds}초 · ` : ""}갱신 {p.refreshAfterSeconds}초</span>
                   </span>
                 </div>
               ))}

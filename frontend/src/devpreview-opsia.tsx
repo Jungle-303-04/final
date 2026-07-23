@@ -86,7 +86,7 @@ function ClusterMiniUsage({ label, value }: { label: string; value: number | nul
           }}
         />
       </span>
-      <span style={{ width: 66, textAlign: "right", fontSize: observed ? TYPE.label2 : TYPE.micro, fontWeight: observed ? 700 : 600, fontFamily: observed ? MONO : undefined, color: observed ? UI.ink : UI.ink3, fontVariantNumeric: "tabular-nums", flexShrink: 0, whiteSpace: "nowrap" }}>
+      <span style={{ width: 66, textAlign: "right", fontSize: observed ? TYPE.label2 : TYPE.micro, fontWeight: observed ? 700 : 600, color: observed ? UI.ink : UI.ink3, fontVariantNumeric: "tabular-nums", flexShrink: 0, whiteSpace: "nowrap" }}>
         <AnimatedPercentageValue value={value} reducedMotion={Boolean(reducedMotion)} />
       </span>
     </div>
@@ -185,11 +185,11 @@ function ClusterRow({ cl, summary, topology, onOpen }: {
         </span>
         <span style={{ minWidth: 0, flex: 1 }}>
           <span style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
-            <span title={cl.displayName} style={{ fontSize: TYPE.title3, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink, fontFamily: MONO, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cl.displayName}</span>
+            <span title={cl.displayName} style={{ fontSize: TYPE.title3, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cl.displayName}</span>
             {cl.environment === "production" && <span style={{ fontSize: TYPE.micro, fontWeight: 600, color: TINT.warn.fg, border: `1px solid ${TINT.warn.bd}`, background: TINT.warn.bg, borderRadius: 5, padding: "1px 6px", flexShrink: 0 }}>prod</span>}
             {cl.readOnly && <span style={{ fontSize: TYPE.micro, fontWeight: 600, color: UI.ink2, border: `1px solid ${UI.line}`, background: UI.bg2, borderRadius: 5, padding: "1px 6px", flexShrink: 0 }}>읽기 전용</span>}
           </span>
-          <span style={{ display: "block", fontSize: TYPE.caption2, color: UI.ink3, marginTop: 2, fontFamily: MONO }}>
+          <span style={{ display: "block", fontSize: TYPE.caption2, color: UI.ink3, marginTop: 2 }}>
             {cl.provider.toUpperCase()} · {cl.kubernetesVersion ?? "—"}
             {summary?.stale === true && <span aria-label="실시간 관측 지연" style={{ color: TINT.warn.fg, fontWeight: 700 }}> · 관측 지연</span>}
           </span>
@@ -202,9 +202,9 @@ function ClusterRow({ cl, summary, topology, onOpen }: {
       </div>
 
       <div style={{ display: "flex", gap: 14, fontSize: TYPE.label, color: UI.ink2, fontVariantNumeric: "tabular-nums", flexWrap: "wrap" }}>
-        <span>노드 <b style={{ fontFamily: MONO, color: UI.ink }}>{fmt(nodesReady)}/{fmt(nodesTotal)}</b> 준비</span>
-        <span>파드 <b style={{ fontFamily: MONO, color: UI.ink }}>{fmt(podCount)}</b>{incidents > 0 && <b style={{ color: TINT.crit.fg, fontFamily: MONO }}> · 장애 {incidents}</b>}</span>
-        <span>네임스페이스 <b style={{ fontFamily: MONO, color: UI.ink }}>{cl.namespaceCount ?? "—"}</b></span>
+        <span>노드 <b style={{ color: UI.ink, fontVariantNumeric: "tabular-nums" }}>{fmt(nodesReady)}/{fmt(nodesTotal)}</b> 준비</span>
+        <span>파드 <b style={{ color: UI.ink, fontVariantNumeric: "tabular-nums" }}>{fmt(podCount)}</b>{incidents > 0 && <b style={{ color: TINT.crit.fg, fontVariantNumeric: "tabular-nums" }}> · 장애 {incidents}</b>}</span>
+        <span>네임스페이스 <b style={{ color: UI.ink, fontVariantNumeric: "tabular-nums" }}>{cl.namespaceCount ?? "—"}</b></span>
         {topology?.status === "ready" && topology.partial && (
           <span title={topology.partialReasonCodes.map(reasonLabel).join(" · ") || "부분 관측"}
             style={{ color: TINT.warn.fg, fontWeight: 700 }}>
@@ -268,7 +268,7 @@ function CompactUsage({ label, value }: { label: string; value: number | null })
       <span style={{ height: 4, borderRadius: 999, background: inkA(0.06), overflow: "hidden" }}>
         {shown !== null && <span style={{ display: "block", width: `${Math.min(100, shown)}%`, height: "100%", borderRadius: 999, background: shown >= 90 ? HP.crit : shown >= 75 ? HP.warn : HP.ok }} />}
       </span>
-      <span style={{ textAlign: "right", fontSize: TYPE.micro, fontWeight: 700, fontFamily: MONO, color: shown === null ? UI.ink3 : UI.ink }}>{shown === null ? "—" : `${Math.round(shown)}%`}</span>
+      <span style={{ textAlign: "right", fontSize: TYPE.micro, fontWeight: 700, fontVariantNumeric: "tabular-nums", color: shown === null ? UI.ink3 : UI.ink }}>{shown === null ? "—" : `${Math.round(shown)}%`}</span>
     </span>
   );
 }
@@ -327,7 +327,7 @@ function CompactClusterRow({ cl, summary, onOpen, onSettings, onDisconnect }: {
       <span style={{ display: "flex", alignItems: "center", gap: 9, minWidth: 0 }}>
         <span style={{ width: 27, height: 27, borderRadius: 8, background: `linear-gradient(135deg, ${BRAND.awsA}, ${BRAND.awsB})`, display: "grid", placeItems: "center", flexShrink: 0 }}><AwsIcon size={15} style={{ color: UI.card }} /></span>
         <span style={{ minWidth: 0 }}>
-          <span title={cl.displayName} style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: TYPE.label2, fontWeight: 750, fontFamily: MONO, color: UI.ink }}>{cl.displayName}</span>
+          <span title={cl.displayName} style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: TYPE.label2, fontWeight: 750, color: UI.ink }}>{cl.displayName}</span>
           <span style={{ display: "block", marginTop: 1, fontSize: TYPE.micro, color: UI.ink3 }}>{cl.environment ?? cl.provider.toUpperCase()}</span>
         </span>
         {incidents > 0 ? (
@@ -352,10 +352,10 @@ function CompactClusterRow({ cl, summary, onOpen, onSettings, onDisconnect }: {
         ) : null}
       </span>
       <span className="home-cluster-compact-facts" style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, auto))", alignItems: "baseline", gap: 12, minWidth: 0, fontSize: TYPE.caption2, lineHeight: 1.2, color: UI.ink3, fontVariantNumeric: "tabular-nums" }}>
-        <span style={{ display: "inline-flex", alignItems: "baseline", gap: 4, whiteSpace: "nowrap" }}>노드 <b style={{ color: UI.ink, fontFamily: MONO }}>{fmt(ready)}/{fmt(nodes)}</b></span>
-        <span style={{ display: "inline-flex", alignItems: "baseline", gap: 4, whiteSpace: "nowrap" }}>파드 <b style={{ color: UI.ink, fontFamily: MONO }}>{fmt(pods)}</b></span>
-        <span style={{ display: "inline-flex", alignItems: "baseline", gap: 4, whiteSpace: "nowrap" }}>NS <b style={{ color: UI.ink, fontFamily: MONO }}>{cl.namespaceCount ?? "—"}</b></span>
-        <span style={{ display: "inline-flex", alignItems: "baseline", gap: 4, whiteSpace: "nowrap" }}>슬롯 <b style={{ color: UI.ink, fontFamily: MONO }}>{fmt(pods)}/{fmt(slots)}</b></span>
+        <span style={{ display: "inline-flex", alignItems: "baseline", gap: 4, whiteSpace: "nowrap" }}>노드 <b style={{ color: UI.ink, fontVariantNumeric: "tabular-nums" }}>{fmt(ready)}/{fmt(nodes)}</b></span>
+        <span style={{ display: "inline-flex", alignItems: "baseline", gap: 4, whiteSpace: "nowrap" }}>파드 <b style={{ color: UI.ink, fontVariantNumeric: "tabular-nums" }}>{fmt(pods)}</b></span>
+        <span style={{ display: "inline-flex", alignItems: "baseline", gap: 4, whiteSpace: "nowrap" }}>NS <b style={{ color: UI.ink, fontVariantNumeric: "tabular-nums" }}>{cl.namespaceCount ?? "—"}</b></span>
+        <span style={{ display: "inline-flex", alignItems: "baseline", gap: 4, whiteSpace: "nowrap" }}>슬롯 <b style={{ color: UI.ink, fontVariantNumeric: "tabular-nums" }}>{fmt(pods)}/{fmt(slots)}</b></span>
       </span>
       <span className="home-cluster-compact-usage" style={{ display: "grid", gap: 4, minWidth: 0 }}>
         <CompactUsage label="CPU" value={summaryLoading ? null : summary?.cpuPct ?? null} />
@@ -410,7 +410,7 @@ export function HomeClustersWidget({ onOpen, onSettings, onDisconnect, pending =
       ))}
       {pending.map((name) => (
         <div key={name} style={{ display: "grid", gridTemplateColumns: "minmax(170px, 1.35fr) minmax(210px, 1.25fr) minmax(180px, 1fr) 28px", alignItems: "center", gap: 14, minHeight: 54, padding: "8px 4px", borderTop: `1px solid ${UI.line2}` }}>
-          <span style={{ minWidth: 0, fontFamily: MONO, fontSize: TYPE.label2, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
+          <span style={{ minWidth: 0, fontSize: TYPE.label2, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
           <span style={{ fontSize: TYPE.caption2, color: TINT.blue.fg }}>부트스트랩 중 · 첫 인벤토리 대기</span>
           <span style={{ fontSize: TYPE.caption2, color: UI.ink3 }}>CPU — · MEM —</span><span />
         </div>
@@ -450,8 +450,8 @@ export function PendingClusterCard({ name, delay = 0 }: { name: string; delay?: 
           <AwsIcon size={17} style={{ color: UI.ink3 }} />
         </span>
         <span style={{ minWidth: 0, flex: 1 }}>
-          <span style={{ fontSize: TYPE.title3, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink, fontFamily: MONO, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
-          <span style={{ display: "block", fontSize: TYPE.caption2, color: UI.ink3, marginTop: 2, fontFamily: MONO }}>Amazon EKS · 버전 관측 대기</span>
+          <span style={{ fontSize: TYPE.title3, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
+          <span style={{ display: "block", fontSize: TYPE.caption2, color: UI.ink3, marginTop: 2 }}>Amazon EKS · 버전 관측 대기</span>
         </span>
         <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: TYPE.caption, fontWeight: 700, color: TINT.blue.fg, background: blueA(0.08), border: `1px solid ${blueA(0.25)}`, borderRadius: 999, padding: "3px 9px", flexShrink: 0 }}><span className="pulsedot" style={{ width: 6, height: 6, borderRadius: 999, background: BLUE }} />부트스트랩 중</span>
       </div>
@@ -523,23 +523,23 @@ export function NodeCard({ node, pods, problemPodCount, onOpen, onTip }: {
         {sev !== "ok" && <HealthChip health={node.health} />}
         <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: TYPE.caption, color: UI.ink3 }}>
           <Box size={12} aria-hidden="true" />파드 슬롯
-          <b style={{ color: UI.ink, fontFamily: MONO }}>{node.matchedPodCount ?? "—"}</b>
+          <b style={{ color: UI.ink, fontVariantNumeric: "tabular-nums" }}>{node.matchedPodCount ?? "—"}</b>
           <span>/</span>
-          <b style={{ color: UI.ink, fontFamily: MONO }}>{node.totalPodCount ?? "—"}</b>
+          <b style={{ color: UI.ink, fontVariantNumeric: "tabular-nums" }}>{node.totalPodCount ?? "—"}</b>
         </span>
         {problemPodCount !== null && problemPodCount > 0 && (
           <span aria-label={`문제 파드 ${problemPodCount}`} style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: TYPE.caption, fontWeight: 700, color: TINT.crit.fg }}>
-            <AlertTriangle size={12} aria-hidden="true" /><b style={{ fontFamily: MONO }}>{problemPodCount}</b>문제 파드
+            <AlertTriangle size={12} aria-hidden="true" /><b style={{ fontVariantNumeric: "tabular-nums" }}>{problemPodCount}</b>문제 파드
           </span>
         )}
         {restartsRecent > 0 && (
           <span aria-label={`최근 재시작 ${restartsRecent}`} style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: TYPE.caption, fontWeight: 700, color: TINT.warn.fg }}>
-            <RotateCcw size={12} aria-hidden="true" /><b style={{ fontFamily: MONO }}>{restartsRecent}</b>최근 재시작
+            <RotateCcw size={12} aria-hidden="true" /><b style={{ fontVariantNumeric: "tabular-nums" }}>{restartsRecent}</b>최근 재시작
           </span>
         )}
         {problemConditionCount > 0 && (
           <span aria-label={`문제 조건 ${problemConditionCount}`} style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: TYPE.caption, fontWeight: 700, color: TINT.warn.fg }}>
-            <AlertTriangle size={12} aria-hidden="true" /><b style={{ fontFamily: MONO }}>{problemConditionCount}</b>조건
+            <AlertTriangle size={12} aria-hidden="true" /><b style={{ fontVariantNumeric: "tabular-nums" }}>{problemConditionCount}</b>조건
           </span>
         )}
       </div>
@@ -621,7 +621,7 @@ export function NodePodSlotGrid({ node, pods }: { node: InvNode; pods: readonly 
         <span
           aria-hidden="true"
           data-slot-overflow={hiddenCapacity}
-          style={{ flexShrink: 0, fontFamily: MONO, fontSize: TYPE.caption, fontWeight: 700, color: UI.ink3, whiteSpace: "nowrap" }}
+          style={{ flexShrink: 0, fontVariantNumeric: "tabular-nums", fontSize: TYPE.caption, fontWeight: 700, color: UI.ink3, whiteSpace: "nowrap" }}
         >
           +{hiddenCapacity}
         </span>
@@ -727,7 +727,7 @@ function PodRow({ pod, onClick, onTip }: {
       <span style={{ width: 10, height: 10, borderRadius: 3, background: sevColor(sev) }} />
       <span style={{ fontSize: TYPE.body, fontWeight: 600, fontFamily: MONO, color: UI.ink, letterSpacing: "-0.01em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{pod.name}</span>
       <span style={{ fontSize: TYPE.caption, fontFamily: MONO, color: UI.ink3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{pod.namespace ?? "—"}</span>
-      <span style={{ fontSize: TYPE.caption, fontFamily: MONO, color: UI.ink2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{pod.status ? statusLabel(pod.status) : "—"}</span>
+      <span style={{ fontSize: TYPE.caption, color: UI.ink2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{pod.status ? statusLabel(pod.status) : "—"}</span>
       <span style={{ justifySelf: "start" }}><HealthChip health={pod.health} /></span>
     </motion.button>
   );
@@ -847,7 +847,7 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
         {/* 상태 요약 줄 — 클러스터 수(실). 드릴 시 관측된 노드·파드 수를 정직하게 표기. */}
         {(() => {
           const seg: React.CSSProperties = { display: "flex", alignItems: "center", gap: 5, fontSize: TYPE.label, fontWeight: 600, color: UI.ink2, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 999, padding: "5px 11px", whiteSpace: "nowrap" };
-          const num: React.CSSProperties = { fontFamily: MONO, fontWeight: 700, color: UI.ink, fontVariantNumeric: "tabular-nums" };
+          const num: React.CSSProperties = { fontWeight: 700, color: UI.ink, fontVariantNumeric: "tabular-nums" };
           const drilled = view.level !== "clusters";
           const observing = drilled && (topology.status === "ready" || activeSummary?.status === "ready");
           const nodesReady = activeSummary?.status === "ready" ? activeSummary.nodesReady : topology.nodesReady;

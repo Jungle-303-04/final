@@ -282,7 +282,7 @@ function CellView({ cell, v, bad }: { cell: Cell; v: unknown; bad?: boolean }) {
     const c = m.pct >= 90 ? HP.crit : m.pct >= 60 ? HP.warn : HP.ok;
     return (
       <span style={{ display: "flex", flexDirection: "column", gap: 3, minWidth: 0 }}>
-        <span style={{ fontSize: TYPE.caption2, fontFamily: MONO, color: UI.ink2, whiteSpace: "nowrap" }}>{m.used} / {m.lim} <span style={{ color: UI.ink3 }}>{m.pct}%</span></span>
+        <span style={{ fontSize: TYPE.caption2, fontVariantNumeric: "tabular-nums", color: UI.ink2, whiteSpace: "nowrap" }}>{m.used} / {m.lim} <span style={{ color: UI.ink3 }}>{m.pct}%</span></span>
         <span style={{ height: 3, borderRadius: 999, background: inkA(0.07), overflow: "hidden" }}>
           <span style={{ display: "block", height: "100%", width: `${m.pct}%`, background: c, borderRadius: 999 }} />
         </span>
@@ -293,14 +293,14 @@ function CellView({ cell, v, bad }: { cell: Cell; v: unknown; bad?: boolean }) {
     const n = v as number;
     return <span style={{ display: "flex", gap: 3 }}>{Array.from({ length: n }).map((_, i) => <span key={i} style={{ width: 7, height: 7, borderRadius: 999, background: bad && i === 0 ? HP.crit : i === 0 && n > 1 ? HP.pending : HP.ok }} />)}</span>;
   }
-  if (cell.t === "ready") return <span style={{ fontSize: TYPE.label, fontFamily: MONO, fontWeight: 600, color: bad ? HP.crit : TINT.ok.fg }}>{String(v)}</span>;
+  if (cell.t === "ready") return <span style={{ fontSize: TYPE.label, fontVariantNumeric: "tabular-nums", fontWeight: 600, color: bad ? HP.crit : TINT.ok.fg }}>{String(v)}</span>;
   if (cell.t === "status") {
     const s = String(v);
     const tone = bad || isCriticalStatus(s) || /Crash|OOM|Fail|Error|Evict/.test(s) ? "red" : /Pending|Provisioning/.test(s) ? "blue" : /Cordoned|Suspend|Terminat/.test(s) ? "gray" : "green";
     return <Badge text={statusLabel(s)} tone={tone} />;
   }
   if (cell.t === "badge") return <Badge text={statusLabel(String(v))} tone={bad ? "red" : cell.tone ?? "gray"} />;
-  if (cell.t === "num") return <span style={{ fontSize: TYPE.label2, fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: UI.ink2 }}>{String(v)}</span>;
+  if (cell.t === "num") return <span style={{ fontSize: TYPE.label2, fontVariantNumeric: "tabular-nums", color: UI.ink2 }}>{String(v)}</span>;
   if (cell.t === "ns") return <span style={{ fontSize: TYPE.label2, color: UI.ink2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{String(v)}</span>;
   if (cell.t === "mono") return <span style={{ fontSize: TYPE.label, fontFamily: MONO, color: UI.ink3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{String(v)}</span>;
   return <span style={{ fontSize: TYPE.label2, color: UI.ink2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{String(v)}</span>;
@@ -442,7 +442,7 @@ function UsageMiniChart({ title, unit, values, observed, total }: { title: strin
     <div>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 6 }}>
         <span style={{ fontSize: TYPE.label2, fontWeight: 700, color: UI.ink2 }}>{title}</span>
-        {last !== undefined && <span style={{ fontSize: TYPE.label2, fontFamily: MONO, color: UI.ink }}>{last.toFixed(0)} {unit}</span>}
+        {last !== undefined && <span style={{ fontSize: TYPE.label2, fontVariantNumeric: "tabular-nums", color: UI.ink }}>{last.toFixed(0)} {unit}</span>}
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" width="100%" height={44} style={{ display: "block", overflow: "visible" }} role="img" aria-label={`${title} 사용량 추이`}>
         <path d={d.trim()} fill="none" stroke={BLUE} strokeWidth={1.5} vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />
@@ -911,7 +911,7 @@ function KindIndex({ sel, onPick, showEmpty, setShowEmpty, pinned, togglePin, fi
         <span role="button" title="즐겨찾기" onClick={(e) => { e.stopPropagation(); togglePin(k.id); }} className="kpin" style={{ display: "grid", placeItems: "center", opacity: pinned.includes(k.id) ? 1 : 0 }}>
           <Pin size={10} style={{ color: pinned.includes(k.id) ? BLUE : UI.ink3 }} />
         </span>
-        <span style={{ fontSize: TYPE.caption, fontWeight: 600, fontFamily: MONO, color: cnt(k) ? (on ? BLUE : UI.ink2) : UI.ink3, background: on ? blueA(0.12) : inkA(0.05), borderRadius: 5, padding: "1px 6px", minWidth: 22, textAlign: "center", flexShrink: 0 }}>{cnt(k)}</span>
+        <span style={{ fontSize: TYPE.caption, fontWeight: 600, fontVariantNumeric: "tabular-nums", color: cnt(k) ? (on ? BLUE : UI.ink2) : UI.ink3, background: on ? blueA(0.12) : inkA(0.05), borderRadius: 5, padding: "1px 6px", minWidth: 22, textAlign: "center", flexShrink: 0 }}>{cnt(k)}</span>
       </button>
     );
   };
@@ -930,7 +930,7 @@ function KindIndex({ sel, onPick, showEmpty, setShowEmpty, pinned, togglePin, fi
           <div key={g}>
             <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "0 9px 5px" }}>
               <span style={{ fontSize: TYPE.micro, fontWeight: 600, letterSpacing: "0.07em", color: UI.ink3 }}>{g}</span>
-              <span style={{ marginLeft: "auto", fontSize: TYPE.micro, fontFamily: MONO, color: UI.ink3 }}>{GROUP_TOTAL(g, counts)}</span>
+              <span style={{ marginLeft: "auto", fontSize: TYPE.micro, fontVariantNumeric: "tabular-nums", color: UI.ink3 }}>{GROUP_TOTAL(g, counts)}</span>
             </div>
             {list.map((k) => <Row key={k.id} k={k} />)}
           </div>
@@ -1222,7 +1222,7 @@ function HomeSurface({ clusterMeta, incidentClusterIds, onDrillCluster, onCluste
       <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
         {(() => {
           const seg: React.CSSProperties = { display: "flex", alignItems: "center", gap: 5, fontSize: TYPE.label, fontWeight: 600, color: UI.ink2, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 999, padding: "5px 11px", whiteSpace: "nowrap" };
-          const num: React.CSSProperties = { fontFamily: MONO, fontWeight: 700, color: UI.ink, fontVariantNumeric: "tabular-nums" };
+          const num: React.CSSProperties = { fontWeight: 700, color: UI.ink, fontVariantNumeric: "tabular-nums" };
           // 실 관측 파생: 장애=RCA 이슈 큐, 동기화 필요=애플리케이션 배송 상태. 노드/파드 세분은 계약 미노출이라 클러스터 카드에만.
           const critCount = issues.status === "ready" ? issues.items.length : 0;
           const firstCrit = issues.items[0]?.clusterId ?? undefined;
@@ -2060,7 +2060,7 @@ function App() {
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                   <kind.icon size={15} style={{ color: BLUE }} />
                   <span style={{ fontSize: TYPE.title3, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink }}>{kind.label}</span>
-                  <span style={{ fontSize: TYPE.label, fontFamily: MONO, color: UI.ink3 }}>{shownRows.length}{shownRows.length !== allRows.length ? ` / ${allRows.length}` : ""}</span>
+                  <span style={{ fontSize: TYPE.label, fontVariantNumeric: "tabular-nums", color: UI.ink3 }}>{shownRows.length}{shownRows.length !== allRows.length ? ` / ${allRows.length}` : ""}</span>
                   <span style={{ fontSize: TYPE.caption2, fontWeight: 600, color: inScope ? BLUE : UI.ink2, background: inScope ? blueA(0.08) : inkA(0.045), borderRadius: 999, padding: "3px 11px" }}>범위 · {scopeLabel}</span>
                 </div>
                 {/* 표 교체는 대기 없이 즉시 — exit를 기다리면 전환이 느리고, 탭 스로틀 시 멈춘다 */}

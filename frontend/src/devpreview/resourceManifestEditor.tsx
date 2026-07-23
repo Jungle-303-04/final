@@ -444,7 +444,7 @@ function LiveManifestPanel({ source }: { source: ResourceManifestSourceEndpoint 
     <section aria-label="Live YAML 읽기 전용" style={{ display: "grid", gap: 8 }}>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
         <b style={{ color: UI.ink, fontSize: TYPE.bodyStrong }}>Live YAML · 읽기 전용</b>
-        {source.live_observed_at && <span style={{ color: UI.ink3, fontFamily: MONO, fontSize: TYPE.micro }}>관측 {source.live_observed_at}</span>}
+        {source.live_observed_at && <span style={{ color: UI.ink3, fontVariantNumeric: "tabular-nums", fontSize: TYPE.micro }}>관측 {source.live_observed_at}</span>}
       </div>
       {source.live_yaml ? (
         <textarea aria-label="Live YAML" value={source.live_yaml} readOnly spellCheck={false}
