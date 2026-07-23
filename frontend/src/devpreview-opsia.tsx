@@ -411,12 +411,15 @@ function CompactClusterRow({ cl, summary, onOpen, onSettings, onDisconnect }: {
         {/* 카드 스택/오버플로 컨텍스트 안에서는 다음 카드가 메뉴 위에 그려져 클릭을
             가로챈다(가림+미동작의 공통 원인). body portal + fixed 좌표로 최상위에 띄운다. */}
         {menuOpen && menuPos && createPortal(
+          // body portal 은 셸(.uni) 스코프 밖이라 폰트·hover 스타일이 빠져 엉성해 보였다.
+          // uni 클래스로 셸 타이포·토큰을 상속하고, rrow 로 항목 hover 피드백을 붙인다.
           <span ref={portalMenuRef} role="menu" aria-label={`${cl.displayName} 클러스터 작업`}
+            className="uni"
             onClick={(event) => event.stopPropagation()}
-            style={{ position: "fixed", top: menuPos.top, right: menuPos.right, zIndex: 1200, width: 156, display: "flex", flexDirection: "column", gap: 2, padding: 5, border: `1px solid ${UI.line}`, borderRadius: 10, background: UI.card, boxShadow: `0 16px 40px -18px ${inkA(0.35)}` }}>
-            <button role="menuitem" type="button" onClick={activate} style={compactMenuStyle}><ExternalLink size={13} />상세 보기</button>
-            {onSettings && <button role="menuitem" type="button" onClick={() => { setMenuOpen(false); onSettings(); }} style={compactMenuStyle}><Settings size={13} />설정</button>}
-            {onDisconnect && <button role="menuitem" type="button" onClick={() => { setMenuOpen(false); onDisconnect(); }} style={{ ...compactMenuStyle, color: HP.crit }}><Unplug size={13} />연결 해제…</button>}
+            style={{ position: "fixed", top: menuPos.top, right: menuPos.right, zIndex: 1200, width: 184, display: "flex", flexDirection: "column", gap: 2, padding: 6, border: `1px solid ${UI.line}`, borderRadius: 12, background: UI.card, boxShadow: `0 16px 40px -18px ${inkA(0.35)}` }}>
+            <button role="menuitem" type="button" className="rrow" onClick={activate} style={compactMenuStyle}><ExternalLink size={15} style={{ flexShrink: 0, color: UI.ink3 }} />상세 보기</button>
+            {onSettings && <button role="menuitem" type="button" className="rrow" onClick={() => { setMenuOpen(false); onSettings(); }} style={compactMenuStyle}><Settings size={15} style={{ flexShrink: 0, color: UI.ink3 }} />설정</button>}
+            {onDisconnect && <button role="menuitem" type="button" className="rrow" onClick={() => { setMenuOpen(false); onDisconnect(); }} style={{ ...compactMenuStyle, color: HP.crit }}><Unplug size={15} style={{ flexShrink: 0 }} />연결 해제…</button>}
           </span>,
           document.body,
         )}
@@ -426,8 +429,8 @@ function CompactClusterRow({ cl, summary, onOpen, onSettings, onDisconnect }: {
 }
 
 const compactMenuStyle: React.CSSProperties = {
-  display: "flex", alignItems: "center", gap: 7, width: "100%", border: "none", borderRadius: 7,
-  background: "transparent", color: UI.ink2, padding: "7px 8px", textAlign: "left", fontSize: TYPE.caption,
+  display: "flex", alignItems: "center", gap: 9, width: "100%", border: "none", borderRadius: 8,
+  background: "transparent", color: UI.ink, padding: "9px 10px", textAlign: "left", fontSize: TYPE.label,
   fontWeight: 600, cursor: "pointer",
 };
 
