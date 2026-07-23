@@ -1,11 +1,19 @@
 from sqlalchemy import select
 from sqlalchemy.dialects import postgresql
 
-from domains.dashboard.repository import _rca_timeline_response_columns
+from domains.dashboard.models import RcaTimeline
+from domains.dashboard.repository import (
+    MAX_RCA_REPORT_SUMMARY_BATCH,
+    RECOMMENDED_ACTION_SUMMARY_PATHS,
+    _rca_timeline_response_columns,
+    effective_confidence_column,
+    issue_detail_projection,
+    latest_rca_issue_report_summaries_statement,
+)
 from domains.dashboard.router import issue_item
 
 
-def test_issue_query_projects_latest_report_narrative_and_evidence_summary() -> None:
+def test_issue_scan_does_not_probe_reports_for_every_candidate_row() -> None:
     statement = select(*_rca_timeline_response_columns(include_issue_severity=True))
     sql = str(
         statement.compile(
@@ -14,12 +22,67 @@ def test_issue_query_projects_latest_report_narrative_and_evidence_summary() -> 
         )
     )
 
+    assert "rca_reports" not in sql
+    assert "rca_issue_report_summary" not in sql
+    assert "rca_timeline.payload" in sql
+
+
+def test_latest_report_summary_is_one_bounded_batch_without_internal_action() -> None:
+    correlation_ids = [f"correlation-{index}" for index in range(500)]
+    statement = latest_rca_issue_report_summaries_statement(
+        "default",
+        correlation_ids,
+    )
+    compiled = statement.compile(dialect=postgresql.dialect())
+    sql = str(compiled)
+
     assert "rca_reports" in sql
+    assert "DISTINCT ON" in sql
     assert "executive_summary" in sql
     assert "recommended_action" in sql
     assert "evidence_bundle_summary" in sql
     assert "rca_issue_report_summary" in sql
-    assert "rca_timeline.payload" in sql
+    assert "rca_reports.action" not in sql
+    assert len(compiled.params["correlation_id_1"]) == MAX_RCA_REPORT_SUMMARY_BATCH
+
+
+def test_recommended_action_projection_never_uses_internal_workflow_tokens() -> None:
+    projection = issue_detail_projection(
+        {
+            "action": "plan_recovery",
+            "recommendation": "user_selection_required",
+            "details": {
+                "plan": {
+                    "candidates": [
+                        {
+                            "description": "문제 배포를 직전 안정 버전으로 되돌리세요.",
+                            "title": "배포 롤백",
+                        }
+                    ]
+                }
+            },
+        }
+    )
+
+    assert projection["recommended_action_summary"] == (
+        "문제 배포를 직전 안정 버전으로 되돌리세요."
+    )
+    assert ("action",) not in RECOMMENDED_ACTION_SUMMARY_PATHS
+    assert ("recommendation",) not in RECOMMENDED_ACTION_SUMMARY_PATHS
+
+
+def test_historical_confidence_cast_is_guarded_by_numeric_validation() -> None:
+    statement = select(effective_confidence_column(RcaTimeline.__table__))
+    sql = str(
+        statement.compile(
+            dialect=postgresql.dialect(),
+            compile_kwargs={"literal_binds": True},
+        )
+    )
+
+    assert "CASE WHEN" in sql
+    assert " ~ " in sql
+    assert "CAST(" in sql
 
 
 def test_issue_item_fills_nullable_detail_fields_from_report_projection() -> None:
