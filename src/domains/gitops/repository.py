@@ -657,6 +657,43 @@ class RepoChangeRepository(GitOpsOverviewRepository):
             rows = conn.execute(statement).mappings().all()
         return [row_dict(row) for row in rows]
 
+    def list_repositories(self, workspace_id: str) -> list[JsonObject]:
+        """워크스페이스의 모든 저장소를 상태와 활성 앱 수와 함께 나열한다.
+
+        활성 뷰(active 조인)와 달리 degraded/disconnected 저장소도 포함해, 연결 상태
+        관리 화면이 '연결은 있는데 상태가 나쁜' 것까지 보여줄 수 있게 한다.
+        """
+        if not workspace_id:
+            return []
+        repo = GitRepository.__table__
+        app = Application.__table__
+        app_count = (
+            select(
+                app.c.repository_id.label("repository_id"),
+                func.count().label("application_count"),
+            )
+            .where(
+                app.c.workspace_id == workspace_id,
+                app.c.status == ApplicationStatus.ACTIVE.value,
+            )
+            .group_by(app.c.repository_id)
+            .subquery()
+        )
+        statement = (
+            select(
+                repo,
+                func.coalesce(app_count.c.application_count, 0).label("application_count"),
+            )
+            .select_from(
+                repo.outerjoin(app_count, repo.c.repository_id == app_count.c.repository_id)
+            )
+            .where(repo.c.workspace_id == workspace_id)
+            .order_by(repo.c.repo_ref.asc())
+        )
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        return [row_dict(row) for row in rows]
+
     def register_watch_target(self, payload: JsonObject) -> JsonObject:
         workspace_id = str(payload.get("workspace_id", DEFAULT_WORKSPACE_ID))
         repository_id = derive_repository_id(payload)
@@ -1831,6 +1868,56 @@ class RepoChangeRepository(GitOpsOverviewRepository):
                 continue
             artifacts.append(artifact)
         return artifacts
+
+    def list_owned_resource_identities(
+        self,
+        workspace_id: str,
+        cluster_id: str,
+        *,
+        exclude_application_id: str | None = None,
+    ) -> dict[str, dict[str, str]]:
+        """클러스터에서 활성 추적 대상이 이미 소유한 리소스 식별자 → 소유 앱 매핑.
+
+        연결 시점의 '소유권 겹침' 감지에 쓴다. 활성 바인딩의 렌더된 매니페스트
+        아티팩트에서 resource_identity 를 모아 인덱스로 만든다. 재연결 중인 앱은
+        exclude_application_id 로 제외해 자기 자신과의 충돌을 피한다.
+
+        주의: 오래된 커밋의 아티팩트가 남아 있으면 과다 보고될 수 있다(경고 성격).
+        하드 차단이 아니라 사용자 확인(override)로 진행 가능하게 설계한다.
+        """
+        art = ManifestArtifact.__table__
+        binding = DeploymentBinding.__table__
+        rid = art.c.source_summary["resource_identity"].astext
+        app_id_col = art.c.source_summary["application_id"].astext
+        statement = (
+            select(
+                rid.label("rid"),
+                app_id_col.label("app_id"),
+                binding.c.app_name.label("app_name"),
+            )
+            .select_from(art.join(binding, art.c.binding_id == binding.c.binding_id))
+            .where(
+                art.c.workspace_id == workspace_id,
+                binding.c.cluster_id == cluster_id,
+                binding.c.status == DeploymentBindingStatus.ACTIVE.value,
+                art.c.status == ManifestArtifactStatus.RENDERED.value,
+                rid.is_not(None),
+            )
+        )
+        index: dict[str, dict[str, str]] = {}
+        with self.connection() as conn:
+            for row in conn.execute(statement).mappings():
+                key = str(row["rid"] or "")
+                owner_app_id = str(row["app_id"] or "")
+                if not key:
+                    continue
+                if exclude_application_id and owner_app_id == exclude_application_id:
+                    continue
+                index[key] = {
+                    "application_id": owner_app_id,
+                    "app_name": str(row["app_name"] or ""),
+                }
+        return index
 
     def get_manifest_artifact_provenance(
         self,

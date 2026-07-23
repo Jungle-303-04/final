@@ -38,6 +38,8 @@ export interface ApplicationConnectInput {
   token?: string;
   /** GitHub App 원클릭 연결 완료 시의 설치 id(있으면 App 설치 참조로 저장). */
   installationId?: string;
+  /** 리소스 소유권 겹침을 사용자가 확인하고 그래도 진행할 때 true. */
+  allowConflicts?: boolean;
 }
 
 /** Lists Applications visible to the signed-in user. */
@@ -72,6 +74,7 @@ export function connectApplication(
         environment: input.environment,
         ...(input.token ? { token: input.token } : {}),
         ...(input.installationId ? { installation_id: input.installationId } : {}),
+        ...(input.allowConflicts ? { allow_conflicts: true } : {}),
       }),
       signal,
     },

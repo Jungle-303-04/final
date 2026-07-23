@@ -32,3 +32,37 @@ export const repositoryConnectionStatusSchema = z.strictObject({
 export type RepositoryConnectionStatus = z.infer<
   typeof repositoryConnectionStatusSchema
 >;
+
+/** Runtime contract for `GET /repositories` (연결 상태 관리 목록). */
+export const repositoryListItemSchema = z.strictObject({
+  repo_ref: z.string().min(1),
+  repository_id: z.string().min(1),
+  provider: z.string(),
+  default_branch: z.string(),
+  repository_status: z.enum([
+    "active",
+    "invalid_credential",
+    "disabled",
+    "source_unreachable",
+    "disconnected",
+    "unknown",
+  ]),
+  degraded_reason: z
+    .enum([
+      "credential_invalid",
+      "source_unreachable",
+      "permission_revoked",
+      "disconnected",
+      "disabled",
+    ])
+    .nullable()
+    .optional(),
+  application_count: z.number().int().nonnegative(),
+  updated_at: z.string().nullable().optional(),
+});
+export type RepositoryListItem = z.infer<typeof repositoryListItemSchema>;
+
+export const repositoryListSchema = z.strictObject({
+  repositories: z.array(repositoryListItemSchema),
+});
+export type RepositoryList = z.infer<typeof repositoryListSchema>;

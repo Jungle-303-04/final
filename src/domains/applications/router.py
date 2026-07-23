@@ -10,6 +10,10 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from domains.application_filter.query import ApplicationFilters, parse_application_filters
+from domains.applications.ownership import (
+    candidate_identity_keys,
+    find_resource_conflicts,
+)
 from domains.applications.product_projection import (
     APPLICATION_TOPOLOGY_NODE_LIMIT,
     application_card,
@@ -71,6 +75,8 @@ from packages.contracts.gateway.responses import (
     ApplicationResponse,
     DeploymentBindingResponse,
     RepositoryConnectionStatusResponse,
+    RepositoryListItem,
+    RepositoryListResponse,
     WorkflowRunListResponse,
 )
 from packages.contracts.gitops import DEFAULT_REPO_BRANCH, PUBLIC_GITHUB_CREDENTIAL_REF
@@ -879,6 +885,55 @@ async def disconnect_repository_connection(
     )
 
 
+_REPOSITORY_DEGRADED_REASON = {
+    "invalid_credential": "credential_invalid",
+    "source_unreachable": "source_unreachable",
+    "disabled": "disabled",
+    "disconnected": "disconnected",
+}
+_KNOWN_REPOSITORY_STATUSES = {
+    "active",
+    "invalid_credential",
+    "disabled",
+    "source_unreachable",
+    "disconnected",
+}
+
+
+@router.get(gateway_routes.REPOSITORIES_PATH, response_model=RepositoryListResponse)
+async def list_workspace_repositories(
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> RepositoryListResponse:
+    """워크스페이스의 모든 연결 저장소를 상태와 함께 나열한다(연결 상태 관리 화면용).
+
+    active 뷰와 달리 degraded/disconnected 저장소도 포함해, 외부 변경으로 상태가
+    내려간 저장소를 사용자가 한눈에 보고 재연결·해제할 수 있게 한다.
+    """
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    lister = getattr(db, "list_repositories", None)
+    rows = await to_thread_db_retry(lister, workspace_id) if callable(lister) else []
+    items: list[RepositoryListItem] = []
+    for row in rows:
+        status = str(row.get("status") or "unknown")
+        if status not in _KNOWN_REPOSITORY_STATUSES:
+            status = "unknown"
+        updated_at = row.get("updated_at")
+        items.append(
+            RepositoryListItem(
+                repo_ref=str(row.get("repo_ref") or ""),
+                repository_id=str(row.get("repository_id") or ""),
+                provider=str(row.get("provider") or ""),
+                default_branch=str(row.get("default_branch") or ""),
+                repository_status=status,
+                degraded_reason=_REPOSITORY_DEGRADED_REASON.get(status),
+                application_count=int(row.get("application_count") or 0),
+                updated_at=str(updated_at) if updated_at is not None else None,
+            )
+        )
+    return RepositoryListResponse(repositories=items)
+
+
 @router.get(gateway_routes.APPLICATIONS_PATH, response_model=ApplicationProductListResponse)
 async def list_applications(
     clusters: str | None = Query(default=None),
@@ -1081,6 +1136,17 @@ async def connect_application(
         workspace_id,
         validation_credential_ref,
     )
+    # PAT·저장 자격증명이 없고 App 설치 id 만 있으면(비공개 레포 원클릭 연결) 설치
+    # 토큰을 발급해 재검증한다. App 미구성·발급 실패는 무인증으로 degrade.
+    if validation_token is None and payload.installation_id and payload.installation_id.strip():
+        from domains.scm.github_app_credentials import resolve_installation_token
+
+        try:
+            validation_token = await resolve_installation_token(
+                db, workspace_id, payload.installation_id.strip()
+            )
+        except Exception:  # noqa: BLE001 - App 미구성·발급 실패는 무인증 degrade
+            validation_token = None
     validation_discovery = discovery_with_token(discovery, validation_token)
     validation_request = RepositoryManifestValidationRequest(
         repo_ref=normalized_repo_ref,
@@ -1121,6 +1187,32 @@ async def connect_application(
         ) from exc
     if validated_repo_ref != normalized_repo_ref:
         raise HTTPException(status_code=422, detail="validated repository identity changed")
+
+    # 소유권 겹침 감지 — 이 대상이 만들 리소스가 이미 다른 활성 앱이 소유한 것과
+    # 겹치면 SSA force-apply 로 조용히 서로 덮어쓰며 무한 드리프트가 난다. 사용자가
+    # 명시적으로 허용(allow_conflicts)하지 않는 한 409 로 막고 소유 앱을 알려준다.
+    owned_lister = getattr(db, "list_owned_resource_identities", None)
+    if not payload.allow_conflicts and callable(owned_lister):
+        exclude_app_id = derive_application_id(
+            {
+                "workspace_id": workspace_id,
+                "repository_id": preflight_repository_id,
+                "name": payload.name,
+            }
+        )
+        owned_index = owned_lister(
+            workspace_id,
+            payload.cluster_id,
+            exclude_application_id=exclude_app_id,
+        )
+        conflicts = find_resource_conflicts(
+            candidate_identity_keys(validation.resources), owned_index
+        )
+        if conflicts:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "resource_ownership_conflict", "conflicts": conflicts},
+            )
 
     try:
         source_type = normalize_source_type(payload.source_type) or source_type_from_path(

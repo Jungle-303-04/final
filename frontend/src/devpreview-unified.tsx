@@ -956,7 +956,7 @@ const NAV_ITEMS: { id: string; label: string; icon: typeof Home }[] = [
   { id: "alerts", label: "알림", icon: Bell },
   { id: "ai", label: "AI 대화", icon: Sparkles },
 ];
-// 연결은 내비 항목이 아니다(D7·D20) — 클러스터 뷰 '+ 연결' 카드와 배포 탭 '+ 저장소 연결'에서 모달로만 연다.
+// 연결은 내비 항목이 아니다(D7·D20) — 홈 액션과 각 도메인 화면에서 문맥 모달로 연다.
 // 설정은 전역 앱 설정만(D20).
 const NAV_BOTTOM: { id: string; label: string; icon: typeof Home }[] = [
   { id: "settings", label: "설정", icon: Settings },
@@ -1260,7 +1260,10 @@ function HomeSurface({ clusterMeta, incidentClusterIds, onDrillCluster, onCluste
           </button>
           <button className="product-focusable product-control" onClick={onAddRepo}
             style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${UI.line}`, background: UI.card, color: UI.ink2, borderRadius: 9, padding: "5px 12px", fontSize: TYPE.label, fontWeight: 600 }}>
-            <GithubIcon size={13} />저장소 연결
+            <span aria-hidden="true" style={{ width: 15, height: 15, flexShrink: 0, display: "grid", placeItems: "center", lineHeight: 0 }}>
+              <GithubIcon size={13} />
+            </span>
+            <span style={{ lineHeight: 1 }}>저장소 연결</span>
           </button>
           <button className="product-focusable product-action" onClick={onConnect}
             style={{ display: "flex", alignItems: "center", gap: 6, border: "none", background: BLUE, color: UI.card, borderRadius: 9, padding: "6px 13px", fontSize: TYPE.label, fontWeight: 600 }}>+ 클러스터 연결</button>
@@ -1383,12 +1386,16 @@ function App() {
   const [recoverySelectionCorrelations, setRecoverySelectionCorrelations] = useState<ReadonlySet<string>>(() => new Set());
   const [navCollapsed, setNavCollapsed] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
+  const [aiFull, setAiFull] = useState(false);         // AI 패널 전체 화면 (헤더 ⤢ 토글)
   const [aiW, setAiW] = useState(440);                 // 실제 제품처럼 리사이즈 가능한 도킹 폭
   const [aiDragging, setAiDragging] = useState(false);
   const [drillCl, setDrillCl] = useState<string | null>(null); // 홈 카드 → 지도 드릴 스코프 전달(D21)
   const [connectView, setConnectView] = useState<null | "repo" | "cluster">(null); // 연결 위저드 딥오픈 대상 (설정 서피스)
   const [connectModal, setConnectModal] = useState<null | "repo" | "cluster">(null); // 문맥 진입 = 모달 팝업
   const [repositoryConnectContext, setRepositoryConnectContext] = useState<RepositoryConnectionContext | null>(null);
+  // GitHub App 설치 복귀(?github_app_installation_id=...)가 홈으로 떨어져도
+  // 연결 위저드를 자동으로 다시 열어 RepoStep 복귀 핸들러가 이어받게 한다.
+  useEffect(() => { const p = new URLSearchParams(window.location.search); if (p.get("github_app_installation_id")) setConnectModal("repo"); }, []);
   const [manifestRefreshKey, setManifestRefreshKey] = useState(0);
   // 세션 중 등록한 연결 대기 항목 — 등록의 결과가 목록에 보여야 한다(로그아웃=세션 초기화로 함께 소멸)
   const [pendingCl, setPendingCl] = useState<string[]>(() => { try { return JSON.parse(sessionStorage.getItem(PENDING_CLUSTER_STORAGE_KEY) || "[]"); } catch { return []; } });
@@ -1746,7 +1753,7 @@ function App() {
         if (bellOpen || nsOpen || meOpen) { setBellOpen(false); setNsOpen(false); setMeOpen(false); }
         else if (connectModal) setConnectModal(null);
         else if (detail) setDetail(null);
-        else if (aiOpen) setAiOpen(false);
+        else if (aiOpen) { setAiOpen(false); setAiFull(false); }
       }
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); searchRef.current?.focus(); }
     };
@@ -2109,12 +2116,15 @@ function App() {
       {/* AI 어시스턴트 — 상세 페이지 위까지 덮는 우측 오버레이 + 폭 조절 핸들 */}
       <AnimatePresence>
         {aiOpen && (
-          <motion.div key="ai" initial={{ x: aiW + 30 }} animate={{ x: 0 }} exit={{ x: aiW + 30 }} transition={{ type: "spring", bounce: 0.06, visualDuration: 0.34 }}
-            style={{ position: "fixed", top: topH, right: 0, bottom: 0, width: aiW, zIndex: 72, display: "flex", boxShadow: `-28px 0 70px -32px ${inkA(0.3)}` }}>
-            <div role="separator" aria-label="AI 패널 폭 조절" aria-orientation="vertical" onPointerDown={onAiHandleDown} title="드래그해서 폭 조절"
-              style={{ width: 1, flexShrink: 0, cursor: "col-resize", background: aiDragging ? blueA(0.35) : UI.line, transition: "background .15s" }} />
+          <motion.div key="ai" initial={{ x: aiW + 30 }} animate={{ x: 0 }} exit={{ x: (aiFull ? window.innerWidth : aiW) + 30 }} transition={{ type: "spring", bounce: 0.06, visualDuration: 0.34 }}
+            style={{ position: "fixed", top: topH, right: 0, bottom: 0, width: aiFull ? "100vw" : aiW, zIndex: 72, display: "flex", boxShadow: `-28px 0 70px -32px ${inkA(0.3)}`, transition: "width .28s cubic-bezier(0.32,0.72,0,1)" }}>
+            {/* 전체 화면 중에는 폭 조절 핸들 비활성 */}
+            {!aiFull && (
+              <div role="separator" aria-label="AI 패널 폭 조절" aria-orientation="vertical" onPointerDown={onAiHandleDown} title="드래그해서 폭 조절"
+                style={{ width: 1, flexShrink: 0, cursor: "col-resize", background: aiDragging ? blueA(0.35) : UI.line, transition: "background .15s" }} />
+            )}
             <div style={{ flex: 1, minWidth: 0 }}>
-              <AiPanel embedded onClose={() => setAiOpen(false)} contextView={surface === "connect" ? "연결 설정" : surface === "home" ? "홈" : surface === "deploy" ? "배포" : surface === "issues" ? "이슈" : surface === "timeline" ? "타임라인" : surface === "checks" ? "점검" : surface === "cost" ? "비용" : surface === "alerts" ? "알림" : surface === "ai" ? "AI 대화" : surface === "settings" ? "설정" : resView === "flow" ? "트래픽" : resView === "list" ? "쿠버네티스 리소스" : "인프라 지도"} contextScope={scope.cluster ?? "전체 클러스터"} />
+              <AiPanel embedded full={aiFull} onToggleFull={() => setAiFull((v) => !v)} onClose={() => { setAiOpen(false); setAiFull(false); }} contextView={surface === "connect" ? "연결 설정" : surface === "home" ? "홈" : surface === "deploy" ? "배포" : surface === "issues" ? "이슈" : surface === "timeline" ? "타임라인" : surface === "checks" ? "점검" : surface === "cost" ? "비용" : surface === "alerts" ? "알림" : surface === "ai" ? "AI 대화" : surface === "settings" ? "설정" : resView === "flow" ? "트래픽" : resView === "list" ? "쿠버네티스 리소스" : "인프라 지도"} contextScope={scope.cluster ?? "전체 클러스터"} />
             </div>
           </motion.div>
         )}

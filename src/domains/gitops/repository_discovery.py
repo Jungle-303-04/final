@@ -68,6 +68,71 @@ MANIFEST_SCAN_TIMEOUT_SECONDS = max(
     1.0,
     min(60.0, float(env(MANIFEST_SCAN_TIMEOUT_SECONDS_ENV, "20"))),
 )
+
+# 루트 후보 랭킹 신호 — 사용자가 고를 법한 진입점을 상위로 올려 자동 선택·추천한다.
+# 우선순위: source_type(kustomize>helm>기타) → 표준 경로 → 파일명 신호 → 얕은 깊이.
+_STANDARD_MANIFEST_DIR_SIGNALS = (
+    "/overlays/",
+    "/deploy/",
+    "/deployment/",
+    "/deployments/",
+    "/k8s/",
+    "/kubernetes/",
+    "/manifests/",
+    "/kustomize/",
+    "/base/",
+    "/chart/",
+    "/charts/",
+)
+_RECOMMENDED_MANIFEST_FILENAMES = (
+    "kustomization.yaml",
+    "kustomization.yml",
+    "chart.yaml",
+    "deployment.yaml",
+    "app.yaml",
+    "release.yaml",
+)
+
+
+def _manifest_candidate_rank(candidate: RepositoryManifestCandidate) -> tuple[int, int, int, int, str]:
+    """작을수록 좋은(상위) 후보. 진입점·표준 경로·파일명·얕은 깊이를 선호한다."""
+    path = candidate.path.lower()
+    filename = path.rsplit("/", 1)[-1]
+    type_rank = {"kustomize": 0, "helm": 1}.get(candidate.source_type, 2)
+    dir_rank = 0 if any(signal in f"/{path}" for signal in _STANDARD_MANIFEST_DIR_SIGNALS) else 1
+    name_rank = 0 if filename in _RECOMMENDED_MANIFEST_FILENAMES else 1
+    depth = path.count("/")
+    return (type_rank, dir_rank, name_rank, depth, path)
+
+
+def _manifest_candidate_reason(candidate: RepositoryManifestCandidate, *, recommended: bool) -> str:
+    """이 후보가 어떤 성격인지(왜 선택할 만한지) 한 줄로 설명한다."""
+    if candidate.source_type == "kustomize":
+        hint = "Kustomize 루트 — 참조 리소스를 자동으로 함께 추적합니다"
+    elif candidate.source_type == "helm":
+        hint = "Helm 차트 루트 — 차트 전체가 렌더됩니다"
+    else:
+        hint = "단일 매니페스트 파일 — 이 파일만 추적합니다"
+    existing = candidate.reason.strip()
+    text = f"{existing} · {hint}" if existing and existing != hint else hint
+    return f"추천 · {text}" if recommended else text
+
+
+def rank_manifest_candidates(
+    candidates: Sequence[RepositoryManifestCandidate],
+) -> list[RepositoryManifestCandidate]:
+    """후보를 추천 순으로 정렬하고, 각 후보에 선택 근거(reason)를 채워 돌려준다.
+
+    최상위(index 0)가 프론트에서 자동 선택되므로, 진입점(kustomization/Chart)이
+    있으면 그게 기본 제안이 된다.
+    """
+    ordered = sorted(candidates, key=_manifest_candidate_rank)
+    return [
+        candidate.model_copy(
+            update={"reason": _manifest_candidate_reason(candidate, recommended=index == 0)}
+        )
+        for index, candidate in enumerate(ordered)
+    ]
 MAX_RENDER_SOURCE_FILES = 500
 MAX_RENDER_SOURCE_BYTES = 5 * 1_048_576
 MAX_RENDER_ERROR_LENGTH = 2000
@@ -468,6 +533,8 @@ class RepositoryDiscoveryService:
             warnings.append("candidate list was limited; narrow the repository layout if needed")
         if not candidates:
             warnings.append("no attachable yaml, json, kustomize, or helm candidates were found")
+        # 추천 순으로 정렬 + 선택 근거 채움 → 최상위가 자동 선택되고 이유가 노출된다.
+        candidates = rank_manifest_candidates(candidates)
         return RepositoryManifestCandidateListResponse(
             repo_ref=normalized,
             branch=normalized_branch,

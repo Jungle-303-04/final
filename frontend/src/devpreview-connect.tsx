@@ -494,7 +494,12 @@ function RepoStep({ providers, onNext }: { providers: ClusterProvidersView; onNe
     setFailure("");
     void (async () => {
       try {
-        const probe = await probeRepository(repo.full, undefined, controller.signal);
+        const probe = await probeRepository(
+          repo.full,
+          undefined,
+          controller.signal,
+          appInstallationId ?? undefined,
+        );
         if (cancelled) return;
         setAccessProbe(probe);
         setAccess(probe.valid && probe.reachable && probe.private === false ? "public" : "auth");
@@ -505,7 +510,7 @@ function RepoStep({ providers, onNext }: { providers: ClusterProvidersView; onNe
       }
     })();
     return () => { cancelled = true; controller.abort(); };
-  }, [status, repo]);
+  }, [status, repo, appInstallationId]);
 
   const needsToken = access === "auth";
   const resolved = access === "public" || access === "auth";
@@ -519,7 +524,12 @@ function RepoStep({ providers, onNext }: { providers: ClusterProvidersView; onNe
       // 공개면 이미 받은 무인증 probe 를 재사용하고, 비공개면 토큰으로 다시 검증한다.
       const probe = access === "public" && accessProbe
         ? accessProbe
-        : await probeRepository(repo.full, token.trim() || undefined);
+        : await probeRepository(
+            repo.full,
+            token.trim() || undefined,
+            undefined,
+            appInstallationId ?? undefined,
+          );
       if (!probe.valid || !probe.reachable) {
         throw new Error(
           probe.errors[0] ||
@@ -528,7 +538,11 @@ function RepoStep({ providers, onNext }: { providers: ClusterProvidersView; onNe
               : "저장소에 연결할 수 없습니다."),
         );
       }
-      const branchList = await listRepositoryBranches(probe.normalized_repo_ref);
+      const branchList = await listRepositoryBranches(
+        probe.normalized_repo_ref,
+        undefined,
+        appInstallationId ?? undefined,
+      );
       const defaultBranch = branchList.default_branch || probe.default_branch || branchList.branches[0]?.name || "main";
       onNext({
         repo: { ...repo, full: probe.normalized_repo_ref, visibility: probe.private ? "private" : "public", branch: defaultBranch },
@@ -636,7 +650,7 @@ function RepoStep({ providers, onNext }: { providers: ClusterProvidersView; onNe
                 {/* 권장: GitHub App(원클릭) — 미설정이면 어드민 자동등록 / 비어드민 안내 */}
                 <GithubAppConnect repoRef={repo.full} config={appConfig} registerNote={appRegisterNote} />
                 {/* App이 구성되면 토큰 칸을 숨긴다(App 기본). 미구성 시에만 토큰 폴백 노출. */}
-                {!appAvailable && (
+                {access === "auth" && (
                   <>
                     <div className="flex items-center gap-2 px-0.5 text-caption c-3">
                       <span className="h-px flex-1" style={{ background: UI.line }} />또는 액세스 토큰<span className="h-px flex-1" style={{ background: UI.line }} />
@@ -676,7 +690,7 @@ function RepoStep({ providers, onNext }: { providers: ClusterProvidersView; onNe
         </motion.div>
       )}
       {/* 토큰 경로 버튼: 공개는 항상, 비공개는 App 미가용일 때만(App 가용 시 App 버튼이 경로). */}
-      {resolved && (access === "public" || !appAvailable) && (
+      {resolved && (access === "public" || !appAvailable || token.trim().length > 0) && (
         <motion.button key="confirm" layout {...REVEAL} disabled={!ready || probeStatus === "submitting"} onClick={() => void verify()} className="btn-primary flex w-full items-center justify-center gap-2 rounded-[14px] py-3.5 text-section font-semibold disabled:cursor-not-allowed disabled:opacity-60">
           {probeStatus === "submitting" ? <><Spin c="size-4 text-white" /> 저장소·브랜치 확인 중…</> : <>저장소 확인 · 배포 대상 선택 <ArrowRight className="size-[17px]" /></>}
         </motion.button>
@@ -720,6 +734,8 @@ function RepoTargetStep({ source, context, onComplete }: {
   const [clusterStatus, setClusterStatus] = useState<"loading" | "ready" | "error">("loading");
   const [submitStatus, setSubmitStatus] = useState<"idle" | "submitting" | "error">("idle");
   const [failure, setFailure] = useState("");
+  // 리소스 소유권 겹침(다른 앱이 이미 관리 중) 감지 시 사용자 확인을 요구.
+  const [conflict, setConflict] = useState<string | null>(null);
   const [manifests, setManifests] = useState<RepositoryManifestCandidateView[]>([]);
   const [manifestStatus, setManifestStatus] = useState<"loading" | "ready" | "error">("loading");
 
@@ -747,7 +763,12 @@ function RepoTargetStep({ source, context, onComplete }: {
 
   useEffect(() => {
     const controller = new AbortController();
-    void listRepositoryManifestCandidates(repoRef, input.branch, controller.signal)
+    void listRepositoryManifestCandidates(
+      repoRef,
+      input.branch,
+      controller.signal,
+      source.installationId ?? undefined,
+    )
       .then((response) => {
         if (controller.signal.aborted) return;
         setManifests(response.candidates);
@@ -778,10 +799,11 @@ function RepoTargetStep({ source, context, onComplete }: {
     setSubmitStatus("idle");
   };
   const complete = Object.values(input).every((value) => value.trim() !== "") && clusterStatus === "ready" && manifestStatus === "ready";
-  const submit = async () => {
+  const submit = async (allowConflicts = false) => {
     if (!complete || submitStatus === "submitting") return;
     setSubmitStatus("submitting");
     setFailure("");
+    if (!allowConflicts) setConflict(null);
     try {
       const candidate = manifests.find((item) => item.path === input.manifestPath);
       const validation = await validateRepositoryManifest(
@@ -789,6 +811,8 @@ function RepoTargetStep({ source, context, onComplete }: {
         input.branch.trim(),
         input.manifestPath.trim(),
         candidate?.source_type ?? "",
+        undefined,
+        source.installationId ?? undefined,
       );
       if (!validation.valid) throw new Error(validation.errors[0] || "매니페스트 검증에 실패했습니다.");
       await connectApplication({
@@ -802,9 +826,19 @@ function RepoTargetStep({ source, context, onComplete }: {
         environment: input.environment,
         ...(source.token.trim() ? { token: source.token.trim() } : {}),
         ...(source.installationId ? { installationId: source.installationId } : {}),
+        ...(allowConflicts ? { allowConflicts: true } : {}),
       });
       onComplete(repoRef);
     } catch (cause: unknown) {
+      // 소유권 겹침(409)이면 실패가 아니라 '확인 후 진행' 흐름으로 전환한다.
+      if (isApiError(cause) && cause.status === 409) {
+        setConflict(
+          "이 저장소가 만들 리소스 중 일부를 이미 다른 앱이 관리하고 있습니다. " +
+            "그대로 연결하면 두 소스가 같은 리소스를 서로 덮어써(무한 드리프트) 위험합니다.",
+        );
+        setSubmitStatus("error");
+        return;
+      }
       setFailure(errorText(cause));
       setSubmitStatus("error");
     }
@@ -844,6 +878,13 @@ function RepoTargetStep({ source, context, onComplete }: {
             {manifestStatus === "ready" && manifests.length === 0 && <option value="">발견된 매니페스트 없음</option>}
             {manifests.map((candidate) => <option key={candidate.path} value={candidate.path}>{candidate.display_name || candidate.path} · {candidate.path}</option>)}
           </select>
+          {/* 선택한 후보의 선택 근거(왜 이게 추천됐는지)를 그대로 노출. */}
+          {(() => {
+            const selected = manifests.find((candidate) => candidate.path === input.manifestPath);
+            return selected?.reason ? (
+              <span className="px-0.5 text-[11px] font-normal c-3">{selected.reason}</span>
+            ) : null;
+          })()}
         </label>
         <label className="grid gap-1.5 text-label font-semibold c-2">
           연결된 클러스터
@@ -866,9 +907,32 @@ function RepoTargetStep({ source, context, onComplete }: {
       {clusterStatus === "ready" && clusters.length === 0 && <GapBanner>먼저 클러스터를 연결해야 저장소 배포 대상을 등록할 수 있습니다.</GapBanner>}
       {manifestStatus === "ready" && manifests.length === 0 && <GapBanner>선택한 브랜치에서 배포 가능한 Kubernetes 매니페스트를 찾지 못했습니다.</GapBanner>}
       <FloatingToast message={failure || null} onDismiss={() => setFailure("")} />
-      <button disabled={!complete || submitStatus === "submitting"} onClick={() => void submit()} className="btn-primary flex w-full items-center justify-center gap-2 rounded-[14px] text-section font-semibold disabled:cursor-not-allowed disabled:opacity-45">
-        {submitStatus === "submitting" ? <><Spin c="size-4 text-white" /> 서버 검증·등록 중…</> : <>서버 검증 후 연결 <ArrowRight className="size-[17px]" /></>}
-      </button>
+      <AnimatePresence mode="popLayout">
+        {conflict && (
+          <motion.div key="conflict" layout {...REVEAL} role="alert" className="grid gap-3 err-bg" style={{ borderRadius: 16, padding: "15px 18px" }}>
+            <div className="flex items-start gap-2.5">
+              <AlertCircle className="mt-0.5 size-[18px] shrink-0 c-red" />
+              <div>
+                <div className="text-body font-semibold c-ink">리소스 소유권이 겹칩니다</div>
+                <div className="mt-1 break-words text-label leading-[1.5] c-2">{conflict}</div>
+              </div>
+            </div>
+            <div className="flex gap-2.5">
+              <button onClick={() => void submit(true)} disabled={submitStatus === "submitting"} className="product-focusable product-destructive flex-1 rounded-[12px] py-2.5 text-label font-bold disabled:opacity-60" style={{ background: HP.crit, color: UI.card }}>
+                {submitStatus === "submitting" ? "진행 중…" : "위험 감수하고 그대로 연결"}
+              </button>
+              <button onClick={() => { setConflict(null); setSubmitStatus("idle"); }} disabled={submitStatus === "submitting"} className="product-focusable product-control flex-1 rounded-[12px] border py-2.5 text-label font-semibold c-2" style={{ borderColor: UI.line }}>
+                취소
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      {!conflict && (
+        <button disabled={!complete || submitStatus === "submitting"} onClick={() => void submit()} className="btn-primary flex w-full items-center justify-center gap-2 rounded-[14px] py-3.5 text-section font-semibold disabled:cursor-not-allowed disabled:opacity-45">
+          {submitStatus === "submitting" ? <><Spin c="size-4 text-white" /> 서버 검증·등록 중…</> : <>서버 검증 후 연결 <ArrowRight className="size-[17px]" /></>}
+        </button>
+      )}
     </motion.div>
   );
 }

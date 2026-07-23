@@ -114,23 +114,26 @@ export function probeRepository(
   repoRef: string,
   token?: string,
   signal?: AbortSignal,
+  installationId?: string,
 ): Promise<RepositoryProbe> {
-  return probeRepositoryApi(repoRef, token, signal);
+  return probeRepositoryApi(repoRef, token, signal, installationId);
 }
 
 export function listRepositoryBranches(
   repoRef: string,
   signal?: AbortSignal,
+  installationId?: string,
 ): Promise<RepositoryBranchList> {
-  return listRepositoryBranchesApi(repoRef, signal);
+  return listRepositoryBranchesApi(repoRef, signal, installationId);
 }
 
 export function listRepositoryManifestCandidates(
   repoRef: string,
   branch: string,
   signal?: AbortSignal,
+  installationId?: string,
 ): Promise<RepositoryManifestCandidateList> {
-  return listRepositoryManifestCandidatesApi(repoRef, branch, signal);
+  return listRepositoryManifestCandidatesApi(repoRef, branch, signal, installationId);
 }
 
 export function validateRepositoryManifest(
@@ -139,8 +142,9 @@ export function validateRepositoryManifest(
   manifestPath: string,
   sourceType = "",
   signal?: AbortSignal,
+  installationId?: string,
 ): Promise<RepositoryManifestValidation> {
-  return validateRepositoryManifestApi(repoRef, branch, manifestPath, sourceType, signal);
+  return validateRepositoryManifestApi(repoRef, branch, manifestPath, sourceType, signal, installationId);
 }
 
 // ── Provider availability (catalog + cluster discovery) ─────────────────────

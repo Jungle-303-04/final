@@ -660,6 +660,9 @@ class ApplicationConnectRequest(StrictModel):
     # GitHub App 원클릭 연결 완료 시 전달되는 설치 id. 있으면 PAT/public 대신
     # App 설치 참조를 자격증명으로 저장해 폴러/PR 이 단명 토큰을 발급하게 한다.
     installation_id: str | None = Field(default=None, min_length=1, max_length=40)
+    # 리소스 소유권 겹침(다른 앱이 이미 관리 중인 리소스)을 사용자가 확인하고
+    # 그래도 진행하겠다고 명시하면 True. 기본은 False(겹치면 409 로 차단).
+    allow_conflicts: bool = False
     branch: str = Field(default=DEFAULT_REPO_BRANCH, min_length=1, max_length=200)
     manifest_path: str = Field(default=DEFAULT_MANIFEST_PATH, min_length=1, max_length=500)
     source_type: str = Field(default="", max_length=40)
@@ -692,11 +695,14 @@ class RepositoryProbeRequest(StrictModel):
         max_length=500,
         json_schema_extra={"writeOnly": True},
     )
+    # GitHub App 설치 id — 있으면 서버가 설치 토큰을 발급해 비공개 레포도 읽는다.
+    installation_id: str | None = Field(default=None, min_length=1, max_length=40)
 
 
 class RepositoryManifestDiscoveryRequest(StrictModel):
     repo_ref: str = Field(min_length=1, max_length=240)
     branch: str = Field(default=DEFAULT_REPO_BRANCH, min_length=1, max_length=200)
+    installation_id: str | None = Field(default=None, min_length=1, max_length=40)
 
 
 class RepositoryManifestValidationRequest(StrictModel):
@@ -705,6 +711,7 @@ class RepositoryManifestValidationRequest(StrictModel):
     manifest_path: str = Field(default=DEFAULT_MANIFEST_PATH, min_length=1, max_length=500)
     source_type: str = Field(default="", max_length=40)
     values_path: str | None = Field(default=None, min_length=1, max_length=500)
+    installation_id: str | None = Field(default=None, min_length=1, max_length=40)
 
     @model_validator(mode="after")
     def values_override_requires_helm(self) -> RepositoryManifestValidationRequest:

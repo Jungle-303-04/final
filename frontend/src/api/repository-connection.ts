@@ -1,9 +1,16 @@
 import { apiRequest, type ApiPath } from "./client";
 import {
   repositoryConnectionStatusSchema,
+  repositoryListSchema,
   type RepositoryConnectionStatus,
+  type RepositoryList,
 } from "./repository-connection-schemas";
 import { withQuery } from "./url";
+
+/** 워크스페이스의 모든 연결 저장소를 상태와 함께 나열한다(관리 화면용). */
+export function listRepositories(signal?: AbortSignal): Promise<RepositoryList> {
+  return apiRequest("/api/repositories" as ApiPath, repositoryListSchema, { signal });
+}
 
 /** Reads the server-owned terminal state for a repository registration. */
 export function getRepositoryConnectionStatus(

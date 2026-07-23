@@ -112,6 +112,33 @@ def require_repository_discovery_access(db: Any, current: Any) -> str:
     return workspace_id
 
 
+async def resolve_wizard_token(
+    db: Any,
+    *,
+    request_token: str | None,
+    installation_id: str | None,
+) -> str | None:
+    """위저드 discovery 호출에 쓸 토큰. 사용자 토큰이 있으면 그걸, 없고 App 설치
+    id 가 있으면 설치 토큰을 발급해 반환한다(비공개/rate-limit 레포를 인증 조회).
+
+    App 미구성·발급 실패는 None 으로 degrade(무인증 흐름 유지, 크래시 금지).
+    """
+    if request_token is not None:
+        return request_token
+    if installation_id:
+        from domains.scm.github_app import GithubAppNotConfigured
+        from domains.scm.github_app_credentials import resolve_installation_token
+
+        try:
+            token = await resolve_installation_token(db, DEFAULT_WORKSPACE_ID, installation_id)
+            return token or None
+        except GithubAppNotConfigured:
+            return None
+        except Exception:  # noqa: BLE001 - 네트워크·발급 실패는 무인증 degrade
+            return None
+    return None
+
+
 def store_github_token(
     db: Any,
     workspace_id: str,
@@ -154,16 +181,20 @@ async def probe_repository(
     try:
         normalized = normalize_github_repo_ref(payload.repo_ref)
         token = payload.token.get_secret_value() if payload.token is not None else None
+        effective_token = await resolve_wizard_token(
+            db, request_token=token, installation_id=payload.installation_id
+        )
         scoped_service = wizard_discovery_service(
             db,
             current,
             normalized,
             service,
-            request_token=token,
+            request_token=effective_token,
         )
         response = await scoped_service.probe_repository(
             RepositoryProbeRequest(repo_ref=normalized)
         )
+        # 사용자 PAT 만 저장한다(App 설치 토큰은 단명이라 저장 금지).
         if token is not None and response.reachable:
             get_repository = getattr(db, "get_repository_by_ref", None)
             existing_repository = (
@@ -187,17 +218,22 @@ async def probe_repository(
 )
 async def list_repository_branches(
     repo_ref: str = Query(min_length=1, max_length=240),
+    installation_id: str | None = Query(default=None, min_length=1, max_length=40),
     current: Any = Depends(require_session),
     db: Any = Depends(get_db),
     service: RepositoryDiscoveryService = Depends(discovery_service),
 ) -> RepositoryBranchListResponse:
     require_repository_discovery_access(db, current)
     try:
+        effective_token = await resolve_wizard_token(
+            db, request_token=None, installation_id=installation_id
+        )
         scoped_service = wizard_discovery_service(
             db,
             current,
             repo_ref,
             service,
+            request_token=effective_token,
         )
         return await scoped_service.list_branches(repo_ref)
     except (RepositoryDiscoveryError, ValueError) as exc:
@@ -216,11 +252,15 @@ async def list_repository_manifest_candidates(
 ) -> RepositoryManifestCandidateListResponse:
     require_repository_discovery_access(db, current)
     try:
+        effective_token = await resolve_wizard_token(
+            db, request_token=None, installation_id=payload.installation_id
+        )
         scoped_service = wizard_discovery_service(
             db,
             current,
             payload.repo_ref,
             service,
+            request_token=effective_token,
         )
         return await scoped_service.list_manifest_candidates(payload.repo_ref, payload.branch)
     except (RepositoryDiscoveryError, ValueError) as exc:
@@ -239,11 +279,15 @@ async def validate_repository_manifest(
 ) -> RepositoryManifestValidationResponse:
     require_repository_discovery_access(db, current)
     try:
+        effective_token = await resolve_wizard_token(
+            db, request_token=None, installation_id=payload.installation_id
+        )
         scoped_service = wizard_discovery_service(
             db,
             current,
             payload.repo_ref,
             service,
+            request_token=effective_token,
         )
         return await scoped_service.validate_manifest(payload)
     except (RepositoryDiscoveryError, ValueError) as exc:
