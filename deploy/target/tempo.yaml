@@ -8,8 +8,9 @@ tempo:
   # Keep the local MVP quiet and self-contained.
   reportingEnabled: false
   # The target Agent persists RCA evidence outside Tempo, so the in-cluster
-  # backend only needs a bounded recent trace window. Keeping 24 hours made
-  # every unbounded search revisit an ever-growing local block set.
+  # backend only needs a bounded recent trace window. This limits local block
+  # storage and compaction work; query time bounds are enforced independently
+  # by the Agent policy.
   retention: 6h
 
   # tempo chart 1.24.4 defaults this to 1024 MiB. That default was larger than
