@@ -45,6 +45,50 @@ function Require-ReleaseWorkload([string]$Release) {
   }
 }
 
+function Require-TempoRuntimeBounds {
+  $argsText = (
+    & kubectl --context $TargetContext -n $TargetNamespace `
+      get statefulset/tempo `
+      -o "jsonpath={.spec.template.spec.containers[0].args[*]}"
+  ).Trim()
+  if ($LASTEXITCODE -ne 0) {
+    throw "tempo StatefulSet lookup failed"
+  }
+  $memoryLimit = (
+    & kubectl --context $TargetContext -n $TargetNamespace `
+      get statefulset/tempo `
+      -o "jsonpath={.spec.template.spec.containers[0].resources.limits.memory}"
+  ).Trim()
+  if ($LASTEXITCODE -ne 0) {
+    throw "tempo memory limit lookup failed"
+  }
+  $renderedConfig = (
+    & kubectl --context $TargetContext -n $TargetNamespace `
+      get configmap/tempo -o "jsonpath={.data.tempo\.yaml}"
+  ) -join "`n"
+  if ($LASTEXITCODE -ne 0) {
+    throw "tempo config lookup failed"
+  }
+
+  if ($argsText -notmatch "(^|\s)-mem-ballast-size-mbs=0(\s|$)") {
+    throw "tempo runtime has an unsafe memory ballast: $argsText"
+  }
+  if ($memoryLimit -ne "1Gi") {
+    throw "tempo runtime memory limit is not the required 1Gi: $memoryLimit"
+  }
+  foreach ($expected in @(
+    "block_retention: 6h",
+    "trace_idle_period: 10s",
+    "max_block_duration: 5m",
+    "max_concurrent_queries: 4",
+    "concurrent_jobs: 32"
+  )) {
+    if (-not $renderedConfig.Contains($expected)) {
+      throw "tempo runtime config is missing required bound: $expected"
+    }
+  }
+}
+
 function New-RandomHex {
   $bytes = New-Object byte[] 32
   $generator = New-Object Security.Cryptography.RNGCryptoServiceProvider
@@ -149,6 +193,7 @@ try {
     Require-ReleaseWorkload $name
   }
 
+  Require-TempoRuntimeBounds
   foreach ($service in @("prometheus", "loki-gateway", "tempo", "opentelemetry-collector")) {
     Wait-ServiceEndpoints $service
   }

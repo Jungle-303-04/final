@@ -233,6 +233,8 @@ class OpenTelemetrySpanQuery:
     query_name: str
     description: str
     traceql: str
+    range_seconds: int | None = None
+    step_seconds: int | None = None
 
 
 @dataclass(frozen=True)

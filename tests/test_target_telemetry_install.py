@@ -3,6 +3,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+import yaml
 from fastapi import HTTPException
 
 from domains.target import router as target_router
@@ -75,6 +76,28 @@ def test_telemetry_installer_pins_and_verifies_every_provider() -> None:
     otel_values = (ROOT / "deploy" / "target" / "opentelemetry.yaml").read_text(encoding="utf-8")
     assert "service:\n" in otel_values
     assert "  enabled: true" in otel_values
+    powershell = script("install-telemetry.ps1")
+    assert "require_tempo_runtime_bounds" in installer
+    assert "Require-TempoRuntimeBounds" in powershell
+    for source in (installer, powershell):
+        assert "mem-ballast-size-mbs=0" in source
+        assert "max_concurrent_queries: 4" in source
+
+
+def test_tempo_values_bound_ballast_blocks_queries_and_retention() -> None:
+    tempo_values = yaml.safe_load(
+        (ROOT / "deploy" / "target" / "tempo.yaml").read_text(encoding="utf-8")
+    )
+    tempo = tempo_values["tempo"]
+
+    assert tempo["memBallastSizeMbs"] == 0
+    assert tempo["retention"] == "6h"
+    assert tempo["resources"]["requests"]["memory"] == "384Mi"
+    assert tempo["resources"]["limits"]["memory"] == "1Gi"
+    assert tempo["ingester"]["trace_idle_period"] == "10s"
+    assert tempo["ingester"]["max_block_duration"] == "5m"
+    assert tempo["querier"]["max_concurrent_queries"] == 4
+    assert tempo["queryFrontend"]["search"]["concurrent_jobs"] == 32
 
 
 def test_ui_connect_command_installs_telemetry_before_agent_manifest() -> None:
@@ -169,9 +192,14 @@ def test_installer_token_serves_only_allowlisted_telemetry_artifacts() -> None:
 
     shell = asyncio.run(install_telemetry_script_by_token("agent-token", "bash", db=db))
     asset = asyncio.run(install_telemetry_asset_by_token("agent-token", "prometheus.yaml", db=db))
+    tempo_asset = asyncio.run(
+        install_telemetry_asset_by_token("agent-token", "tempo.yaml", db=db)
+    )
 
     assert b"helm upgrade --install" in shell.body
     assert b"fullnameOverride: prometheus" in asset.body
+    assert b"memBallastSizeMbs: 0" in tempo_asset.body
+    assert b"max_concurrent_queries: 4" in tempo_asset.body
 
     with pytest.raises(HTTPException) as exc:
         asyncio.run(install_telemetry_asset_by_token("agent-token", "../secrets", db=db))

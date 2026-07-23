@@ -106,6 +106,49 @@ require_release_workload() {
   fi
 }
 
+require_tempo_runtime_bounds() {
+  local args
+  local memory_limit
+  local rendered_config
+  local expected
+
+  args="$(
+    kubectl --context "${TARGET_CONTEXT}" -n "${TARGET_NAMESPACE}" \
+      get statefulset/tempo \
+      -o jsonpath='{.spec.template.spec.containers[0].args[*]}'
+  )"
+  memory_limit="$(
+    kubectl --context "${TARGET_CONTEXT}" -n "${TARGET_NAMESPACE}" \
+      get statefulset/tempo \
+      -o jsonpath='{.spec.template.spec.containers[0].resources.limits.memory}'
+  )"
+  rendered_config="$(
+    kubectl --context "${TARGET_CONTEXT}" -n "${TARGET_NAMESPACE}" \
+      get configmap/tempo \
+      -o jsonpath='{.data.tempo\.yaml}'
+  )"
+
+  if [[ " ${args} " != *" -mem-ballast-size-mbs=0 "* ]]; then
+    echo "tempo runtime has an unsafe memory ballast: ${args}" >&2
+    return 1
+  fi
+  if [[ "${memory_limit}" != "1Gi" ]]; then
+    echo "tempo runtime memory limit is not the required 1Gi: ${memory_limit}" >&2
+    return 1
+  fi
+  for expected in \
+    "block_retention: 6h" \
+    "trace_idle_period: 10s" \
+    "max_block_duration: 5m" \
+    "max_concurrent_queries: 4" \
+    "concurrent_jobs: 32"; do
+    if [[ "${rendered_config}" != *"${expected}"* ]]; then
+      echo "tempo runtime config is missing required bound: ${expected}" >&2
+      return 1
+    fi
+  done
+}
+
 existing_secret_value() {
   local secret_name="$1"
   local key="$2"
@@ -238,6 +281,7 @@ require_release_workload "${PROMETHEUS_RELEASE}"
 require_release_workload "${LOKI_RELEASE}"
 require_release_workload "${TEMPO_RELEASE}"
 require_release_workload "${OTEL_RELEASE}"
+require_tempo_runtime_bounds
 require_service_endpoints prometheus
 require_service_endpoints loki-gateway
 require_service_endpoints tempo

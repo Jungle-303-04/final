@@ -68,6 +68,7 @@ def test_target_profile_enables_cluster_local_tempo_query() -> None:
     )
     assert [query["name"] for query in queries] == ["cluster_recent_traces"]
     assert queries[0]["query"] == "{}"
+    assert queries[0]["range_seconds"] == 15 * 60
     assert queries[0]["provenance"]["backend_scope"] == "cluster_local"
 
 
