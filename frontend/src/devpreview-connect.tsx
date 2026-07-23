@@ -856,6 +856,13 @@ function RepoTargetStep({ source, context, onComplete }: {
             {manifestStatus === "ready" && manifests.length === 0 && <option value="">발견된 매니페스트 없음</option>}
             {manifests.map((candidate) => <option key={candidate.path} value={candidate.path}>{candidate.display_name || candidate.path} · {candidate.path}</option>)}
           </select>
+          {/* 선택한 후보의 선택 근거(왜 이게 추천됐는지)를 그대로 노출. */}
+          {(() => {
+            const selected = manifests.find((candidate) => candidate.path === input.manifestPath);
+            return selected?.reason ? (
+              <span className="px-0.5 text-[11px] font-normal c-3">{selected.reason}</span>
+            ) : null;
+          })()}
         </label>
         <label className="grid gap-1.5 text-[12px] font-semibold c-2">
           연결된 클러스터
