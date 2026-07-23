@@ -48,6 +48,7 @@ from domains.target.evidence_jobs import (
     DEFAULT_PENDING_EVIDENCE_EVENT_TTL_SECONDS,
     PENDING_EVIDENCE_EVENT_ID_PREFIX,
 )
+from domains.target.telemetry_readiness import telemetry_stack_view
 from domains.target.evidence_policy import (
     control_namespace_tuple,
     default_agent_policy,
@@ -113,6 +114,7 @@ from packages.contracts.gateway.responses import (
     SchedulingPolicyResponse,
     TargetInstallResponse,
     TargetPreflightResponse,
+    TelemetryStackView,
 )
 from packages.contracts.identity import (
     DEFAULT_WORKSPACE_ID,
@@ -120,7 +122,11 @@ from packages.contracts.identity import (
     ClusterRegistrationStatus,
     Permission,
 )
-from packages.contracts.target import SANDBOX_NAMESPACE, TARGET_RBAC_MANIFEST_VERSION
+from packages.contracts.target import (
+    SANDBOX_NAMESPACE,
+    TARGET_NAMESPACE,
+    TARGET_RBAC_MANIFEST_VERSION,
+)
 from packages.events.envelope import event
 from packages.runtime.dependencies import (
     get_dashboard_ready_fanout,
@@ -1702,10 +1708,12 @@ async def get_cluster_connection_status(
     )
     connection_status = registration_connection_status(registration, latest_agent)
     connection_stage = cluster_connection_stage(registration, latest_agent, latest_snapshot)
+    telemetry_stack = _cluster_telemetry_stack(db, workspace_id, cluster_id, connection_status)
     return ClusterConnectionStatusResponse(
         cluster_id=cluster_id,
         connection_status=connection_status,
         connection_stage=connection_stage,
+        telemetry_stack=telemetry_stack,
         refresh_after_seconds=connection_refresh_after_seconds(connection_stage),
         last_agent_id=latest_agent.get("agent_id") if latest_agent else None,
         last_seen_at=latest_agent.get("last_seen_at") if latest_agent else None,
@@ -1713,6 +1721,34 @@ async def get_cluster_connection_status(
         connect_timeout_seconds=registration_connect_timeout(registration),
         connect_expires_at=registration_connect_expires_at(registration),
     )
+
+
+def _cluster_telemetry_stack(
+    db: Any,
+    workspace_id: str,
+    cluster_id: str,
+    connection_status: str,
+) -> TelemetryStackView | None:
+    """온라인 클러스터의 target 네임스페이스 워크로드에서 관측 스택 준비도를 실측한다.
+
+    에이전트가 온라인이 아니거나 스택 관측이 0이면 None(진행바 미표시)."""
+    if connection_status != AGENT_STATUS_ONLINE:
+        return None
+    lister = getattr(db, "list_inventory_resources", None)
+    if not callable(lister):
+        return None
+    try:
+        workloads = lister(
+            workspace_id=workspace_id,
+            cluster_id=cluster_id,
+            resource_type="workload",
+            namespace=TARGET_NAMESPACE,
+            limit=200,
+        )
+    except Exception:  # noqa: BLE001 - 진행바 산출 실패는 연결 상태 응답을 막지 않는다.
+        return None
+    view = telemetry_stack_view(workloads if isinstance(workloads, list) else [])
+    return TelemetryStackView.model_validate(view) if view else None
 
 
 def connection_refresh_after_seconds(connection_stage: str | None) -> float | None:

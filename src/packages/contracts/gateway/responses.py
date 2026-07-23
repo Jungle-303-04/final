@@ -2801,9 +2801,33 @@ class ClusterResponse(StrictModel):
     agents: list[ClusterAgentStatus] = Field(default_factory=list)
 
 
+class TelemetryStackComponent(StrictModel):
+    """관측 스택 구성요소 하나의 실측 상태(present/ready)."""
+
+    key: str
+    label: str
+    present: bool = False
+    ready: bool = False
+
+
+class TelemetryStackView(StrictModel):
+    """관측 스택(minio·prometheus·loki·tempo·otel) 준비도 — 실측 파드 health 기반.
+
+    ready_count/total 로 "합류 진행"을 정직하게 표기한다(타이머로 채우지 않음).
+    스택 설치가 시작되지 않았으면 서버는 이 필드를 None 으로 둔다(진행바 미표시).
+    """
+
+    ready_count: int = Field(ge=0)
+    total: int = Field(ge=1)
+    complete: bool = False
+    components: list[TelemetryStackComponent] = Field(default_factory=list)
+
+
 class ClusterConnectionStatusResponse(StrictModel):
     cluster_id: str
     connection_status: str
+    # 관측 스택 합류 진행(선택) — 에이전트-우선 연결 후 후속 세팅 상태를 실측으로 노출.
+    telemetry_stack: TelemetryStackView | None = None
     connection_stage: (
         Literal[
             "awaiting_install",
