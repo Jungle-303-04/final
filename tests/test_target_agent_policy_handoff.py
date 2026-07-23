@@ -15,6 +15,7 @@ from control.store import AgentControlStore  # noqa: E402
 
 from packages.contracts.gateway.requests import (  # noqa: E402
     AgentPolicy,
+    BootstrapPolicy,
     DesiredResource,
     DesiredStatePolicy,
 )
@@ -46,11 +47,57 @@ def target_agent_deployment(image: str) -> DesiredResource:
     )
 
 
-def policy(generation: int, image: str) -> AgentPolicy:
+def target_runtime_config(image: str) -> DesiredResource:
+    return DesiredResource(
+        resource_id="target-runtime-config-images",
+        scope="target-agent",
+        kind="ConfigMap",
+        namespace="target",
+        name="target-runtime-config",
+        action="apply",
+        state={
+            "apiVersion": "v1",
+            "kind": "ConfigMap",
+            "metadata": {"name": "target-runtime-config", "namespace": "target"},
+            "data": {
+                "TARGET_AGENT_IMAGE": image,
+                "NODE_COLLECTOR_IMAGE": image,
+            },
+        },
+    )
+
+
+def unrelated_target_config() -> DesiredResource:
+    return DesiredResource(
+        resource_id="unrelated-target-config",
+        scope="target-agent",
+        kind="ConfigMap",
+        namespace="target",
+        name="target-agent-policy",
+        action="apply",
+        state={
+            "apiVersion": "v1",
+            "kind": "ConfigMap",
+            "metadata": {"name": "target-agent-policy", "namespace": "target"},
+            "data": {"unrelated": "must-not-cross-failed-runtime-policy"},
+        },
+    )
+
+
+def policy(
+    generation: int,
+    image: str,
+    *,
+    include_unrelated: bool = False,
+) -> AgentPolicy:
+    desired_resources = [target_agent_deployment(image)]
+    if include_unrelated:
+        desired_resources.append(unrelated_target_config())
     return AgentPolicy(
         cluster_id="target-1",
         generation=generation,
-        desired_state=DesiredStatePolicy(resources=[target_agent_deployment(image)]),
+        bootstrap=BootstrapPolicy(resources=[target_runtime_config(image)]),
+        desired_state=DesiredStatePolicy(resources=desired_resources),
     )
 
 
@@ -81,7 +128,7 @@ def test_failed_evidence_activation_stages_only_upgrade_reconcile_policy(
     tmp_path: Path,
 ) -> None:
     active = policy(12, OLD_IMAGE)
-    incoming = policy(13, NEW_IMAGE)
+    incoming = policy(13, NEW_IMAGE, include_unrelated=True)
     client = PolicyClient(incoming)
 
     with AgentControlStore(str(tmp_path / "agent-control.db")) as store:
@@ -101,7 +148,11 @@ def test_failed_evidence_activation_stages_only_upgrade_reconcile_policy(
         assert result == "failed"
         assert store.active_generation() == 12
         assert store.load_policy() == active
-        assert store.load_reconcile_policy() == incoming
+        reconcile_policy = store.load_reconcile_policy()
+        assert reconcile_policy is not None
+        assert reconcile_policy.generation == incoming.generation
+        assert reconcile_policy.bootstrap.resources == [target_runtime_config(NEW_IMAGE)]
+        assert reconcile_policy.desired_state.resources == [target_agent_deployment(NEW_IMAGE)]
         assert client.statuses[-1]["status"] == "failed"
         assert client.statuses[-1]["message"] == (
             "telemetry source does not support range query: tempo"
@@ -125,7 +176,8 @@ def test_failed_evidence_activation_stages_only_upgrade_reconcile_policy(
 
         assert reconcile["generation"] == 13
         assert [resource.state for resource in applier.applied] == [
-            target_agent_deployment(NEW_IMAGE).state
+            target_runtime_config(NEW_IMAGE).state,
+            target_agent_deployment(NEW_IMAGE).state,
         ]
         assert store.load_policy() == active
 
