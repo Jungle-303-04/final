@@ -36,6 +36,7 @@ import {
   type ApplicationRunView,
   type WorkflowStepView,
 } from "./devpreview/deployFeed";
+import { DeployDetailHost, type DeployDetailTarget } from "./devpreview/DeployDetailPanel";
 import { useChangeTimeline } from "./devpreview/changeTimelineFeed";
 import { useTimelineBoard } from "./devpreview/timelineFeed";
 import { useUiPreferences, useRefreshPolicies, useSettingsAccess } from "./devpreview/settingsFeed";
@@ -413,10 +414,14 @@ function ScenarioGate({ runs, repositoryRef, status, onRefresh, onOpenRef, onOpe
     </Card>
   );
 }
-export function DeploySurface({ pendingRepos = [], repositoryFilter = null, onOpenRef, onOpenIssues, onAskAi, onAddRepo }: {
+export function DeploySurface({ pendingRepos = [], repositoryFilter = null, onOpenRef, onOpenIssues, onAskAi, onAddRepo, topInset = 57, leftInset = 208, rightInset = 0 }: {
   pendingRepos?: string[]; repositoryFilter?: string | null; onOpenRef: (kind: string, name: string) => void; onOpenIssues: () => void; onAskAi: () => void; onAddRepo: () => void;
+  /** 상세 패널 겹침 방지용 크롬 인셋 — unified DetailOverlay와 같은 계약. */
+  topInset?: number; leftInset?: number; rightInset?: number;
 }) {
   const [tab, setTab] = useState(repositoryFilter ? "GitOps" : "워크플로우");
+  // 행 클릭 → 상세 패널(읽기 전용). 한 번에 하나만 연다 — 전역 레이어 계약(70/71).
+  const [detail, setDetail] = useState<DeployDetailTarget | null>(null);
   const [selectedRepository, setSelectedRepository] = useState<string | null>(repositoryFilter);
   const [expandedRepositories, setExpandedRepositories] = useState<string[]>(repositoryFilter ? [repositoryFilter] : []);
   useEffect(() => {
@@ -449,6 +454,7 @@ export function DeploySurface({ pendingRepos = [], repositoryFilter = null, onOp
   const helmCols: [string, string][] = [["릴리스", "minmax(120px,1.1fr)"], ["차트", "minmax(150px,1.4fr)"], ["차트 버전", "minmax(80px,0.8fr)"], ["네임스페이스", "minmax(90px,0.9fr)"], ["리비전", "56px"], ["상태", "minmax(90px,0.8fr)"]];
   const loading = appsFeed.status === "loading";
   return (
+    <>
     <Page title="배포" icon={Rocket} tabs={["애플리케이션", "GitOps", "워크플로우", "Helm 릴리스"]} tab={tab} onTab={setTab} ensureVerticalScroll
       action={tab === "GitOps"
         ? <button className="product-focusable product-action" onClick={onAddRepo} style={{ display: "flex", alignItems: "center", gap: 6, border: "none", background: BLUE, color: UI.card, borderRadius: 9, padding: "6px 13px", fontSize: TYPE.label, fontWeight: 600, cursor: "pointer" }}>+ 저장소 연결</button>
@@ -466,7 +472,8 @@ export function DeploySurface({ pendingRepos = [], repositoryFilter = null, onOp
             : appsFeed.status === "unavailable" ? emptyRow("애플리케이션을 불러오지 못했습니다.")
             : apps.length === 0 ? emptyRow("관측된 애플리케이션 없음")
             : apps.map((a, i) => (
-              <TRow key={a.id} cols={appCols} i={i} cells={[
+              <TRow key={a.id} cols={appCols} i={i}
+                onClick={() => setDetail({ kind: "application", applicationId: a.id, name: a.name })} cells={[
                 <span key="n" style={{ display: "flex", alignItems: "center", gap: 8 }}><Package size={13} style={{ color: BLUE, flexShrink: 0 }} /><Mono>{a.name}</Mono></span>,
                 <span key="e" style={{ fontSize: TYPE.label, color: UI.ink2 }}>{a.environments.length ? a.environments.join(", ") : "—"}</span>,
                 <Mono key="r" dim>{a.repositoryRef ?? "—"}</Mono>,
@@ -525,14 +532,18 @@ export function DeploySurface({ pendingRepos = [], repositoryFilter = null, onOp
             {loading ? emptyRow("불러오는 중…")
               : appsFeed.status === "unavailable" ? emptyRow("워크플로우 실행을 불러오지 못했습니다.")
               : visibleWorkflowApps.length === 0 ? emptyRow("관측된 배포 실행 없음")
-              : visibleWorkflowApps.map((a, i) => (
-                <TRow key={a.id} cols={wfCols} i={i} cells={[
+              : visibleWorkflowApps.map((a, i) => {
+                const runId = a.workflowRunId;
+                return (
+                <TRow key={a.id} cols={wfCols} i={i}
+                  onClick={runId === null ? undefined : () => setDetail({ kind: "run", workflowRunId: runId })} cells={[
                   <span key="n" style={{ display: "flex", alignItems: "center", gap: 8 }}><Rocket size={13} style={{ color: BLUE, flexShrink: 0 }} /><Mono>{a.name}</Mono></span>,
                   <Mono key="w" dim>{a.workflowRunId}</Mono>,
                   deliveryPill(a.deliveryStatus),
                   <Mono key="t" dim>{fromNow(a.deliveryObservedAt)}</Mono>,
                 ]} />
-              ))}
+                );
+              })}
           </Card>
         </div>
       )}
@@ -549,7 +560,8 @@ export function DeploySurface({ pendingRepos = [], repositoryFilter = null, onOp
               </div>
             )
             : helm.items.map((h, i) => (
-              <TRow key={`${h.namespace}/${h.name}`} cols={helmCols} i={i} cells={[
+              <TRow key={`${h.clusterId}/${h.storageNamespace}/${h.name}`} cols={helmCols} i={i}
+                onClick={() => setDetail({ kind: "helm", identity: { clusterId: h.clusterId, storageNamespace: h.storageNamespace, name: h.name }, displayNamespace: h.namespace })} cells={[
                 <span key="n" style={{ display: "flex", alignItems: "center", gap: 8 }}><Package size={13} style={{ color: BLUE, flexShrink: 0 }} /><Mono>{h.name}</Mono></span>,
                 <Mono key="c" dim>{h.chart ?? "—"}</Mono>, <Mono key="v">{h.chartVersion ?? "—"}</Mono>,
                 <Mono key="ns" dim>{h.namespace}</Mono>, <Mono key="rv">{h.revision ?? "—"}</Mono>,
@@ -559,6 +571,11 @@ export function DeploySurface({ pendingRepos = [], repositoryFilter = null, onOp
         </Card>
       )}
     </Page>
+    {detail !== null && (
+      <DeployDetailHost target={detail} runs={workflowFeed.items} onClose={() => setDetail(null)}
+        topInset={topInset} leftInset={leftInset} rightInset={rightInset} />
+    )}
+    </>
   );
 }
 

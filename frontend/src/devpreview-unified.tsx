@@ -2070,7 +2070,8 @@ function App() {
         </div>
       ) : surface === "deploy" ? (
         <DeploySurface pendingRepos={pendingRepo} repositoryFilter={deployRepositoryFilter} onOpenRef={openRef}
-          onOpenIssues={() => setSurface("issues")} onAskAi={() => setAiOpen(true)} onAddRepo={() => setConnectModal("repo")} />
+          onOpenIssues={() => setSurface("issues")} onAskAi={() => setAiOpen(true)} onAddRepo={() => setConnectModal("repo")}
+          topInset={topH} leftInset={navCollapsed ? 60 : 208} rightInset={aiOpen ? aiW : 0} />
       ) : surface === "issues" ? (
         <IssuesSurface incidentClusterIds={incidentClusterIds} recoverySelectionCorrelations={recoverySelectionCorrelations} sessionRules={notes.filter((n) => n.icon === "rule").map((n) => n.body.split(" · ")[0])} onOpenRef={openRef} onAskAi={() => setAiOpen(true)} onOpenRca={setRcaIncident} />
       ) : surface === "timeline" ? (

@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { listApplicationRuns, listApplications } from "../api/applications";
 import type { Application, WorkflowRun } from "../api/applications-schemas";
 import { listHelmReleases } from "../api/helm-releases";
+import { useVisibleRefreshClock } from "../shared/data/useVisibleRefreshClock";
 
 // UI-PHASE2-001 §2 "Deploy": typed live adapters for the /deploy surface.
 //
@@ -11,6 +12,17 @@ import { listHelmReleases } from "../api/helm-releases";
 // fabricated value. `GET /api/helm/releases` currently reports coverage
 // `unavailable` with reason codes; that honest state is surfaced rather than a
 // backfilled release table. Both hooks are strictly read-only.
+//
+// 갱신 정책: 목록 훅은 탭이 보이는 동안 주기 폴링한다(useVisibleRefreshClock —
+// hidden 탭에서는 요청하지 않는다). 재조회 중에는 마지막 관측 값을 유지해
+// 화면이 스켈레톤으로 되돌아가지 않는다. Helm은 서버가 지시한
+// refresh_after_seconds를 따른다 — 임의 주기를 지어내지 않는다.
+
+/** 애플리케이션·워크플로우 목록 폴링 주기. */
+export const DEPLOY_LIST_POLL_MS = 15_000;
+const HELM_LIST_MIN_POLL_MS = 5_000;
+const HELM_LIST_MAX_POLL_MS = 60_000;
+const HELM_LIST_FALLBACK_POLL_MS = 15_000;
 
 function isAbortError(error: unknown): boolean {
   return typeof error === "object" && error !== null && "name" in error
@@ -96,6 +108,7 @@ function toApplicationView(record: Application, index: number): ApplicationView 
  */
 export function useApplications(refreshKey: unknown = null): ApplicationsFeed {
   const [feed, setFeed] = useState<ApplicationsFeed>({ status: "loading", items: [] });
+  const { revision } = useVisibleRefreshClock(true, DEPLOY_LIST_POLL_MS);
   useEffect(() => {
     const controller = new AbortController();
     void listApplications({ signal: controller.signal })
@@ -108,7 +121,7 @@ export function useApplications(refreshKey: unknown = null): ApplicationsFeed {
         setFeed({ status: "unavailable", items: [] });
       });
     return () => controller.abort();
-  }, [refreshKey]);
+  }, [refreshKey, revision]);
   return feed;
 }
 
@@ -179,6 +192,7 @@ export function useApplicationRuns(
   refreshKey: unknown = null,
 ): ApplicationRunsFeed {
   const [feed, setFeed] = useState<ApplicationRunsFeed>({ status: "loading", items: [] });
+  const { revision } = useVisibleRefreshClock(applications.length > 0, DEPLOY_LIST_POLL_MS);
   const applicationKey = applications.map(({ id, workflowRunId }) => `${id}:${workflowRunId ?? ""}`).join("|");
   useEffect(() => {
     const controller = new AbortController();
@@ -186,7 +200,8 @@ export function useApplicationRuns(
       setFeed({ status: "ready", items: [] });
       return () => controller.abort();
     }
-    setFeed({ status: "loading", items: [] });
+    // 재조회·범위 변경 중에는 마지막 관측 값을 유지한다(stale-while-revalidate) —
+    // 초기 상태가 이미 loading이므로 여기서 동기 setState로 되돌리지 않는다.
     void Promise.allSettled(applications.map(async (application) => {
       // A single application can accumulate many connect-validation and retry
       // runs before the GitOps recovery flow completes. Read the full bounded
@@ -206,7 +221,7 @@ export function useApplicationRuns(
     return () => controller.abort();
     // applicationKey is a stable serialization of the server-owned identities.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [applicationKey, refreshKey]);
+  }, [applicationKey, refreshKey, revision]);
   return feed;
 }
 
@@ -215,6 +230,8 @@ export function useApplicationRuns(
 export interface HelmReleaseView {
   name: string;
   namespace: string;
+  /** Helm 스토리지 네임스페이스 — 상세 조회 경로의 정본 식별자. */
+  storageNamespace: string;
   clusterId: string;
   chart: string | null;
   chartVersion: string | null;
@@ -242,16 +259,24 @@ export function useHelmReleases(): HelmReleasesFeed {
     coverageAvailability: null,
     reasonCodes: [],
   });
+  const [pollMs, setPollMs] = useState(HELM_LIST_FALLBACK_POLL_MS);
+  const { revision } = useVisibleRefreshClock(true, pollMs);
   useEffect(() => {
     const controller = new AbortController();
     void listHelmReleases({}, controller.signal)
       .then((response) => {
         if (controller.signal.aborted) return;
+        // 서버가 지시한 재조회 주기를 그대로 따른다(안전 클램프만 적용).
+        const advised = Math.round(response.refresh_after_seconds * 1000);
+        setPollMs(Number.isFinite(advised) && advised > 0
+          ? Math.min(HELM_LIST_MAX_POLL_MS, Math.max(HELM_LIST_MIN_POLL_MS, advised))
+          : HELM_LIST_FALLBACK_POLL_MS);
         setFeed({
           status: "ready",
           items: response.releases.map((release) => ({
             name: release.name,
             namespace: release.scope.namespaces[0] ?? release.storage_namespace,
+            storageNamespace: release.storage_namespace,
             clusterId: release.scope.cluster_id,
             chart: release.chart,
             chartVersion: release.chart_version,
@@ -267,6 +292,6 @@ export function useHelmReleases(): HelmReleasesFeed {
         setFeed({ status: "unavailable", items: [], coverageAvailability: null, reasonCodes: [] });
       });
     return () => controller.abort();
-  }, []);
+  }, [revision]);
   return feed;
 }
