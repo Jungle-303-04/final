@@ -364,7 +364,10 @@ function CompactClusterRow({ cl, summary, onOpen, onSettings, onDisconnect }: {
       <span style={{ display: "flex", alignItems: "center", gap: 9, minWidth: 0 }}>
         <span style={{ width: 27, height: 27, borderRadius: 8, background: `linear-gradient(135deg, ${BRAND.awsA}, ${BRAND.awsB})`, display: "grid", placeItems: "center", flexShrink: 0 }}><AwsIcon size={15} style={{ color: UI.card }} /></span>
         <span style={{ minWidth: 0 }}>
-          <span title={cl.displayName} style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: TYPE.label, fontWeight: 600, color: UI.ink }}>{cl.displayName}</span>
+          <span style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+            <span title={cl.displayName} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: TYPE.label, fontWeight: 600, color: UI.ink }}>{cl.displayName}</span>
+            {cl.readOnly && <span style={{ fontSize: TYPE.caption, fontWeight: 600, color: UI.ink2, border: `1px solid ${UI.line}`, background: UI.bg2, borderRadius: 5, padding: "1px 6px", flexShrink: 0 }}>읽기 전용</span>}
+          </span>
           <span style={{ display: "block", marginTop: 1, fontSize: TYPE.caption, color: UI.ink3 }}>{cl.environment ?? cl.provider.toUpperCase()}</span>
         </span>
         {incidents > 0 ? (
