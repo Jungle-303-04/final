@@ -149,6 +149,15 @@ KUBERNETES_ROLLOUT_POLL_INTERVAL_SECONDS_ENV = (
 KUBERNETES_ROLLOUT_POLL_INTERVAL_SECONDS = float(
     env(KUBERNETES_ROLLOUT_POLL_INTERVAL_SECONDS_ENV, "2")
 )
+KUBERNETES_AWAIT_ROLLOUT_ENV = (
+    # apply 후 Deployment rollout 완료를 기다려 promotion gate 에 반영할지(기본 off).
+    # off 면 기존처럼 ready=None 으로 즉시 반환(빠른 배포). on 이면 나쁜 이미지가
+    # rollout 실패로 남아 ready=False → 프로모션 자동 차단.
+    "KUBERNETES_AWAIT_ROLLOUT"
+)
+KUBERNETES_AWAIT_ROLLOUT = (
+    env(KUBERNETES_AWAIT_ROLLOUT_ENV, "").strip().lower() in {"1", "true", "yes", "on"}
+)
 
 HOSTNAME_ENV = "HOSTNAME"
 AGENT_TOKEN_ENV = "AGENT_TOKEN"

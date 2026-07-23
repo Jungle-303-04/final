@@ -128,6 +128,9 @@ from config import (
     RECONCILER_MODE_ENV,
 )
 from config import (
+    KUBERNETES_AWAIT_ROLLOUT as CONFIG_KUBERNETES_AWAIT_ROLLOUT,
+)
+from config import (
     KUBERNETES_ROLLOUT_POLL_INTERVAL_SECONDS as CONFIG_KUBERNETES_ROLLOUT_POLL_INTERVAL_SECONDS,
 )
 from config import (
@@ -389,6 +392,7 @@ class AgentConfig:
     DIRECT_COMMANDS_DISABLED_MESSAGE = "direct commands are disabled by agent profile"
     KUBERNETES_ROLLOUT_TIMEOUT_SECONDS = CONFIG_KUBERNETES_ROLLOUT_TIMEOUT_SECONDS
     KUBERNETES_ROLLOUT_POLL_INTERVAL_SECONDS = CONFIG_KUBERNETES_ROLLOUT_POLL_INTERVAL_SECONDS
+    KUBERNETES_AWAIT_ROLLOUT = CONFIG_KUBERNETES_AWAIT_ROLLOUT
 
 
 class HttpManagementPlaneClient:
@@ -4241,10 +4245,8 @@ class TargetClusterAgent:
                 if created.is_error:
                     return False, kubernetes_failure_message("create", created), {}
                 if resource.kind == "Deployment":
-                    return (
-                        True,
-                        AgentConfig.COMMAND_RESULT_MESSAGE,
-                        rollout_progress(resource.name, waited=False),
+                    return await self.deployment_apply_result(
+                        client, base_url, token, resource.namespace, resource.name
                     )
                 return True, AgentConfig.MANIFEST_CREATED_MESSAGE, {}
 
@@ -4270,10 +4272,8 @@ class TargetClusterAgent:
             if patched.is_error:
                 return False, kubernetes_failure_message("patch", patched), {}
             if resource.kind == "Deployment":
-                return (
-                    True,
-                    AgentConfig.COMMAND_RESULT_MESSAGE,
-                    rollout_progress(resource.name, waited=False),
+                return await self.deployment_apply_result(
+                    client, base_url, token, resource.namespace, resource.name
                 )
         return True, AgentConfig.MANIFEST_PATCHED_MESSAGE, {}
 
@@ -4331,11 +4331,29 @@ class TargetClusterAgent:
             response = await client.patch(url, json=patch, headers=headers)
             if response.is_error:
                 return False, kubernetes_failure_message("patch", response), {}
-            return (
-                True,
-                AgentConfig.COMMAND_RESULT_MESSAGE,
-                rollout_progress(deployment, waited=False),
+            return await self.deployment_apply_result(
+                client, base_url, token, namespace, deployment
             )
+
+    async def deployment_apply_result(
+        self,
+        client: httpx.AsyncClient,
+        base_url: str,
+        token: str,
+        namespace: str,
+        deployment: str,
+    ) -> tuple[bool, str, JsonObject]:
+        """Deployment apply 성공 후 반환값. KUBERNETES_AWAIT_ROLLOUT 옵트인이면 rollout
+        완료를 기다려 ready=True/False 를 실어 promotion gate 가 판정하게 한다. off(기본)
+        면 기존처럼 즉시 ready=None(빠른 배포, 회귀 없음). apply 자체는 성공했으므로
+        applied 는 항상 True.
+        """
+        if AgentConfig.KUBERNETES_AWAIT_ROLLOUT:
+            _ready, message, status = await self.wait_for_deployment_rollout(
+                client, base_url, token, namespace, deployment
+            )
+            return True, message, status
+        return True, AgentConfig.COMMAND_RESULT_MESSAGE, rollout_progress(deployment, waited=False)
 
     async def wait_for_deployment_rollout(
         self,
