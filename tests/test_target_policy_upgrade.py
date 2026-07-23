@@ -30,7 +30,7 @@ def desired_runtime_config(policy: AgentPolicy) -> dict[str, object]:
     raise AssertionError("target runtime ConfigMap was not planned")
 
 
-def test_policy_upgrade_enables_traces_and_backfills_otel_endpoint() -> None:
+def test_policy_upgrade_enables_traces_and_keeps_self_upgrade_image_only() -> None:
     cluster_id = "legacy-target"
     plan = build_target_upgrade_plan(
         registration={

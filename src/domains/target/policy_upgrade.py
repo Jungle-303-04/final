@@ -288,9 +288,10 @@ def _runtime_config_resource(policy: AgentPolicy, payload: TargetRegisterRequest
     """Own only the image leaves understood by every deployed target agent.
 
     The target runtime ConfigMap is merge-patched, so installation-owned
-    telemetry settings remain intact.  Keeping this resource image-only is a
-    backward-compatibility boundary: older agents reject any additional key
-    before they can apply the Deployment that upgrades themselves.
+    telemetry settings (including the OTel endpoint) remain intact.  Keeping
+    this resource image-only is a backward-compatibility boundary: older
+    agents reject any additional key before they can apply the Deployment that
+    upgrades themselves.
     """
 
     body = policy.model_dump()
