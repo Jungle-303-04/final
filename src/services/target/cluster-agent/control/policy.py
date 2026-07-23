@@ -5,12 +5,18 @@ from collections.abc import Awaitable, Callable
 
 from span import get_tracer
 
-from control.store import AgentControlStore
+from control.store import AgentControlStore, desired_resource_hash
 from packages.config.logs import CONTEXT_KEY, get_logger
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.gateway.policy_merge import merge_agent_policy
-from packages.contracts.gateway.requests import AgentPolicy
+from packages.contracts.gateway.requests import (
+    AgentPolicy,
+    BootstrapPolicy,
+    DesiredResource,
+    DesiredStatePolicy,
+)
 from packages.contracts.interfaces import ManagementPlaneClient
+from packages.contracts.target import TARGET_RUNTIME_CONFIG_NAME, TargetComponent
 
 TRACER = get_tracer("target-cluster-agent.policy")
 LOGGER = get_logger(__name__)
@@ -110,10 +116,12 @@ class AgentPolicySync:
                     return "failed"
 
             attempted_generation = self.payload_generation(payload, generation)
+            active_policy = self.store.load_policy() or self.default_policy
+            policy: AgentPolicy | None = None
             try:
                 incoming_policy = AgentPolicy.model_validate(payload)
                 policy = merge_agent_policy(
-                    self.store.load_policy() or self.default_policy,
+                    active_policy,
                     incoming_policy,
                 )
                 details = await self.apply_runtime(client, policy)
@@ -133,6 +141,9 @@ class AgentPolicySync:
             except Exception as exc:
                 span.error(exc)
                 details = await self.runtime_status_details()
+                handoff = self.stage_desired_state_handoff(active_policy, policy)
+                if handoff is not None:
+                    details["desired_state_handoff"] = handoff
                 await client.report_policy_status(
                     {
                         "cluster_id": self.cluster_id,
@@ -143,6 +154,78 @@ class AgentPolicySync:
                     }
                 )
                 return "failed"
+
+    def stage_desired_state_handoff(
+        self,
+        active_policy: AgentPolicy,
+        candidate_policy: AgentPolicy | None,
+    ) -> JsonObject | None:
+        if (
+            candidate_policy is None
+            or self.store.active_generation() >= candidate_policy.generation
+            or candidate_policy.cluster_id != self.cluster_id
+            or candidate_policy.cluster_role != active_policy.cluster_role
+        ):
+            return None
+        active_deployment = self.target_agent_deployment(active_policy)
+        candidate_deployment = self.target_agent_deployment(candidate_policy)
+        if candidate_deployment is None:
+            return None
+        if active_deployment is not None and desired_resource_hash(
+            active_deployment
+        ) == desired_resource_hash(candidate_deployment):
+            return None
+        handoff_policy = self.self_upgrade_handoff_policy(
+            active_policy,
+            candidate_policy,
+            candidate_deployment,
+        )
+        if not self.store.save_pending_reconcile_policy(handoff_policy):
+            return None
+        return {
+            "status": "staged",
+            "generation": candidate_policy.generation,
+            "resource_id": candidate_deployment.resource_id,
+        }
+
+    @staticmethod
+    def self_upgrade_handoff_policy(
+        active_policy: AgentPolicy,
+        candidate_policy: AgentPolicy,
+        candidate_deployment: DesiredResource,
+    ) -> AgentPolicy:
+        runtime_configs = [
+            resource
+            for resource in candidate_policy.bootstrap.resources
+            if (
+                resource.scope == "target-agent"
+                and resource.kind == "ConfigMap"
+                and resource.name == TARGET_RUNTIME_CONFIG_NAME
+                and resource.action == "apply"
+            )
+        ]
+        return active_policy.model_copy(
+            update={
+                "generation": candidate_policy.generation,
+                "bootstrap": BootstrapPolicy(
+                    mode=candidate_policy.bootstrap.mode,
+                    resources=runtime_configs,
+                ),
+                "desired_state": DesiredStatePolicy(resources=[candidate_deployment]),
+            }
+        )
+
+    @staticmethod
+    def target_agent_deployment(policy: AgentPolicy) -> DesiredResource | None:
+        for resource in (*policy.bootstrap.resources, *policy.desired_state.resources):
+            if (
+                resource.scope == "target-agent"
+                and resource.kind == "Deployment"
+                and resource.name == TargetComponent.CLUSTER_AGENT
+                and resource.action == "apply"
+            ):
+                return resource
+        return None
 
     def payload_generation(self, payload: JsonObject, fallback: int) -> int:
         raw_generation = payload.get("generation")

@@ -155,7 +155,7 @@ class DesiredStateReconciler:
             await asyncio.sleep(self.interval_seconds)
 
     async def reconcile_once(self, policy: AgentPolicy | None = None) -> dict[str, object]:
-        policy = policy or self.store.load_policy()
+        policy = policy or self.store.load_reconcile_policy()
         if policy is None:
             return {
                 "cluster_id": self.cluster_id,

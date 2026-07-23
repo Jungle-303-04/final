@@ -12,6 +12,7 @@ from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.gateway.requests import AgentPolicy, DesiredResource
 
 ACTIVE_POLICY_ID = "active"
+PENDING_RECONCILE_POLICY_ID = "pending-reconcile"
 RECONCILE_STATUS_APPLIED = "applied"
 RECONCILE_STATUS_UNCHANGED = "unchanged"
 SUCCESSFUL_RECONCILE_STATUSES = {
@@ -121,8 +122,55 @@ class AgentControlStore:
                     now,
                 ),
             )
+            conn.execute(
+                """
+                delete from agent_policy
+                where policy_id = ?
+                  and generation <= ?
+                """,
+                (PENDING_RECONCILE_POLICY_ID, policy.generation),
+            )
+
+    def save_pending_reconcile_policy(self, policy: AgentPolicy) -> bool:
+        """Stage desired state without promoting an unapplied runtime policy."""
+
+        now = time.time()
+        conn = self.connection()
+        with conn:
+            cursor = conn.execute(
+                """
+                insert into agent_policy
+                    (policy_id, generation, payload_json, updated_at)
+                values (?, ?, ?, ?)
+                on conflict (policy_id) do update set
+                    generation = excluded.generation,
+                    payload_json = excluded.payload_json,
+                    updated_at = excluded.updated_at
+                where excluded.generation >= agent_policy.generation
+                """,
+                (
+                    PENDING_RECONCILE_POLICY_ID,
+                    policy.generation,
+                    policy.model_dump_json(),
+                    now,
+                ),
+            )
+        return cursor.rowcount > 0
 
     def load_policy(self) -> AgentPolicy | None:
+        return self._load_policy(ACTIVE_POLICY_ID)
+
+    def load_pending_reconcile_policy(self) -> AgentPolicy | None:
+        return self._load_policy(PENDING_RECONCILE_POLICY_ID)
+
+    def load_reconcile_policy(self) -> AgentPolicy | None:
+        active = self.load_policy()
+        pending = self.load_pending_reconcile_policy()
+        if pending is not None and (active is None or pending.generation > active.generation):
+            return pending
+        return active
+
+    def _load_policy(self, policy_id: str) -> AgentPolicy | None:
         row = (
             self.connection()
             .execute(
@@ -131,7 +179,7 @@ class AgentControlStore:
             from agent_policy
             where policy_id = ?
             """,
-                (ACTIVE_POLICY_ID,),
+                (policy_id,),
             )
             .fetchone()
         )
