@@ -16,6 +16,7 @@ from domains.dashboard.repository import (
     effective_root_cause_column,
     issue_detail_projection_columns,
     issue_severity_projection,
+    latest_rca_issue_report_summary,
     serialize_timeline_row,
 )
 from domains.gitops.models import Application
@@ -373,6 +374,7 @@ def _authorized_issues(workspace_id: str, cluster_ids: set[str]) -> Select[Any]:
             effective_root_cause_column(table),
             effective_confidence_column(table),
             *issue_detail_projection_columns(table),
+            latest_rca_issue_report_summary(table).label("rca_issue_report_summary"),
             table.c.evidence_ref,
             table.c.supporting_evidence,
             table.c.missing_evidence,

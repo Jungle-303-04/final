@@ -558,13 +558,48 @@ def timeline_item(row: JsonObject) -> RcaTimelineItem:
 
 def issue_item(row: JsonObject) -> RcaIssueItem:
     data = {key: row.get(key) for key in RcaIssueItem.model_fields}
+    _apply_rca_report_summary(data, row)
     data["supporting_evidence"] = row.get("supporting_evidence") or []
     data["missing_evidence"] = row.get("missing_evidence") or []
     return RcaIssueItem(**data)
 
 
+def _apply_rca_report_summary(data: JsonObject, row: JsonObject) -> None:
+    """Prefer a completed report and retain timeline payload prose as fallback."""
+    report_summary = row.get("rca_issue_report_summary")
+    report = report_summary if isinstance(report_summary, dict) else {}
+    data["situation_summary"] = _nonempty_text(
+        report.get("executive_summary"),
+        data.get("situation_summary"),
+    )
+    data["recommended_action_summary"] = _nonempty_text(
+        report.get("recommended_action"),
+        data.get("recommended_action_summary"),
+    )
+    data["evidence_summary"] = _nonempty_text(
+        report.get("evidence_summary"),
+        data.get("evidence_summary"),
+    )
+    data["evidence_bundle_summary"] = _nonempty_text(
+        report.get("evidence_bundle_summary"),
+        data.get("evidence_bundle_summary"),
+    )
+
+
+def _nonempty_text(*values: object) -> str | None:
+    return next(
+        (
+            value.strip()
+            for value in values
+            if isinstance(value, str) and value.strip()
+        ),
+        None,
+    )
+
+
 def queue_issue_item(row: JsonObject) -> RcaIssueQueueItem:
     data = {key: row.get(key) for key in RcaIssueQueueItem.model_fields}
+    _apply_rca_report_summary(data, row)
     data["supporting_evidence"] = row.get("supporting_evidence") or []
     data["missing_evidence"] = row.get("missing_evidence") or []
     return RcaIssueQueueItem(**data)
@@ -572,6 +607,7 @@ def queue_issue_item(row: JsonObject) -> RcaIssueQueueItem:
 
 def resource_issue_item(row: JsonObject) -> ResourceIssueItem:
     data = {key: row.get(key) for key in ResourceIssueItem.model_fields}
+    _apply_rca_report_summary(data, row)
     data["supporting_evidence"] = row.get("supporting_evidence") or []
     data["missing_evidence"] = row.get("missing_evidence") or []
     return ResourceIssueItem(**data)
