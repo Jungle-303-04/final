@@ -24,6 +24,7 @@ import {
   type InvNode,
   type InvPod,
 } from "./devpreview/inventoryTopologyFeed";
+import { OpsiaConfigPanel } from "./devpreview/OpsiaConfigPanel";
 import { OpsiaServicePanel } from "./devpreview/OpsiaServicePanel";
 import { RepositoryConnections } from "./devpreview/RepositoryConnections";
 import type { RepositoryGroup } from "./devpreview/repositoryRegistry";
@@ -1304,8 +1305,7 @@ function PodSkeleton() {
 }
 
 // ── 우측 패널 ─────────────────────────────
-// 서비스 탭은 현재 드릴된 클러스터/네임스페이스 범위의 실제 Service 리소스를 보여준다.
-// 구성 탭은 아직 ConfigMap/Secret 일반 인벤토리 계약이 없어 정직한 빈 상태로 둔다.
+// 서비스/구성 탭은 현재 드릴된 클러스터/네임스페이스 범위의 read-only projection을 보여준다.
 function SidePanel({ forcedTab, scaled, onAddRepo, onOpenRepository, stickyTop, activeCluster, selectedNamespace, pendingRepos, connectedRepos, repositoryGroups, onRepositoryDisconnected }: {
   forcedTab?: "svc" | "cfg" | "git" | null;
   scaled?: boolean;
@@ -1342,11 +1342,7 @@ function SidePanel({ forcedTab, scaled, onAddRepo, onOpenRepository, stickyTop, 
       )}
 
       {tab === "cfg" && (
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "26px 14px", textAlign: "center" }}>
-          <FileCog size={20} style={{ color: INK4 }} />
-          <span style={{ fontSize: TYPE.label, fontWeight: 600, color: UI.ink2 }}>구성 관계 관측 안 됨</span>
-          <span style={{ fontSize: TYPE.caption, color: UI.ink3 }}>ConfigMap·Secret 참조는 쿠버네티스 관점의 리소스 상세에서 확인하세요.</span>
-        </div>
+        <OpsiaConfigPanel activeCluster={activeCluster ?? null} selectedNamespace={selectedNamespace ?? null} />
       )}
 
       {tab === "git" && (
