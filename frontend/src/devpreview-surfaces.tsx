@@ -1375,10 +1375,10 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
     <>
       {/* 스크림 — 사이드바 밖 클릭 시 닫기 */}
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: DUR.fade }}
-        onClick={onClose} style={{ position: "fixed", top: topInset, left: leftInset, right: rightInset, bottom: 0, background: inkA(0.22), zIndex: 55 }} />
+        onClick={onClose} style={{ position: "fixed", top: topInset, left: leftInset, right: rightInset, bottom: 0, background: inkA(0.22), zIndex: 70 }} />
       {/* RCA 보고서 — 우측 사이드바(드로어). 리소스 상세 시트(DetailOverlay)와 폭·레이아웃 통일(560px) */}
       <motion.div initial={{ x: 580 }} animate={{ x: 0 }} exit={{ x: 580, transition: { duration: 0.14, ease: [0.4, 0, 1, 1] } }} transition={{ type: "spring", bounce: 0.06, visualDuration: 0.28 }}
-        style={{ position: "fixed", top: topInset, right: rightInset, bottom: 0, width: 560, maxWidth: `calc(100vw / ${PRESENT_SCALE} - ${leftInset + rightInset}px)`, background: UI.card, borderLeft: `1px solid ${UI.line}`, boxShadow: `-24px 0 60px -30px ${inkA(0.3)}`, zIndex: 56, display: "flex", flexDirection: "column", overflow: "hidden", transition: "right .28s cubic-bezier(.32,.72,0,1), max-width .28s cubic-bezier(.32,.72,0,1)" }}>
+        style={{ position: "fixed", top: topInset, right: rightInset, bottom: 0, width: 560, maxWidth: `calc(100vw / ${PRESENT_SCALE} - ${leftInset + rightInset}px)`, background: UI.card, borderLeft: `1px solid ${UI.line}`, boxShadow: `-24px 0 60px -30px ${inkA(0.3)}`, zIndex: 71, display: "flex", flexDirection: "column", overflow: "hidden", transition: "right .28s cubic-bezier(.32,.72,0,1), max-width .28s cubic-bezier(.32,.72,0,1)" }}>
           {/* 헤더 */}
           <div style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "18px 20px 14px" }}>
             <span style={{ width: 38, height: 38, borderRadius: 11, background: headerTone.bg, display: "grid", placeItems: "center", flexShrink: 0 }}>

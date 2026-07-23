@@ -129,7 +129,11 @@ function PanelShell({ icon: Icon, title, subtitle, onClose, insets, children }: 
 }) {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key !== "Escape") return;
+      // 최상위 표면이 ESC를 소비한다 — 셸(window) 핸들러가 AI 패널 등을
+      // 같이 닫는 이중 닫힘을 막는다(전역 규약: 한 번에 한 겹).
+      event.stopPropagation();
+      onClose();
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
