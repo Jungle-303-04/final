@@ -59,7 +59,7 @@ function HealthChip({ health }: { health: string }) {
     return <span style={{ fontSize: TYPE.caption, fontWeight: 600, color: UI.ink3, border: `1px solid ${UI.line}`, borderRadius: 5, padding: "1px 6px", whiteSpace: "nowrap" }}>{label}</span>;
   }
   const c = sevColor(sev);
-  return <span style={{ fontSize: TYPE.caption, fontWeight: 700, color: c, background: `${c}14`, border: `1px solid ${c}33`, borderRadius: 5, padding: "1px 6px", whiteSpace: "nowrap" }}>{label}</span>;
+  return <span style={{ fontSize: TYPE.caption, fontWeight: 600, color: c, background: `${c}14`, border: `1px solid ${c}33`, borderRadius: 5, padding: "1px 6px", whiteSpace: "nowrap" }}>{label}</span>;
 }
 
 // ── 관측 안 됨 표기(사용률 계약이 없을 때) ─────────────────────────────
@@ -86,7 +86,7 @@ function ClusterMiniUsage({ label, value }: { label: string; value: number | nul
           }}
         />
       </span>
-      <span style={{ width: 66, textAlign: "right", fontSize: observed ? TYPE.label : TYPE.caption, fontWeight: observed ? 700 : 600, color: observed ? UI.ink : UI.ink3, fontVariantNumeric: "tabular-nums", flexShrink: 0, whiteSpace: "nowrap" }}>
+      <span style={{ width: 66, textAlign: "right", fontSize: observed ? TYPE.label : TYPE.caption, fontWeight: observed ? 600 : 500, color: observed ? UI.ink : UI.ink3, fontVariantNumeric: "tabular-nums", flexShrink: 0, whiteSpace: "nowrap" }}>
         <AnimatedPercentageValue value={value} reducedMotion={Boolean(reducedMotion)} />
       </span>
     </div>
@@ -191,13 +191,13 @@ function ClusterRow({ cl, summary, topology, onOpen }: {
           </span>
           <span style={{ display: "block", fontSize: TYPE.caption, color: UI.ink3, marginTop: 2 }}>
             {cl.provider.toUpperCase()} · {cl.kubernetesVersion ?? "—"}
-            {summary?.stale === true && <span aria-label="실시간 관측 지연" style={{ color: TINT.warn.fg, fontWeight: 700 }}> · 관측 지연</span>}
+            {summary?.stale === true && <span aria-label="실시간 관측 지연" style={{ color: TINT.warn.fg, fontWeight: 600 }}> · 관측 지연</span>}
           </span>
         </span>
         {!healthy && (incidentsObserved
-            ? <span style={{ fontSize: TYPE.caption, fontWeight: 700, color: UI.card, background: HP.crit, borderRadius: 999, padding: "3px 9px", fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>장애 {incidents}</span>
+            ? <span style={{ fontSize: TYPE.caption, fontWeight: 600, color: UI.card, background: HP.crit, borderRadius: 999, padding: "3px 9px", fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>장애 {incidents}</span>
             : !isHealthyConnection(cl)
-              ? <span style={{ fontSize: TYPE.caption, fontWeight: 700, color: TINT.warn.fg, background: TINT.warn.bg, border: `1px solid ${TINT.warn.bd}`, borderRadius: 999, padding: "3px 9px", flexShrink: 0 }}>{statusLabel(cl.connectionStage ?? cl.connectionStatus)}</span>
+              ? <span style={{ fontSize: TYPE.caption, fontWeight: 600, color: TINT.warn.fg, background: TINT.warn.bg, border: `1px solid ${TINT.warn.bd}`, borderRadius: 999, padding: "3px 9px", flexShrink: 0 }}>{statusLabel(cl.connectionStage ?? cl.connectionStatus)}</span>
               : null)}
       </div>
 
@@ -207,7 +207,7 @@ function ClusterRow({ cl, summary, topology, onOpen }: {
         <span>네임스페이스 <b style={{ color: UI.ink, fontVariantNumeric: "tabular-nums" }}>{cl.namespaceCount ?? "—"}</b></span>
         {topology?.status === "ready" && topology.partial && (
           <span title={topology.partialReasonCodes.map(reasonLabel).join(" · ") || "부분 관측"}
-            style={{ color: TINT.warn.fg, fontWeight: 700 }}>
+            style={{ color: TINT.warn.fg, fontWeight: 600 }}>
             일부 관측{topology.truncatedPodCount > 0 ? ` · ${topology.truncatedPodCount}개 미표시` : ""}
           </span>
         )}
@@ -264,11 +264,11 @@ function CompactUsage({ label, value }: { label: string; value: number | null })
   const shown = useSmoothedValue(value);
   return (
     <span style={{ display: "grid", gridTemplateColumns: "30px minmax(48px, 1fr) 38px", alignItems: "center", gap: 6, minWidth: 0 }}>
-      <span style={{ fontSize: TYPE.caption, fontWeight: 700, color: UI.ink3 }}>{label}</span>
+      <span style={{ fontSize: TYPE.caption, fontWeight: 600, color: UI.ink3 }}>{label}</span>
       <span style={{ height: 4, borderRadius: 999, background: inkA(0.06), overflow: "hidden" }}>
         {shown !== null && <span style={{ display: "block", width: `${Math.min(100, shown)}%`, height: "100%", borderRadius: 999, background: shown >= 90 ? HP.crit : shown >= 75 ? HP.warn : HP.ok }} />}
       </span>
-      <span style={{ textAlign: "right", fontSize: TYPE.caption, fontWeight: 700, fontVariantNumeric: "tabular-nums", color: shown === null ? UI.ink3 : UI.ink }}>{shown === null ? "—" : `${Math.round(shown)}%`}</span>
+      <span style={{ textAlign: "right", fontSize: TYPE.caption, fontWeight: 600, fontVariantNumeric: "tabular-nums", color: shown === null ? UI.ink3 : UI.ink }}>{shown === null ? "—" : `${Math.round(shown)}%`}</span>
     </span>
   );
 }
@@ -327,17 +327,17 @@ function CompactClusterRow({ cl, summary, onOpen, onSettings, onDisconnect }: {
       <span style={{ display: "flex", alignItems: "center", gap: 9, minWidth: 0 }}>
         <span style={{ width: 27, height: 27, borderRadius: 8, background: `linear-gradient(135deg, ${BRAND.awsA}, ${BRAND.awsB})`, display: "grid", placeItems: "center", flexShrink: 0 }}><AwsIcon size={15} style={{ color: UI.card }} /></span>
         <span style={{ minWidth: 0 }}>
-          <span title={cl.displayName} style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: TYPE.label, fontWeight: 750, color: UI.ink }}>{cl.displayName}</span>
+          <span title={cl.displayName} style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: TYPE.label, fontWeight: 600, color: UI.ink }}>{cl.displayName}</span>
           <span style={{ display: "block", marginTop: 1, fontSize: TYPE.caption, color: UI.ink3 }}>{cl.environment ?? cl.provider.toUpperCase()}</span>
         </span>
         {incidents > 0 ? (
-          <span style={{ marginLeft: "auto", flexShrink: 0, fontSize: TYPE.caption, fontWeight: 700, color: HP.crit, background: TINT.crit.bg, borderRadius: 999, padding: "2px 6px" }}>장애 {incidents}</span>
+          <span style={{ marginLeft: "auto", flexShrink: 0, fontSize: TYPE.caption, fontWeight: 600, color: HP.crit, background: TINT.crit.bg, borderRadius: 999, padding: "2px 6px" }}>장애 {incidents}</span>
         ) : connectionWarning ? (
-          <span style={{ marginLeft: "auto", flexShrink: 0, fontSize: TYPE.caption, fontWeight: 700, color: TINT.warn.fg, background: TINT.warn.bg, borderRadius: 999, padding: "2px 6px" }}>{statusLabel(cl.connectionStage ?? cl.connectionStatus)}</span>
+          <span style={{ marginLeft: "auto", flexShrink: 0, fontSize: TYPE.caption, fontWeight: 600, color: TINT.warn.fg, background: TINT.warn.bg, borderRadius: 999, padding: "2px 6px" }}>{statusLabel(cl.connectionStage ?? cl.connectionStatus)}</span>
         ) : summary?.stale === true ? (
           <span
             aria-label="실시간 관측 지연"
-            style={{ marginLeft: "auto", flexShrink: 0, fontSize: TYPE.caption, fontWeight: 700, color: TINT.warn.fg }}
+            style={{ marginLeft: "auto", flexShrink: 0, fontSize: TYPE.caption, fontWeight: 600, color: TINT.warn.fg }}
           >
             <Clock3 size={11} aria-hidden="true" /> 관측 지연
           </span>
@@ -345,7 +345,7 @@ function CompactClusterRow({ cl, summary, onOpen, onSettings, onDisconnect }: {
           <span
             aria-label="메트릭 수집 대기: CPU·메모리 최신 샘플 미수신"
             title="CPU·메모리 최신 샘플을 아직 수신하지 못했습니다."
-            style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 4, flexShrink: 0, fontSize: TYPE.caption, fontWeight: 700, lineHeight: 1, color: TINT.warn.fg }}
+            style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 4, flexShrink: 0, fontSize: TYPE.caption, fontWeight: 600, lineHeight: 1, color: TINT.warn.fg }}
           >
             <Clock3 size={11} aria-hidden="true" />메트릭 수집 대기
           </span>
@@ -410,7 +410,7 @@ export function HomeClustersWidget({ onOpen, onSettings, onDisconnect, pending =
       ))}
       {pending.map((name) => (
         <div key={name} style={{ display: "grid", gridTemplateColumns: "minmax(170px, 1.35fr) minmax(210px, 1.25fr) minmax(180px, 1fr) 28px", alignItems: "center", gap: 14, minHeight: 54, padding: "8px 4px", borderTop: `1px solid ${UI.line2}` }}>
-          <span style={{ minWidth: 0, fontSize: TYPE.label, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
+          <span style={{ minWidth: 0, fontSize: TYPE.label, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
           <span style={{ fontSize: TYPE.caption, color: TINT.blue.fg }}>부트스트랩 중 · 첫 인벤토리 대기</span>
           <span style={{ fontSize: TYPE.caption, color: UI.ink3 }}>CPU — · MEM —</span><span />
         </div>
@@ -432,7 +432,7 @@ function AddClusterCard({ onClick, delay = 0, compact = false }: { onClick: () =
         : { display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, minHeight: 200,
             border: `1.5px dashed ${LINE3}`, borderRadius: 16, background: "transparent", cursor: "pointer" }}>
       <span style={{ width: compact ? 26 : 34, height: compact ? 26 : 34, borderRadius: 999, background: blueA(0.09), display: "grid", placeItems: "center", color: BLUE, fontSize: compact ? TYPE.body : TYPE.section, fontWeight: 600, lineHeight: 1 }}>+</span>
-      <span style={{ fontSize: TYPE.body, fontWeight: 700, color: UI.ink }}>클러스터 연결</span>
+      <span style={{ fontSize: TYPE.body, fontWeight: 600, color: UI.ink }}>클러스터 연결</span>
       <span style={{ fontSize: TYPE.caption, color: UI.ink3 }}>에이전트 설치로 등록</span>
     </motion.button>
   );
@@ -453,7 +453,7 @@ export function PendingClusterCard({ name, delay = 0 }: { name: string; delay?: 
           <span style={{ fontSize: TYPE.section, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
           <span style={{ display: "block", fontSize: TYPE.caption, color: UI.ink3, marginTop: 2 }}>Amazon EKS · 버전 관측 대기</span>
         </span>
-        <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: TYPE.caption, fontWeight: 700, color: TINT.blue.fg, background: blueA(0.08), border: `1px solid ${blueA(0.25)}`, borderRadius: 999, padding: "3px 9px", flexShrink: 0 }}><span className="pulsedot" style={{ width: 6, height: 6, borderRadius: 999, background: BLUE }} />부트스트랩 중</span>
+        <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: TYPE.caption, fontWeight: 600, color: TINT.blue.fg, background: blueA(0.08), border: `1px solid ${blueA(0.25)}`, borderRadius: 999, padding: "3px 9px", flexShrink: 0 }}><span className="pulsedot" style={{ width: 6, height: 6, borderRadius: 999, background: BLUE }} />부트스트랩 중</span>
       </div>
       <div style={{ fontSize: TYPE.label, color: UI.ink2 }}>부트스트랩 중 · 첫 인벤토리 수집 대기</div>
       <div style={{ marginTop: "auto", display: "flex", flexDirection: "column", gap: 7 }}>
@@ -514,7 +514,7 @@ export function NodeCard({ node, pods, problemPodCount, onOpen, onTip }: {
       <div style={{ display: "flex", alignItems: "flex-start", gap: 8, minWidth: 0 }}>
         <Server size={13} strokeWidth={2} style={{ color: UI.ink3, flexShrink: 0, marginTop: 2 }} />
         <div style={{ minWidth: 0, flex: 1 }}>
-          <div title={node.name} style={{ fontSize: TYPE.body, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink, fontFamily: MONO, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", lineHeight: 1.35 }}>{node.name}</div>
+          <div title={node.name} style={{ fontSize: TYPE.body, fontWeight: 600, letterSpacing: "-0.02em", color: UI.ink, fontFamily: MONO, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", lineHeight: 1.35 }}>{node.name}</div>
           {showStatus && <div style={{ fontSize: TYPE.caption, color: UI.ink3, marginTop: 2 }}>{statusText}</div>}
         </div>
         {sev !== "ok" && <span style={{ width: 8, height: 8, borderRadius: 999, background: sevColor(sev), flexShrink: 0, marginTop: 4 }} />}
@@ -528,17 +528,17 @@ export function NodeCard({ node, pods, problemPodCount, onOpen, onTip }: {
           <b style={{ color: UI.ink, fontVariantNumeric: "tabular-nums" }}>{node.totalPodCount ?? "—"}</b>
         </span>
         {problemPodCount !== null && problemPodCount > 0 && (
-          <span aria-label={`문제 파드 ${problemPodCount}`} style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: TYPE.caption, fontWeight: 700, color: TINT.crit.fg }}>
+          <span aria-label={`문제 파드 ${problemPodCount}`} style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: TYPE.caption, fontWeight: 600, color: TINT.crit.fg }}>
             <AlertTriangle size={12} aria-hidden="true" /><b style={{ fontVariantNumeric: "tabular-nums" }}>{problemPodCount}</b>문제 파드
           </span>
         )}
         {restartsRecent > 0 && (
-          <span aria-label={`최근 재시작 ${restartsRecent}`} style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: TYPE.caption, fontWeight: 700, color: TINT.warn.fg }}>
+          <span aria-label={`최근 재시작 ${restartsRecent}`} style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: TYPE.caption, fontWeight: 600, color: TINT.warn.fg }}>
             <RotateCcw size={12} aria-hidden="true" /><b style={{ fontVariantNumeric: "tabular-nums" }}>{restartsRecent}</b>최근 재시작
           </span>
         )}
         {problemConditionCount > 0 && (
-          <span aria-label={`문제 조건 ${problemConditionCount}`} style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: TYPE.caption, fontWeight: 700, color: TINT.warn.fg }}>
+          <span aria-label={`문제 조건 ${problemConditionCount}`} style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: TYPE.caption, fontWeight: 600, color: TINT.warn.fg }}>
             <AlertTriangle size={12} aria-hidden="true" /><b style={{ fontVariantNumeric: "tabular-nums" }}>{problemConditionCount}</b>조건
           </span>
         )}
@@ -621,7 +621,7 @@ export function NodePodSlotGrid({ node, pods }: { node: InvNode; pods: readonly 
         <span
           aria-hidden="true"
           data-slot-overflow={hiddenCapacity}
-          style={{ flexShrink: 0, fontVariantNumeric: "tabular-nums", fontSize: TYPE.caption, fontWeight: 700, color: UI.ink3, whiteSpace: "nowrap" }}
+          style={{ flexShrink: 0, fontVariantNumeric: "tabular-nums", fontSize: TYPE.caption, fontWeight: 600, color: UI.ink3, whiteSpace: "nowrap" }}
         >
           +{hiddenCapacity}
         </span>
@@ -864,19 +864,19 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
                 <span style={seg}><Box size={11} style={{ color: UI.ink3 }} />파드 <b style={num}>{observing ? activeSummary?.podsTotal ?? topology.podsTotal ?? "—" : topology.status === "loading" ? "…" : "—"}</b></span>
               )}
               {drilled && (topology.stale || activeSummary?.stale === true) && (
-                <span aria-label="실시간 관측 지연" style={{ ...seg, color: TINT.warn.fg, fontWeight: 700 }}>
+                <span aria-label="실시간 관측 지연" style={{ ...seg, color: TINT.warn.fg, fontWeight: 600 }}>
                   <Clock3 size={11} />관측 지연
                 </span>
               )}
               {observing && topology.partial && (
                 <span title={topology.partialReasonCodes.map(reasonLabel).join(" · ") || "부분 관측"}
-                  style={{ ...seg, color: TINT.warn.fg, fontWeight: 700 }}>
+                  style={{ ...seg, color: TINT.warn.fg, fontWeight: 600 }}>
                   일부 관측{topology.truncatedPodCount > 0 ? ` · ${topology.truncatedPodCount}개 미표시` : ""}
                 </span>
               )}
               {crit > 0 && <span style={{ width: 1, height: 16, background: UI.line, margin: "0 2px" }} />}
               {crit > 0 && (
-                <span style={{ fontSize: TYPE.label, fontWeight: 700, color: HP.crit, display: "flex", alignItems: "center", gap: 5, border: `1px solid ${TINT.crit.bd}`, background: TINT.crit.bg, borderRadius: 999, padding: "5px 12px" }}>
+                <span style={{ fontSize: TYPE.label, fontWeight: 600, color: HP.crit, display: "flex", alignItems: "center", gap: 5, border: `1px solid ${TINT.crit.bd}`, background: TINT.crit.bg, borderRadius: 999, padding: "5px 12px" }}>
                   <Activity size={12} />장애 {crit}
                 </span>
               )}
@@ -976,7 +976,7 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
                   <div style={{ background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 16, padding: 20 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
                       <Server size={14} style={{ color: UI.ink3 }} />
-                      <span style={{ fontSize: TYPE.body, fontWeight: 700, fontFamily: MONO, color: UI.ink }}>{view.node}</span>
+                      <span style={{ fontSize: TYPE.body, fontWeight: 600, fontFamily: MONO, color: UI.ink }}>{view.node}</span>
                     </div>
                     {/* physical topology의 server_id로만 노드 귀속을 판정한다. */}
                     <div style={{ display: "flex", alignItems: "flex-start", gap: 8, background: UI.bg2, border: `1px solid ${UI.line}`, borderRadius: 10, padding: "9px 12px", marginBottom: 14 }}>
@@ -1035,7 +1035,7 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
             }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <span style={{ width: 7, height: 7, borderRadius: 999, background: sevColor(healthSev(tip.health)), flexShrink: 0 }} />
-              <span style={{ fontSize: TYPE.label, fontWeight: 700, fontFamily: MONO, color: UI.ink, letterSpacing: "-0.01em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tip.label}</span>
+              <span style={{ fontSize: TYPE.label, fontWeight: 600, fontFamily: MONO, color: UI.ink, letterSpacing: "-0.01em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tip.label}</span>
             </div>
             <div style={{ fontSize: TYPE.caption, color: UI.ink3, marginTop: 3, marginLeft: 13 }}>
               {(tip.status ? statusLabel(tip.status) : "상태 관측 안 됨")} · {tip.health ? statusLabel(tip.health) : "헬스 관측 안 됨"}
@@ -1088,7 +1088,7 @@ function EmptyState({ icon, label, hint, flush = false }: { icon?: React.ReactNo
       padding: "44px 20px", textAlign: "center",
     }}>
       {icon && <span style={{ width: 40, height: 40, borderRadius: 12, background: inkA(0.04), display: "grid", placeItems: "center", color: UI.ink3, flexShrink: 0 }}>{icon}</span>}
-      <span style={{ fontSize: TYPE.body, fontWeight: 700, color: UI.ink2 }}>{label}</span>
+      <span style={{ fontSize: TYPE.body, fontWeight: 600, color: UI.ink2 }}>{label}</span>
       {hint && <span style={{ fontSize: TYPE.caption, color: UI.ink3, maxWidth: 320, lineHeight: 1.5 }}>{hint}</span>}
     </div>
   );
@@ -1241,7 +1241,7 @@ function SidePanel({ forcedTab, scaled, onAddRepo, onOpenRepository, stickyTop, 
           {onAddRepo && (
             <button onClick={onAddRepo}
               style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 7, width: "100%", marginTop: 6, padding: "9px 0",
-                border: `1.5px dashed ${LINE3}`, borderRadius: 11, background: "transparent", cursor: "pointer", fontSize: TYPE.label, fontWeight: 700, color: BLUE }}>
+                border: `1.5px dashed ${LINE3}`, borderRadius: 11, background: "transparent", cursor: "pointer", fontSize: TYPE.label, fontWeight: 600, color: BLUE }}>
               + 저장소 연결
             </button>
           )}

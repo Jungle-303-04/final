@@ -16,7 +16,7 @@ const itemStyle: React.CSSProperties = {
 };
 
 function Meta({ label, value }: { label: string; value: React.ReactNode }) {
-  return <div style={itemStyle}><span style={{ color: UI.ink3, fontSize: TYPE.caption }}>{label}</span><span style={{ color: UI.ink, fontFamily: MONO, fontSize: TYPE.caption, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{value}</span></div>;
+  return <div style={itemStyle}><span style={{ color: UI.ink3, fontSize: TYPE.caption }}>{label}</span><span style={{ color: UI.ink, fontFamily: MONO, fontSize: TYPE.caption, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{value}</span></div>;
 }
 
 export function ResourceAccessPanel({ view }: { view: ResourceAccessView }) {
@@ -24,7 +24,7 @@ export function ResourceAccessPanel({ view }: { view: ResourceAccessView }) {
   if (view.status === "idle") return <div style={{ color: UI.ink3, fontSize: TYPE.label }}>이 리소스의 권한 근거는 현재 범위에서 관측되지 않습니다.</div>;
   if (view.status === "unavailable") return <div style={{ color: UI.ink3, fontSize: TYPE.label }}>권한 인벤토리가 아직 수집되지 않았습니다.</div>;
   if (view.status === "error" || !view.data) {
-    return <button type="button" onClick={view.retry} style={{ alignItems: "center", background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 8, color: BLUE, cursor: "pointer", display: "inline-flex", fontSize: TYPE.label, fontWeight: 700, gap: 7, padding: "7px 11px" }}><RefreshCw size={12} />권한 다시 불러오기</button>;
+    return <button type="button" onClick={view.retry} style={{ alignItems: "center", background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 8, color: BLUE, cursor: "pointer", display: "inline-flex", fontSize: TYPE.label, fontWeight: 600, gap: 7, padding: "7px 11px" }}><RefreshCw size={12} />권한 다시 불러오기</button>;
   }
   const data = view.data;
   if (data.type === "unavailable") {

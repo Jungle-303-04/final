@@ -63,7 +63,7 @@ export function ClusterLifecycleControl({
           display: "inline-flex",
           flexShrink: 0,
           fontSize: TYPE.label,
-          fontWeight: 700,
+          fontWeight: 600,
           gap: 6,
           padding: "6px 9px",
         }}

@@ -97,11 +97,11 @@ export function WidgetFrame({ title, info, onDeepLink, editing, span, widgetType
             (CSS word-break: normal은 CJK를 임의 글자에서 끊으므로 nowrap이 필요하다.) */}
         {navigable ? (
           <button type="button" onClick={onDeepLink} aria-label={`${title} 화면으로 이동`}
-            style={{ border: "none", background: "transparent", padding: 0, textAlign: "left", cursor: "pointer", fontSize: TYPE.body, fontWeight: 700, letterSpacing: "-0.01em", color: UI.ink, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            style={{ border: "none", background: "transparent", padding: 0, textAlign: "left", cursor: "pointer", fontSize: TYPE.body, fontWeight: 600, letterSpacing: "-0.01em", color: UI.ink, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {title}
           </button>
         ) : (
-          <span style={{ fontSize: TYPE.body, fontWeight: 700, letterSpacing: "-0.01em", color: UI.ink, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</span>
+          <span style={{ fontSize: TYPE.body, fontWeight: 600, letterSpacing: "-0.01em", color: UI.ink, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</span>
         )}
         {info && (
           <span style={{ position: "relative", display: "grid", flexShrink: 0 }} onClick={(event) => event.stopPropagation()} onMouseEnter={() => setTip(true)} onMouseLeave={() => setTip(false)}>
@@ -122,12 +122,12 @@ export function WidgetFrame({ title, info, onDeepLink, editing, span, widgetType
             <span role="menu" aria-label={`${title} 위젯 설정`} style={{ position: "absolute", top: 30, right: 0, zIndex: 45, width: 246, display: "flex", flexDirection: "column", gap: 9, padding: 10, borderRadius: 12, border: `1px solid ${UI.line}`, background: UI.card, boxShadow: `0 16px 40px -18px ${inkA(0.35)}` }}>
               {onSpanChange && (
                 <span style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-                  <span style={{ fontSize: TYPE.caption, fontWeight: 700, color: UI.ink3 }}>너비</span>
+                  <span style={{ fontSize: TYPE.caption, fontWeight: 600, color: UI.ink3 }}>너비</span>
                   <span style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 4 }}>
                     {([1, 2, 3, 4] as const).map((nextSpan) => (
                       <button key={nextSpan} type="button" aria-label={`${title} 너비 ${nextSpan}/4`} aria-pressed={span === nextSpan}
                         onClick={() => { onSpanChange(nextSpan); setMenuOpen(false); }}
-                        style={{ position: "relative", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, border: `1px solid ${span === nextSpan ? blueA(0.55) : UI.line}`, borderRadius: 8, background: span === nextSpan ? blueA(0.09) : UI.card, color: span === nextSpan ? BLUE : UI.ink2, padding: "6px 3px 5px", fontSize: TYPE.caption, fontWeight: 700, cursor: "pointer", boxShadow: span === nextSpan ? `inset 0 0 0 1px ${blueA(0.12)}` : "none" }}>
+                        style={{ position: "relative", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, border: `1px solid ${span === nextSpan ? blueA(0.55) : UI.line}`, borderRadius: 8, background: span === nextSpan ? blueA(0.09) : UI.card, color: span === nextSpan ? BLUE : UI.ink2, padding: "6px 3px 5px", fontSize: TYPE.caption, fontWeight: 600, cursor: "pointer", boxShadow: span === nextSpan ? `inset 0 0 0 1px ${blueA(0.12)}` : "none" }}>
                         <span aria-hidden="true" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 2, width: 28, height: 10 }}>
                           {[1, 2, 3, 4].map((unit) => <span key={unit} style={{ borderRadius: 2, background: unit <= nextSpan ? (span === nextSpan ? BLUE : UI.ink3) : inkA(0.08) }} />)}
                         </span>
@@ -138,12 +138,12 @@ export function WidgetFrame({ title, info, onDeepLink, editing, span, widgetType
                 </span>
               )}
               {onTypeChange && widgetTypes && widgetTypes.length > 0 && (
-                <label style={{ display: "flex", flexDirection: "column", gap: 5, fontSize: TYPE.caption, fontWeight: 700, color: UI.ink3 }}>
+                <label style={{ display: "flex", flexDirection: "column", gap: 5, fontSize: TYPE.caption, fontWeight: 600, color: UI.ink3 }}>
                   <span style={{ display: "flex", alignItems: "center", gap: 5 }}><LayoutGrid size={12} />위젯 유형</span>
                   <span style={{ position: "relative", display: "flex", alignItems: "center" }}>
                     <LayoutGrid size={13} aria-hidden="true" style={{ position: "absolute", left: 8, color: UI.ink3, pointerEvents: "none" }} />
                     <select aria-label={`${title} 위젯 유형`} value={widgetType} onChange={(event) => { onTypeChange(event.target.value); setMenuOpen(false); }}
-                      style={{ minWidth: 0, width: "100%", border: `1px solid ${UI.line}`, borderRadius: 8, background: UI.card, color: UI.ink, padding: "7px 28px", fontSize: TYPE.caption, fontWeight: 650, cursor: "pointer" }}>
+                      style={{ minWidth: 0, width: "100%", border: `1px solid ${UI.line}`, borderRadius: 8, background: UI.card, color: UI.ink, padding: "7px 28px", fontSize: TYPE.caption, fontWeight: 600, cursor: "pointer" }}>
                       {widgetTypes.map((type) => <option key={type.id} value={type.id}>{type.title}</option>)}
                     </select>
                   </span>
@@ -153,11 +153,11 @@ export function WidgetFrame({ title, info, onDeepLink, editing, span, widgetType
               <span style={{ display: "grid", gridTemplateColumns: onEdit && onRemove ? "1fr 1fr" : "1fr", gap: 5 }}>
                 {onEdit && (
                   <button type="button" role="menuitem" onClick={() => { onEdit(); setMenuOpen(false); }}
-                    style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, border: `1px solid ${UI.line}`, borderRadius: 8, background: UI.bg2, color: UI.ink2, padding: "7px 6px", fontSize: TYPE.caption, fontWeight: 650, cursor: "pointer" }}><Pencil size={13} />레이아웃 편집</button>
+                    style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, border: `1px solid ${UI.line}`, borderRadius: 8, background: UI.bg2, color: UI.ink2, padding: "7px 6px", fontSize: TYPE.caption, fontWeight: 600, cursor: "pointer" }}><Pencil size={13} />레이아웃 편집</button>
                 )}
                 {onRemove && (
                   <button type="button" role="menuitem" onClick={() => { onRemove(); setMenuOpen(false); }}
-                    style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, border: `1px solid ${critA(0.2)}`, borderRadius: 8, background: critA(0.05), color: HP.crit, padding: "7px 6px", fontSize: TYPE.caption, fontWeight: 650, cursor: "pointer" }}><Trash2 size={13} />위젯 삭제</button>
+                    style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, border: `1px solid ${critA(0.2)}`, borderRadius: 8, background: critA(0.05), color: HP.crit, padding: "7px 6px", fontSize: TYPE.caption, fontWeight: 600, cursor: "pointer" }}><Trash2 size={13} />위젯 삭제</button>
                 )}
               </span>
             </span>
@@ -179,7 +179,7 @@ export function KpiValue({ value, unit, delta, deltaTone, summary }: {
         <span style={{ fontSize: TYPE.kpi, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink, fontVariantNumeric: "tabular-nums" }}>{value}</span>
         {unit && <span style={{ fontSize: TYPE.label, fontWeight: 600, color: UI.ink3 }}>{unit}</span>}
         {delta && (
-          <span style={{ fontSize: TYPE.caption, fontWeight: 700, fontVariantNumeric: "tabular-nums", color: deltaTone === "warn" ? TINT.warn.fg : TINT.ok.fg, background: deltaTone === "warn" ? warnA(0.14) : okA(0.12), borderRadius: 999, padding: "2px 8px" }}>{delta}</span>
+          <span style={{ fontSize: TYPE.caption, fontWeight: 600, fontVariantNumeric: "tabular-nums", color: deltaTone === "warn" ? TINT.warn.fg : TINT.ok.fg, background: deltaTone === "warn" ? warnA(0.14) : okA(0.12), borderRadius: 999, padding: "2px 8px" }}>{delta}</span>
         )}
       </span>
       {summary && <span style={{ fontSize: TYPE.label, color: UI.ink2, lineHeight: 1.5 }}>{summary}</span>}
@@ -222,7 +222,7 @@ export function MiniBars({ values, labels, currentIndex, tone = BLUE }: {
         <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", gap: 4, minWidth: 0 }}>
           <motion.span initial={{ height: 0 }} animate={{ height: Math.max((v / max) * barArea, 3) }} transition={{ ...SOFT, delay: i * 0.04 }}
             style={{ width: "100%", maxWidth: 22, borderRadius: 5, background: i === currentIndex ? tone : inkA(0.09), minHeight: 3 }} />
-          {labels && <span style={{ fontSize: TYPE.caption, fontVariantNumeric: "tabular-nums", color: i === currentIndex ? UI.ink : UI.ink3, fontWeight: i === currentIndex ? 700 : 500 }}>{labels[i]}</span>}
+          {labels && <span style={{ fontSize: TYPE.caption, fontVariantNumeric: "tabular-nums", color: i === currentIndex ? UI.ink : UI.ink3, fontWeight: i === currentIndex ? 600 : 500 }}>{labels[i]}</span>}
         </div>
       ))}
     </div>
@@ -335,7 +335,7 @@ export function RingGauge({ label, value }: { label: string; value: number }) {
           <motion.circle cx={26} cy={26} r={R} fill="none" stroke={tone} strokeWidth={5} strokeLinecap="round"
             strokeDasharray={C} initial={{ strokeDashoffset: C }} animate={{ strokeDashoffset: C * (1 - value / 100) }} transition={{ duration: DUR.meter, ease: "easeInOut" }} />
         </svg>
-        <span style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", fontSize: TYPE.caption, fontWeight: 700, color: UI.ink, fontVariantNumeric: "tabular-nums" }}>{value}%</span>
+        <span style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", fontSize: TYPE.caption, fontWeight: 600, color: UI.ink, fontVariantNumeric: "tabular-nums" }}>{value}%</span>
       </div>
       <span style={{ fontSize: TYPE.caption, fontWeight: 600, letterSpacing: "0.05em", color: UI.ink3 }}>{label}</span>
     </div>

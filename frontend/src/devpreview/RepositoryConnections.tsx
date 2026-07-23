@@ -193,7 +193,7 @@ function RepositoryRow({
                       background: busy ? "#f0a3a3" : "#dc2626",
                       color: "#fff",
                       fontSize: TYPE.label,
-                      fontWeight: 700,
+                      fontWeight: 600,
                       cursor: busy ? "default" : "pointer",
                     }}
                   >

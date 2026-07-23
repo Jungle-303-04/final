@@ -43,7 +43,7 @@ function ServiceHealthChip({ health }: { health: string }) {
   }
   const color = severity === "crit" ? HP.crit : severity === "warn" ? HP.warn : HP.ok;
   return (
-    <span style={{ fontSize: TYPE.caption, fontWeight: 700, color, background: `${color}14`, border: `1px solid ${color}33`, borderRadius: 5, padding: "1px 6px", whiteSpace: "nowrap" }}>
+    <span style={{ fontSize: TYPE.caption, fontWeight: 600, color, background: `${color}14`, border: `1px solid ${color}33`, borderRadius: 5, padding: "1px 6px", whiteSpace: "nowrap" }}>
       {statusLabel(health)}
     </span>
   );
@@ -151,7 +151,7 @@ export function OpsiaServicePanel({ activeCluster, selectedNamespace }: OpsiaSer
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "2px 2px 4px" }}>
-        <span style={{ fontSize: TYPE.body, fontWeight: 700, color: UI.ink }}>서비스</span>
+        <span style={{ fontSize: TYPE.body, fontWeight: 600, color: UI.ink }}>서비스</span>
         <span style={{ fontSize: TYPE.caption, color: UI.ink3 }}>
           {serviceStatusLabel(serviceView.status, serviceView.rows.length)}
         </span>
@@ -182,7 +182,7 @@ export function OpsiaServicePanel({ activeCluster, selectedNamespace }: OpsiaSer
                 style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", minHeight: 48, textAlign: "left", border: "1px solid transparent", background: "transparent", borderRadius: 9, padding: "7px 9px" }}>
                 <Plug size={14} style={{ color: UI.ink3, flexShrink: 0 }} />
                 <span style={{ minWidth: 0, flex: 1 }}>
-                  <span title={name} style={{ display: "block", fontSize: TYPE.label, fontWeight: 700, fontFamily: MONO, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
+                  <span title={name} style={{ display: "block", fontSize: TYPE.label, fontWeight: 600, fontFamily: MONO, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
                   <span style={{ display: "block", fontSize: TYPE.caption, color: UI.ink3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{namespace} · {statusLabel(status)}</span>
                 </span>
                 <ServiceHealthChip health={health} />

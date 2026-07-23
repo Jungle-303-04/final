@@ -70,9 +70,10 @@
   --type-page: 24px;
   --type-kpi: 28px;
   --type-code: 12px;
+  --font-weight-supporting: 400;
   --font-weight-body: 500;
   --font-weight-label: 600;
-  --font-weight-numeric: 650;
+  --font-weight-numeric: 600;
   --font-weight-title: 700;
   --product-sidebar-width: 12.5rem;
   --product-sidebar-width-collapsed: 3.5rem;
