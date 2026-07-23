@@ -76,6 +76,26 @@ class StubEvidenceSource:
         return {}
 
 
+class RecordingScheduleClient:
+    def __init__(self, scheduler: EvidenceJobScheduler | None = None) -> None:
+        self.scheduler = scheduler
+        self.calls: list[tuple[str, str, list[str]]] = []
+
+    async def schedule_evidence_jobs(
+        self,
+        source_id: str,
+        window_start: str,
+        provider_keys: list[str],
+    ) -> dict:
+        self.calls.append((source_id, window_start, list(provider_keys)))
+        if self.scheduler is not None:
+            self.scheduler.configure_schedule(
+                provider_intervals={"kubernetes": 30, "traces": 30},
+                enabled_provider_keys={"kubernetes", "traces"},
+            )
+        return {"evidence_key": "window-1"}
+
+
 def evidence_scheduler(
     *provider_keys: str,
 ) -> EvidenceJobScheduler:
@@ -130,6 +150,47 @@ def test_runtime_provider_registration_aligns_existing_providers() -> None:
     )
 
     assert scheduler.due_provider_keys(1.0) == ("kubernetes", "logs", "metrics")
+
+
+def test_schedule_once_queues_the_aligned_provider_set_together() -> None:
+    scheduler = evidence_scheduler("kubernetes", "logs", "traces")
+    scheduler.enabled_provider_keys = {"kubernetes", "logs"}
+    scheduler.next_provider_runs.update(
+        {"kubernetes": 100.0, "logs": 101.0, "traces": 0.0}
+    )
+    scheduler.configure_schedule(
+        provider_intervals={"kubernetes": 30, "logs": 30, "traces": 30},
+        enabled_provider_keys={"kubernetes", "logs", "traces"},
+    )
+    client = RecordingScheduleClient()
+
+    evidence_key = asyncio.run(scheduler.schedule_once(client, now=1.0))
+
+    assert evidence_key == "window-1"
+    assert client.calls == [
+        (
+            "cluster-snapshot",
+            "1970-01-01T00:00:00+00:00",
+            ["kubernetes", "logs", "traces"],
+        )
+    ]
+    assert scheduler.next_provider_runs == {
+        "kubernetes": 31.0,
+        "logs": 31.0,
+        "traces": 31.0,
+    }
+
+
+def test_policy_change_during_schedule_does_not_restore_stale_deadline() -> None:
+    scheduler = evidence_scheduler("kubernetes", "traces")
+    scheduler.enabled_provider_keys = {"traces"}
+    scheduler.next_provider_runs.update({"kubernetes": 100.0, "traces": 0.0})
+    client = RecordingScheduleClient(scheduler)
+
+    asyncio.run(scheduler.schedule_once(client, now=1.0))
+
+    assert client.calls[0][2] == ["traces"]
+    assert scheduler.next_provider_runs == {"kubernetes": 0.0, "traces": 0.0}
 
 
 def collect_stub(

@@ -63,6 +63,7 @@ class EvidenceJobScheduler:
         self.enabled_provider_keys = set(provider_keys)
         self.next_provider_runs = {provider_key: 0.0 for provider_key in provider_keys}
         self.interval_seconds = interval_seconds
+        self._schedule_revision = 0
         self._client: ManagementPlaneClient | None = None
         self._worker_tasks: dict[str, list[asyncio.Task[None]]] = {
             provider_key: [] for provider_key in provider_keys
@@ -106,14 +107,16 @@ class EvidenceJobScheduler:
         if not due_provider_keys:
             return None
 
+        schedule_revision = self._schedule_revision
         window_start = self.new_window_start(now)
         response = await client.schedule_evidence_jobs(
             self.source_id,
             window_start,
             list(due_provider_keys),
         )
-        for provider_key in due_provider_keys:
-            self.next_provider_runs[provider_key] = now + self.provider_intervals[provider_key]
+        if schedule_revision == self._schedule_revision:
+            for provider_key in due_provider_keys:
+                self.next_provider_runs[provider_key] = now + self.provider_intervals[provider_key]
         return str(response.get(Gateway.EVIDENCE_KEY) or window_start)
 
     def due_provider_keys(self, now: float) -> tuple[str, ...]:
@@ -299,6 +302,7 @@ class EvidenceJobScheduler:
         full changed set in one transaction, so the first completed provider cannot seal a
         partial window that later results are unable to enrich.
         """
+        self._schedule_revision += 1
         for provider_key in self.enabled_provider_keys:
             self.next_provider_runs[provider_key] = 0.0
 
@@ -314,6 +318,7 @@ class EvidenceJobScheduler:
         self.provider_worker_counts.pop(provider_key, None)
         self.provider_intervals.pop(provider_key, None)
         self.next_provider_runs.pop(provider_key, None)
+        self.align_enabled_provider_runs()
 
     def set_worker_counts(
         self,
