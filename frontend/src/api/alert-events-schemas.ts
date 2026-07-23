@@ -11,7 +11,7 @@ export const alertEventSeveritySchema = z.enum([
   "info",
 ]);
 export const alertEventStatusSchema = z.enum(["firing", "resolved", "acked"]);
-export const alertEventSourceSchema = z.enum(["opsia", "alertmanager"]);
+export const alertEventSourceSchema = z.enum(["opsia", "alertmanager", "incident"]);
 
 export const alertEventSubjectSchema = z.strictObject({
   cluster: z.string().min(1).max(512),

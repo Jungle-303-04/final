@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
+from collections.abc import AsyncIterator
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi.responses import StreamingResponse
 
 from domains.alert.delivery import post_alert_webhook
 from domains.alert.events import AlertRequestedBody
@@ -47,6 +51,7 @@ from packages.contracts.identity import DEFAULT_WORKSPACE_ID
 from packages.runtime.dependencies import get_db, get_events
 from packages.security.outbound_url import UnsafeOutboundUrlError, validate_outbound_url_syntax
 from packages.storage.engine import unit_of_work_or_null
+from packages.storage.retry import to_thread_db_retry
 
 router = APIRouter()
 NOT_FOUND_CODE = 404
@@ -173,6 +178,59 @@ async def list_alert_events(
         limit=limit,
     )
     return [alert_event_response(row) for row in rows]
+
+
+@router.get(gateway_routes.ALERT_EVENTS_STREAM_PATH)
+async def stream_alert_events(
+    request: Request,
+    current: Any = Depends(require_admin_session),
+    db: Any = Depends(get_db),
+) -> StreamingResponse:
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    return StreamingResponse(
+        _alert_event_stream(db, workspace_id, request),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+async def _alert_event_stream(
+    db: Any,
+    workspace_id: str,
+    request: Request,
+) -> AsyncIterator[str]:
+    """Keep the browser current while PostgreSQL remains the durable source."""
+    # The browser first loads the durable list, then opens this stream. Replaying
+    # the bounded current set closes the race between those two requests.
+    seen: set[tuple[str, str]] = set()
+    yield "event: ready\ndata: {}\n\n"
+    heartbeat = 0
+    while not await request.is_disconnected():
+        await asyncio.sleep(1)
+        rows = await to_thread_db_retry(
+            db.list_alert_events,
+            workspace_id,
+            limit=gateway_limits.ALERT_EVENT_MAX_LIMIT,
+        )
+        signatures = {_alert_event_signature(row) for row in rows}
+        changed = [row for row in reversed(rows) if _alert_event_signature(row) not in seen]
+        for row in changed:
+            event = alert_event_response(row)
+            payload = json.dumps(event.model_dump(mode="json"), ensure_ascii=False)
+            yield f"id: {event.event_id}\nevent: alert\ndata: {payload}\n\n"
+        seen = signatures
+        heartbeat += 1
+        if heartbeat >= 15:
+            heartbeat = 0
+            yield ": keep-alive\n\n"
+
+
+def _alert_event_signature(row: dict[str, Any]) -> tuple[str, str]:
+    return str(row.get("event_id") or ""), str(row.get("updated_at") or "")
 
 
 @router.post(gateway_routes.ALERT_EVENT_ACK_PATH, response_model=AlertEventResponse)

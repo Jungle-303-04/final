@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 
 import { listAlertChannels } from "../api/alert-channels";
 import type { AlertChannel } from "../api/alert-channels-schemas";
-import { listAlertEvents } from "../api/alert-events";
+import { listAlertEvents, subscribeAlertEvents } from "../api/alert-events";
 import type { AlertEvent } from "../api/alert-events-schemas";
 import { listAlertRules } from "../api/alert-rules";
 import type { AlertRule } from "../api/alert-rules-schemas";
@@ -27,6 +27,7 @@ function isAbortError(error: unknown): boolean {
 export interface AlertEventView {
   eventId: string;
   ruleName: string | null;
+  source: AlertEvent["source"];
   severity: AlertEvent["severity"];
   status: AlertEvent["status"];
   cluster: string;
@@ -34,6 +35,7 @@ export interface AlertEventView {
   kind: string;
   name: string;
   firedAt: string;
+  incidentId: string | null;
 }
 
 export interface AlertEventsFeed {
@@ -41,10 +43,19 @@ export interface AlertEventsFeed {
   items: AlertEventView[];
 }
 
+export function isIncidentNotification(event: AlertEventView): boolean {
+  return (
+    (event.source === "incident" || event.source === "alertmanager")
+    && event.status === "firing"
+    && event.incidentId !== null
+  );
+}
+
 function toEventView(event: AlertEvent): AlertEventView {
   return {
     eventId: event.event_id,
     ruleName: event.rule_name,
+    source: event.source,
     severity: event.severity,
     status: event.status,
     cluster: event.subject.cluster,
@@ -52,6 +63,7 @@ function toEventView(event: AlertEvent): AlertEventView {
     kind: event.subject.kind,
     name: event.subject.name,
     firedAt: event.fired_at,
+    incidentId: event.incident_id,
   };
 }
 
@@ -63,18 +75,60 @@ export function useAlertEvents(): AlertEventsFeed {
   const [feed, setFeed] = useState<AlertEventsFeed>({ status: "loading", items: [] });
   useEffect(() => {
     const controller = new AbortController();
-    void listAlertEvents({ signal: controller.signal })
-      .then((events) => {
-        if (controller.signal.aborted) return;
+    const refresh = async () => {
+      const events = await listAlertEvents({ signal: controller.signal });
+      if (!controller.signal.aborted) {
         setFeed({ status: "ready", items: events.map(toEventView) });
-      })
-      .catch((cause: unknown) => {
+      }
+    };
+    const run = async () => {
+      try {
+        await refresh();
+      } catch (cause: unknown) {
         if (controller.signal.aborted || isAbortError(cause)) return;
         setFeed({ status: "unavailable", items: [] });
-      });
+      }
+      while (!controller.signal.aborted) {
+        try {
+          for await (const event of subscribeAlertEvents(controller.signal)) {
+            if (controller.signal.aborted) return;
+            const next = toEventView(event);
+            setFeed((current) => ({
+              status: "ready",
+              items: mergeAlertEvent(current.items, next),
+            }));
+          }
+        } catch (cause: unknown) {
+          if (controller.signal.aborted || isAbortError(cause)) return;
+        }
+        try {
+          await refresh();
+        } catch (cause: unknown) {
+          if (controller.signal.aborted || isAbortError(cause)) return;
+        }
+        await reconnectDelay(controller.signal);
+      }
+    };
+    void run();
     return () => controller.abort();
   }, []);
   return feed;
+}
+
+function mergeAlertEvent(current: AlertEventView[], next: AlertEventView): AlertEventView[] {
+  return [next, ...current.filter((item) => item.eventId !== next.eventId)]
+    .sort((a, b) => Date.parse(b.firedAt) - Date.parse(a.firedAt))
+    .slice(0, 200);
+}
+
+async function reconnectDelay(signal: AbortSignal): Promise<void> {
+  await new Promise<void>((resolve) => {
+    const timeout = window.setTimeout(resolve, 1_000);
+    signal.addEventListener("abort", () => {
+      window.clearTimeout(timeout);
+      resolve();
+    }, { once: true });
+  });
 }
 
 // ── rules ────────────────────────────────────────────────────────────────────

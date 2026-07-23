@@ -13,11 +13,13 @@ import httpx
 from domains.alert.delivery import post_alert_webhook
 from domains.alert.evaluation import AlertEvaluationEngine
 from domains.alert.events import AlertDispatchedBody, AlertRejectedBody, AlertRequestedBody
+from domains.alert.incidents import persist_incident_alert_event
 from domains.alert.measurements import (
     DEFAULT_MEASUREMENT_MAX_AGE_SECONDS,
     AlertRuleMeasurementLoader,
 )
 from domains.alert.repository import severity_matches
+from domains.rca.events import IncidentDetectedBody
 from packages.config.environments import normalize_environment
 from packages.config.logs import CONTEXT_KEY, get_logger
 from packages.config.settings import env
@@ -164,6 +166,15 @@ def build_alert_provider(name: str | None = None) -> AlertProvider:
 
 # 전송 전략 주입 지점 — env 로 선택(log 기본, webhook 선택 가능).
 ALERT_PROVIDER: AlertProvider = build_alert_provider()
+
+
+@app.on(IncidentDetectedBody)
+async def on_incident_detected(
+    evt: IncidentDetectedBody,
+    ctx: EventContext[object],
+) -> None:
+    """Store one in-app notification after RCA confirms an actual incident."""
+    await persist_incident_alert_event(ctx.db, evt)
 
 
 async def dispatch_to_channel(
