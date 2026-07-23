@@ -245,7 +245,7 @@ export function Donut({ items, onPick }: { items: { label: string; value: number
     };
   });
   return (
-    <div data-donut-layout="responsive" style={{ display: "grid", gridTemplateColumns: "minmax(64px, 80px) minmax(0, 1fr)", alignItems: "center", gap: "clamp(8px, 3vw, 14px)", width: "100%", minWidth: 0 }}>
+    <div data-donut-layout="responsive" style={{ display: "grid", gridTemplateColumns: "var(--donut-layout-columns, minmax(64px, 80px) minmax(0, 1fr))", alignItems: "center", gap: "clamp(8px, 3vw, 14px)", width: "100%", minWidth: 0 }}>
       <svg width={80} height={80} viewBox="0 0 88 88" style={{ display: "block", width: "100%", maxWidth: 80, height: "auto", minWidth: 0, transform: "rotate(-90deg)" }}>
         {segments.map(({ it, i, dash, off }) => {
           return <motion.circle key={it.label} cx={44} cy={44} r={R} fill="none" strokeWidth={11} strokeLinecap="round"

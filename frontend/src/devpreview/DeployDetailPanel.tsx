@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
-import { motion } from "motion/react";
-import { GitBranch, ListChecks, Package, Rocket, X } from "lucide-react";
+import { GitBranch, ListChecks, Package, Rocket } from "lucide-react";
 
 import type { ApplicationDriftEndpoint } from "../api/application-catalog-schemas";
 import type { GitOpsApplicationDetailEndpoint } from "../api/gitops-application-detail-schemas";
-import { BLUE, ELEV, HP, MONO, PRESENT_SCALE, RADIUS, SOFT, SPACE, TINT, TYPE, UI, blueA, critA, inkA } from "./theme";
+import { BLUE, ELEV, HP, MONO, RADIUS, SPACE, TINT, TYPE, UI, blueA, critA, inkA } from "./theme";
+import { DetailDrawer } from "./DetailDrawer";
 import { statusLabel } from "./statusLabel";
 import {
   useApplicationChangeEvents,
@@ -32,8 +32,6 @@ interface PanelInsets {
   leftInset: number;
   rightInset: number;
 }
-
-const PANEL_WIDTH = 560;
 
 // ── 소형 로컬 부품 — devpreview-surfaces와 같은 토큰 문법(순환 import 회피용 사본,
 //    Phase 5에서 공용 모듈로 수렴 예정) ──────────────────────────────────────
@@ -127,41 +125,37 @@ function PanelShell({ icon: Icon, title, subtitle, onClose, insets, children }: 
   insets: PanelInsets;
   children: React.ReactNode;
 }) {
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      // 최상위 표면이 ESC를 소비한다 — 셸(window) 핸들러가 AI 패널 등을
-      // 같이 닫는 이중 닫힘을 막는다(전역 규약: 한 번에 한 겹).
-      event.stopPropagation();
-      onClose();
-    };
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [onClose]);
+  const [expanded, setExpanded] = useState(false);
 
   return (
-    <>
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={SOFT} aria-hidden="true" onClick={onClose}
-        style={{ position: "fixed", top: insets.topInset, left: insets.leftInset, right: insets.rightInset, bottom: 0, background: inkA(0.22), zIndex: 70 }} />
-      <motion.aside role="dialog" aria-modal="true" aria-label={title}
-        initial={{ x: 24, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={SOFT}
-        style={{ position: "fixed", top: insets.topInset, right: insets.rightInset, bottom: 0, width: PANEL_WIDTH, maxWidth: `calc(100vw / ${PRESENT_SCALE} - ${insets.leftInset + insets.rightInset + 24}px)`, background: UI.card, borderLeft: `1px solid ${UI.line}`, boxShadow: ELEV.overlay, zIndex: 71, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: `${SPACE.stack}px ${SPACE.card}px`, borderBottom: `1px solid ${UI.line}` }}>
-          <Icon size={16} style={{ color: BLUE, flexShrink: 0 }} />
+    <DetailDrawer
+      ariaLabel={title}
+      bodyStyle={{
+        display: "flex",
+        flexDirection: "column",
+        gap: SPACE.stack,
+        padding: SPACE.card,
+      }}
+      expanded={expanded}
+      header={(
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+          <span style={{ width: 30, height: 30, borderRadius: 9, background: blueA(0.09), display: "grid", placeItems: "center", flexShrink: 0 }}>
+            <Icon size={16} style={{ color: BLUE }} />
+          </span>
           <div style={{ minWidth: 0, flex: 1 }}>
             <div style={{ fontSize: TYPE.section, fontWeight: 700, letterSpacing: "-0.01em", color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</div>
             {subtitle && <div title={subtitle} style={{ marginTop: 1, fontFamily: MONO, fontSize: TYPE.caption, color: UI.ink3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{subtitle}</div>}
           </div>
-          <button type="button" className="product-focusable product-control" onClick={onClose} aria-label="상세 패널 닫기"
-            style={{ width: 30, height: 30, borderRadius: RADIUS.control, border: `1px solid ${UI.line}`, background: UI.card, color: UI.ink2, cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }}>
-            <X size={14} />
-          </button>
         </div>
-        <div style={{ flex: 1, minHeight: 0, overflowY: "auto", overscrollBehavior: "contain", scrollbarGutter: "stable", display: "flex", flexDirection: "column", gap: SPACE.stack, padding: SPACE.card }}>
-          {children}
-        </div>
-      </motion.aside>
-    </>
+      )}
+      leftInset={insets.leftInset}
+      onClose={onClose}
+      onExpandedChange={setExpanded}
+      rightInset={insets.rightInset}
+      topInset={insets.topInset}
+    >
+      {children}
+    </DetailDrawer>
   );
 }
 

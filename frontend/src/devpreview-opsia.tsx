@@ -364,16 +364,27 @@ function CompactClusterRow({ cl, summary, onOpen, onSettings, onDisconnect }: {
   const fmt = (value: number | null) => summaryLoading ? "…" : value ?? "—";
   const activate = () => { setMenuOpen(false); onOpen(); };
   return (
-    <motion.div role="button" tabIndex={0} aria-label={`${cl.displayName} 클러스터 상세`} onClick={activate}
-      onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); activate(); } }}
+    <motion.div onClick={activate}
       whileHover={{ backgroundColor: inkA(0.025) }}
       className="home-cluster-compact-row"
-      style={{ position: "relative", display: "grid", alignItems: "center", minHeight: 54, padding: "8px 4px", borderTop: `1px solid ${UI.line2}`, cursor: "pointer", outline: "none" }}>
+      style={{ position: "relative", display: "grid", alignItems: "center", minHeight: 54, padding: "8px 4px", borderTop: `1px solid ${UI.line2}`, cursor: "pointer" }}>
       <span style={{ display: "flex", alignItems: "center", gap: 9, minWidth: 0 }}>
         <span style={{ width: 27, height: 27, borderRadius: 8, background: `linear-gradient(135deg, ${BRAND.awsA}, ${BRAND.awsB})`, display: "grid", placeItems: "center", flexShrink: 0 }}><AwsIcon size={15} style={{ color: UI.card }} /></span>
         <span style={{ minWidth: 0 }}>
           <span style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
-            <span title={cl.displayName} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: TYPE.label, fontWeight: 600, color: UI.ink }}>{cl.displayName}</span>
+            <button
+              type="button"
+              aria-label={`${cl.displayName} 클러스터 상세`}
+              className="product-focusable"
+              onClick={(event) => {
+                event.stopPropagation();
+                activate();
+              }}
+              title={cl.displayName}
+              style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", border: "none", borderRadius: 5, padding: 0, background: "transparent", fontSize: TYPE.label, fontWeight: 600, color: UI.ink, cursor: "pointer", textAlign: "left" }}
+            >
+              {cl.displayName}
+            </button>
             {cl.readOnly && <span style={{ fontSize: TYPE.caption, fontWeight: 600, color: UI.ink2, border: `1px solid ${UI.line}`, background: UI.bg2, borderRadius: 5, padding: "1px 6px", flexShrink: 0 }}>읽기 전용</span>}
           </span>
           <span style={{ display: "block", marginTop: 1, fontSize: TYPE.caption, color: UI.ink3 }}>{cl.environment ?? cl.provider.toUpperCase()}</span>
@@ -399,7 +410,7 @@ function CompactClusterRow({ cl, summary, onOpen, onSettings, onDisconnect }: {
           </span>
         ) : null}
       </span>
-      <span className="home-cluster-compact-facts" style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, auto))", alignItems: "baseline", gap: 12, minWidth: 0, fontSize: TYPE.caption, lineHeight: 1.2, color: UI.ink3, fontVariantNumeric: "tabular-nums" }}>
+      <span className="home-cluster-compact-facts" style={{ display: "grid", gridTemplateColumns: "var(--home-cluster-facts-columns, repeat(4, minmax(0, auto)))", alignItems: "baseline", gap: "var(--home-cluster-facts-gap, 12px)", minWidth: 0, fontSize: TYPE.caption, lineHeight: 1.2, color: UI.ink3, fontVariantNumeric: "tabular-nums" }}>
         <span style={{ display: "inline-flex", alignItems: "baseline", gap: 4, whiteSpace: "nowrap" }}>노드 <b style={{ color: UI.ink, fontVariantNumeric: "tabular-nums" }}>{fmt(ready)}/{fmt(nodes)}</b></span>
         <span style={{ display: "inline-flex", alignItems: "baseline", gap: 4, whiteSpace: "nowrap" }}>파드 <b style={{ color: UI.ink, fontVariantNumeric: "tabular-nums" }}>{fmt(pods)}</b></span>
         <span style={{ display: "inline-flex", alignItems: "baseline", gap: 4, whiteSpace: "nowrap" }}>NS <b style={{ color: UI.ink, fontVariantNumeric: "tabular-nums" }}>{cl.namespaceCount ?? "—"}</b></span>
@@ -460,7 +471,7 @@ export function HomeClustersWidget({ onOpen, onSettings, onDisconnect, pending =
           onDisconnect={onDisconnect ? () => onDisconnect(cluster.id) : undefined} />
       ))}
       {pending.map((name) => (
-        <div key={name} style={{ display: "grid", gridTemplateColumns: "minmax(170px, 1.35fr) minmax(210px, 1.25fr) minmax(180px, 1fr) 28px", alignItems: "center", gap: 14, minHeight: 54, padding: "8px 4px", borderTop: `1px solid ${UI.line2}` }}>
+        <div key={name} className="home-cluster-pending-row" style={{ display: "grid", gridTemplateColumns: "var(--home-cluster-pending-columns, minmax(170px, 1.35fr) minmax(210px, 1.25fr) minmax(180px, 1fr) 28px)", alignItems: "center", gap: "var(--home-cluster-pending-gap, 14px)", minHeight: 54, padding: "8px 4px", borderTop: `1px solid ${UI.line2}` }}>
           <span style={{ minWidth: 0, fontSize: TYPE.label, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
           <span style={{ fontSize: TYPE.caption, color: TINT.blue.fg }}>부트스트랩 중 · 첫 인벤토리 대기</span>
           <span style={{ fontSize: TYPE.caption, color: UI.ink3 }}>CPU — · MEM —</span><span />
@@ -571,18 +582,8 @@ export function NodeCard({
   // 헤더 점·HealthChip 으로 드러낸다(레퍼런스 톤).
   const problemConditionCount = (node.conditions ?? []).filter((condition) => !/^ready$/i.test(condition)).length;
   const restartsRecent = node.restartsRecent ?? 0;
-  const nodeDisplayName = nodeAlias?.alias || node.name;
   return (
     <motion.div transition={SPRING} onClick={onOpen}
-      aria-label={`${nodeDisplayName} 노드 파드 보기`}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(event) => {
-        if (event.target !== event.currentTarget) return;
-        if (event.key !== "Enter" && event.key !== " ") return;
-        event.preventDefault();
-        onOpen();
-      }}
       whileHover={{ boxShadow: `0 10px 26px -20px ${inkA(0.16)}`, borderColor: LINE3 }}
       onMouseMove={(event) => {
         if (event.target instanceof Element && event.target.closest("[data-slot-state]")) return;
@@ -602,6 +603,7 @@ export function NodeCard({
           <NodeAliasTitle
             alias={nodeAlias ?? null}
             nodeName={node.name}
+            onOpen={onOpen}
             onDelete={onDeleteNodeAlias}
             onSave={onSaveNodeAlias}
           />

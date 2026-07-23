@@ -5,9 +5,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import {
   Rocket, Package, AlertTriangle, Bell, Clock, ShieldCheck, Coins,
-  Building2, Globe, Check, Sparkle, Sparkles, X, Palette, RefreshCw, Lock, Pin,
+  Building2, Globe, Check, Sparkle, Sparkles, Palette, RefreshCw, Lock, Pin,
   ChevronRight, MapPin, ShieldAlert, ArrowLeft, ArrowRight, ExternalLink, CircleAlert, CircleCheck,
-  Lightbulb, Maximize2, Minimize2,
+  Lightbulb,
 } from "lucide-react";
 import { UI, BLUE, HP, TINT, INSET, MONO, TYPE, SOFT, DUR, PRESENT_SCALE, RADIUS, SPACE, inkA, blueA, critA } from "./devpreview/theme";
 import { GithubIcon } from "./devpreview/brandIcons";
@@ -41,6 +41,7 @@ import {
   type WorkflowStepView,
 } from "./devpreview/deployFeed";
 import { DeployDetailHost, type DeployDetailTarget } from "./devpreview/DeployDetailPanel";
+import { DetailDrawer, DetailDrawerTabs } from "./devpreview/DetailDrawer";
 import { isActiveRunStatus, runEffectiveStatus, useReleaseActions, useReleaseFlow } from "./devpreview/releaseFlowFeed";
 import { useChangeTimeline } from "./devpreview/changeTimelineFeed";
 import { useTimelineBoard } from "./devpreview/timelineFeed";
@@ -1635,23 +1636,6 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
   // 셸 우측 패널 공통 규약(DetailOverlay·AI 패널과 동일) — 전체 화면 토글 + 좌측 엣지 리사이즈.
   // 전체 화면은 상단바·좌측 내비를 침범하지 않는 콘텐츠 영역 최대치다.
   const [drawerFull, setDrawerFull] = useState(false);
-  const [drawerW, setDrawerW] = useState(560);
-  const [drawerDragging, setDrawerDragging] = useState(false);
-  const onDrawerEdgeDown = (e: React.PointerEvent) => {
-    if (drawerFull) return;
-    e.preventDefault();
-    setDrawerDragging(true);
-    const startX = e.clientX;
-    const startW = drawerW;
-    const move = (ev: PointerEvent) => setDrawerW(Math.min(Math.max(startW + (startX - ev.clientX), 440), 920));
-    const up = () => {
-      setDrawerDragging(false);
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", up);
-    };
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", up);
-  };
   const [deploymentLinkActive, setDeploymentLinkActive] = useState<string | null>(null);
   const [highlightedEvidenceIndex, setHighlightedEvidenceIndex] = useState<number | null>(null);
   const [selectedRecoveryActionId, setSelectedRecoveryActionId] = useState<string | null>(null);
@@ -1662,24 +1646,6 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
   const evidenceSummaryRef = useRef<HTMLElement | null>(null);
   const detailScrollRef = useRef<HTMLDivElement | null>(null);
   const recoveryListScrollTopRef = useRef(0);
-  useEffect(() => {
-    const root = document.documentElement;
-    const body = document.body;
-    const previousRootOverflow = root.style.overflow;
-    const previousRootOverscroll = root.style.overscrollBehavior;
-    const previousBodyOverflow = body.style.overflow;
-    const previousBodyOverscroll = body.style.overscrollBehavior;
-    root.style.overflow = "hidden";
-    root.style.overscrollBehavior = "none";
-    body.style.overflow = "hidden";
-    body.style.overscrollBehavior = "none";
-    return () => {
-      root.style.overflow = previousRootOverflow;
-      root.style.overscrollBehavior = previousRootOverscroll;
-      body.style.overflow = previousBodyOverflow;
-      body.style.overscrollBehavior = previousBodyOverscroll;
-    };
-  }, []);
   // 복구 후보는 실 계약(GET /api/rca/recovery-plans/by-correlation)에서만. 상관관계
   // id가 없으면(예: 지도 파생 진입) idle로 두고 관측 안 됨을 정직하게 표시한다.
   const recovery = useRecoveryPlan(correlationId ?? null);
@@ -1786,19 +1752,20 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
     requestAnimationFrame(() => target.scrollIntoView({ behavior: "smooth", block: "center" }));
   };
   return (
-    <>
-      {/* 스크림 — 사이드바 밖 클릭 시 닫기 */}
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: DUR.fade }}
-        onClick={onClose} style={{ position: "fixed", top: topInset, left: leftInset, right: rightInset, bottom: 0, background: inkA(0.07), zIndex: 70 }} />
-      {/* RCA 보고서 — 우측 사이드바(드로어). 리소스 상세 시트(DetailOverlay)와 폭·레이아웃 통일(560px) */}
-      <motion.div initial={{ x: 580 }} animate={{ x: 0 }} exit={{ x: 580, transition: { duration: 0.14, ease: [0.4, 0, 1, 1] } }} transition={{ type: "spring", bounce: 0.06, visualDuration: 0.28 }}
-        style={{ position: "fixed", top: topInset, right: rightInset, bottom: 0, width: drawerFull ? `calc(100vw / ${PRESENT_SCALE} - ${leftInset + rightInset}px)` : drawerW, maxWidth: `calc(100vw / ${PRESENT_SCALE} - ${leftInset + rightInset}px)`, background: UI.card, borderLeft: `1px solid ${UI.line}`, boxShadow: `-24px 0 60px -30px ${inkA(0.3)}`, zIndex: 71, display: "flex", flexDirection: "column", overflow: "hidden", transition: drawerDragging ? "right .28s cubic-bezier(.32,.72,0,1)" : "right .28s cubic-bezier(.32,.72,0,1), width .24s cubic-bezier(.32,.72,0,1), max-width .28s cubic-bezier(.32,.72,0,1)" }}>
-          {/* 좌측 엣지 리사이즈 핸들 — DetailOverlay와 동일 규약 */}
-          <div role="separator" aria-orientation="vertical" aria-label="상세 패널 폭 조절" title={drawerFull ? undefined : "드래그해서 폭 조절"}
-            onPointerDown={onDrawerEdgeDown}
-            style={{ position: "absolute", left: -2, top: 0, bottom: 0, width: 6, cursor: drawerFull ? "default" : "col-resize", zIndex: 2, background: drawerDragging ? blueA(0.3) : "transparent" }} />
-          {/* 헤더 */}
-          <div style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "18px 20px 14px" }}>
+    <DetailDrawer
+      ariaLabel={`${name} RCA 상세`}
+      bodyRef={detailScrollRef}
+      bodyStyle={{
+        display: "flex",
+        flexDirection: "column",
+        gap: SPACE.section,
+        padding: `${SPACE.section}px ${SPACE.section}px 104px`,
+        background: activeTab === "recovery" && reviewedRecoveryCandidate ? INSET : UI.card,
+        transition: `background ${DUR.fade}s ease`,
+      }}
+      expanded={drawerFull}
+      header={(
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
             <span style={{ width: 38, height: 38, borderRadius: 11, background: headerTone.bg, display: "grid", placeItems: "center", flexShrink: 0 }}>
               {analysisState.label === "해결됨"
                 ? <Check size={19} strokeWidth={2.4} style={{ color: headerTone.fg }} />
@@ -1823,33 +1790,32 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
                 ))}
               </div>
             </div>
-            <span style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
-              <button type="button" className="product-focusable product-control" aria-label={drawerFull ? "상세 패널 축소" : "상세 패널 전체 화면"} title={drawerFull ? "패널로 축소" : "전체 화면"} onClick={() => setDrawerFull((v) => !v)}
-                style={{ width: 30, height: 30, padding: 0, borderRadius: 999, border: "none", background: inkA(0.06), color: UI.ink2, cursor: "pointer", display: "grid", placeItems: "center", lineHeight: 1 }}>
-                {drawerFull ? <Minimize2 size={14} strokeWidth={2.2} /> : <Maximize2 size={14} strokeWidth={2.2} />}
-              </button>
-              <button type="button" className="product-focusable product-control" aria-label="상세 닫기" onClick={onClose} style={{ width: 30, height: 30, padding: 0, borderRadius: 999, border: "none", background: inkA(0.06), color: UI.ink2, cursor: "pointer", display: "grid", placeItems: "center", lineHeight: 1 }}><X size={15} /></button>
-            </span>
-          </div>
-          <div role="tablist" aria-label="이슈 상세 보기" style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", padding: "0 20px", borderBottom: `1px solid ${UI.line}` }}>
-            {([
-              ["detail", "이슈 상세"],
-              ["recovery", "복구 플랜"],
-            ] as const).map(([id, label]) => {
-              const selected = activeTab === id;
-              const disabled = id === "recovery" && !recoveryAvailable;
-              return (
-                <button key={id} className="product-focusable product-control" type="button" role="tab" aria-selected={selected} aria-disabled={disabled} disabled={disabled}
-                  title={disabled ? "원인 후보와 복구 플랜이 확인되면 열 수 있습니다." : undefined}
-                  onClick={() => { if (!disabled) setActiveTab(id); }}
-                  style={{ position: "relative", height: 42, border: "none", background: "transparent", color: disabled ? UI.ink3 : selected ? UI.ink : UI.ink3, opacity: disabled ? 0.52 : 1, fontSize: TYPE.label, fontWeight: selected ? 600 : 500, cursor: disabled ? "not-allowed" : "pointer" }}>
-                  {label}
-                  {selected && <span aria-hidden="true" style={{ position: "absolute", left: 0, right: 0, bottom: -1, height: 2, background: BLUE, borderRadius: "2px 2px 0 0" }} />}
-                </button>
-              );
-            })}
-          </div>
-          <div ref={detailScrollRef} style={{ flex: 1, minHeight: 0, overflowY: "auto", overscrollBehavior: "contain", scrollbarGutter: "stable", display: "flex", flexDirection: "column", gap: SPACE.section, padding: `${SPACE.section}px ${SPACE.section}px 104px`, background: activeTab === "recovery" && reviewedRecoveryCandidate ? INSET : UI.card, transition: `background ${DUR.fade}s ease` }}>
+        </div>
+      )}
+      leftInset={leftInset}
+      navigation={(
+        <DetailDrawerTabs
+          active={activeTab}
+          indicatorId="rca-detail-tab"
+          items={[
+            { id: "detail", label: "이슈 상세" },
+            {
+              id: "recovery",
+              label: "복구 플랜",
+              disabled: !recoveryAvailable,
+              title: !recoveryAvailable
+                ? "원인 후보와 복구 플랜이 확인되면 열 수 있습니다."
+                : undefined,
+            },
+          ]}
+          onChange={setActiveTab}
+        />
+      )}
+      onClose={onClose}
+      onExpandedChange={setDrawerFull}
+      rightInset={rightInset}
+      topInset={topInset}
+    >
             {activeTab === "detail" ? <>
             <section aria-labelledby="issue-summary-heading" style={{ flexShrink: 0, display: "grid", gap: SPACE.stack, border: `1px solid ${UI.line}`, borderRadius: RADIUS.card, background: UI.card, padding: SPACE.card, boxShadow: `0 6px 16px -10px ${inkA(0.26)}, 0 1px 3px ${inkA(0.06)}` }}>
               <h2 id="issue-summary-heading" style={{ margin: 0, fontSize: ISSUE_DETAIL_TYPE.sectionTitle, fontWeight: 700, color: UI.heading }}>상황 요약</h2>
@@ -2051,9 +2017,7 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
             )}
             </AnimatePresence>
             </>}
-          </div>
-      </motion.div>
-    </>
+    </DetailDrawer>
   );
 }
 
@@ -2163,13 +2127,12 @@ function IssueCard({ issue, recoverySelectionRoute, recoveryCompleted, onOpen, o
   const scope = [issue.clusterId, issue.namespace].filter(Boolean).join(" · ") || "범위 미확인";
 
   return (
-    <motion.div
-      onClick={onOpen}
+    <motion.article
       whileHover={{ y: -1 }}
       transition={{ duration: DUR.micro }}
       style={{
         width: "100%", minWidth: 0, display: "block",
-        padding: 0, overflow: "hidden", textAlign: "left", cursor: "pointer",
+        padding: 0, overflow: "hidden", textAlign: "left",
         border: `1px solid ${UI.line}`, borderRadius: RADIUS.card, background: UI.card,
         boxShadow: `0 1px 2px ${inkA(0.04)}`, color: UI.ink,
       }}
@@ -2238,7 +2201,7 @@ function IssueCard({ issue, recoverySelectionRoute, recoveryCompleted, onOpen, o
           <button type="button" className="product-focusable product-control" onClick={(event) => { event.stopPropagation(); onOpen(); }} style={{ display: "inline-flex", alignItems: "center", gap: 3, border: "none", background: "transparent", padding: "3px 5px", color: BLUE, borderRadius: 6, fontSize: TYPE.label, fontWeight: 600, cursor: "pointer" }}>열기 <ChevronRight size={14} /></button>
         </span>
       </span>
-    </motion.div>
+    </motion.article>
   );
 }
 

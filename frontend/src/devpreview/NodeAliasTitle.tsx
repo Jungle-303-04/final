@@ -8,6 +8,7 @@ import type { NodeAliasView } from "./nodeAliasesFeed";
 interface NodeAliasTitleProps {
   nodeName: string;
   alias: NodeAliasView | null;
+  onOpen?: () => void;
   onSave?: (nodeName: string, alias: string) => Promise<NodeAliasView | null>;
   onDelete?: (nodeName: string) => Promise<void>;
 }
@@ -15,6 +16,7 @@ interface NodeAliasTitleProps {
 export function NodeAliasTitle({
   nodeName,
   alias,
+  onOpen,
   onSave,
   onDelete,
 }: NodeAliasTitleProps) {
@@ -95,24 +97,58 @@ export function NodeAliasTitle({
   return (
     <span style={{ display: "block", maxWidth: "100%", minWidth: 0 }}>
       <span style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
-        <span
-          title={hasAlias ? `${displayName} · ${nodeName}` : nodeName}
-          style={{
-            minWidth: 0,
-            flex: "0 1 auto",
-            fontSize: TYPE.body,
-            fontWeight: 600,
-            letterSpacing: 0,
-            color: UI.ink,
-            fontFamily: MONO,
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-            lineHeight: 1.35,
-          }}
-        >
-          {displayName}
-        </span>
+        {onOpen ? (
+          <button
+            type="button"
+            aria-label={`${displayName} 노드 파드 보기`}
+            className="product-focusable"
+            onClick={(event) => {
+              event.stopPropagation();
+              onOpen();
+            }}
+            title={hasAlias ? `${displayName} · ${nodeName}` : nodeName}
+            style={{
+              minWidth: 0,
+              flex: "0 1 auto",
+              border: "none",
+              borderRadius: 5,
+              background: "transparent",
+              padding: 0,
+              textAlign: "left",
+              cursor: "pointer",
+              fontSize: TYPE.body,
+              fontWeight: 600,
+              letterSpacing: 0,
+              color: UI.ink,
+              fontFamily: MONO,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              lineHeight: 1.35,
+            }}
+          >
+            {displayName}
+          </button>
+        ) : (
+          <span
+            title={hasAlias ? `${displayName} · ${nodeName}` : nodeName}
+            style={{
+              minWidth: 0,
+              flex: "0 1 auto",
+              fontSize: TYPE.body,
+              fontWeight: 600,
+              letterSpacing: 0,
+              color: UI.ink,
+              fontFamily: MONO,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              lineHeight: 1.35,
+            }}
+          >
+            {displayName}
+          </span>
+        )}
         {editable && (
           <IconButton
             label="노드 별칭 수정"

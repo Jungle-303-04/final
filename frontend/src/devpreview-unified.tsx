@@ -9,7 +9,6 @@ import {
   HardDrive, Cpu, Folder, Activity, UserCog, Eye, Radio, ChevronDown, Pin,
   Home, ListTree, AlertTriangle, Clock, Coins, Settings, Sparkles, PanelLeftClose, PanelLeftOpen,
   Bell, Pencil, Check, Hourglass, Webhook, SignalHigh, Building2, LogOut, RefreshCw,
-  Maximize2, Minimize2, X,
 } from "lucide-react";
 import { HomeClustersWidget, OpsiaMap } from "./devpreview-opsia";
 import { DASHBOARD_WIDGET_GRID_CLASS, DASHBOARD_WIDGET_GRID_ITEM_CLASS, WidgetFrame, RatioBar, Donut, RankList, MultiLine, MiniTimeline, dashboardWidgetGridStyle, dashboardWidgetItemStyle, type DashboardWidgetSpan } from "./devpreview/widgets";
@@ -25,6 +24,7 @@ import { DevpreviewContractProvider, useDevpreviewContracts } from "./devpreview
 import { ClusterLifecycleControl, toHomeClusterChoice } from "./devpreview/ClusterLifecycleControl";
 import { ClusterDisconnectDialog } from "./pages/clusters/ClusterDisconnectDialog";
 import { createClusterDisconnectPort } from "./app/composition/surfaces/clusters";
+import { DetailDrawer, DetailDrawerTabs } from "./devpreview/DetailDrawer";
 
 // 목록(⋮ 메뉴) 연결 해제도 상세 뷰와 같은 캐논 계약 port 를 공유한다 —
 // 두 번째 unregister 구현이 생기지 않게 하는 ClusterLifecycleControl 원칙 준수.
@@ -50,6 +50,10 @@ import {
 import { AuthSessionGateProvider } from "./features/auth/AuthSessionGate";
 import { I18nProvider } from "./shared/i18n";
 import { activeIncidentClusterIds, useRcaIssues } from "./devpreview/rcaIssuesFeed";
+import {
+  useRcaIssueDetails,
+  type RcaIssueDetailView,
+} from "./devpreview/rcaDetailFeed";
 import { useCostOverview } from "./devpreview/costFeed";
 import { useSession, sessionInitial } from "./devpreview/sessionFeed";
 import { useInventoryNamespaces } from "./devpreview/inventoryNamespacesFeed";
@@ -81,6 +85,33 @@ import { podsForNode, useClusterTopology } from "./devpreview/inventoryTopologyF
 import { UI, BLUE, BLUE2, HP, INTERACTION, TINT, MONO, TYPE, SOFT, SPRING, PRESENT_SCALE, DUR, RADIUS, SPACE, inkA, blueA, MARK, cardA, GLASS, critA } from "./devpreview/theme";
 import "./styles/tokens.css";
 import "./styles/foundation.css";
+
+function incidentFromIssue(issue: RcaIssueDetailView): RcaIncident {
+  return {
+    name: issue.resourceName ?? issue.correlationId.slice(0, 12),
+    symptom: issue.symptom ?? issue.status,
+    rawSymptom: issue.rawSymptom,
+    cluster: issue.clusterId ?? "-",
+    svc: issue.resourceName ?? issue.correlationId.slice(0, 12),
+    ns: issue.namespace ?? "-",
+    resourceKind: issue.resourceKind,
+    correlationId: issue.correlationId,
+    incidentId: issue.incidentId,
+    currentSubject: issue.currentSubject,
+    updatedAt: issue.updatedAt,
+    status: issue.status,
+    severity: issue.severity,
+    rootCause: issue.rootCause,
+    confidence: issue.confidence,
+    supportingEvidence: issue.supportingEvidence,
+    missingEvidence: issue.missingEvidence,
+    situationSummary: issue.situationSummary,
+    recommendedActionSummary: issue.recommendedActionSummary,
+    evidenceSummary: issue.evidenceSummary,
+    evidenceBundleSummary: issue.evidenceBundleSummary,
+    prUrl: issue.prUrl,
+  };
+}
 
 
 // ── 파생 헬퍼 (가짜 rng/합성 행 제거 — 표는 라이브 인벤토리 계약으로 배선) ──
@@ -844,16 +875,6 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
     row.ns != null && String(row.ns) ? String(row.ns) : null,
     name,
   );
-  // 드로어 폭 — 왼쪽 가장자리 드래그로 조절 (전체 화면일 땐 비활성)
-  const [dw, setDw] = useState(560);
-  const [dwDragging, setDwDragging] = useState(false);
-  const onEdgeDown = (e: React.PointerEvent) => {
-    if (full) return;
-    e.preventDefault(); setDwDragging(true);
-    const move = (ev: PointerEvent) => { const cssW = document.documentElement.clientWidth / PRESENT_SCALE; setDw(Math.min(cssW - leftInset - 40, Math.max(460, cssW - ev.clientX / PRESENT_SCALE))); };
-    const up = () => { setDwDragging(false); window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
-    window.addEventListener("pointermove", move); window.addEventListener("pointerup", up);
-  };
   // 재시작/스케일처럼 이 드로어가 지원하지 않는 변경 컨트롤은 노출하지 않는다.
   // YAML 변경은 source/content SHA를 고정하고 권한·CSRF·감사 계약을 거치는 전용 편집기에서만 수행한다.
   const isWorkload = ["Deployment", "StatefulSet", "DaemonSet", "ReplicaSet", "Job", "CronJob"].includes(kind.id);
@@ -863,23 +884,17 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
   // Git 바인딩 누락 상태를 명시해 잘못된 매니페스트를 편집·적용하지 않도록 한다.
 
   return (
-    <>
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: 0.1 } }} transition={{ duration: DUR.fade }}
-        aria-hidden="true" onClick={onClose} style={{ position: "fixed", top: topInset, right: 0, bottom: 0, left: leftInset, background: inkA(0.07), zIndex: 70 }} />
-      {/* 닫기 즉시 반응 — 열림은 스프링, 닫힘은 짧은 ease-in으로 지연 없이 사라진다(P1-12) */}
-      <motion.aside initial={{ x: 40, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 24, opacity: 0, transition: { duration: 0.14, ease: [0.4, 0, 1, 1] } }} transition={{ type: "spring", bounce: 0.06, visualDuration: 0.36 }}
-        style={{ position: "fixed", top: topInset, right: 0, bottom: 0,
-          /* 상단바·사이드바·서브사이드바는 덮지 않는다 — 콘텐츠 영역만 */
-          width: full ? viewportW - leftInset : dw, maxWidth: viewportW - leftInset,
-          background: UI.card, borderLeft: `1px solid ${UI.line}`, zIndex: 71, display: "flex", flexDirection: "column", boxShadow: `-24px 0 60px -30px ${inkA(0.3)}`, transition: dwDragging ? "none" : "width .28s cubic-bezier(.32,.72,0,1), padding-right .28s cubic-bezier(.32,.72,0,1)", paddingRight: full ? rightInset : 0, boxSizing: "border-box" }}>
-        {/* 좌측 가장자리 리사이즈 핸들 */}
-        {!full && (
-          <div onPointerDown={onEdgeDown} title="드래그해서 폭 조절"
-            style={{ position: "absolute", left: -2, top: 0, bottom: 0, width: 6, cursor: "col-resize", zIndex: 5, background: dwDragging ? blueA(0.35) : "transparent", transition: "background .15s" }} />
-        )}
-        {/* 헤더 */}
-        <div style={{ padding: "16px 20px 0", borderBottom: `1px solid ${UI.line}` }}>
-          <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+    <DetailDrawer
+      actions={(
+        <span title="YAML 탭에서 실제 Git 소스·권한·에이전트 적용 가능성을 확인합니다" style={{ display: "flex", alignItems: "center", gap: 5, border: `1px solid ${UI.line}`, background: UI.bg2, borderRadius: 8, padding: "5px 10px", fontSize: TYPE.label, fontWeight: 600, color: UI.ink3 }}>
+          소스·권한 검증
+        </span>
+      )}
+      ariaLabel={`${kind.label} ${name} 상세`}
+      expanded={fullSelf}
+      forceExpanded={forceFull}
+      header={(
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
             <span style={{ width: 30, height: 30, borderRadius: 9, background: blueA(0.09), display: "grid", placeItems: "center", flexShrink: 0 }}>
               <kind.icon size={15} style={{ color: BLUE }} />
             </span>
@@ -887,30 +902,26 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
               <div style={{ fontSize: TYPE.section, fontWeight: 700, fontFamily: MONO, color: UI.ink, letterSpacing: "-0.02em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</div>
               <div style={{ fontSize: TYPE.label, color: UI.ink3, marginTop: 2 }}>{kind.label} · {ns}</div>
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <span title="YAML 탭에서 실제 Git 소스·권한·에이전트 적용 가능성을 확인합니다" style={{ display: "flex", alignItems: "center", gap: 5, border: `1px solid ${UI.line}`, background: UI.bg2, borderRadius: 8, padding: "5px 10px", fontSize: TYPE.label, fontWeight: 600, color: UI.ink3 }}>
-                소스·권한 검증
-              </span>
-              <button type="button" className="product-focusable product-control" aria-label={forceFull ? "AI 대화 중에는 전체 화면 유지" : full ? "상세 패널 축소" : "상세 패널 전체 화면"} title={forceFull ? "AI 대화 중에는 전체 화면 유지" : full ? "패널로 축소" : "전체 화면"} disabled={forceFull} onClick={() => setFull(!fullSelf)} style={{ width: 28, height: 28, borderRadius: 999, border: "none", background: inkA(0.06), color: UI.ink2, display: "grid", placeItems: "center", cursor: forceFull ? "not-allowed" : "pointer" }}>{full ? <Minimize2 size={14} strokeWidth={2.2} /> : <Maximize2 size={14} strokeWidth={2.2} />}</button>
-              <button type="button" className="product-focusable product-control" aria-label="상세 패널 닫기" onClick={onClose} style={{ width: 28, height: 28, borderRadius: 999, border: "none", background: inkA(0.06), color: UI.ink2, cursor: "pointer", display: "grid", placeItems: "center" }}><X size={15} strokeWidth={2.2} /></button>
-            </div>
-          </div>
-          <div style={{ display: "flex", gap: 2, marginTop: 14 }}>
-            {tabs.map((t) => {
-              const on = tab === t;
-              const label = DETAIL_TABS.find((d) => d.id === t)!.label;
-              return (
-                <button type="button" className="product-focusable product-control" role="tab" aria-selected={on} key={t} onClick={() => switchTab(t)} style={{ position: "relative", border: "none", background: "transparent", cursor: "pointer", padding: "8px 12px 10px", fontSize: TYPE.body, fontWeight: on ? 600 : 500, color: on ? UI.ink : UI.ink3 }}>
-                  {label}
-                  {on && <motion.span layoutId="dtab" transition={SOFT} style={{ position: "absolute", left: 8, right: 8, bottom: 0, height: 2, borderRadius: 2, background: BLUE }} />}
-                </button>
-              );
-            })}
-          </div>
         </div>
-
-        {/* 본문 */}
-        <div style={{ flex: 1, overflowY: "auto", padding: "0 20px 28px" }}>
+      )}
+      leftInset={leftInset}
+      navigation={(
+        <DetailDrawerTabs
+          active={tab}
+          indicatorId="resource-detail-tab"
+          items={tabs.map((item) => ({
+            id: item,
+            label: DETAIL_TABS.find((candidate) => candidate.id === item)!.label,
+          }))}
+          onChange={switchTab}
+        />
+      )}
+      onClose={onClose}
+      onExpandedChange={setFull}
+      rightInset={rightInset}
+      topInset={topInset}
+      viewportWidth={viewportW}
+    >
         <div style={{ maxWidth: full ? 880 : "none", margin: full ? "0 auto" : 0 }}>
           {tab === "overview" && (
             <div>
@@ -1153,9 +1164,7 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
             <div style={{ padding: "14px 0" }}><ResourceAccessPanel view={access} /></div>
           )}
         </div>
-        </div>
-      </motion.aside>
-    </>
+    </DetailDrawer>
   );
 }
 
@@ -1221,15 +1230,31 @@ function KindIndex({ sel, onPick, showEmpty, setShowEmpty, pinned, togglePin, fi
   const Row = ({ k }: { k: Kind }) => {
     const on = sel === k.id;
     return (
-      <button onClick={() => onPick(k)} className="krow product-focusable product-control" aria-selected={on}
-        style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left", border: "none", cursor: "pointer", background: on ? blueA(0.09) : "transparent", borderRadius: 8, padding: "6px 9px" }}>
-        <k.icon size={13} style={{ color: on ? BLUE : UI.ink3, flexShrink: 0 }} />
-        <span style={{ flex: 1, minWidth: 0, fontSize: TYPE.body, fontWeight: on ? 600 : 500, color: on ? BLUE : UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{k.label}</span>
-        <span role="button" title="즐겨찾기" onClick={(e) => { e.stopPropagation(); togglePin(k.id); }} className="kpin" style={{ display: "grid", placeItems: "center", opacity: pinned.includes(k.id) ? 1 : 0 }}>
+      <div className="krow"
+        style={{ display: "flex", alignItems: "center", width: "100%", background: on ? blueA(0.09) : "transparent", borderRadius: 8 }}>
+        <button
+          type="button"
+          onClick={() => onPick(k)}
+          className="product-focusable product-control"
+          aria-current={on ? "page" : undefined}
+          style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flex: 1, textAlign: "left", border: "none", cursor: "pointer", background: "transparent", borderRadius: 8, padding: "6px 4px 6px 9px" }}
+        >
+          <k.icon size={13} style={{ color: on ? BLUE : UI.ink3, flexShrink: 0 }} />
+          <span style={{ flex: 1, minWidth: 0, fontSize: TYPE.body, fontWeight: on ? 600 : 500, color: on ? BLUE : UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{k.label}</span>
+          <span style={{ fontSize: TYPE.caption, fontWeight: 600, fontVariantNumeric: "tabular-nums", color: cnt(k) ? (on ? BLUE : UI.ink2) : UI.ink3, background: on ? blueA(0.12) : inkA(0.05), borderRadius: 5, padding: "1px 6px", minWidth: 22, textAlign: "center", flexShrink: 0 }}>{cnt(k)}</span>
+        </button>
+        <button
+          type="button"
+          aria-label={`${k.label} 즐겨찾기 ${pinned.includes(k.id) ? "해제" : "추가"}`}
+          aria-pressed={pinned.includes(k.id)}
+          title="즐겨찾기"
+          onClick={() => togglePin(k.id)}
+          className="kpin product-focusable product-control"
+          style={{ width: 25, height: 28, marginRight: 3, border: "none", borderRadius: 6, background: "transparent", cursor: "pointer", display: "grid", placeItems: "center", opacity: pinned.includes(k.id) ? 1 : 0.45 }}
+        >
           <Pin size={10} style={{ color: pinned.includes(k.id) ? BLUE : UI.ink3 }} />
-        </span>
-        <span style={{ fontSize: TYPE.caption, fontWeight: 600, fontVariantNumeric: "tabular-nums", color: cnt(k) ? (on ? BLUE : UI.ink2) : UI.ink3, background: on ? blueA(0.12) : inkA(0.05), borderRadius: 5, padding: "1px 6px", minWidth: 22, textAlign: "center", flexShrink: 0 }}>{cnt(k)}</span>
-      </button>
+        </button>
+      </div>
     );
   };
   return (
@@ -1533,7 +1558,7 @@ function HomeSurface({ clusterMeta, incidentClusterIds, onDrillCluster, onCluste
   const visible = board.order.filter((id) => !board.hidden.includes(id));
   const hiddenSlots = board.order.filter((id) => board.hidden.includes(id));
   return (
-    <main style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: SPACE.card, padding: "14px 18px 40px" }}>
+    <main className="home-surface" style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: SPACE.card, padding: "var(--home-surface-padding, 14px 18px 40px)" }}>
       {/* ── 고정 헤더: 상태 요약 줄(지도 요약 줄과 같은 칩 문법·같은 표기 — 두 화면이 다른 형식으로 말하지 않는다) ── */}
       <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
         {(() => {
@@ -1673,6 +1698,7 @@ function App() {
     () => activeIncidentClusterIds(contract.clusters),
     [contract.clusters],
   );
+  const alertRcaIssues = useRcaIssueDetails(incidentClusterIds);
   const [kindId, setKindId] = useState("Deployment");
   const [resView, setResView] = useState<ResView>("map"); // D18 관점 — 지도가 기본, 스코프는 관점 공유
   const [trafficFocus, setTrafficFocus] = useState<string | null>(null); // 트래픽 보조 패널 → 그래프 포커스
@@ -1708,19 +1734,54 @@ function App() {
   const [aiFull, setAiFull] = useState(false);         // AI 패널 전체 화면 (헤더 ⤢ 토글)
   const [aiW, setAiW] = useState(440);                 // 실제 제품처럼 리사이즈 가능한 도킹 폭
   const [aiDragging, setAiDragging] = useState(false);
+  const aiPanelRef = useRef<HTMLDivElement>(null);
+  const aiPreviousFocusRef = useRef<HTMLElement | null>(null);
+  const aiRestoreFocusRef = useRef(false);
   const [drillCl, setDrillCl] = useState<string | null>(null); // 홈 카드 → 지도 드릴 스코프 전달(D21)
   const [connectView, setConnectView] = useState<null | "repo" | "cluster">(null); // 연결 위저드 딥오픈 대상 (설정 서피스)
   const [connectModal, setConnectModal] = useState<null | "repo" | "cluster">(null); // 문맥 진입 = 모달 팝업
   const [repositoryConnectContext, setRepositoryConnectContext] = useState<RepositoryConnectionContext | null>(null);
   const showAi = useCallback(() => {
+    if (!aiOpen && document.activeElement instanceof HTMLElement) {
+      aiPreviousFocusRef.current = document.activeElement;
+    }
     setAiMounted(true);
     setAiOpen(true);
-  }, []);
+  }, [aiOpen]);
   const openAi = useCallback((request?: AiRecoveryHandoff) => {
+    if (!aiOpen && document.activeElement instanceof HTMLElement) {
+      aiPreviousFocusRef.current = document.activeElement;
+    }
     if (request !== undefined) setAiRecoveryRequest(request);
     setAiMounted(true);
     setAiOpen(true);
+  }, [aiOpen]);
+  const closeAi = useCallback(() => {
+    aiRestoreFocusRef.current = true;
+    const previousFocus = aiPreviousFocusRef.current;
+    if (
+      aiPanelRef.current?.contains(document.activeElement)
+      && previousFocus?.isConnected
+    ) {
+      previousFocus.focus({ preventScroll: true });
+    }
+    setAiOpen(false);
+    setAiFull(false);
   }, []);
+  useEffect(() => {
+    if (aiOpen || !aiRestoreFocusRef.current) return;
+    const frame = window.requestAnimationFrame(() => {
+      const previousFocus = aiPreviousFocusRef.current;
+      const fallback = document.querySelector<HTMLElement>(
+        '[aria-label="AI 어시스턴트 열기"]',
+      );
+      (previousFocus?.isConnected ? previousFocus : fallback)?.focus({
+        preventScroll: true,
+      });
+      aiRestoreFocusRef.current = false;
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [aiOpen]);
   // GitHub App 설치 복귀(?github_app_installation_id=...)가 홈으로 떨어져도
   // 연결 위저드를 자동으로 다시 열어 RepoStep 복귀 핸들러가 이어받게 한다.
   useEffect(() => { const p = new URLSearchParams(window.location.search); if (p.get("github_app_installation_id")) setConnectModal("repo"); }, []);
@@ -1809,10 +1870,27 @@ function App() {
     const up = () => { setAiDragging(false); window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
     window.addEventListener("pointermove", move); window.addEventListener("pointerup", up);
   };
+  const onAiHandleKeyDown = (event: React.KeyboardEvent) => {
+    const step = event.shiftKey ? 40 : 16;
+    if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      setAiW((current) => Math.min(560, current + step));
+    } else if (event.key === "ArrowRight") {
+      event.preventDefault();
+      setAiW((current) => Math.max(380, current - step));
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      setAiW(560);
+    } else if (event.key === "End") {
+      event.preventDefault();
+      setAiW(380);
+    }
+  };
   const scopeLabel = scope.level === "clusters" ? "전체 클러스터" : scope.level === "nodes" ? `클러스터 ${scope.cluster}` : `노드 ${scope.node}`;
   const kind = KINDS.find((k) => k.id === kindId)!;
   const togglePin = (id: string) => setPinned((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
   const searchRef = useRef<HTMLInputElement>(null);
+  const contentScrollRef = useRef<HTMLDivElement>(null);
   // 상단 크롬 높이 — 폰트·확대에 따라 변하므로 실측해서 오버레이 기준으로 쓴다
   const headerRef = useRef<HTMLElement>(null);
   useEffect(() => {
@@ -1835,10 +1913,10 @@ function App() {
     const ro = new ResizeObserver(() => setTopH(el.offsetHeight));
     ro.observe(el); return () => ro.disconnect();
   }, []);
-  // 서피스·관점·물리 드릴·종류 전환 = 새 화면. 문서 스크롤을 초기화해
+  // 서피스·관점·물리 드릴·종류 전환 = 새 화면. 실제 소유 스크롤 컨테이너를 초기화해
   // 긴 이슈/타임라인/노드 목록의 위치를 다음 화면으로 승계하지 않는다.
   useEffect(() => {
-    window.scrollTo({ top: 0, left: 0 });
+    contentScrollRef.current?.scrollTo({ top: 0, left: 0, behavior: "auto" });
   }, [surface, resView, scope.level, scope.cluster, scope.node, kindId]);
   // zoom 좌표계: fixed 오버레이 계산은 전부 CSS 픽셀(뷰포트/스케일)로
   const [vwCss, setVwCss] = useState(() => document.documentElement.clientWidth / PRESENT_SCALE);
@@ -2128,12 +2206,12 @@ function App() {
         else if (connectModal) setConnectModal(null);
         else if (detail) setDetail(null);
         else if (rcaIncident) setRcaIncident(null);
-        else if (aiOpen) { setAiOpen(false); setAiFull(false); }
+        else if (aiOpen) closeAi();
       }
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); searchRef.current?.focus(); }
     };
     window.addEventListener("keydown", h); return () => window.removeEventListener("keydown", h);
-  }, [bellOpen, nsOpen, meOpen, connectModal, detail, rcaIncident, aiOpen]);
+  }, [bellOpen, nsOpen, meOpen, connectModal, detail, rcaIncident, aiOpen, closeAi]);
 
   return (
     // 앱 셸 스크롤 규약 — 문서 스크롤 금지. 상단 크롬·내비는 고정하고 스크롤은
@@ -2159,12 +2237,13 @@ function App() {
         style={{ flex: 1, minWidth: 0, height: "100%", display: "flex", flexDirection: "column", overflowX: "clip" }}>
       {/* 상단 크롬 — 워크스페이스·스코프·네임스페이스·검색. 셸이 문서 스크롤을 막으므로
           sticky 없이도 항상 고정된다. */}
-      <header ref={headerRef} style={{ zIndex: 74, flexShrink: 0, display: "flex", alignItems: "center", flexWrap: "wrap", gap: 10, padding: "12px 18px", borderBottom: `1px solid ${UI.line}`, background: UI.card }}>
+      <header ref={headerRef} className="product-shell-header" style={{ zIndex: 74, flexShrink: 0, display: "flex", alignItems: "center", flexWrap: "wrap", gap: "var(--product-shell-header-gap, 10px)", padding: "var(--product-shell-header-padding, 12px 18px)", borderBottom: `1px solid ${UI.line}`, background: UI.card }}>
         {/* 워크스페이스 — 정체성은 항상 맨 왼쪽(D20). 데모 세계는 워크스페이스 1개라 사실 표시만 */}
         <span
+          className="product-workspace-label"
           data-slot={workspaceIdentityId ? "workspace-identity" : "workspace-identity-loading"}
           data-workspace-id={workspaceIdentityId ?? ""}
-          style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0, maxWidth: "30%", fontSize: TYPE.body, fontWeight: 600, color: UI.ink, paddingRight: 12, borderRight: `1px solid ${UI.line2}`, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+          style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0, maxWidth: "var(--product-workspace-max-width, 30%)", fontSize: TYPE.body, fontWeight: 600, color: UI.ink, paddingRight: "var(--product-workspace-padding-right, 12px)", borderRight: `1px solid ${UI.line2}`, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
         >
           <Building2 size={14} style={{ color: UI.ink3 }} />{workspaceLabel(workspaceIdentityId)}
         </span>
@@ -2227,7 +2306,7 @@ function App() {
           </AnimatePresence>
         </span>
         )}
-        <div className="product-input-surface" style={{ flex: 1, maxWidth: 520, margin: "0 auto", display: "flex", alignItems: "center", gap: 8, border: `1px solid ${UI.line}`, background: UI.bg2, borderRadius: 9, padding: "6px 12px", transition: "border-color 150ms ease, box-shadow 150ms ease" }}>
+        <div className="product-input-surface product-global-search" style={{ flex: "var(--product-global-search-flex, 1)", maxWidth: "var(--product-global-search-max-width, 520px)", margin: "var(--product-global-search-margin, 0 auto)", display: "flex", alignItems: "center", gap: 8, border: `1px solid ${UI.line}`, background: UI.bg2, borderRadius: 9, padding: "6px 12px", transition: "border-color 150ms ease, box-shadow 150ms ease" }}>
           <Search size={13} style={{ color: UI.ink3 }} />
           {/* 전역 검색(D6) — 홈에서 입력하면 결과가 있는 리소스 목록으로 이동한다(무반응 인풋 금지) */}
           <input ref={searchRef} aria-label="리소스와 화면 전체 검색" value={q}
@@ -2254,7 +2333,7 @@ function App() {
             </motion.span>
           </button>
           {alertTotal > 0 && (
-            <span style={{ position: "absolute", top: -3, right: -3, minWidth: 15, height: 15, borderRadius: 999, background: alertBadgePresentation?.color ?? HP.warn, color: UI.card, fontSize: TYPE.caption, fontWeight: 600, display: "grid", placeItems: "center", padding: "0 4px", border: `2px solid ${UI.card}`, boxSizing: "content-box" }}>{alertBadge}</span>
+            <span aria-hidden="true" style={{ position: "absolute", top: -3, right: -3, minWidth: 15, height: 15, borderRadius: 999, background: alertBadgePresentation?.color ?? HP.warn, color: UI.card, fontSize: TYPE.caption, fontWeight: 600, display: "grid", placeItems: "center", padding: "0 4px", border: `2px solid ${UI.card}`, boxSizing: "content-box", pointerEvents: "none" }}>{alertBadge}</span>
           )}
           <AnimatePresence>
             {/* 애플 알림 센터 스타일 — 반투명 블러 패널 위 카드 스택 */}
@@ -2291,11 +2370,9 @@ function App() {
                   </div>
                 )}
                 {(() => {
-                  const Card = ({ icon: I, tint, title, body, time, right, onClick }: { icon: typeof Bell; tint: string; title: string; body: string; time: string; right?: string; onClick?: () => void }) => (
-                    <button type="button" className="acard" aria-label={`${title} 알림 상세 열기`} onClick={onClick} disabled={!onClick}
-                      style={{ display: "flex", alignItems: "flex-start", gap: 10, width: "100%", textAlign: "left", background: cardA(0.85),
-                        border: `1px solid ${inkA(0.05)}`, borderRadius: RADIUS.card, padding: "10px 12px", marginBottom: 6,
-                        boxShadow: `0 1px 2px ${inkA(0.05)}` }}>
+                  const Card = ({ icon: I, tint, title, body, time, right, onClick }: { icon: typeof Bell; tint: string; title: string; body: string; time: string; right?: string; onClick?: () => void }) => {
+                    const content = (
+                      <>
                       <span style={{ width: 28, height: 28, borderRadius: 8, background: tint, display: "grid", placeItems: "center", flexShrink: 0, marginTop: 1 }}>
                         <I size={14} color={UI.card} strokeWidth={2.2} />
                       </span>
@@ -2307,8 +2384,25 @@ function App() {
                         <span style={{ display: "block", fontSize: TYPE.caption, color: UI.ink2, marginTop: 2, lineHeight: 1.45 }}>{body}</span>
                         {right && <span style={{ display: "block", fontSize: TYPE.caption, fontFamily: MONO, color: UI.ink3, marginTop: 3 }}>{right}</span>}
                       </span>
-                    </button>
-                  );
+                      </>
+                    );
+                    const style: React.CSSProperties = {
+                      display: "flex", alignItems: "flex-start", gap: 10, width: "100%",
+                      textAlign: "left", background: cardA(0.85),
+                      border: `1px solid ${inkA(0.05)}`, borderRadius: RADIUS.card,
+                      padding: "10px 12px", marginBottom: 6,
+                      boxShadow: `0 1px 2px ${inkA(0.05)}`,
+                    };
+                    return onClick ? (
+                      <button type="button" className="acard" aria-label={`${title} 알림 상세 열기`} onClick={onClick} style={{ ...style, cursor: "pointer" }}>
+                        {content}
+                      </button>
+                    ) : (
+                      <div className="acard" role="status" aria-label={`${title} 알림`} style={style}>
+                        {content}
+                      </div>
+                    );
+                  };
                   return (
                     <>
                       {notes.map((nn) => (
@@ -2321,12 +2415,26 @@ function App() {
                             tint={presentation.color} title={ev.name} time={alertTime(ev.firedAt)}
                             body={[statusLabel(ev.severity), statusLabel(ev.status), ev.kind, ev.namespace, ev.ruleName].filter(Boolean).join(" · ")}
                             right={ev.cluster} onClick={() => {
-                              markAlertRead(ev);
                               setBellOpen(false);
                               if (ev.incidentId) {
                                 setSurface("issues");
+                                setDetail(null);
+                                const matchingIssue = alertRcaIssues.items.find(
+                                  (issue) => issue.incidentId === ev.incidentId,
+                                );
+                                if (matchingIssue) {
+                                  setRcaIncident(incidentFromIssue(matchingIssue));
+                                  markAlertRead(ev);
+                                } else {
+                                  pushToast({
+                                    title: "이슈 상세 동기화 중",
+                                    sub: "이슈 목록을 새로고침한 뒤 다시 열어 주세요. 알림은 읽지 않은 상태로 유지됩니다.",
+                                    tone: "crit",
+                                  });
+                                }
                                 return;
                               }
+                              markAlertRead(ev);
                               openRef(ev.kind, ev.name);
                             }} />
                         );
@@ -2375,7 +2483,7 @@ function App() {
 
       {/* 콘텐츠 스크롤 영역 — 스크롤은 여기서만. gutter 고정으로 스크롤바 유무에 따른
           가로 점프(창 열닫힘 체감)를 없앤다. */}
-      <div style={{ flex: 1, minHeight: 0, overflowY: "auto", overflowX: "clip", scrollbarGutter: "stable" }}>
+      <div ref={contentScrollRef} data-shell-scroll-container="true" style={{ flex: 1, minHeight: 0, overflowY: "auto", overflowX: "clip", scrollbarGutter: "stable" }}>
       {surface === "connect" ? (
         /* 연결 설정 — 셸 안에서 위저드 서피스로 전환 (별도 페이지 아님) */
         <div style={{ position: "relative", minHeight: `calc(100vh / ${PRESENT_SCALE} - 57px)`, background: UI.bg }}>
@@ -2526,13 +2634,17 @@ function App() {
       {/* AI 어시스턴트 — 상세 페이지 위까지 덮는 우측 오버레이 + 폭 조절 핸들 */}
       <AnimatePresence>
         {aiMounted && (
-          <motion.div key="ai" initial={{ x: aiW + 30 }} animate={{ x: aiOpen ? 0 : (aiFull ? window.innerWidth : aiW) + 30 }} transition={{ type: "spring", bounce: 0.06, visualDuration: 0.34 }}
+          <motion.div ref={aiPanelRef} key="ai" initial={{ x: aiW + 30 }} animate={{ x: aiOpen ? 0 : (aiFull ? window.innerWidth : aiW) + 30 }} transition={{ type: "spring", bounce: 0.06, visualDuration: 0.34 }}
             aria-hidden={!aiOpen}
+            inert={!aiOpen}
             style={{ position: "fixed", top: topH, right: 0, bottom: 0, width: aiFull ? `calc(100vw - ${navCollapsed ? 60 : 208}px)` : aiW, zIndex: 72, display: "flex", pointerEvents: aiOpen ? "auto" : "none", boxShadow: aiOpen ? `-28px 0 70px -32px ${inkA(0.3)}` : "none", transition: "width .28s cubic-bezier(0.32,0.72,0,1)" }}>
             {/* 전체 화면 중에는 폭 조절 핸들 비활성 — 핸들 규약은 상세·RCA와 동일한
                 투명 6px 엣지(경계선 1px은 시각 유지, 히트 영역만 넓힘) */}
             {!aiFull && (
-              <div role="separator" aria-label="AI 패널 폭 조절" aria-orientation="vertical" onPointerDown={onAiHandleDown} title="드래그해서 폭 조절"
+              <div role="separator" aria-label="AI 패널 폭 조절" aria-orientation="vertical"
+                aria-valuemin={380} aria-valuemax={560} aria-valuenow={Math.round(aiW)}
+                tabIndex={0} className="product-focusable"
+                onPointerDown={onAiHandleDown} onKeyDown={onAiHandleKeyDown} title="드래그하거나 방향키로 폭 조절"
                 style={{ position: "relative", width: 1, flexShrink: 0, background: aiDragging ? blueA(0.35) : UI.line, transition: "background .15s" }}>
                 <span aria-hidden="true" style={{ position: "absolute", left: -3, top: 0, bottom: 0, width: 7, cursor: "col-resize", background: "transparent" }} />
               </div>
@@ -2540,7 +2652,7 @@ function App() {
             <div style={{ flex: 1, minWidth: 0 }}>
               <AiPanel embedded full={aiFull} recoveryRequest={aiRecoveryRequest}
                 onToggleFull={() => setAiFull((v) => !v)}
-                onClose={() => { setAiOpen(false); setAiFull(false); }}
+                onClose={closeAi}
                 onCancelRecovery={() => {
                   setAiRecoveryRequest(null);
                   setAiRecoveryReviewState("idle");
@@ -2655,15 +2767,18 @@ function App() {
         )}
       </AnimatePresence>
 
-      {/* 상세 — 최상위 레이어 오버레이 (Esc로 닫힘) */}
-      <AnimatePresence>
-        {detail && <DetailOverlay key={`${detail.kind.id}-${String(detail.row.cluster ?? "")}-${String(detail.row._key ?? detail.row.name)}`} kind={detail.kind} row={detail.row} onClose={() => setDetail(null)} onToast={pushToast} onOpenRef={openRef} onShowPods={(b) => { setDetail(null); setSurface("resources"); setResView("list"); setKindId("Pod"); setQ(b); }} onConnectRepository={(context) => { setRepositoryConnectContext(context); setConnectModal("repo"); }} onRequestManifestAccess={() => { setDetail(null); setSurface("settings"); }} onOpenDeploySurface={() => { setDetail(null); setSurface("deploy"); }} manifestRefreshKey={manifestRefreshKey} forceFull={aiOpen} rightInset={aiOpen ? aiW : 0} leftInset={navCollapsed ? 60 : 208} topInset={topH} viewportW={vwCss} />}
-      </AnimatePresence>
-      {/* 이슈 RCA 사이드바 — 셸 레벨 렌더(서피스 transform 밖) */}
-      <AnimatePresence>
-        {rcaIncident && <IssueDetail key={rcaIncident.name} {...rcaIncident} topInset={topH} leftInset={navCollapsed ? 60 : 208}
+      {/* 리소스·RCA 상세은 하나의 레이어 슬롯을 공유한다. mode=wait로 기존
+          드로어 퇴장 후 다음 드로어가 들어와 동일 z-index 중첩을 막는다. */}
+      <AnimatePresence mode="wait">
+        {detail ? (
+          <DetailOverlay key={`resource-${detail.kind.id}-${String(detail.row.cluster ?? "")}-${String(detail.row._key ?? detail.row.name)}`} kind={detail.kind} row={detail.row} onClose={() => setDetail(null)} onToast={pushToast} onOpenRef={openRef} onShowPods={(b) => { setDetail(null); setSurface("resources"); setResView("list"); setKindId("Pod"); setQ(b); }} onConnectRepository={(context) => { setRepositoryConnectContext(context); setConnectModal("repo"); }} onRequestManifestAccess={() => { setDetail(null); setSurface("settings"); }} onOpenDeploySurface={() => { setDetail(null); setSurface("deploy"); }} manifestRefreshKey={manifestRefreshKey} forceFull={aiOpen} rightInset={aiOpen ? aiW : 0} leftInset={navCollapsed ? 60 : 208} topInset={topH} viewportW={vwCss} />
+        ) : rcaIncident ? (
+          <IssueDetail key={`rca-${rcaIncident.incidentId ?? rcaIncident.correlationId ?? rcaIncident.name}`} {...rcaIncident} topInset={topH} leftInset={navCollapsed ? 60 : 208}
           onClose={() => setRcaIncident(null)}
-          onOpenRef={(k, n) => openRef(k, n)}
+          onOpenRef={(k, n) => {
+            setRcaIncident(null);
+            openRef(k, n);
+          }}
           onAskAi={openAi}
           onRecoverySelected={(correlationId, route, source) => {
             setRecoverySelectionRoutes((current) => {
@@ -2679,7 +2794,8 @@ function App() {
               setAiRecoveryReviewState("idle");
             }
           }}
-          rightInset={aiOpen ? aiW : 0} />}
+          rightInset={aiOpen ? aiW : 0} />
+        ) : null}
       </AnimatePresence>
 
       {/* 작업 토스트 — 우측 상단 스택 */}

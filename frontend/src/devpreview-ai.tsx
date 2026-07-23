@@ -344,6 +344,32 @@ function deriveSummary(turn: AiTurn): { text: string; tone: AiTone } {
   return { text: turn.summary ?? "대화", tone: "neutral" };
 }
 
+export function isStructuredAssistantTurn(turn: AiTurn): boolean {
+  return (turn.parts ?? []).some((part) => part.kind !== "text");
+}
+
+function PlainAssistantTurn({ turn }: { turn: AiTurn }) {
+  const textParts = (turn.parts ?? []).filter(
+    (part): part is AiTextPart => part.kind === "text",
+  );
+  if (textParts.length === 0) return null;
+  return (
+    <div
+      className="mr-auto grid w-full max-w-[94%] gap-2 px-1 py-1 animate-in fade-in-0 slide-in-from-bottom-1 duration-300"
+      data-ai-turn-presentation="chat"
+    >
+      {textParts.map((part, index) => (
+        <TextPart
+          active={false}
+          key={`${turn.id}-text-${index}`}
+          onReady={noop}
+          part={part}
+        />
+      ))}
+    </div>
+  );
+}
+
 /** 접힘/펼침 — CSS grid-template-rows(0fr↔1fr)로 height:auto를 트랜지션. React는 is-collapsed 클래스만 토글(측정·JS조작 없음). */
 function AssistantTurn({ turn, onComplete }: { turn: AiTurn; onComplete: () => void }) {
   const parts = turn.parts ?? [];
@@ -671,7 +697,11 @@ export function AiPanel({ onClose, onCancelRecovery, onRecoveryReviewStateChange
     idSeq.current += 1;
     const userTurn: AiTurn = { id: `u${idSeq.current}`, role: "user", question: displayText?.trim() || trimmed, collapsed: false, createdAt: now() };
     setTurns((prev) => [
-      ...prev.map((turn) => turn.role === "assistant" ? { ...turn, collapsed: true } : turn),
+      ...prev.map((turn) => (
+        turn.role === "assistant" && isStructuredAssistantTurn(turn)
+          ? { ...turn, collapsed: true }
+          : turn
+      )),
       userTurn,
     ]);
     setThinking(true);
@@ -851,6 +881,7 @@ export function AiPanel({ onClose, onCancelRecovery, onRecoveryReviewStateChange
   // 저장된 대화의 이력 턴과 라이브 대화 턴을 같은 표면으로 렌더한다
   const renderTurn = (turn: AiTurn) => {
     if (turn.role === "user") return <UserTurn key={turn.id} onShown={noop} turn={turn} />;
+    if (!isStructuredAssistantTurn(turn)) return <PlainAssistantTurn key={turn.id} turn={turn} />;
     if (turn.collapsed) return <CollapsedTurn key={turn.id} onShown={noop} turn={turn} />;
     return <AssistantTurn key={turn.id} onComplete={noop} turn={turn} />;
   };
