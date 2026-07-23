@@ -90,13 +90,16 @@ export function NodeAliasTitle({
     );
   }
 
+  // 연필 버튼은 제목 "줄 안"에 인라인으로 둔다 — 두 줄 블록 옆에 flex-start로
+  // 붙이면 버튼(24px)이 제목 줄(≈20px)과 어긋나 떠 보인다.
   return (
-    <span style={{ display: "flex", alignItems: "flex-start", gap: 6, maxWidth: "100%", minWidth: 0 }}>
-      <span style={{ minWidth: 0, flex: "0 1 auto", maxWidth: "100%" }}>
+    <span style={{ display: "block", maxWidth: "100%", minWidth: 0 }}>
+      <span style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
         <span
           title={hasAlias ? `${displayName} · ${nodeName}` : nodeName}
           style={{
-            display: "block",
+            minWidth: 0,
+            flex: "0 1 auto",
             fontSize: TYPE.body,
             fontWeight: 600,
             letterSpacing: 0,
@@ -110,36 +113,36 @@ export function NodeAliasTitle({
         >
           {displayName}
         </span>
-        {hasAlias && (
-          <span
-            title={nodeName}
-            style={{
-              display: "block",
-              fontSize: TYPE.caption,
-              color: UI.ink3,
-              fontFamily: MONO,
-              marginTop: 2,
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
+        {editable && (
+          <IconButton
+            label="노드 별칭 수정"
+            onClick={() => {
+              setDraft(alias?.alias ?? "");
+              setError(null);
+              setEditing(true);
             }}
+            type="button"
           >
-            {nodeName}
-          </span>
+            <Pencil size={12} />
+          </IconButton>
         )}
       </span>
-      {editable && (
-        <IconButton
-          label="노드 별칭 수정"
-          onClick={() => {
-            setDraft(alias?.alias ?? "");
-            setError(null);
-            setEditing(true);
+      {hasAlias && (
+        <span
+          title={nodeName}
+          style={{
+            display: "block",
+            fontSize: TYPE.caption,
+            color: UI.ink3,
+            fontFamily: MONO,
+            marginTop: 2,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
           }}
-          type="button"
         >
-          <Pencil size={12} />
-        </IconButton>
+          {nodeName}
+        </span>
       )}
     </span>
   );
@@ -188,8 +191,8 @@ function IconButton({
       title={label}
       type={type}
       style={{
-        width: 24,
-        height: 24,
+        width: 22,
+        height: 22,
         border: `1px solid ${UI.line}`,
         borderRadius: 7,
         background: UI.card,

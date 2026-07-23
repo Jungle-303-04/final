@@ -583,9 +583,10 @@ export function NodeCard({
         display: "flex", flexDirection: "column", gap: 10, width: "100%", height: "100%", textAlign: "left", cursor: "pointer",
         background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 16, padding: 16, boxShadow: "none", boxSizing: "border-box", overflow: "hidden", minHeight: 0,
       }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-        <span style={{ width: 38, height: 38, borderRadius: 9, background: UI.bg2, display: "grid", placeItems: "center", flexShrink: 0 }}>
-          <Monitor size={24} strokeWidth={2} style={{ color: UI.ink2 }} />
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 8, minWidth: 0 }}>
+        {/* 아이콘 박스는 제목+호스트명 두 줄 높이(≈40px)에 맞춘다 */}
+        <span style={{ width: 40, height: 40, borderRadius: 10, background: UI.bg2, display: "grid", placeItems: "center", flexShrink: 0 }}>
+          <Monitor size={22} strokeWidth={2} style={{ color: UI.ink2 }} />
         </span>
         <div style={{ minWidth: 0, flex: 1 }}>
           <NodeAliasTitle
