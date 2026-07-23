@@ -554,9 +554,8 @@ export function NodeCard({
   onDeleteNodeAlias?: (nodeName: string) => Promise<void>;
 }) {
   const sev = healthSev(node.health);
-  const statusText = node.status ? statusLabel(node.status) : "상태 관측 안 됨";
-  const healthText = statusLabel(node.health);
-  const showStatus = statusText !== healthText;
+  // "준비됨" 상태 서브라인은 제거 — 정상 상태는 표시하지 않고, 이상 신호만
+  // 헤더 점·HealthChip 으로 드러낸다(레퍼런스 톤).
   const problemConditionCount = (node.conditions ?? []).filter((condition) => !/^ready$/i.test(condition)).length;
   const restartsRecent = node.restartsRecent ?? 0;
   const nodeDisplayName = nodeAlias?.alias || node.name;
@@ -592,23 +591,22 @@ export function NodeCard({
             onDelete={onDeleteNodeAlias}
             onSave={onSaveNodeAlias}
           />
-          {showStatus && <div style={{ fontSize: TYPE.caption, color: UI.ink3, marginTop: 2 }}>{statusText}</div>}
         </div>
-        {sev !== "ok" && <span style={{ width: 8, height: 8, borderRadius: 999, background: sevColor(sev), flexShrink: 0, marginTop: 4 }} />}
+        {/* 레퍼런스 톤: 문제 배지·슬롯 카운트를 헤더 우측 상단에 — 별도 "파드 슬롯" 라벨 행 제거 */}
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 7, flexShrink: 0, marginTop: 2 }}>
+          {problemPodCount !== null && problemPodCount > 0 && (
+            <span aria-label={`문제 파드 ${problemPodCount}`} style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: TYPE.caption, fontWeight: 700, color: TINT.crit.fg, background: TINT.crit.bg, border: `1px solid ${TINT.crit.bd}`, borderRadius: 7, padding: "1px 6px" }}>
+              <b style={{ fontVariantNumeric: "tabular-nums" }}>{problemPodCount}</b><AlertTriangle size={11} aria-hidden="true" />
+            </span>
+          )}
+          <span aria-label={`파드 슬롯 ${node.matchedPodCount ?? "미관측"}/${node.totalPodCount ?? "미관측"}`} style={{ fontSize: TYPE.label, fontFamily: MONO, fontWeight: 700, color: UI.ink2, fontVariantNumeric: "tabular-nums" }}>
+            {node.matchedPodCount ?? "—"}/{node.totalPodCount ?? "—"}
+          </span>
+          {sev !== "ok" && <span style={{ width: 8, height: 8, borderRadius: 999, background: sevColor(sev), flexShrink: 0 }} />}
+        </span>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
         {sev !== "ok" && <HealthChip health={node.health} />}
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: TYPE.caption, color: UI.ink3 }}>
-          <Box size={12} aria-hidden="true" />파드 슬롯
-          <b style={{ color: UI.ink, fontVariantNumeric: "tabular-nums" }}>{node.matchedPodCount ?? "—"}</b>
-          <span>/</span>
-          <b style={{ color: UI.ink, fontVariantNumeric: "tabular-nums" }}>{node.totalPodCount ?? "—"}</b>
-        </span>
-        {problemPodCount !== null && problemPodCount > 0 && (
-          <span aria-label={`문제 파드 ${problemPodCount}`} style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: TYPE.caption, fontWeight: 600, color: TINT.crit.fg }}>
-            <AlertTriangle size={12} aria-hidden="true" /><b style={{ fontVariantNumeric: "tabular-nums" }}>{problemPodCount}</b>문제 파드
-          </span>
-        )}
         {restartsRecent > 0 && (
           <span aria-label={`최근 재시작 ${restartsRecent}`} style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: TYPE.caption, fontWeight: 600, color: TINT.warn.fg }}>
             <RotateCcw size={12} aria-hidden="true" /><b style={{ fontVariantNumeric: "tabular-nums" }}>{restartsRecent}</b>최근 재시작
@@ -777,28 +775,8 @@ const NODE_SLOT_COUNT_PER_COLUMN = 10;
 const NODE_SLOT_COLUMNS_PER_UNIT = 5;
 const NODE_SLOT_RENDER_LIMIT = 40;
 
-function PodSlotLegend() {
-  const states = [
-    ["정상", HP.ok],
-    ["주의", HP.warn],
-    ["장애", HP.crit],
-    ["대기", HP.pending],
-  ] as const;
-  return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 12, minHeight: 20, flexWrap: "wrap", fontSize: TYPE.caption, color: UI.ink3 }}>
-      {states.map(([label, color]) => (
-        <span key={label} style={{ display: "inline-flex", alignItems: "center", gap: 5, whiteSpace: "nowrap" }}>
-          <span style={{ width: 8, height: 8, borderRadius: 2, background: color }} />
-          {label}
-        </span>
-      ))}
-      <span style={{ display: "inline-flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}>
-        <span style={{ width: 28, height: 6, borderRadius: 2, background: `linear-gradient(90deg, color-mix(in srgb, ${HP.ok} 36%, ${UI.card}), color-mix(in srgb, ${HP.ok} 82%, ${UI.card}))` }} />
-        농도 · 제한 대비 사용률
-      </span>
-    </div>
-  );
-}
+// PodSlotLegend(정상/주의/장애/대기 범례)는 제거 — 슬롯 색·호버 툴팁이 자체 설명적이라
+// 상단 설명 줄 없이 노드 그리드를 바로 보여준다.
 
 /**
  * Node cards share the same four-column geometry as dashboard widgets. One
@@ -1102,7 +1080,6 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
                   ) : (
                     /* 노드: 대시보드와 같은 4단위 격자. 슬롯 10개마다 카드가 한 칸씩 확장된다. */
                     <div style={{ display: "grid", gap: 8 }}>
-                      <PodSlotLegend />
                       <div className="node-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gridAutoFlow: "row dense", gap: 12 }}>
                         {nodes.map((node, i) => {
                           const observedPods = observedPodsForNode(node, topologyNodes, pods);
