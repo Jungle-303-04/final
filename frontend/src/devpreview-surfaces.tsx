@@ -621,7 +621,7 @@ function RecoveryPlanProgress({ progress }: { progress: RecoveryProgressState })
     <section aria-live="polite" style={{ display: "grid", gap: SPACE.stack, border: `1px solid ${UI.line}`, borderRadius: RADIUS.card, background: UI.card, padding: SPACE.card, boxShadow: `0 6px 16px -10px ${inkA(0.26)}, 0 1px 3px ${inkA(0.06)}` }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
         <div style={{ minWidth: 0, flex: 1, display: "grid", gap: 3 }}>
-          <strong style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: ISSUE_DETAIL_TYPE.itemTitle, color: UI.ink }}>{progress.label}</strong>
+          <strong style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: ISSUE_DETAIL_TYPE.sectionTitle, fontWeight: 700, color: UI.heading }}>{progress.label}</strong>
           <span style={{ fontSize: ISSUE_DETAIL_TYPE.label, color: UI.ink3 }}>복구 진행 상태</span>
         </div>
         <span style={{ flexShrink: 0, fontSize: ISSUE_DETAIL_TYPE.itemTitle, fontVariantNumeric: "tabular-nums", color: progress.tone === "failed" ? HP.crit : UI.ink2 }}>
@@ -718,7 +718,7 @@ function RecoveryCandidateDetails({
 }
 
 function recoveryActionButtonLabel(route: string): string {
-  if (route === "auto") return "자동 복구 실행";
+  if (route === "auto") return "복구 실행 요청";
   if (route === "safe_pr") return "복구 PR 생성";
   if (route === "approval_required") return "추가 검토 요청";
   return "복구 조치 선택";
@@ -747,7 +747,7 @@ function RecoveryRollbackSection({ candidate }: { candidate: RecoveryActionCandi
   if (!candidate.rollback_plan) return null;
   return (
     <section style={{ display: "grid", gap: 7, paddingTop: 14, borderTop: `1px dashed ${UI.line}` }}>
-      <h4 style={{ margin: 0, fontSize: ISSUE_DETAIL_TYPE.sectionTitle, fontWeight: 700, color: UI.heading }}>실패 시 복원</h4>
+      <h4 style={{ margin: 0, fontSize: ISSUE_DETAIL_TYPE.itemTitle, fontWeight: 600, color: UI.heading }}>실패 시 복원</h4>
       {candidate.rollback_reason && (
         <div style={{ display: "grid", gridTemplateColumns: "64px minmax(0, 1fr)", gap: 8, alignItems: "start" }}>
           <span style={{ fontSize: TYPE.caption, lineHeight: 1.55, color: UI.ink3 }}>복원 조건</span>
@@ -765,7 +765,7 @@ function RecoveryRollbackSection({ candidate }: { candidate: RecoveryActionCandi
 function RecoveryCandidateSection({ title, text }: { title: string; text: string }) {
   return (
     <section style={{ display: "grid", gap: 7, paddingTop: 14, borderTop: `1px dashed ${UI.line}` }}>
-      <h4 style={{ margin: 0, fontSize: ISSUE_DETAIL_TYPE.sectionTitle, fontWeight: 700, color: UI.heading }}>{title}</h4>
+      <h4 style={{ margin: 0, fontSize: ISSUE_DETAIL_TYPE.itemTitle, fontWeight: 600, color: UI.heading }}>{title}</h4>
       <p style={{ margin: 0, fontSize: ISSUE_DETAIL_TYPE.body, lineHeight: 1.6, color: UI.ink2 }}>{text}</p>
     </section>
   );
@@ -774,7 +774,7 @@ function RecoveryCandidateSection({ title, text }: { title: string; text: string
 function RecoveryCandidateList({ title, items }: { title: string; items: readonly string[] }) {
   return (
     <section style={{ display: "grid", gap: 7, paddingTop: 14, borderTop: `1px dashed ${UI.line}` }}>
-      <h4 style={{ margin: 0, fontSize: ISSUE_DETAIL_TYPE.sectionTitle, fontWeight: 700, color: UI.heading }}>{title}</h4>
+      <h4 style={{ margin: 0, fontSize: ISSUE_DETAIL_TYPE.itemTitle, fontWeight: 600, color: UI.heading }}>{title}</h4>
       <ul style={{ display: "grid", gap: 5, margin: 0, padding: 0, listStyle: "none" }}>
         {items.map((item, index) => <li key={`${item}-${index}`} style={{ display: "grid", gridTemplateColumns: "14px minmax(0, 1fr)", gap: 5, fontSize: ISSUE_DETAIL_TYPE.body, lineHeight: 1.5, color: UI.ink2 }}><Check size={12} style={{ marginTop: 2, color: TINT.ok.fg }} /><span>{item}</span></li>)}
       </ul>
@@ -802,7 +802,7 @@ function RecoveryAlternativeCandidate({
         style={{ width: "100%", minWidth: 0, display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto auto", alignItems: "center", gap: 10, border: "none", background: "transparent", padding: 12, textAlign: "left", cursor: "pointer" }}>
         <span style={{ minWidth: 0, display: "flex", alignItems: "center", gap: 7 }}>
           <Lightbulb size={14} style={{ flexShrink: 0, color: UI.ink3 }} />
-          <strong title={candidate.title} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: TYPE.label, color: UI.ink }}>{candidate.title}</strong>
+          <strong title={candidate.title} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: ISSUE_DETAIL_TYPE.itemTitle, fontWeight: 600, color: UI.heading }}>{candidate.title}</strong>
         </span>
         <span style={{ fontSize: TYPE.caption, color: UI.ink2, fontVariantNumeric: "tabular-nums" }}>{Math.round(candidate.score * 100)}%</span>
         <Sparkle size={14} style={{ color: UI.ink3, transform: open ? "rotate(45deg)" : "none", transition: `transform ${DUR.micro}s ease` }} />
@@ -858,7 +858,7 @@ function RecoveryPlanPanel({
       {alternatives.length > 0 && (
         <section style={{ display: "grid", gap: 8 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-            <h3 style={{ margin: 0, fontSize: TYPE.caption, fontWeight: 600, color: UI.ink3 }}>다른 복구 후보</h3>
+            <h3 style={{ margin: 0, fontSize: ISSUE_DETAIL_TYPE.itemTitle, fontWeight: 600, color: UI.heading }}>다른 복구 후보</h3>
             <span style={{ fontSize: TYPE.caption, color: UI.ink3 }}>{alternatives.length}개</span>
           </div>
           <div style={{ overflow: "hidden", borderBottom: `1px dashed ${UI.line}` }}>
@@ -1126,7 +1126,7 @@ function EvidenceDetailItem({ evidence, id, highlighted = false, onOpenChange }:
           <strong title={evidence.name} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: TYPE.label, color: UI.ink2 }}>{evidenceSourceLabel(evidence.source)} · {evidenceNameLabel(evidence.name)}</strong>
           <span style={{ fontSize: TYPE.caption, color: UI.ink2, lineHeight: 1.45 }}>{evidence.summary || "수집된 근거"}</span>
         </span>
-        <ChevronRight size={15} style={{ color: UI.ink2, transform: open ? "rotate(90deg)" : "none", transition: "transform 150ms ease" }} />
+        <ChevronRight size={15} style={{ color: UI.ink2, transform: open ? "rotate(90deg)" : "none", transition: `transform ${DUR.micro}s ease` }} />
       </summary>
       <div style={{ display: "grid", gap: 10, padding: "0 4px 12px" }}>
         <dl style={{ display: "grid", gridTemplateColumns: "68px minmax(0, 1fr)", gap: "5px 9px", margin: 0, fontSize: TYPE.caption }}>
@@ -1139,54 +1139,81 @@ function EvidenceDetailItem({ evidence, id, highlighted = false, onOpenChange }:
   );
 }
 
-function RcaCandidateList({ report, fallbackCause, onEvidenceSelect }: { report: RcaReport | null; fallbackCause: string | null | undefined; onEvidenceSelect?: (item: string) => void }) {
-  const [candidateListOpen, setCandidateListOpen] = useState(false);
+function RcaSelectedCause({ report, fallbackCause, onEvidenceSelect }: { report: RcaReport | null; fallbackCause: string | null | undefined; onEvidenceSelect?: (item: string) => void }) {
   const candidates = report?.candidates ?? [];
   if (candidates.length === 0) {
     return <p style={{ margin: 0, fontSize: TYPE.label, color: fallbackCause ? UI.ink2 : UI.ink3, lineHeight: 1.55 }}>{fallbackCause || "원인 후보 정보가 아직 없습니다."}</p>;
   }
   const selected = candidates.find((candidate) => candidate.candidate_id === report?.selected_candidate_id) ?? candidates[0]!;
-  const alternatives = candidates.filter((candidate) => candidate.candidate_id !== selected.candidate_id);
   const selectedConfirmed = selected.supporting_evidence.length;
   const selectedTotal = selectedConfirmed + selected.missing_evidence.length;
   return (
-    <div style={{ display: "grid", gap: 12 }}>
-      <div style={{ display: "grid", gap: 9, borderRadius: 8, background: UI.bg2, padding: 11 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-          <span title={selected.title ?? selected.candidate_id} style={{ minWidth: 0, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: TYPE.label, fontWeight: 600, color: UI.ink }}>{selected.title ?? rcaDisplayLabel(selected.candidate_id)}</span>
-          <span style={{ flexShrink: 0, borderRadius: 999, border: `1px solid ${TINT.ok.bd}`, background: TINT.ok.bg, color: TINT.ok.fg, padding: "2px 7px", fontSize: TYPE.caption, fontWeight: 600 }}>권장</span>
-          <span style={{ flexShrink: 0, fontSize: TYPE.caption, color: selected.score === null ? UI.ink3 : UI.ink2 }}>{selected.score === null ? "미확인" : `${Math.round(selected.score * 100)}%`}</span>
-        </div>
-        <span style={{ fontSize: TYPE.caption, color: UI.ink2, lineHeight: 1.5 }}>- 필요한 근거 {selectedTotal}개 중 {selectedConfirmed}개가 확인되었습니다.</span>
-        {selected.reason && <p style={{ margin: 0, fontSize: TYPE.caption, color: UI.ink2, lineHeight: 1.5 }}>- {selected.reason}</p>}
+    <div style={{ display: "grid", gap: 9, borderRadius: 8, background: UI.bg2, padding: 11 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+        <span title={selected.title ?? selected.candidate_id} style={{ minWidth: 0, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: TYPE.label, fontWeight: 600, color: UI.ink }}>{selected.title ?? rcaDisplayLabel(selected.candidate_id)}</span>
+        <span style={{ flexShrink: 0, borderRadius: 999, border: `1px solid ${TINT.ok.bd}`, background: TINT.ok.bg, color: TINT.ok.fg, padding: "2px 7px", fontSize: TYPE.caption, fontWeight: 600 }}>권장</span>
+        <span style={{ flexShrink: 0, fontSize: TYPE.caption, color: selected.score === null ? UI.ink3 : UI.ink2 }}>{selected.score === null ? "미확인" : `${Math.round(selected.score * 100)}%`}</span>
+      </div>
+      <span style={{ fontSize: TYPE.caption, color: UI.ink2, lineHeight: 1.5 }}>- 필요한 근거 {selectedTotal}개 중 {selectedConfirmed}개가 확인되었습니다.</span>
+      {selected.reason && <p style={{ margin: 0, fontSize: TYPE.caption, color: UI.ink2, lineHeight: 1.5 }}>- {selected.reason}</p>}
+      <div style={{ display: "grid", gap: 9, marginTop: 2, paddingTop: 10, borderTop: `1px solid ${UI.line}` }}>
+        <CandidateEvidenceTokens label="확인된 근거" items={selected.supporting_evidence} tone="ok" references={report?.supporting_evidence_refs} onEvidenceSelect={onEvidenceSelect} />
+        <CandidateEvidenceTokens label="추가 확인 필요" items={selected.missing_evidence} tone="warn" />
+      </div>
+    </div>
+  );
+}
+
+function RcaAlternativeCandidates({ report, onEvidenceSelect }: { report: RcaReport | null; onEvidenceSelect?: (item: string) => void }) {
+  const candidates = report?.candidates ?? [];
+  const selected = candidates.find((candidate) => candidate.candidate_id === report?.selected_candidate_id) ?? candidates[0];
+  const alternatives = selected ? candidates.filter((candidate) => candidate.candidate_id !== selected.candidate_id) : [];
+  if (alternatives.length === 0) {
+    return <p style={{ margin: 0, fontSize: TYPE.label, color: UI.ink3, lineHeight: 1.55 }}>추가 원인 후보가 없습니다.</p>;
+  }
+  return (
+    <div style={{ display: "grid", borderBottom: `1px dashed ${UI.line}` }}>
+      {alternatives.map((candidate, index) => (
+        <RcaAlternativeCandidate
+          key={candidate.candidate_id}
+          candidate={candidate}
+          first={index === 0}
+          references={report?.supporting_evidence_refs}
+          onEvidenceSelect={onEvidenceSelect}
+        />
+      ))}
+    </div>
+  );
+}
+
+function RcaAlternativeCandidate({
+  candidate,
+  first,
+  references,
+  onEvidenceSelect,
+}: {
+  candidate: RcaReport["candidates"][number];
+  first: boolean;
+  references: RcaReport["supporting_evidence_refs"] | undefined;
+  onEvidenceSelect?: (item: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <details open={open} onToggle={(event) => setOpen(event.currentTarget.open)} style={{ borderTop: first ? "none" : `1px dashed ${UI.line}`, background: open ? UI.bg2 : "transparent" }}>
+      <summary style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto auto", alignItems: "center", gap: 9, padding: "11px 8px", cursor: "pointer", listStyle: "none", fontSize: TYPE.label, color: UI.ink2 }}>
+        <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: 600 }}>{candidate.title ?? rcaDisplayLabel(candidate.candidate_id)}</span>
+        <span>{candidate.score === null ? "미확인" : `${Math.round(candidate.score * 100)}%`}</span>
+        <ChevronRight size={15} style={{ color: UI.ink2, transform: open ? "rotate(90deg)" : "none", transition: "transform 150ms ease" }} />
+      </summary>
+      <div style={{ display: "grid", gap: 8, padding: "9px 8px 12px", borderTop: `1px solid ${UI.line2}` }}>
+        <p style={{ margin: 0, fontSize: TYPE.caption, color: UI.ink2, lineHeight: 1.5 }}>- 필요한 근거 {candidate.supporting_evidence.length + candidate.missing_evidence.length}개 중 {candidate.supporting_evidence.length}개가 확인되었습니다.</p>
+        {candidate.reason && <p style={{ margin: 0, fontSize: TYPE.caption, color: UI.ink2, lineHeight: 1.5 }}>- {candidate.reason}</p>}
         <div style={{ display: "grid", gap: 9, marginTop: 2, paddingTop: 10, borderTop: `1px solid ${UI.line}` }}>
-          <CandidateEvidenceTokens label="확인된 근거" items={selected.supporting_evidence} tone="ok" references={report?.supporting_evidence_refs} onEvidenceSelect={onEvidenceSelect} />
-          <CandidateEvidenceTokens label="추가 확인 필요" items={selected.missing_evidence} tone="warn" />
+          <CandidateEvidenceTokens label="확인된 근거" items={candidate.supporting_evidence} tone="ok" references={references} onEvidenceSelect={onEvidenceSelect} />
+          <CandidateEvidenceTokens label="추가 확인 필요" items={candidate.missing_evidence} tone="warn" />
         </div>
       </div>
-      {alternatives.length > 0 && <details open={candidateListOpen} onToggle={(event) => setCandidateListOpen(event.currentTarget.open)} style={{ display: "grid", borderTop: `1px dashed ${UI.line}` }}>
-        <summary style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "10px 4px", cursor: "pointer", listStyle: "none", color: UI.ink2, fontSize: TYPE.caption, fontWeight: 600 }}><span>원인 후보 {alternatives.length}개 보기</span><ChevronRight size={15} style={{ transform: candidateListOpen ? "rotate(90deg)" : "none", transition: "transform 150ms ease" }} /></summary>
-        <div style={{ borderTop: `1px dashed ${UI.line}`, borderBottom: `1px dashed ${UI.line}` }}>
-          {alternatives.map((candidate, index) => (
-            <details key={candidate.candidate_id} style={{ borderTop: index > 0 ? `1px dashed ${UI.line}` : "none" }}>
-              <summary style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto auto", alignItems: "center", gap: 9, padding: "10px 8px", cursor: "pointer", listStyle: "none", fontSize: TYPE.label, color: UI.ink2 }}>
-                <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{candidate.title ?? rcaDisplayLabel(candidate.candidate_id)}</span>
-                <span>{candidate.score === null ? "미확인" : `${Math.round(candidate.score * 100)}%`}</span>
-                <Sparkle size={14} style={{ color: UI.ink2, transition: "transform 150ms ease" }} />
-              </summary>
-              <div style={{ display: "grid", gap: 8, padding: "9px 8px 12px", borderTop: `1px solid ${UI.line2}`, background: UI.bg2 }}>
-                <p style={{ margin: 0, fontSize: TYPE.caption, color: UI.ink2, lineHeight: 1.5 }}>- 필요한 근거 {candidate.supporting_evidence.length + candidate.missing_evidence.length}개 중 {candidate.supporting_evidence.length}개가 확인되었습니다.</p>
-                {candidate.reason && <p style={{ margin: 0, fontSize: TYPE.caption, color: UI.ink2, lineHeight: 1.5 }}>- {candidate.reason}</p>}
-                <div style={{ display: "grid", gap: 9, marginTop: 2, paddingTop: 10, borderTop: `1px solid ${UI.line}` }}>
-                  <CandidateEvidenceTokens label="확인된 근거" items={candidate.supporting_evidence} tone="ok" references={report?.supporting_evidence_refs} onEvidenceSelect={onEvidenceSelect} />
-                  <CandidateEvidenceTokens label="추가 확인 필요" items={candidate.missing_evidence} tone="warn" />
-                </div>
-              </div>
-            </details>
-          ))}
-        </div>
-      </details>}
-    </div>
+    </details>
   );
 }
 export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resourceKind, incidentId, currentSubject, updatedAt, onClose, onOpenRef, onAskAi, onRecoverySelected, correlationId, status, severity, rootCause, confidence, supportingEvidence, missingEvidence, situationSummary, recommendedActionSummary, evidenceSummary, evidenceBundleSummary, topInset = 0, leftInset = 0, rightInset = 0 }: {
@@ -1344,7 +1371,7 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
           <div style={{ flex: 1, minHeight: 0, overflowY: "auto", overscrollBehavior: "contain", scrollbarGutter: "stable", display: "flex", flexDirection: "column", gap: SPACE.section, padding: SPACE.section }}>
             {activeTab === "detail" ? <>
             <section aria-labelledby="issue-summary-heading" style={{ flexShrink: 0, display: "grid", gap: SPACE.stack, border: `1px solid ${UI.line}`, borderRadius: RADIUS.card, background: UI.card, padding: SPACE.card, boxShadow: `0 6px 16px -10px ${inkA(0.26)}, 0 1px 3px ${inkA(0.06)}` }}>
-              <h2 id="issue-summary-heading" style={{ margin: 0, fontSize: ISSUE_DETAIL_TYPE.itemTitle, fontWeight: 700, color: UI.heading }}>상황 요약</h2>
+              <h2 id="issue-summary-heading" style={{ margin: 0, fontSize: ISSUE_DETAIL_TYPE.sectionTitle, fontWeight: 700, color: UI.heading }}>상황 요약</h2>
               <p style={{ margin: 0, fontSize: TYPE.body, fontWeight: 600, color: situationSummary?.trim() ? UI.ink : UI.ink3, lineHeight: 1.65 }}>{situationSummary?.trim() || "상황 요약 정보가 아직 없습니다."}</p>
               {(reportFirstSeenAt || reportElapsed || reportImpact) && <dl style={{ display: "grid", gridTemplateColumns: "86px minmax(0, 1fr)", gap: "7px 10px", margin: 0, paddingTop: 12, borderTop: `1px solid ${UI.line2}`, fontSize: TYPE.caption, lineHeight: 1.5 }}>
                 {reportFirstSeenAt && <><dt style={{ color: UI.ink3 }}>장애 시작</dt><dd style={{ margin: 0, color: UI.ink2 }}>{reportTimeLabel(reportFirstSeenAt)}</dd></>}
@@ -1436,20 +1463,23 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
                 <ReportNumberedSection number="02" title="최종 원인">
                   {latestReport.status === "loading" && <span style={{ fontSize: TYPE.caption, color: UI.ink2 }}>원인 후보를 불러오는 중…</span>}
                   {latestReport.status === "unavailable" && <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: TYPE.caption, color: TINT.crit.fg }}><CircleAlert size={14} />원인 후보를 불러오지 못했습니다.</span>}
-                  <RcaCandidateList report={report} fallbackCause={rootCause} onEvidenceSelect={openEvidenceDetail} />
+                  <RcaSelectedCause report={report} fallbackCause={rootCause} onEvidenceSelect={openEvidenceDetail} />
                 </ReportNumberedSection>
-                <ReportNumberedSection number="03" title="근거 요약" sectionRef={evidenceSummaryRef}>
+                <ReportNumberedSection number="03" title="원인 후보">
+                  <RcaAlternativeCandidates report={report} onEvidenceSelect={openEvidenceDetail} />
+                </ReportNumberedSection>
+                <ReportNumberedSection number="04" title="근거 요약" sectionRef={evidenceSummaryRef}>
                   {evidenceSummary || evidenceBundleSummary ? <div style={{ display: "grid", gap: 7 }}>
                     {evidenceSummary && <div style={{ display: "grid", gridTemplateColumns: "16px minmax(0, 1fr)", gap: 7, alignItems: "start" }}><span aria-hidden="true" style={{ width: 16, height: 20, display: "grid", placeItems: "center", color: TINT.ok.fg }}><CircleCheck size={14} /></span><p style={{ margin: 0, fontSize: TYPE.label, color: UI.ink2, lineHeight: 1.55 }}>{evidenceSummary}</p></div>}
                     {evidenceBundleSummary && <p style={{ margin: "0 0 0 23px", fontSize: TYPE.caption, color: UI.ink2, lineHeight: 1.5 }}>{evidenceBundleSummary}</p>}
                   </div> : <p style={{ margin: 0, fontSize: TYPE.label, color: UI.ink3 }}>근거 요약이 아직 없습니다.</p>}
                 </ReportNumberedSection>
-                <ReportNumberedSection number="04" title="근거 상세">
+                <ReportNumberedSection number="05" title="근거 상세">
                   {(report?.supporting_evidence_refs.length ?? 0) > 0 ? <div style={{ display: "grid", borderBottom: `1px dashed ${UI.line}` }}>
                     {report!.supporting_evidence_refs.map((evidence, index) => <EvidenceDetailItem key={`${evidence.source}-${evidence.name}-${index}`} id={evidenceDetailAnchor(index)} evidence={evidence} highlighted={highlightedEvidenceIndex === index} onOpenChange={(open) => { if (!open) setHighlightedEvidenceIndex((current) => current === index ? null : current); }} />)}
                   </div> : support.length > 0 ? <ul style={{ display: "grid", gap: 7, margin: 0, padding: 0, listStyle: "none" }}>{support.map((item, index) => <li key={`${item}-${index}`} style={{ fontSize: TYPE.label, color: UI.ink2, lineHeight: 1.5 }}>{item}</li>)}</ul> : <p style={{ margin: 0, fontSize: TYPE.label, color: UI.ink3 }}>근거 상세가 아직 없습니다.</p>}
                 </ReportNumberedSection>
-                <ReportNumberedSection number="05" title="권장 조치">
+                <ReportNumberedSection number="06" title="권장 조치">
                   <p style={{ margin: 0, fontSize: TYPE.label, color: recommendedActionSummary || report?.narrative?.recommended_action ? UI.ink2 : UI.ink3, lineHeight: 1.55 }}>{recommendedActionSummary || report?.narrative?.recommended_action || "권장 조치가 아직 없습니다."}</p>
                   <button type="button" className="product-focusable product-control" onClick={() => setActiveTab("recovery")} style={{ justifySelf: "end", border: `1px solid ${blueA(0.32)}`, borderRadius: 8, background: blueA(0.07), color: BLUE, padding: "7px 12px", fontSize: TYPE.caption, fontWeight: 600, cursor: "pointer" }}>복구 플랜 보기</button>
                 </ReportNumberedSection>
