@@ -1234,7 +1234,11 @@ function HomeSurface({ clusterMeta, incidentClusterIds, onDrillCluster, onCluste
               <span style={seg}><Server size={11} style={{ color: UI.ink3 }} />클러스터 <b style={num}>{clusters.length}</b>{pendingCl.length > 0 && <span style={{ color: TINT.blue.fg }}>· 연결 중 {pendingCl.length}</span>}</span>
               {outSyncCount > 0 && (
                 <span style={{ ...seg, borderColor: TINT.warn.bd, background: TINT.warn.bg, color: TINT.warn.fg }}>
-                  <GithubIcon size={11} />동기화 필요 <b style={{ ...num, color: TINT.warn.fg }}>{outSyncCount}</b>
+                  <span aria-hidden="true" style={{ width: 13, height: 13, flexShrink: 0, display: "grid", placeItems: "center", lineHeight: 0 }}>
+                    <GithubIcon size={11} />
+                  </span>
+                  <span style={{ lineHeight: 1 }}>동기화 필요</span>
+                  <b style={{ ...num, color: TINT.warn.fg }}>{outSyncCount}</b>
                 </span>
               )}
               {critCount > 0 && (
