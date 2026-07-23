@@ -652,6 +652,47 @@ def alertmanager_evidence_key(
     return f"{workspace_id}:{cluster_id}:alertmanager:{digest}"
 
 
+def alertmanager_kubernetes_hint(payload: AlertmanagerWebhookRequest) -> dict[str, Any]:
+    """firing 알림의 라벨/주석을 파이프라인의 명시 계약(symptom/resource)으로 승격한다.
+
+    incident 분류는 "명시 > 유도 > unknown" 계약(pipeline/symptom.py)을 따르는데,
+    Alertmanager evidence 는 kubernetes snapshot 이 없어 종전에는 항상 unknown 으로
+    빠져 원인 룰에 도달하지 못했다. 알림 룰이 선언한 opsia_* 라벨(관측 대상)과
+    alertname 은 Prometheus 가 실제로 평가한 관측 결과이므로, 합성이 아니라
+    수신한 계약 데이터의 승격이다. 힌트가 없으면 alertname 만 symptom 으로 쓴다.
+    """
+    firing = [alert for alert in payload.alerts if alert.status == "firing"]
+    if not firing:
+        return {}
+    alert = firing[0]
+    labels = alert.labels if isinstance(alert.labels, dict) else {}
+    annotations = alert.annotations if isinstance(alert.annotations, dict) else {}
+
+    def text(value: object) -> str:
+        return str(value or "").strip()
+
+    symptom = text(annotations.get("opsia_symptom")) or text(labels.get("opsia_symptom")) or text(
+        labels.get("alertname")
+    )
+    hint: dict[str, Any] = {}
+    if symptom:
+        hint["symptom"] = symptom
+    resource_name = text(labels.get("opsia_resource_name"))
+    if resource_name:
+        hint["resource"] = {
+            "kind": text(labels.get("opsia_resource_kind")) or "Deployment",
+            "name": resource_name,
+            "namespace": text(labels.get("opsia_namespace")) or text(labels.get("namespace"))
+            or None,
+        }
+    severity = text(labels.get("severity"))
+    if severity:
+        hint["severity"] = severity
+    if hint:
+        hint.setdefault("category", "application_runtime")
+    return hint
+
+
 def build_alertmanager_evidence_body(
     workspace_id: str,
     cluster_id: str,
@@ -666,7 +707,7 @@ def build_alertmanager_evidence_body(
     return ClusterEvidenceReceivedBody(
         cluster_id=cluster_id,
         workspace_id=workspace_id,
-        kubernetes={},
+        kubernetes=alertmanager_kubernetes_hint(payload),
         metrics={
             "alertmanager": {
                 "group_key": payload.groupKey,

@@ -29,6 +29,9 @@ FACT_WAITING_REASON = "waiting_reason"
 FACT_TERMINATED_REASON = "terminated_reason"
 FACT_EVENT_REASON = "event_reason"
 FACT_EXIT_CODE = "exit_code"
+# Alertmanager firing 알림 — Prometheus 가 실제 평가한 관측 결과를 fact 로 승격한다.
+# 토큰 어휘: `alert_name=<alertname>`.
+FACT_ALERT_NAME = "alert_name"
 # OOM(137)도 정상 종료(0)도 아닌 종료 코드 — 일반 앱/설정 크래시(exit 1 등) 판별용.
 FACT_EXIT_CODE_NON_OOM = "exit_code=non_oom"
 OOM_EXIT_CODE = 137
@@ -58,6 +61,8 @@ def extract_bundle_signals(evidence_bundle: EvidenceBundle) -> BundleSignals:
             collect_kubernetes_signals(item.value, collector)
         elif item.source == "logs":
             collect_log_lines(item.value, collector)
+        elif item.source == "metrics":
+            collect_alert_facts(item.value, collector)
     return BundleSignals(
         facts=frozenset(collector.facts),
         log_lines=tuple(collector.log_lines),
@@ -95,6 +100,22 @@ def add_exit_code_facts(container: JsonObject, collector: _SignalCollector) -> N
         collector.facts.add(f"{FACT_EXIT_CODE}={code}")
         if code not in (0, OOM_EXIT_CODE):
             collector.facts.add(FACT_EXIT_CODE_NON_OOM)
+
+
+def collect_alert_facts(value: JsonObject, collector: _SignalCollector) -> None:
+    """metrics["alertmanager"] 의 firing 알림 이름을 fact 토큰으로 추출한다."""
+    alertmanager = value.get("alertmanager")
+    if not isinstance(alertmanager, dict):
+        return
+    for alert in dict_items(alertmanager.get("alerts")):
+        if str(alert.get("status") or "firing") != "firing":
+            continue
+        labels = alert.get("labels")
+        if not isinstance(labels, dict):
+            continue
+        name = str(labels.get("alertname") or "").strip()
+        if name:
+            collector.facts.add(f"{FACT_ALERT_NAME}={name}")
 
 
 def collect_log_lines(value: JsonObject, collector: _SignalCollector) -> None:
