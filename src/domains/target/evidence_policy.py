@@ -13,6 +13,8 @@ from packages.contracts.cost.observations import (
     COST_POD_MEMORY_USE_METRIC,
 )
 from packages.contracts.evidence_policy import (
+    TEMPO_RECENT_TRACE_QUERY_NAME,
+    TEMPO_RECENT_TRACE_RANGE_SECONDS,
     EvidencePolicyQuery,
     EvidenceProfile,
     EvidenceQueryProvenance,
@@ -48,7 +50,6 @@ STANDARD_EVIDENCE_PROFILE: EvidenceProfile = "standard"
 DEMO_EVIDENCE_PROFILE: EvidenceProfile = "demo"
 MANAGEMENT_EVIDENCE_PROFILE: EvidenceProfile = "management"
 EVIDENCE_PROVIDER_KEYS = ("kubernetes", "metrics", "logs", "traces", "metadata")
-TEMPO_RECENT_TRACE_RANGE_SECONDS = 15 * 60
 
 COST_NAMESPACE_HOURLY_QUERY = """sum by (namespace) (
   label_replace(avg_over_time(container_cpu_allocation{namespace!=""}[1h]), "namespace", "$1", "exported_namespace", "(.+)")
@@ -600,7 +601,7 @@ def evidence_provider_queries(
         return [
             _query(
                 source="tempo",
-                name="cluster_recent_traces",
+                name=TEMPO_RECENT_TRACE_QUERY_NAME,
                 description="Recent traces from the target cluster-local Tempo backend.",
                 query="{}",
                 range_seconds=TEMPO_RECENT_TRACE_RANGE_SECONDS,
