@@ -973,7 +973,10 @@ class ConfigReferenceCoverage(StrictModel):
     observed_at: str | None = Field(default=None, max_length=80)
     workload_count: int = Field(ge=0)
     projected_reference_count: int = Field(ge=0)
-    reason_codes: tuple[str, ...] = Field(default=(), max_length=16)
+    reason_codes: tuple[str, ...] = Field(
+        default=(),
+        max_length=gateway_limits.CONFIG_REFERENCE_REASON_CODE_MAX_COUNT,
+    )
 
 
 class ConfigReferenceListResponse(StrictModel):

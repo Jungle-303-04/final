@@ -23,14 +23,16 @@ JsonObject = dict[str, Any]
 CONFIG_MAP_KIND = "ConfigMap"
 DEPLOYMENT_KIND = "Deployment"
 SECRET_KIND = "Secret"
-CONFIG_REFERENCE_DEFAULT_WORKLOAD_LIMIT = 500
+CONFIG_REFERENCE_DEFAULT_WORKLOAD_LIMIT = gateway_limits.INVENTORY_RESOURCE_DEFAULT_LIMIT
 CONFIG_REFERENCE_MAX_WORKLOAD_LIMIT = gateway_limits.INVENTORY_RESOURCE_MAX_LIMIT
 CONFIG_REFERENCE_MAX_ITEMS = gateway_limits.INVENTORY_RESOURCE_MAX_LIMIT
 CONFIG_REFERENCE_MAX_USAGES = gateway_limits.INVENTORY_RESOURCE_MAX_LIMIT
+CONFIG_REFERENCE_MAX_REASON_CODES = gateway_limits.CONFIG_REFERENCE_REASON_CODE_MAX_COUNT
 CONFIG_REFERENCE_TEXT_MAX_LENGTH = gateway_limits.KUBERNETES_NAME_MAX_LENGTH
 CONFIG_REFERENCE_PATH_MAX_LENGTH = gateway_limits.FILTER_VALUE_LIST_MAX_LENGTH
 CONFIG_REFERENCE_REASON_MAX_LENGTH = 160
 CONFIG_REFERENCE_TIMESTAMP_MAX_LENGTH = 80
+CONFIG_REFERENCE_REASONS_TRUNCATED = "config_reference_reason_codes_truncated"
 
 
 @dataclass
@@ -56,7 +58,20 @@ def config_reference_list_response(
 ) -> ConfigReferenceListResponse:
     """Project only Deployment -> ConfigMap/Secret reference identities."""
 
-    namespace = normalize_namespace(namespace)
+    namespace, namespace_error = normalize_namespace(namespace)
+    if namespace_error is not None:
+        return ConfigReferenceListResponse(
+            cluster_id=cluster_id,
+            namespace=namespace,
+            items=[],
+            coverage=ConfigReferenceCoverage(
+                availability="unavailable",
+                workload_count=0,
+                projected_reference_count=0,
+                reason_codes=(namespace_error,),
+            ),
+        )
+
     effective_limit = bounded_workload_limit(workload_limit)
     read_limit = min(effective_limit + 1, CONFIG_REFERENCE_MAX_WORKLOAD_LIMIT)
     latest_snapshot = latest_inventory_snapshot(db, workspace_id, cluster_id)
@@ -121,7 +136,7 @@ def config_reference_list_response(
             ),
             workload_count=len(projection_deployments),
             projected_reference_count=len(projection.items),
-            reason_codes=tuple(reason_codes),
+            reason_codes=tuple(bounded_reason_codes(reason_codes)),
         ),
     )
 
@@ -232,7 +247,7 @@ def project_deployment_config_references(
         if state.limited:
             return
 
-    for container in list_items(template_spec.get("containers")):
+    for container in container_items(template_spec):
         container_name = bounded_text_or_none(container.get("name"))
         for ref in env_value_refs(container):
             add_config_reference(
@@ -405,6 +420,13 @@ def deployment_template_spec(
     return {}
 
 
+def container_items(template_spec: Mapping[str, object]) -> list[Mapping[str, object]]:
+    containers: list[Mapping[str, object]] = []
+    containers.extend(list_items(template_spec.get("containers")))
+    containers.extend(list_items(template_spec.get("initContainers")))
+    return containers[: CONFIG_REFERENCE_MAX_USAGES + 1]
+
+
 def add_config_reference(
     state: ConfigReferenceProjectionState,
     *,
@@ -521,6 +543,16 @@ def coverage_reason_codes(
     return unique(reasons)
 
 
+def bounded_reason_codes(values: Sequence[str]) -> list[str]:
+    reasons = unique(values)
+    if len(reasons) <= CONFIG_REFERENCE_MAX_REASON_CODES:
+        return reasons
+    return [
+        *reasons[: CONFIG_REFERENCE_MAX_REASON_CODES - 1],
+        CONFIG_REFERENCE_REASONS_TRUNCATED,
+    ]
+
+
 def workload_coverage_reason_codes(
     source_summary: Mapping[str, object],
     namespace: str | None,
@@ -608,24 +640,35 @@ def text_or_none(value: object, *, max_length: int | None = None) -> str | None:
     return stripped or None
 
 
-def normalize_namespace(value: str | None) -> str | None:
-    return text_or_none(value)
+def normalize_namespace(value: str | None) -> tuple[str | None, str | None]:
+    normalized = text_or_none(value)
+    if normalized is None:
+        return None, None
+    if len(normalized) > CONFIG_REFERENCE_TEXT_MAX_LENGTH:
+        return None, "invalid_namespace"
+    return normalized, None
 
 
 def bool_or_none(value: object) -> bool | None:
     return value if isinstance(value, bool) else None
 
 
-def text_list(value: object) -> list[str]:
+def text_list(
+    value: object,
+    *,
+    limit: int = CONFIG_REFERENCE_MAX_REASON_CODES + 1,
+) -> list[str]:
     if not isinstance(value, Sequence) or isinstance(value, (str, bytes, bytearray)):
         return []
-    return [
-        item
-        for item in (
-            text_or_none(item, max_length=CONFIG_REFERENCE_REASON_MAX_LENGTH) for item in value
-        )
-        if item is not None
-    ]
+    items: list[str] = []
+    for item in value:
+        text = text_or_none(item, max_length=CONFIG_REFERENCE_REASON_MAX_LENGTH)
+        if text is None:
+            continue
+        items.append(text)
+        if len(items) >= limit:
+            break
+    return items
 
 
 def unique(values: Sequence[str]) -> list[str]:

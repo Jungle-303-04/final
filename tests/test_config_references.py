@@ -4,9 +4,12 @@ import json
 from typing import Any
 
 from domains.inventory.config_references import (
+    CONFIG_REFERENCE_DEFAULT_WORKLOAD_LIMIT,
     CONFIG_REFERENCE_MAX_ITEMS,
+    CONFIG_REFERENCE_REASONS_TRUNCATED,
     config_reference_list_response,
 )
+from packages.contracts.gateway import limits as gateway_limits
 
 
 class FakeInventoryDb:
@@ -30,6 +33,13 @@ class FakeInventoryDb:
         if namespace is None:
             return self.deployments
         return [row for row in self.deployments if row.get("namespace") == namespace]
+
+
+def test_config_reference_default_limit_follows_inventory_default() -> None:
+    assert (
+        CONFIG_REFERENCE_DEFAULT_WORKLOAD_LIMIT
+        == gateway_limits.INVENTORY_RESOURCE_DEFAULT_LIMIT
+    )
 
 
 def test_config_reference_projection_extracts_only_reference_identities() -> None:
@@ -165,6 +175,44 @@ def test_config_reference_projection_reads_persisted_workload_template_shape() -
     by_key = {(item.kind, item.namespace, item.name): item for item in response.items}
     assert ("ConfigMap", "apps", "app-config") in by_key
     assert ("Secret", "apps", "app-secret") in by_key
+
+
+def test_config_reference_projection_reads_init_container_references() -> None:
+    deployment = deployment_with_config_refs()
+    template_spec = deployment["raw"]["spec"]["template"]["spec"]
+    template_spec["volumes"] = []
+    template_spec["containers"][0]["env"] = []
+    template_spec["containers"][0]["envFrom"] = []
+    template_spec["containers"][0]["volumeMounts"] = []
+    template_spec["initContainers"] = [
+        {
+            "name": "migrate",
+            "env": [
+                {
+                    "name": "MIGRATION_CONFIG",
+                    "valueFrom": {
+                        "configMapKeyRef": {
+                            "name": "migration-config",
+                            "key": "dsn",
+                        }
+                    },
+                }
+            ],
+        }
+    ]
+    db = FakeInventoryDb(snapshot=complete_snapshot(), deployments=[deployment])
+
+    response = config_reference_list_response(
+        db,
+        workspace_id="default",
+        cluster_id="cluster-a",
+        namespace="apps",
+    )
+
+    by_key = {(item.kind, item.namespace, item.name): item for item in response.items}
+    init_config = by_key[("ConfigMap", "apps", "migration-config")]
+    assert init_config.referenced_by[0].container_name == "migrate"
+    assert init_config.referenced_by[0].source == "env"
 
 
 def test_config_reference_projection_reports_missing_snapshot() -> None:
@@ -343,6 +391,25 @@ def test_config_reference_projection_normalizes_blank_namespace_to_all_namespace
     assert response.items
 
 
+def test_config_reference_projection_rejects_oversized_namespace_filter() -> None:
+    db = FakeInventoryDb(
+        snapshot=complete_snapshot(),
+        deployments=[deployment_with_config_refs()],
+    )
+
+    response = config_reference_list_response(
+        db,
+        workspace_id="default",
+        cluster_id="cluster-a",
+        namespace="n" * (gateway_limits.KUBERNETES_NAME_MAX_LENGTH + 1),
+    )
+
+    assert response.namespace is None
+    assert response.items == []
+    assert response.coverage.availability == "unavailable"
+    assert response.coverage.reason_codes == ("invalid_namespace",)
+
+
 def test_config_reference_projection_marks_uncovered_namespace_partial() -> None:
     db = FakeInventoryDb(
         snapshot={
@@ -410,6 +477,45 @@ def test_config_reference_projection_marks_incomplete_workload_coverage_without_
 
     assert response.coverage.availability == "partial"
     assert response.coverage.reason_codes == ("workload_collection_incomplete",)
+
+
+def test_config_reference_projection_bounds_reason_code_count() -> None:
+    reason_limit = gateway_limits.CONFIG_REFERENCE_REASON_CODE_MAX_COUNT
+    db = FakeInventoryDb(
+        snapshot={
+            "snapshot_id": "snapshot-a",
+            "collected_at": "2026-07-23T05:00:00+00:00",
+            "summary": {
+                "summary": {
+                    "resources_complete": True,
+                    "collection_coverage": [
+                        {
+                            "collection": "workloads",
+                            "scope": "namespace",
+                            "namespace": "apps",
+                            "complete": False,
+                            "reason_codes": [
+                                f"collection_partial_reason_{index}"
+                                for index in range(reason_limit + 3)
+                            ],
+                        }
+                    ],
+                }
+            },
+        },
+        deployments=[deployment_with_config_refs()],
+    )
+
+    response = config_reference_list_response(
+        db,
+        workspace_id="default",
+        cluster_id="cluster-a",
+        namespace="apps",
+    )
+
+    assert response.coverage.availability == "partial"
+    assert len(response.coverage.reason_codes) == reason_limit
+    assert response.coverage.reason_codes[-1] == CONFIG_REFERENCE_REASONS_TRUNCATED
 
 
 def complete_snapshot() -> dict[str, Any]:
