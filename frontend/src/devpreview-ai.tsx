@@ -477,7 +477,7 @@ export function AiPanel({ onClose, embedded = false, contextView = "resources", 
     <div className={`opsia-ai relative flex ${embedded ? "h-full w-full min-w-0" : "h-screen w-[460px]"} flex-col overflow-hidden border-l border-black/[0.06] bg-gradient-to-b from-[oklch(0.99_0.002_255)] to-[oklch(0.97_0.003_255)] shadow-2xl`}>
       <header className="flex items-center gap-2.5 border-b border-black/[0.05] bg-white/60 px-3.5 py-3 backdrop-blur-xl">
         <span className="grid size-9 shrink-0 place-items-center rounded-[13px] bg-gradient-to-br from-primary to-[color-mix(in_oklch,var(--primary)_75%,black)] text-primary-foreground shadow-[0_2px_8px_-2px_color-mix(in_oklch,var(--primary)_55%,transparent)]"><Sparkles className="size-4" /></span>
-        <div className="min-w-0 flex-1"><h2 className="text-body font-semibold leading-tight tracking-[-0.01em] text-heading">Kyro AI</h2></div>
+        <div className="min-w-0 flex-1"><h2 className="text-body font-semibold leading-tight tracking-[-0.01em] text-black">Kyro AI</h2></div>
         {onToggleFull && (
           <button className="grid size-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" onClick={onToggleFull} title={full ? "패널로 축소" : "전체 화면"} type="button" aria-label={full ? "AI 패널 축소" : "AI 패널 전체 화면"}>
             {full ? <Minimize2 className="size-[17px]" /> : <Maximize2 className="size-[17px]" />}
@@ -554,9 +554,9 @@ export function AiPanel({ onClose, embedded = false, contextView = "resources", 
         {suggestions.status === "ready" && suggestions.items.length > 0 ? (
           <div className="mb-2.5 flex flex-wrap gap-1.5">{suggestions.items.map((s) => <button className="rounded-full border border-border bg-card/80 px-3 py-1.5 text-caption font-medium text-muted-foreground shadow-[0_1px_2px_rgba(0,0,0,0.03)] transition-all hover:-translate-y-px hover:border-ring hover:text-foreground hover:shadow-[0_2px_6px_-2px_rgba(0,0,0,0.12)]" key={s.id} onClick={() => send(s.prompt)} type="button">{s.label}</button>)}</div>
         ) : null}
-        <div className="relative rounded-[20px] border border-border bg-card/90 shadow-[0_1px_2px_rgba(0,0,0,0.04),inset_0_1px_0_rgba(255,255,255,0.6)] transition-all focus-within:border-primary/40 focus-within:shadow-[0_0_0_4px_color-mix(in_oklch,var(--primary)_12%,transparent)]">
+        <div className="relative rounded-[20px] border border-black/[0.12] bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),inset_0_1px_0_rgba(255,255,255,0.8)] transition-all focus-within:border-primary/40 focus-within:shadow-[0_0_0_4px_color-mix(in_oklch,var(--primary)_12%,transparent)]">
           <textarea
-            className="min-h-[60px] w-full resize-none rounded-[20px] bg-transparent px-3.5 py-3 pr-12 text-body leading-relaxed tracking-[-0.006em] text-black outline-none placeholder:text-muted-foreground/60"
+            className="min-h-[60px] w-full resize-none rounded-[20px] bg-white px-3.5 py-3 pr-12 text-body leading-relaxed tracking-[-0.006em] text-black caret-black outline-none placeholder:text-black/40"
             onChange={(e) => setInput(e.currentTarget.value)}
             onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(input); } }}
             placeholder="질문 입력"
