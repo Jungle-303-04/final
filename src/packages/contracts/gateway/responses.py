@@ -753,20 +753,17 @@ class RemediationBundleActionDraft(StrictModel):
     params: JsonMap
 
 
-class RemediationBundleRecoveryCandidate(StrictModel):
-    action_id: str
-    title: str
-    description: str
+class RemediationBundleRecoveryCandidate(RecoveryActionCandidateItem):
+    """Bundle candidate sharing the canonical recovery-plan contract.
+
+    The bundle adds an executable draft while keeping the three evidence and
+    validation lists required for its detail surface.  Common recovery copy
+    fields are inherited so the two APIs cannot silently drift again.
+    """
+
     draft: RemediationBundleActionDraft
-    route: str
-    rank: int
-    score: float
-    risk_level: str
-    blast_radius: str
-    approval_required: bool
     prerequisites: list[str]
     validation_checks: list[str]
-    rollback_plan: str
     evidence_refs: list[str]
 
 
