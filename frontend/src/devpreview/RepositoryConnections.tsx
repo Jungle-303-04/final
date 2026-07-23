@@ -37,6 +37,9 @@ export function RepositoryConnections({
             key={group.repositoryRef}
             group={group}
             selected={Boolean(selected)}
+            // 아코디언(여닫기)은 expandedRepositories 를 관리하는 배포 화면에서만 —
+            // 사이드패널처럼 클릭이 화면 이동인 곳에서는 ▾ 토글을 그리지 않는다.
+            accordion={expandedRepositories !== undefined}
             onOpenRepository={onOpenRepository}
             onDisconnected={onDisconnected}
           />
@@ -49,11 +52,13 @@ export function RepositoryConnections({
 function RepositoryRow({
   group,
   selected,
+  accordion,
   onOpenRepository,
   onDisconnected,
 }: {
   group: RepositoryGroup;
   selected: boolean;
+  accordion: boolean;
   onOpenRepository?: (repositoryRef: string) => void;
   onDisconnected?: (repositoryRef: string) => void;
 }) {
@@ -81,9 +86,11 @@ function RepositoryRow({
       <button
         type="button"
         className="product-focusable product-control"
-        aria-expanded={selected}
-        aria-controls={applicationsId}
-        aria-label={`${group.repositoryRef} GitOps ${selected ? "닫기" : "열기"}`}
+        aria-expanded={accordion ? selected : undefined}
+        aria-controls={accordion ? applicationsId : undefined}
+        aria-label={accordion
+          ? `${group.repositoryRef} GitOps ${selected ? "닫기" : "열기"}`
+          : `${group.repositoryRef} 배포 화면에서 열기`}
         onClick={() => onOpenRepository?.(group.repositoryRef)}
         style={{
           display: "flex",
@@ -121,9 +128,11 @@ function RepositoryRow({
             연결됨 · 앱 {group.applications.length}개
           </span>
         </span>
-        <span aria-hidden="true" style={{ color: selected ? BLUE : UI.ink2, fontSize: TYPE.body, transform: selected ? "rotate(180deg)" : "none", transition: "transform 150ms ease" }}>
-          ▾
-        </span>
+        {accordion && (
+          <span aria-hidden="true" style={{ color: selected ? BLUE : UI.ink2, fontSize: TYPE.body, transform: selected ? "rotate(180deg)" : "none", transition: "transform 150ms ease" }}>
+            ▾
+          </span>
+        )}
       </button>
 
       {selected && (
