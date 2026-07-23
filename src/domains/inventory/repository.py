@@ -2331,6 +2331,17 @@ class InventoryRepository(DatabaseConnection):
             "usage_samples": usage_samples,
         }
 
+    def _snapshot_cluster_ids(self, workspace_id: str) -> set[str]:
+        """허용 집합이 None(전체)일 때 LATERAL 대상이 될 snapshot 보유 클러스터 집합."""
+        snapshots = ClusterInventorySnapshotRecord.__table__
+        statement = (
+            select(snapshots.c.cluster_id)
+            .where(snapshots.c.workspace_id == workspace_id)
+            .distinct()
+        )
+        with self.connection() as conn:
+            return {str(row[0]) for row in conn.execute(statement)}
+
     def fleet_inventory_rollup(
         self,
         workspace_id: str,
@@ -2342,26 +2353,19 @@ class InventoryRepository(DatabaseConnection):
         반환: {cluster_id: {pods_running, pods_total, nodes_ready, nodes_total,
         workloads_degraded, workloads_total, last_seen_at}}.
         """
-        if cluster_ids is not None and not cluster_ids:
+        resolved_cluster_ids = (
+            cluster_ids if cluster_ids is not None else self._snapshot_cluster_ids(workspace_id)
+        )
+        if not resolved_cluster_ids:
             return {}
         table = ClusterInventoryResourceRecord.__table__
-        snapshots = ClusterInventorySnapshotRecord.__table__
-        latest_snapshot_id = (
-            select(snapshots.c.snapshot_id)
-            .where(
-                snapshots.c.workspace_id == workspace_id,
-                snapshots.c.cluster_id == table.c.cluster_id,
-                snapshots.c.status != "ignored_stale",
-                live_inventory_snapshot_clause(snapshots),
-            )
-            .order_by(
-                snapshots.c.created_at.desc(),
-                snapshots.c.snapshot_id.desc(),
-            )
-            .limit(1)
-            .correlate(table)
-            .scalar_subquery()
-        )
+        # 상관 서브쿼리(리소스 행마다 최신 snapshot 재조회)는 snapshot 이력이 쌓이면
+        # statement_timeout(30s)을 초과해 fleet 화면 전체가 500 으로 떨어졌다.
+        # /clusters 목록과 같은 VALUES+LATERAL 최신-snapshot 1회 조회로 조인한다.
+        latest = _latest_inventory_snapshots_statement(
+            workspace_id,
+            resolved_cluster_ids,
+        ).subquery("fleet_rollup_latest_snapshots")
         statement = (
             select(
                 table.c.cluster_id,
@@ -2371,16 +2375,24 @@ class InventoryRepository(DatabaseConnection):
                 func.count().label("count"),
                 func.max(table.c.last_seen_at).label("last_seen_at"),
             )
+            .select_from(
+                table.join(
+                    latest,
+                    and_(
+                        latest.c.workspace_id == table.c.workspace_id,
+                        latest.c.cluster_id == table.c.cluster_id,
+                        latest.c.snapshot_id == table.c.snapshot_id,
+                    ),
+                )
+            )
             .where(
                 table.c.workspace_id == workspace_id,
                 table.c.resource_type.in_(FLEET_ROLLUP_RESOURCE_TYPES),
                 table.c.deleted_at.is_(None),
-                table.c.snapshot_id == latest_snapshot_id,
             )
             .group_by(table.c.cluster_id, table.c.resource_type, table.c.status, table.c.health)
         )
-        if cluster_ids is not None:
-            statement = statement.where(table.c.cluster_id.in_(cluster_ids))
+        statement = statement.where(table.c.cluster_id.in_(sorted(resolved_cluster_ids)))
         with self.connection() as conn:
             rows = conn.execute(statement).mappings().all()
         rollup: dict[str, JsonObject] = {}
@@ -2423,31 +2435,37 @@ class InventoryRepository(DatabaseConnection):
     ) -> dict[str, list[JsonObject]]:
         """Return node summaries from each cluster's latest committed inventory cut."""
 
-        if cluster_ids is not None and not cluster_ids:
+        resolved_cluster_ids = (
+            cluster_ids if cluster_ids is not None else self._snapshot_cluster_ids(workspace_id)
+        )
+        if not resolved_cluster_ids:
             return {}
         table = ClusterInventoryResourceRecord.__table__
-        snapshots = ClusterInventorySnapshotRecord.__table__
-        latest_snapshot_id = (
-            select(snapshots.c.snapshot_id)
-            .where(
-                snapshots.c.workspace_id == workspace_id,
-                snapshots.c.cluster_id == table.c.cluster_id,
-                snapshots.c.status != "ignored_stale",
-                live_inventory_snapshot_clause(snapshots),
+        # 상관 서브쿼리 → VALUES+LATERAL 조인(fleet_inventory_rollup 과 동일한 이유·
+        # 동일한 "최신 snapshot" 정의). /clusters·counts 경로와 한 기준을 공유한다.
+        latest = _latest_inventory_snapshots_statement(
+            workspace_id,
+            resolved_cluster_ids,
+        ).subquery("fleet_nodes_latest_snapshots")
+        statement = (
+            select(table.c.cluster_id, table.c.summary)
+            .select_from(
+                table.join(
+                    latest,
+                    and_(
+                        latest.c.workspace_id == table.c.workspace_id,
+                        latest.c.cluster_id == table.c.cluster_id,
+                        latest.c.snapshot_id == table.c.snapshot_id,
+                    ),
+                )
             )
-            .order_by(snapshots.c.collected_at.desc(), snapshots.c.created_at.desc())
-            .limit(1)
-            .correlate(table)
-            .scalar_subquery()
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.resource_type == NODE_RESOURCE_TYPE,
+                table.c.deleted_at.is_(None),
+                table.c.cluster_id.in_(sorted(resolved_cluster_ids)),
+            )
         )
-        statement = select(table.c.cluster_id, table.c.summary).where(
-            table.c.workspace_id == workspace_id,
-            table.c.resource_type == NODE_RESOURCE_TYPE,
-            table.c.deleted_at.is_(None),
-            table.c.snapshot_id == latest_snapshot_id,
-        )
-        if cluster_ids is not None:
-            statement = statement.where(table.c.cluster_id.in_(cluster_ids))
         with self.connection() as conn:
             rows = conn.execute(statement).mappings().all()
         result: dict[str, list[JsonObject]] = {}
@@ -2477,24 +2495,36 @@ class InventoryRepository(DatabaseConnection):
 
         빈 허용 집합이면 즉시 {}. window function(row_number)으로 클러스터당 최신 N개만 취함.
         """
-        if cluster_ids is not None and not cluster_ids:
+        resolved_cluster_ids = (
+            cluster_ids if cluster_ids is not None else self._snapshot_cluster_ids(workspace_id)
+        )
+        if not resolved_cluster_ids:
             return {}
         table = ClusterUsageSampleRecord.__table__
-        ranked = select(
-            table.c.cluster_id,
-            table.c.sampled_at,
-            table.c.usage,
-            func.row_number()
-            .over(partition_by=table.c.cluster_id, order_by=table.c.sampled_at.desc())
-            .label("recency_rank"),
-        ).where(table.c.workspace_id == workspace_id)
-        if cluster_ids is not None:
-            ranked = ranked.where(table.c.cluster_id.in_(cluster_ids))
-        subquery = ranked.subquery()
+        # window rank 는 워크스페이스의 usage 샘플 전체(8~30초 간격 append-only)를
+        # 훑은 뒤에야 rank 1..N 을 남긴다 — 하루만 지나도 statement_timeout 위험.
+        # 클러스터별 VALUES+LATERAL 역방향 프로브(ix_cluster_usage_samples_scope)로
+        # 최신 N개만 정확히 읽는다.
+        bounded_samples = max(1, min(samples_per_cluster, 10))
+        requested = (
+            values(column("cluster_id", Text), name="requested_usage_clusters")
+            .data([(cluster_id,) for cluster_id in sorted(set(resolved_cluster_ids))])
+            .alias("requested_usage_clusters")
+        )
+        latest = (
+            select(table.c.cluster_id, table.c.sampled_at, table.c.usage)
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.cluster_id == requested.c.cluster_id,
+            )
+            .order_by(table.c.sampled_at.desc())
+            .limit(bounded_samples)
+            .lateral("latest_usage_samples")
+        )
         statement = (
-            select(subquery.c.cluster_id, subquery.c.sampled_at, subquery.c.usage)
-            .where(subquery.c.recency_rank <= max(1, min(samples_per_cluster, 10)))
-            .order_by(subquery.c.cluster_id, subquery.c.sampled_at.asc())
+            select(latest.c.cluster_id, latest.c.sampled_at, latest.c.usage)
+            .select_from(requested.join(latest, true()))
+            .order_by(latest.c.cluster_id, latest.c.sampled_at.asc())
         )
         with self.connection() as conn:
             rows = conn.execute(statement).mappings().all()
@@ -2590,7 +2620,6 @@ class InventoryRepository(DatabaseConnection):
 
         resources = ClusterInventoryResourceRecord.__table__
         snapshots = ClusterInventorySnapshotRecord.__table__
-        latest_snapshot_id = _latest_inventory_snapshot_id_scalar(workspace_id, cluster_id)
         latest = (
             select(
                 snapshots.c.snapshot_id,
@@ -2613,6 +2642,8 @@ class InventoryRepository(DatabaseConnection):
             .limit(1)
             .subquery("latest_node_summary_snapshot")
         )
+        # 최신 snapshot 조회를 두 번 렌더하지 않도록(계약: snapshots FROM 1회),
+        # Node 행은 latest 에 상관된 LATERAL 로 같은 snapshot_id 를 재사용한다.
         node_rows = (
             select(
                 resources.c.name,
@@ -2625,11 +2656,11 @@ class InventoryRepository(DatabaseConnection):
                 resources.c.cluster_id == cluster_id,
                 resources.c.resource_type == NODE_RESOURCE_TYPE,
                 resources.c.deleted_at.is_(None),
-                resources.c.snapshot_id == latest_snapshot_id,
+                resources.c.snapshot_id == latest.c.snapshot_id,
             )
             .order_by(resources.c.name)
             .limit(max(1, min(limit, 1000)))
-            .subquery("node_summary_resources")
+            .lateral("node_summary_resources")
         )
         node_json = func.jsonb_build_object(
             "name",

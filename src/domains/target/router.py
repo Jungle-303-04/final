@@ -1040,9 +1040,12 @@ def cluster_observation_metadata(
         next(iter(versions)) if len(versions) == 1 else None
     )
     namespaces = source.get("namespaces")
+    # namespace 스코프 수집(control_namespaces)은 resources_complete=False 로 보고되므로
+    # "완전 수집"을 요구하면 실제 관측값이 영원히 null 로 남는다. 관측된 namespace 목록이
+    # 있으면 그 수를 그대로 제공한다(관측 범위 내 실측 — last-known-good).
     namespace_count = (
         len({value for value in namespaces if isinstance(value, str) and value})
-        if complete_inventory_snapshot(latest_snapshot) and isinstance(namespaces, list)
+        if isinstance(namespaces, list)
         else None
     )
     discovery = source.get("api_resource_discovery")
@@ -1068,7 +1071,11 @@ def enrich_cluster_inventory_counts(
     latest_snapshot: dict[str, Any] | None,
     resource_counts: list[dict[str, Any]] | None = None,
 ) -> None:
-    if not complete_inventory_snapshot(latest_snapshot):
+    # 과거에는 "완전 수집" snapshot 만 카운트를 채웠지만, namespace 스코프 에이전트는
+    # resources_complete=False 를 보고하므로 실측 카운트가 영원히 null 로 남아 화면이
+    # 비었다. snapshot 이 하나라도 있으면 그 안의 실측 행 수를 그대로 제공한다
+    # (관측 범위 내 사실 — 지어내는 값 아님, last-known-good).
+    if not isinstance(latest_snapshot, dict) or not latest_snapshot:
         return
     count_reader = getattr(db, "inventory_resource_counts", None)
     if not callable(count_reader):
@@ -1601,7 +1608,8 @@ async def list_clusters(
     count_cluster_ids = {
         summary.cluster_id
         for summary in summaries
-        if complete_inventory_snapshot(latest_snapshots.get(summary.cluster_id))
+        if isinstance(latest_snapshots.get(summary.cluster_id), dict)
+        and latest_snapshots.get(summary.cluster_id)
     }
     resource_counts = (
         await asyncio.to_thread(bulk_count_reader, workspace_id, count_cluster_ids)
