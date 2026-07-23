@@ -2,10 +2,12 @@ import { apiRequest, type ApiPath } from "./client";
 import {
   applicationListSchema,
   applicationResponseSchema,
+  connectionPreviewSchema,
   deploymentBindingListSchema,
   workflowRunListSchema,
   type ApplicationList,
   type ApplicationResponse,
+  type ConnectionPreview,
   type DeploymentBindingList,
   type WorkflowRunList,
 } from "./applications-schemas";
@@ -50,6 +52,46 @@ export async function listApplications(
   assertLimit(limit);
   const path = withQuery("/api/applications" as ApiPath, [["limit", limit]]);
   return apiRequest(path, applicationListSchema, { signal: options.signal });
+}
+
+export interface ApplicationConnectPreviewInput {
+  repository: string;
+  branch: string;
+  manifestPath: string;
+  sourceType?: string;
+  valuesPath?: string;
+  clusterId: string;
+  namespace: string;
+  installationId?: string;
+}
+
+/**
+ * 연결 직전, 선택 매니페스트를 대상 클러스터에 반영하면 무엇이 생성·변경·유지·겹침
+ * 되는지 미리 계산한다(읽기 전용, 상태 변화 없음).
+ */
+export function previewApplicationConnection(
+  input: ApplicationConnectPreviewInput,
+  signal?: AbortSignal,
+): Promise<ConnectionPreview> {
+  return apiRequest(
+    "/api/applications/connect/preview",
+    connectionPreviewSchema,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        repo_ref: input.repository,
+        branch: input.branch,
+        manifest_path: input.manifestPath,
+        ...(input.sourceType ? { source_type: input.sourceType } : {}),
+        ...(input.valuesPath ? { values_path: input.valuesPath } : {}),
+        cluster_id: input.clusterId,
+        namespace: input.namespace,
+        ...(input.installationId ? { installation_id: input.installationId } : {}),
+      }),
+      signal,
+    },
+  );
 }
 
 /** Validates a Git source and registers a deployable Application target. */

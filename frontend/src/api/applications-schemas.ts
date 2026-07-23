@@ -69,6 +69,43 @@ export const workflowRunListSchema = z.strictObject({
   runs: z.array(workflowRunSchema),
 });
 
+export const connectionPreviewFieldChangeSchema = z.strictObject({
+  field_path: z.string(),
+  classification: z.string(),
+  before: z.string(),
+  after: z.string(),
+});
+
+export const connectionPreviewResourceSchema = z.strictObject({
+  api_version: z.string(),
+  kind: z.string(),
+  namespace: z.string().nullable(),
+  name: z.string(),
+  change: z.enum(["create", "update", "in_sync", "conflict"]),
+  live_observed: z.boolean(),
+  status: z.string(),
+  field_changes: z.array(connectionPreviewFieldChangeSchema),
+  owned_by: z.string().nullable(),
+});
+
+export const connectionPreviewSchema = z.strictObject({
+  repo_ref: z.string(),
+  branch: z.string(),
+  manifest_path: z.string(),
+  cluster_id: z.string(),
+  namespace: z.string(),
+  revision: z.string(),
+  valid: z.boolean(),
+  live_observed: z.boolean(),
+  create_count: z.number().int().nonnegative(),
+  update_count: z.number().int().nonnegative(),
+  in_sync_count: z.number().int().nonnegative(),
+  conflict_count: z.number().int().nonnegative(),
+  resources: z.array(connectionPreviewResourceSchema),
+  warnings: z.array(z.string()),
+  errors: z.array(z.string()),
+});
+
 export type Application = z.infer<typeof applicationSchema>;
 export type ApplicationList = z.infer<typeof applicationListSchema>;
 export type ApplicationResponse = z.infer<typeof applicationResponseSchema>;
@@ -76,3 +113,6 @@ export type DeploymentBindingList = z.infer<typeof deploymentBindingListSchema>;
 export type PromotionGate = z.infer<typeof promotionGateSchema>;
 export type WorkflowRun = z.infer<typeof workflowRunSchema>;
 export type WorkflowRunList = z.infer<typeof workflowRunListSchema>;
+export type ConnectionPreviewFieldChange = z.infer<typeof connectionPreviewFieldChangeSchema>;
+export type ConnectionPreviewResource = z.infer<typeof connectionPreviewResourceSchema>;
+export type ConnectionPreview = z.infer<typeof connectionPreviewSchema>;

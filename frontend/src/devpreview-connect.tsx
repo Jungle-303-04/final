@@ -39,6 +39,7 @@ import {
   connectCluster,
   reissueClusterConnectCommand,
   connectApplication,
+  previewApplicationConnection,
   isApiError,
   listClusters,
   listRepositoryBranches,
@@ -47,6 +48,7 @@ import {
   validateRepositoryManifest,
   type ClusterSummaryView,
   type ClusterConnectResponseView,
+  type ConnectionPreviewView,
   type RepositoryBranchView,
   type RepositoryManifestCandidateView,
 } from "./devpreview/connectFeed";
@@ -61,7 +63,7 @@ import {
   type ProviderAvailability,
 } from "./devpreview/connectFeed";
 import { reasonLabel } from "./devpreview/statusLabel";
-import { BLUE, HP, INSET, UI, blueA, critA, inkA, okA, warnA } from "./devpreview/theme";
+import { BLUE, HP, INSET, TINT, UI, blueA, critA, inkA, okA, warnA } from "./devpreview/theme";
 import {
   getGithubAppConfig,
   getGithubAppInstallUrl,
@@ -714,6 +716,32 @@ export interface RepositoryConnectionContext {
   namespace?: string;
 }
 
+// 연결 프리뷰 변경 분류별 표기(클러스터 연결뷰 톤과 통일: 은은한 배경 + 진한 글자).
+const CHANGE_META: Record<string, { label: string; tint: { fg: string; bg: string; bd: string } }> = {
+  create: { label: "생성", tint: TINT.ok },
+  update: { label: "변경", tint: TINT.warn },
+  in_sync: { label: "유지", tint: TINT.gray },
+  conflict: { label: "겹침", tint: TINT.crit },
+};
+
+function ChangeBadge({ change }: { change: string }) {
+  const meta = CHANGE_META[change] ?? CHANGE_META.in_sync;
+  return (
+    <span className="shrink-0 rounded-full px-2 py-0.5 text-caption font-bold" style={{ color: meta.tint.fg, background: meta.tint.bg }}>
+      {meta.label}
+    </span>
+  );
+}
+
+function PreviewChip({ change, count }: { change: string; count: number }) {
+  const meta = CHANGE_META[change] ?? CHANGE_META.in_sync;
+  return (
+    <span className="rounded-full px-2.5 py-1 text-caption font-semibold" style={{ color: meta.tint.fg, background: meta.tint.bg }}>
+      {meta.label} {count}
+    </span>
+  );
+}
+
 function RepoTargetStep({ source, context, onComplete }: {
   source: RepoSource;
   context?: RepositoryConnectionContext;
@@ -738,6 +766,9 @@ function RepoTargetStep({ source, context, onComplete }: {
   const [conflict, setConflict] = useState<string | null>(null);
   const [manifests, setManifests] = useState<RepositoryManifestCandidateView[]>([]);
   const [manifestStatus, setManifestStatus] = useState<"loading" | "ready" | "error">("loading");
+  // 연결 직전 desired vs live 프리뷰(입력이 바뀌면 무효화하고 다시 계산).
+  const [preview, setPreview] = useState<ConnectionPreviewView | null>(null);
+  const [previewStatus, setPreviewStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
 
   useEffect(() => {
     const controller = new AbortController();
@@ -797,8 +828,33 @@ function RepoTargetStep({ source, context, onComplete }: {
     }
     setFailure("");
     setSubmitStatus("idle");
+    // 대상·매니페스트가 바뀌면 이전 프리뷰는 무효 — 다시 계산하게 초기화.
+    setPreview(null);
+    setPreviewStatus("idle");
   };
   const complete = Object.values(input).every((value) => value.trim() !== "") && clusterStatus === "ready" && manifestStatus === "ready";
+  const loadPreview = async () => {
+    if (!complete || previewStatus === "loading") return;
+    setPreviewStatus("loading");
+    setFailure("");
+    try {
+      const candidate = manifests.find((item) => item.path === input.manifestPath);
+      const result = await previewApplicationConnection({
+        repository: repoRef,
+        branch: input.branch.trim(),
+        manifestPath: input.manifestPath.trim(),
+        sourceType: candidate?.source_type ?? "",
+        clusterId: input.clusterId,
+        namespace: input.namespace.trim(),
+        ...(source.installationId ? { installationId: source.installationId } : {}),
+      });
+      setPreview(result);
+      setPreviewStatus("ready");
+    } catch (cause: unknown) {
+      setFailure(errorText(cause));
+      setPreviewStatus("error");
+    }
+  };
   const submit = async (allowConflicts = false) => {
     if (!complete || submitStatus === "submitting") return;
     setSubmitStatus("submitting");
@@ -928,9 +984,53 @@ function RepoTargetStep({ source, context, onComplete }: {
           </motion.div>
         )}
       </AnimatePresence>
-      {!conflict && (
-        <button disabled={!complete || submitStatus === "submitting"} onClick={() => void submit()} className="btn-primary flex w-full items-center justify-center gap-2 rounded-[14px] py-3.5 text-section font-semibold disabled:cursor-not-allowed disabled:opacity-45">
-          {submitStatus === "submitting" ? <><Spin c="size-4 text-white" /> 서버 검증·등록 중…</> : <>서버 검증 후 연결 <ArrowRight className="size-[17px]" /></>}
+      <AnimatePresence mode="popLayout">
+        {previewStatus === "ready" && preview && (
+          <motion.div key="preview" layout {...REVEAL} className="grid gap-3 bg-soft" style={{ borderRadius: 16, padding: "16px 18px" }}>
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-body font-semibold c-ink">연결 시 클러스터 변경 미리보기</div>
+              {preview.revision && <div className="font-mono text-caption c-3">{preview.revision.slice(0, 7)}</div>}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <PreviewChip change="create" count={preview.create_count} />
+              <PreviewChip change="update" count={preview.update_count} />
+              <PreviewChip change="in_sync" count={preview.in_sync_count} />
+              {preview.conflict_count > 0 && <PreviewChip change="conflict" count={preview.conflict_count} />}
+            </div>
+            {!preview.live_observed && (
+              <div className="text-caption leading-[1.5] c-3">아직 이 클러스터의 관측 데이터가 없어 모두 신규 생성으로 표시됩니다. 연결·관측 후 다시 보면 변경·유지가 구분됩니다.</div>
+            )}
+            {preview.resources.length > 0 && (
+              <div className="grid gap-1.5">
+                {preview.resources.map((resource) => (
+                  <div key={`${resource.kind}/${resource.namespace ?? "-"}/${resource.name}`} className="flex items-center gap-2.5 bg-surface" style={{ borderRadius: 11, padding: "9px 12px" }}>
+                    <ChangeBadge change={resource.change} />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-label font-medium c-ink">{resource.kind} · {resource.name}</div>
+                      <div className="truncate text-caption c-3">
+                        {resource.namespace || "cluster"}
+                        {resource.owned_by ? ` · 이미 ${resource.owned_by} 관리` : ""}
+                        {resource.field_changes.length > 0 ? ` · ${resource.field_changes.length}개 필드 변경 예정` : ""}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {preview.conflict_count > 0 && (
+              <div className="text-caption leading-[1.5] c-red">겹치는 리소스가 있습니다. 그대로 연결하면 다른 앱과 같은 리소스를 서로 덮어써(무한 드리프트) 위험합니다.</div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+      {!conflict && previewStatus !== "ready" && (
+        <button disabled={!complete || previewStatus === "loading"} onClick={() => void loadPreview()} className="btn-primary flex w-full items-center justify-center gap-2 rounded-[14px] py-3.5 text-section font-semibold disabled:cursor-not-allowed disabled:opacity-45">
+          {previewStatus === "loading" ? <><Spin c="size-4 text-white" /> 변경 미리보기 계산 중…</> : <>연결 시 변경 미리보기 <ArrowRight className="size-[17px]" /></>}
+        </button>
+      )}
+      {!conflict && previewStatus === "ready" && (
+        <button disabled={submitStatus === "submitting"} onClick={() => void submit()} className="btn-primary flex w-full items-center justify-center gap-2 rounded-[14px] py-3.5 text-section font-semibold disabled:cursor-not-allowed disabled:opacity-45">
+          {submitStatus === "submitting" ? <><Spin c="size-4 text-white" /> 서버 검증·등록 중…</> : <>이대로 연결 <ArrowRight className="size-[17px]" /></>}
         </button>
       )}
     </motion.div>
