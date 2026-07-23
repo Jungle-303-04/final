@@ -761,10 +761,26 @@ def evidence_details(payload: Mapping[str, Any]) -> JsonObject:
         "workflow_run_id": _workflow_run_id(payload),
         "object_ref": _first_string(payload, ("evidence", "object_ref")),
         "cluster_id": _first_string(payload, ("cluster_id",), ("evidence", "cluster_id")),
-        "has_kubernetes": bool(payload.get("kubernetes") or evidence.get("kubernetes")),
-        "has_metrics": bool(payload.get("metrics") or evidence.get("metrics")),
-        "has_logs": bool(payload.get("logs") or evidence.get("logs")),
-        "has_traces": bool(payload.get("traces") or evidence.get("traces")),
+        "has_kubernetes": evidence_source_present(
+            "kubernetes",
+            payload.get("kubernetes") or evidence.get("kubernetes"),
+            collection_status,
+        ),
+        "has_metrics": evidence_source_present(
+            "metrics",
+            payload.get("metrics") or evidence.get("metrics"),
+            collection_status,
+        ),
+        "has_logs": evidence_source_present(
+            "logs",
+            payload.get("logs") or evidence.get("logs"),
+            collection_status,
+        ),
+        "has_traces": evidence_source_present(
+            "traces",
+            payload.get("traces") or evidence.get("traces"),
+            collection_status,
+        ),
         "collection_complete": collection_status.get("complete"),
         "failed_providers": failed_providers,
         "failed_provider_count": len(failed_providers),
@@ -782,8 +798,41 @@ def collection_status_details(
 ) -> JsonObject:
     direct = mapping_value(payload.get("collection_status"))
     nested = mapping_value(evidence.get("collection_status"))
-    status = direct or nested
+    evidence_metadata = mapping_value(evidence.get("metadata"))
+    metadata_status = mapping_value(evidence_metadata.get("collection_status"))
+    status = direct or nested or metadata_status
     return dict(status) if status else {}
+
+
+def evidence_source_present(
+    source: str,
+    value: object,
+    collection_status: Mapping[str, Any],
+) -> bool:
+    """Avoid presenting unavailable telemetry envelopes as collected evidence."""
+    providers = mapping_value(collection_status.get("providers"))
+    provider_status = mapping_value(providers.get(source))
+    if provider_status.get("status") in {"unavailable", "not_queried"}:
+        return False
+    if source == "logs":
+        return isinstance(value, list) and bool(value)
+    if not isinstance(value, Mapping):
+        return False
+    if source == "metrics":
+        alertmanager = value.get("alertmanager")
+        if isinstance(alertmanager, Mapping) and bool(alertmanager):
+            return True
+        if value.get("source") == "prometheus" or "results" in value:
+            results = value.get("results")
+            return isinstance(results, Mapping) and bool(results)
+    if source == "traces" and (value.get("source") == "tempo" or "results" in value):
+        results = value.get("results")
+        return isinstance(results, Mapping) and bool(results)
+    return any(
+        item not in (None, "", [], {})
+        for key, item in value.items()
+        if key != "_lineage"
+    )
 
 
 def evidence_job_details(payload: Mapping[str, Any]) -> JsonObject:

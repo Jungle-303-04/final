@@ -42,6 +42,7 @@ from packages.contracts.target import (
     NODE_COLLECTOR_IMAGE_KEY,
     TARGET_AGENT_IMAGE_KEY,
     TARGET_NAMESPACE,
+    TARGET_OTEL_TRACES_ENDPOINT,
     TARGET_RBAC_MANIFEST_VERSION,
     TARGET_RUNTIME_CONFIG_NAME,
     TARGET_RUNTIME_IMAGE_ANNOTATION,
@@ -159,7 +160,15 @@ def _registration_payload(registration: JsonObject, target_image: str) -> Target
             "image": target_image,
         }
     )
-    return TargetRegisterRequest.model_validate(values)
+    payload = TargetRegisterRequest.model_validate(values)
+    if (
+        payload.cluster_role != MANAGEMENT_CLUSTER_ROLE
+        and not payload.otel_traces_endpoint.strip()
+    ):
+        payload = payload.model_copy(
+            update={"otel_traces_endpoint": TARGET_OTEL_TRACES_ENDPOINT}
+        )
+    return payload
 
 
 def _rebase_provider_queries(
@@ -211,6 +220,10 @@ def _rebase_provider_queries(
             if name not in seen_defaults:
                 rebased.append(copy.deepcopy(default_query))
         existing_provider["queries"] = rebased
+        # Target telemetry is installed as one required stack. Legacy policies
+        # carried traces.enabled=false even after Tempo gained a canonical query,
+        # which silently excluded the fourth RCA signal forever.
+        existing_provider["enabled"] = bool(default_queries)
     return AgentPolicy.model_validate(payload)
 
 
@@ -272,7 +285,7 @@ def _deployment_resource(policy: AgentPolicy, payload: TargetRegisterRequest) ->
 
 
 def _runtime_config_resource(policy: AgentPolicy, payload: TargetRegisterRequest) -> AgentPolicy:
-    """Own only the two runtime image leaves and order them before agent rollout."""
+    """Own runtime image and OTel endpoint leaves, ordered before agent rollout."""
 
     body = policy.model_dump()
     matches: list[tuple[str, int, JsonObject]] = []
@@ -299,6 +312,7 @@ def _runtime_config_resource(policy: AgentPolicy, payload: TargetRegisterRequest
         "data": {
             TARGET_AGENT_IMAGE_KEY: payload.image,
             NODE_COLLECTOR_IMAGE_KEY: payload.image,
+            "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT": payload.otel_traces_endpoint,
         },
     }
     resource = DesiredResource(
@@ -397,6 +411,11 @@ def build_target_upgrade_plan(
     settings = registration.get("settings")
     current_image = str(settings.get("image") or "") if isinstance(settings, dict) else ""
     settings_patch = {"image": image} if current_image != image else {}
+    current_otel_endpoint = (
+        str(settings.get("otel_traces_endpoint") or "") if isinstance(settings, dict) else ""
+    )
+    if current_otel_endpoint != payload.otel_traces_endpoint:
+        settings_patch["otel_traces_endpoint"] = payload.otel_traces_endpoint
     next_desired_states = target_desired_state_rows(payload, desired_states)
     normalized_existing = sorted(desired_states, key=lambda item: str(item.get("component")))
     desired_changed = next_desired_states != normalized_existing

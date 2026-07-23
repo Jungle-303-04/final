@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from dataclasses import dataclass
 
 import httpx
 from providers import (
@@ -26,6 +27,14 @@ from packages.contracts.event_bus.interfaces import JsonObject
 TRACER = get_tracer("target-cluster-agent.evidence")
 LOGGER = get_logger(__name__)
 STRICT_FAILURE_POLICY = "strict"
+COLLECTION_STATUS_KEY = "collection_status"
+COLLECTION_PROVIDERS_KEY = "providers"
+COLLECTION_COMPLETED = "completed"
+COLLECTION_PARTIAL = "partial"
+COLLECTION_UNAVAILABLE = "unavailable"
+COLLECTION_NOT_QUERIED = "not_queried"
+PROVIDER_QUERY_FAILED_REASON = "provider_query_failed"
+NO_QUERIES_CONFIGURED_REASON = "no_queries_configured"
 
 __all__ = [
     "EvidenceCollector",
@@ -36,6 +45,14 @@ __all__ = [
     "TelemetryProvider",
     "TempoTracesProvider",
 ]
+
+
+@dataclass(frozen=True)
+class ProviderCollectionOutcome:
+    """One provider payload plus non-secret collection health metadata."""
+
+    payload: ProviderResult
+    status: JsonObject
 
 
 class EvidenceCollector:
@@ -86,13 +103,17 @@ class EvidenceCollector:
     # 지정 provider(미지정 시 전체)로 evidence payload 생성.
     async def collect(self, *evidence_keys: str) -> JsonObject:
         selected_keys = self._select_provider_keys(evidence_keys)
+        statuses: dict[str, JsonObject] = {}
         with TRACER.start_payload_span(
             "evidence.collect",
             namespace="evidence",
             expected_fields=selected_keys,
         ) as evidence:
             for evidence_key in selected_keys:
-                evidence[evidence_key] = await self._collect_provider(evidence_key)
+                outcome = await self._collect_provider_outcome(evidence_key)
+                evidence[evidence_key] = outcome.payload
+                statuses[evidence_key] = outcome.status
+            evidence[COLLECTION_STATUS_KEY] = collection_status_payload(statuses)
             return evidence
 
     async def collect_query_policy(
@@ -104,12 +125,16 @@ class EvidenceCollector:
     ) -> JsonObject:
         provider = self.providers[evidence_key]
         queries = tuple(definition.to_provider_query() for definition in definitions)
+        outcome = await self._collect_with_queries_outcome(
+            provider,
+            queries,
+            propagate_errors=failure_policy == STRICT_FAILURE_POLICY,
+        )
         return {
-            evidence_key: await self._collect_with_queries(
-                provider,
-                queries,
-                propagate_errors=failure_policy == STRICT_FAILURE_POLICY,
-            )
+            evidence_key: outcome.payload,
+            COLLECTION_STATUS_KEY: collection_status_payload(
+                {evidence_key: outcome.status}
+            ),
         }
 
     def _select_provider_keys(self, requested_keys: tuple[str, ...]) -> tuple[str, ...]:
@@ -123,6 +148,13 @@ class EvidenceCollector:
 
     async def _collect_provider(self, evidence_key: str) -> ProviderResult:
         return await self._collect_with_provider(self.providers[evidence_key])
+
+    async def _collect_provider_outcome(
+        self,
+        evidence_key: str,
+    ) -> ProviderCollectionOutcome:
+        provider = self.providers[evidence_key]
+        return await self._collect_with_queries_outcome(provider, provider.queries)
 
     async def run_query(self, definition: TelemetryQueryDefinition) -> ProviderResult:
         provider = self._provider_for_source(definition.source)
@@ -142,9 +174,37 @@ class EvidenceCollector:
         *,
         propagate_errors: bool = False,
     ) -> ProviderResult:
+        outcome = await self._collect_with_queries_outcome(
+            provider,
+            queries,
+            propagate_errors=propagate_errors,
+        )
+        return outcome.payload
+
+    async def _collect_with_queries_outcome(
+        self,
+        provider: TelemetryProvider,
+        queries: tuple[object, ...],
+        *,
+        propagate_errors: bool = False,
+    ) -> ProviderCollectionOutcome:
         with TRACER.start_as_current_span(provider.span_name) as span:
             span.count(provider.query_count_attribute, queries)
-            partial_failure = False
+            query_count = len(queries)
+            completed_query_count = 0
+            failed_query_count = 0
+            if query_count == 0:
+                return ProviderCollectionOutcome(
+                    payload=provider.build_response(provider.empty_results()),
+                    status=provider_collection_status(
+                        provider,
+                        state=COLLECTION_NOT_QUERIED,
+                        query_count=0,
+                        completed_query_count=0,
+                        failed_query_count=0,
+                        reason_codes=(NO_QUERIES_CONFIGURED_REASON,),
+                    ),
+                )
             try:
                 async with httpx.AsyncClient(timeout=provider.timeout_seconds) as client:
                     results = provider.empty_results()
@@ -153,10 +213,11 @@ class EvidenceCollector:
                         try:
                             payload = await provider.query(client, telemetry_query)
                             provider.append_result(results, telemetry_query, payload)
+                            completed_query_count += 1
                         except Exception as exc:
                             if propagate_errors:
                                 raise
-                            partial_failure = True
+                            failed_query_count += 1
                             span.error(exc)
                             LOGGER.warning(
                                 provider.failure_message,
@@ -170,8 +231,28 @@ class EvidenceCollector:
                             )
 
                 span.count(provider.result_count_attribute, results)
-                span.flag(f"{provider.source}.fallback_used", partial_failure)
-                return provider.build_response(results)
+                span.flag(f"{provider.source}.fallback_used", failed_query_count > 0)
+                state = (
+                    COLLECTION_COMPLETED
+                    if failed_query_count == 0
+                    else COLLECTION_PARTIAL
+                    if completed_query_count > 0
+                    else COLLECTION_UNAVAILABLE
+                )
+                reason_codes = (
+                    (PROVIDER_QUERY_FAILED_REASON,) if failed_query_count > 0 else ()
+                )
+                return ProviderCollectionOutcome(
+                    payload=provider.build_response(results),
+                    status=provider_collection_status(
+                        provider,
+                        state=state,
+                        query_count=query_count,
+                        completed_query_count=completed_query_count,
+                        failed_query_count=failed_query_count,
+                        reason_codes=reason_codes,
+                    ),
+                )
 
             except Exception as exc:
                 span.error(exc)
@@ -183,7 +264,63 @@ class EvidenceCollector:
                 )
                 if propagate_errors:
                     raise
-                return provider.build_response(provider.empty_results())
+                return ProviderCollectionOutcome(
+                    payload=provider.build_response(provider.empty_results()),
+                    status=provider_collection_status(
+                        provider,
+                        state=COLLECTION_UNAVAILABLE,
+                        query_count=query_count,
+                        completed_query_count=completed_query_count,
+                        failed_query_count=max(
+                            failed_query_count,
+                            query_count - completed_query_count,
+                        ),
+                        reason_codes=(PROVIDER_QUERY_FAILED_REASON,),
+                    ),
+                )
+
+
+def provider_collection_status(
+    provider: TelemetryProvider,
+    *,
+    state: str,
+    query_count: int,
+    completed_query_count: int,
+    failed_query_count: int,
+    reason_codes: tuple[str, ...],
+) -> JsonObject:
+    """Build bounded status metadata without leaking exception or endpoint details."""
+    return {
+        "status": state,
+        "source": provider.source,
+        "query_count": query_count,
+        "completed_query_count": completed_query_count,
+        "failed_query_count": failed_query_count,
+        "reason_codes": list(reason_codes),
+    }
+
+
+def collection_status_payload(statuses: dict[str, JsonObject]) -> JsonObject:
+    """Summarize per-provider health while preserving the existing evidence buckets."""
+    completed = sorted(
+        key for key, status in statuses.items() if status.get("status") == COLLECTION_COMPLETED
+    )
+    partial = sorted(
+        key for key, status in statuses.items() if status.get("status") == COLLECTION_PARTIAL
+    )
+    failed = sorted(
+        key
+        for key, status in statuses.items()
+        if status.get("status") in {COLLECTION_UNAVAILABLE, COLLECTION_NOT_QUERIED}
+    )
+    return {
+        "complete": len(completed) == len(statuses),
+        "completed_providers": completed,
+        "partial_providers": partial,
+        "failed_providers": failed,
+        "pending_providers": [],
+        COLLECTION_PROVIDERS_KEY: statuses,
+    }
 
 
 def telemetry_query_name(telemetry_query: object) -> str:

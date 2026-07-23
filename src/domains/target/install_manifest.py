@@ -20,6 +20,10 @@ from packages.config.security import (
 )
 from packages.contracts.gateway.requests import DEFAULT_OTEL_SERVICE_NAME, TargetRegisterRequest
 from packages.contracts.target import (
+    CONTROL_PRIORITY_CLASS_NAME,
+    FAST_LANE_NODE_LABEL_KEY,
+    FAST_LANE_NODE_LABEL_VALUE,
+    FAST_LANE_PRIORITY_CLASS_NAME,
     NODE_COLLECTOR_IMAGE_KEY,
     NODE_COLLECTOR_READ_CLUSTER_ROLE_BINDING_NAME,
     NODE_COLLECTOR_READ_CLUSTER_ROLE_NAME,
@@ -30,11 +34,6 @@ from packages.contracts.target import (
     TARGET_RBAC_MANIFEST_VERSION,
     TARGET_RBAC_VERSION_ANNOTATION,
 )
-
-CONTROL_PRIORITY_CLASS_NAME = "gitops-control-critical"
-FAST_LANE_PRIORITY_CLASS_NAME = "gitops-demo-fast"
-FAST_LANE_NODE_LABEL_KEY = "workload-tier"
-FAST_LANE_NODE_LABEL_VALUE = "demo-fast"
 
 
 def yaml_string(value: str) -> str:
@@ -378,10 +377,6 @@ rules:
     resources: ["clusterrolebindings"]
     resourceNames: ["cluster-agent-uninstall"]
     verbs: ["patch"]
-  - apiGroups: ["scheduling.k8s.io"]
-    resources: ["priorityclasses"]
-    resourceNames: ["gitops-control-critical", "gitops-demo-fast"]
-    verbs: ["delete"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

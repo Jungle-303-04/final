@@ -588,6 +588,26 @@ jobs:
           uv run python scripts/verify_dev_auth_bypass.py rendered \
             --manifest "${RUNNER_TEMP}/management.yaml"
 
+      - name: Reconcile shared management scheduling
+        if: steps.release_lease.outputs.mode == 'deploy'
+        shell: bash
+        run: |
+          set -euo pipefail
+          diff_exit=0
+          kubectl --context "${MGMT_CONTEXT}" diff \
+            --field-manager=opsia-dev-deploy \
+            --filename deploy/management/scheduling.yaml || diff_exit=$?
+          case "${diff_exit}" in
+            0|1) ;;
+            *) echo "management scheduling server-side diff failed" >&2; exit "${diff_exit}" ;;
+          esac
+          kubectl --context "${MGMT_CONTEXT}" apply \
+            --field-manager=opsia-dev-deploy \
+            --filename deploy/management/scheduling.yaml
+          kubectl --context "${MGMT_CONTEXT}" get \
+            priorityclass/gitops-control-critical >/dev/null
+          unset diff_exit
+
       - name: Run pre-deploy smoke
         id: pre_smoke
         if: steps.release_lease.outputs.mode == 'deploy'

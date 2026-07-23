@@ -34,6 +34,7 @@ TARGET_RBAC_VERSION_ANNOTATION = "opsia.dev/target-rbac-version"
 TARGET_RUNTIME_CONFIG_NAME = "target-runtime-config"
 TARGET_AGENT_IMAGE_KEY = "TARGET_AGENT_IMAGE"
 NODE_COLLECTOR_IMAGE_KEY = "NODE_COLLECTOR_IMAGE"
+TARGET_OTEL_TRACES_ENDPOINT = "http://opentelemetry-collector.target.svc:4318/v1/traces"
 TARGET_RUNTIME_IMAGE_ANNOTATION = "opsia.dev/runtime-image"
 TARGET_IMAGE_DIGEST_PATTERN = re.compile(r"^[A-Za-z0-9._:/-]+@sha256:[0-9a-f]{64}$")
 

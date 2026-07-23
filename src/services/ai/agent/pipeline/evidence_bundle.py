@@ -36,6 +36,10 @@ MAX_TEXT_LENGTH = 1600
 MAX_METRIC_RESULTS = 12
 MAX_METRIC_SERIES = 8
 MAX_TRACE_RESULTS = 12
+COLLECTION_STATUS_METADATA_KEY = "collection_status"
+COLLECTION_PROVIDERS_KEY = "providers"
+COLLECTION_UNAVAILABLE_STATES = {"unavailable", "not_queried"}
+NO_PROVIDER_RESULTS_REASON = "no_provider_results"
 
 
 def extract_resource(kubernetes: dict) -> tuple[str, str, str | None]:
@@ -61,7 +65,7 @@ def build_incident_evidence_bundle(
         items=items,
         missing_evidence=missing_evidence,
         complete=not missing_evidence,
-        missing_evidence_checks=missing_source_checks(missing_evidence),
+        missing_evidence_checks=missing_source_checks(missing_evidence, evt),
     )
 
 
@@ -225,16 +229,97 @@ def enrich_lineage_from_logs(lineage: dict, entries: list[dict]) -> dict:
     return lineage
 
 
-def missing_source_checks(missing_evidence: list[str]) -> list[MissingEvidenceCheck]:
-    return [
-        MissingEvidenceCheck(
-            check_id=f"evidence:{source}:required",
-            source=source,
-            status="missing",
-            reason=f"{source} evidence query/check must complete before RCA can be finalized.",
+def missing_source_checks(
+    missing_evidence: list[str],
+    evt: EvidenceSource | None = None,
+) -> list[MissingEvidenceCheck]:
+    checks: list[MissingEvidenceCheck] = []
+    for source in missing_evidence:
+        status = provider_collection_status(evt, source) if evt is not None else {}
+        state = str(status.get("status") or "")
+        raw_reason_codes = status.get("reason_codes")
+        reason_codes = [
+            value
+            for value in raw_reason_codes
+            if isinstance(value, str) and value
+        ] if isinstance(raw_reason_codes, list) else []
+        if state in COLLECTION_UNAVAILABLE_STATES or state == "partial":
+            reason_suffix = f" ({', '.join(reason_codes)})" if reason_codes else ""
+            check_status = state
+            reason = f"{source} evidence collection is {state}{reason_suffix}."
+        elif evt is not None and legacy_empty_telemetry_source(evt, source):
+            check_status = "unavailable"
+            reason = f"{source} evidence collection is unavailable ({NO_PROVIDER_RESULTS_REASON})."
+        else:
+            check_status = "missing"
+            reason = f"{source} evidence query/check must complete before RCA can be finalized."
+        checks.append(
+            MissingEvidenceCheck(
+                check_id=f"evidence:{source}:required",
+                source=source,
+                status=check_status,
+                reason=reason,
+            )
         )
-        for source in missing_evidence
-    ]
+    return checks
+
+
+def evidence_collection_status(evt: EvidenceSource) -> dict:
+    if isinstance(evt, ClusterEvidenceReceivedBody):
+        return evt.collection_status
+    value = evt.metadata.get(COLLECTION_STATUS_METADATA_KEY)
+    return value if isinstance(value, dict) else {}
+
+
+def provider_collection_status(evt: EvidenceSource | None, source: str) -> dict:
+    if evt is None:
+        return {}
+    providers = evidence_collection_status(evt).get(COLLECTION_PROVIDERS_KEY)
+    if not isinstance(providers, dict):
+        return {}
+    value = providers.get(source)
+    return value if isinstance(value, dict) else {}
+
+
+def source_evidence_available(evt: EvidenceSource, source: str) -> bool:
+    state = provider_collection_status(evt, source).get("status")
+    if state in COLLECTION_UNAVAILABLE_STATES:
+        return False
+    payload = source_payload(evt, source)
+    if source == "logs":
+        return isinstance(payload, list) and bool(payload)
+    if not isinstance(payload, dict):
+        return False
+    if source == "metrics":
+        alertmanager = payload.get("alertmanager")
+        if isinstance(alertmanager, dict) and bool(alertmanager):
+            return True
+        if payload.get("source") == "prometheus" or "results" in payload:
+            results = payload.get("results")
+            return isinstance(results, dict) and bool(results)
+    if source == "traces" and (
+        payload.get("source") == "tempo" or "results" in payload
+    ):
+        results = payload.get("results")
+        return isinstance(results, dict) and bool(results)
+    return any(
+        value not in (None, "", [], {})
+        for key, value in payload.items()
+        if key != EVIDENCE_LINEAGE_KEY
+    )
+
+
+def legacy_empty_telemetry_source(evt: EvidenceSource, source: str) -> bool:
+    if source not in {"metrics", "traces"}:
+        return False
+    payload = source_payload(evt, source)
+    if not isinstance(payload, dict):
+        return False
+    expected_source = "prometheus" if source == "metrics" else "tempo"
+    if payload.get("source") != expected_source and "results" not in payload:
+        return False
+    results = payload.get("results")
+    return isinstance(results, dict) and not results
 
 
 # Loki 정규화 payload 의 stream 라벨 중 네임스페이스로 인정하는 키.
@@ -586,7 +671,7 @@ def collect_evidence_items(evt: EvidenceSource) -> list[EvidenceItem]:
         f"{resource_name}에서 {symptom} 증상이 보고되었습니다."
     )
 
-    if evt.kubernetes:
+    if source_evidence_available(evt, "kubernetes"):
         items.append(
             evidence_item(
                 evt,
@@ -601,7 +686,7 @@ def collect_evidence_items(evt: EvidenceSource) -> list[EvidenceItem]:
                 summary=f"{target_summary} Kubernetes 상태 근거입니다.",
             )
         )
-    if evt.metrics:
+    if source_evidence_available(evt, "metrics"):
         items.append(
             evidence_item(
                 evt,
@@ -611,10 +696,14 @@ def collect_evidence_items(evt: EvidenceSource) -> list[EvidenceItem]:
                 summary=f"{target_summary} Metric snapshot 근거입니다.",
             )
         )
-    log_entries = select_incident_log_entries(
-        evt.logs,
-        namespace,
-        pod_names=rca_test_pod_names(evt.metadata),
+    log_entries = (
+        select_incident_log_entries(
+            evt.logs,
+            namespace,
+            pod_names=rca_test_pod_names(evt.metadata),
+        )
+        if source_evidence_available(evt, "logs")
+        else []
     )
     if log_entries:
         items.append(
@@ -626,7 +715,7 @@ def collect_evidence_items(evt: EvidenceSource) -> list[EvidenceItem]:
                 summary=f"{target_summary} Log tail 근거입니다.",
             )
         )
-    if evt.traces:
+    if source_evidence_available(evt, "traces"):
         items.append(
             evidence_item(
                 evt,

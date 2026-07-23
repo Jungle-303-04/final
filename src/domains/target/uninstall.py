@@ -33,7 +33,7 @@ from packages.contracts.target import (
     TARGET_NAMESPACE,
 )
 
-UNINSTALL_CONTRACT_VERSION = 1
+UNINSTALL_CONTRACT_VERSION = 2
 UNINSTALL_PRIORITY = 1_000
 UNINSTALL_COMMAND_REFERENCE = Command.CLUSTER_AGENT_UNINSTALL_ACTION
 
@@ -171,8 +171,6 @@ PRE_ACK_CLUSTER_CLEANUP = (
         "rbac.authorization.k8s.io", "v1", "clusterrolebindings", "cluster-agent-read"
     ),
     ClusterCleanupResource("rbac.authorization.k8s.io", "v1", "clusterroles", "cluster-agent-read"),
-    ClusterCleanupResource("scheduling.k8s.io", "v1", "priorityclasses", "gitops-control-critical"),
-    ClusterCleanupResource("scheduling.k8s.io", "v1", "priorityclasses", "gitops-demo-fast"),
 )
 FINAL_AGENT_DEPLOYMENT = NamespacedCleanupResource(
     "apps", "v1", TARGET_NAMESPACE, "deployments", "cluster-agent"

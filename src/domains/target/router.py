@@ -129,6 +129,7 @@ from packages.contracts.integrations import PrometheusIntegrationUpdateRequest
 from packages.contracts.target import (
     SANDBOX_NAMESPACE,
     TARGET_NAMESPACE,
+    TARGET_OTEL_TRACES_ENDPOINT,
     TARGET_RBAC_MANIFEST_VERSION,
 )
 from packages.events.envelope import event
@@ -221,7 +222,7 @@ CLUSTER_NOT_FOUND = "cluster not found"
 TEST_FIXTURE_PURGE_FORBIDDEN_CODE = "test_fixture_purge_forbidden"
 TEST_FIXTURE_PURGE_UNSUPPORTED_CODE = "test_fixture_purge_unsupported"
 DEFAULT_PROMETHEUS_URL = "http://prometheus.target.svc.cluster.local:9090"
-DEFAULT_OTEL_TRACES_URL = "http://opentelemetry-collector.target.svc:4318/v1/traces"
+DEFAULT_OTEL_TRACES_URL = TARGET_OTEL_TRACES_ENDPOINT
 INSTALL_ARTIFACT_ROOT = Path(__file__).resolve().parents[3]
 INSTALL_TELEMETRY_SCRIPTS = {
     "bash": INSTALL_ARTIFACT_ROOT / "scripts" / "install-telemetry.sh",

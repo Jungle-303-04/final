@@ -23,6 +23,27 @@ TERMINAL_EVIDENCE_JOB_STATUSES = {
     EVIDENCE_JOB_STATUS_COMPLETED,
     EVIDENCE_JOB_STATUS_FAILED,
 }
+COLLECTION_STATUS_KEY = "collection_status"
+COLLECTION_PROVIDERS_KEY = "providers"
+COLLECTION_COMPLETED = "completed"
+COLLECTION_PARTIAL = "partial"
+COLLECTION_UNAVAILABLE = "unavailable"
+COLLECTION_NOT_QUERIED = "not_queried"
+COLLECTION_STATES = {
+    COLLECTION_COMPLETED,
+    COLLECTION_PARTIAL,
+    COLLECTION_UNAVAILABLE,
+    COLLECTION_NOT_QUERIED,
+}
+COLLECTION_COUNT_FIELDS = (
+    "query_count",
+    "completed_query_count",
+    "failed_query_count",
+)
+MAX_COLLECTION_REASON_CODES = 8
+MAX_COLLECTION_REASON_CODE_LENGTH = 120
+NO_PROVIDER_RESULTS_REASON = "no_provider_results"
+PROVIDER_JOB_FAILED_REASON = "provider_job_failed"
 
 
 def evidence_key(
@@ -61,12 +82,63 @@ def normalize_evidence_provider_result(provider_key: str, result: JsonObject) ->
     증거 본문으로 승격하지 않는다.
     """
     if provider_key in result:
-        return {provider_key: result[provider_key]}
-    return {provider_key: result}
+        normalized: JsonObject = {provider_key: result[provider_key]}
+    else:
+        # Legacy agents may send the provider bucket directly. In particular,
+        # Kubernetes uses its own nested ``collection_status`` for API coverage,
+        # so preserve that bucket verbatim instead of confusing it with the
+        # new top-level provider-health envelope.
+        normalized = {provider_key: result}
+    provider_status = normalized_provider_collection_status(provider_key, result)
+    if provider_status:
+        normalized[COLLECTION_STATUS_KEY] = {
+            COLLECTION_PROVIDERS_KEY: {provider_key: provider_status}
+        }
+    return normalized
+
+
+def normalized_provider_collection_status(
+    provider_key: str,
+    result: JsonObject,
+) -> JsonObject:
+    """Accept only the leased provider's bounded status fields."""
+    collection_status = result.get(COLLECTION_STATUS_KEY)
+    if not isinstance(collection_status, dict):
+        return {}
+    providers = collection_status.get(COLLECTION_PROVIDERS_KEY)
+    if not isinstance(providers, dict):
+        return {}
+    raw_status = providers.get(provider_key)
+    if not isinstance(raw_status, dict):
+        return {}
+    state = raw_status.get("status")
+    if state not in COLLECTION_STATES:
+        return {}
+    normalized: JsonObject = {"status": state}
+    source = raw_status.get("source")
+    if isinstance(source, str) and source:
+        normalized["source"] = source[:MAX_COLLECTION_REASON_CODE_LENGTH]
+    for field_name in COLLECTION_COUNT_FIELDS:
+        value = raw_status.get(field_name)
+        if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+            normalized[field_name] = value
+    reason_codes = raw_status.get("reason_codes")
+    if isinstance(reason_codes, list):
+        normalized["reason_codes"] = [
+            reason[:MAX_COLLECTION_REASON_CODE_LENGTH]
+            for reason in reason_codes[:MAX_COLLECTION_REASON_CODES]
+            if isinstance(reason, str) and reason
+        ]
+    return normalized
 
 
 def merge_evidence_provider_payload(payload: JsonObject, provider_payload: JsonObject) -> None:
     """Merge one provider payload without dropping existing metadata keys."""
+    provider_payload = {
+        key: value
+        for key, value in provider_payload.items()
+        if key != COLLECTION_STATUS_KEY
+    }
     provider_metadata = provider_payload.get("metadata")
     if isinstance(provider_metadata, dict):
         current_metadata = payload.get("metadata")
@@ -122,17 +194,115 @@ def aggregate_evidence_payload(rows: list[JsonObject]) -> JsonObject | None:
                 if normalized_names:
                     rca_test_metadata["pod_names"] = list(dict.fromkeys(normalized_names))[:32]
             payload["metadata"] = {"rca_test": rca_test_metadata}
+    provider_statuses: dict[str, JsonObject] = {}
     for row in rows:
         provider_key = str(row["provider_key"])
         if row["status"] == EVIDENCE_JOB_STATUS_COMPLETED and isinstance(row["result"], dict):
+            normalized_result = normalize_evidence_provider_result(provider_key, row["result"])
+            provider_payload = normalized_result.get(provider_key)
+            reported_status = normalized_provider_collection_status(
+                provider_key,
+                normalized_result,
+            )
             merge_evidence_provider_payload(
                 payload,
-                normalize_evidence_provider_result(provider_key, row["result"]),
+                normalized_result,
+            )
+            provider_statuses[provider_key] = resolved_provider_collection_status(
+                provider_key,
+                provider_payload,
+                reported_status,
             )
         elif row["status"] == EVIDENCE_JOB_STATUS_FAILED:
             payload.setdefault(provider_key, empty_provider_payload(provider_key))
+            provider_statuses[provider_key] = {
+                "status": COLLECTION_UNAVAILABLE,
+                "reason_codes": [PROVIDER_JOB_FAILED_REASON],
+            }
+    payload[COLLECTION_STATUS_KEY] = aggregate_collection_status(provider_statuses)
     promote_release_target(payload, release_context)
     return payload
+
+
+def resolved_provider_collection_status(
+    provider_key: str,
+    provider_payload: object,
+    reported_status: JsonObject,
+) -> JsonObject:
+    """Reconcile agent status with actual payload, conservatively handling legacy agents."""
+    has_results = provider_payload_has_results(provider_key, provider_payload)
+    state = reported_status.get("status")
+    if state in {COLLECTION_UNAVAILABLE, COLLECTION_NOT_QUERIED}:
+        return dict(reported_status)
+    if not has_results:
+        status = dict(reported_status)
+        status["status"] = COLLECTION_UNAVAILABLE
+        status["reason_codes"] = merge_reason_codes(
+            status.get("reason_codes"),
+            NO_PROVIDER_RESULTS_REASON,
+        )
+        return status
+    if state in {COLLECTION_COMPLETED, COLLECTION_PARTIAL}:
+        return dict(reported_status)
+    return {"status": COLLECTION_COMPLETED, "reason_codes": []}
+
+
+def provider_payload_has_results(provider_key: str, provider_payload: object) -> bool:
+    """Distinguish successful empty query results from an unqueried empty envelope."""
+    if provider_key == "logs":
+        return isinstance(provider_payload, list) and bool(provider_payload)
+    if not isinstance(provider_payload, dict):
+        return False
+    if provider_key == "metrics":
+        alertmanager = provider_payload.get("alertmanager")
+        if isinstance(alertmanager, dict) and bool(alertmanager):
+            return True
+        if provider_payload.get("source") == "prometheus" or "results" in provider_payload:
+            results = provider_payload.get("results")
+            return isinstance(results, dict) and bool(results)
+    if provider_key == "traces" and (
+        provider_payload.get("source") == "tempo" or "results" in provider_payload
+    ):
+        results = provider_payload.get("results")
+        return isinstance(results, dict) and bool(results)
+    return any(
+        value not in (None, "", [], {})
+        for key, value in provider_payload.items()
+        if key != "_lineage"
+    )
+
+
+def merge_reason_codes(current: object, reason: str) -> list[str]:
+    values = (
+        [value for value in current if isinstance(value, str) and value]
+        if isinstance(current, list)
+        else []
+    )
+    if reason not in values:
+        values.append(reason)
+    return values[:MAX_COLLECTION_REASON_CODES]
+
+
+def aggregate_collection_status(statuses: dict[str, JsonObject]) -> JsonObject:
+    completed = sorted(
+        key for key, status in statuses.items() if status.get("status") == COLLECTION_COMPLETED
+    )
+    partial = sorted(
+        key for key, status in statuses.items() if status.get("status") == COLLECTION_PARTIAL
+    )
+    failed = sorted(
+        key
+        for key, status in statuses.items()
+        if status.get("status") in {COLLECTION_UNAVAILABLE, COLLECTION_NOT_QUERIED}
+    )
+    return {
+        "complete": len(completed) == len(statuses),
+        "completed_providers": completed,
+        "partial_providers": partial,
+        "failed_providers": failed,
+        "pending_providers": [],
+        COLLECTION_PROVIDERS_KEY: statuses,
+    }
 
 
 def common_release_context(rows: list[JsonObject]) -> JsonObject:

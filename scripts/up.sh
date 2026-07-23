@@ -636,6 +636,7 @@ MANAGEMENT_APP_OVERLAY="${RUNTIME_DIR}/management-app-kustomization"
 mkdir -p "${MANAGEMENT_INFRA_OVERLAY}" "${MANAGEMENT_APP_OVERLAY}"
 cp \
   "${ROOT_DIR}/deploy/management/namespace.yaml" \
+  "${ROOT_DIR}/deploy/management/scheduling.yaml" \
   "${ROOT_DIR}/deploy/management/storage.yaml" \
   "${ROOT_DIR}/deploy/management/pgbouncer.yaml" \
   "${ROOT_DIR}/deploy/management/nats.yaml" \
@@ -654,6 +655,7 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - namespace.yaml
+  - scheduling.yaml
   - storage.yaml
   - pgbouncer.yaml
   - nats.yaml

@@ -25,6 +25,11 @@ class EvidenceBuilder:
 
     def build_evidence(self, evt: ClusterEvidenceReceivedBody, correlation_id: str) -> Evidence:
         evidence_ref = f"{self.defaults.object_ref_prefix}/{correlation_id}.json"
+        metadata = dict(evt.metadata)
+        if evt.collection_status:
+            # Evidence wire 계약에 필드를 추가하면 구버전 strict consumer가 DLQ로
+            # 보낼 수 있으므로 기존 metadata 확장점에 수집 상태를 보존한다.
+            metadata["collection_status"] = dict(evt.collection_status)
         return Evidence(
             cluster_id=evt.cluster_id,
             kubernetes=with_lineage(evt.kubernetes, lineage_for(evt, "kubernetes")),
@@ -35,7 +40,7 @@ class EvidenceBuilder:
                 if isinstance(entry, dict)
             ],
             traces=with_lineage(evt.traces, lineage_for(evt, "traces")),
-            metadata=with_lineage(evt.metadata, lineage_for(evt, "metadata")),
+            metadata=with_lineage(metadata, lineage_for(evt, "metadata")),
             object_ref=evidence_ref,
             workspace_id=evt.workspace_id,
         )
