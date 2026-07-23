@@ -901,7 +901,7 @@ function PodRow({ pod, onClick, onTip }: {
 
 // ── 앱 ─────────────────────────────
 // embedded: 셸(통합 리소스)에 내장될 때 자체 헤더·내비를 숨기고 스코프 변화를 알림
-export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOpenRca, lensTab, onAddCluster, onAddRepo, onOpenRepository, stickyTop, initialCluster, selectedNamespace = null, pendingClusters, pendingRepos, connectedRepos, repositoryGroups, onRepositoryDisconnected }: {
+export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOpenRca, lensTab, onAddCluster, onAddRepo, onOpenRepository, stickyTop, viewportTopInset = 0, initialCluster, selectedNamespace = null, pendingClusters, pendingRepos, connectedRepos, repositoryGroups, onRepositoryDisconnected }: {
   embedded?: boolean;
   onScopeChange?: (v: View) => void;
   /** 임베드 모드: 파드 클릭 시 셸의 통합 상세 오버레이를 연다 (내부 패널 대신) */
@@ -917,6 +917,8 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
   onOpenRepository?: (repositoryRef: string) => void;
   /** 탐색 패널 고정 오프셋(CSS px) — 셸 sticky 헤더 바로 아래 */
   stickyTop?: number;
+  /** 임베드된 셸의 고정 헤더 높이. 보조 패널의 가용 높이 계산에 사용한다. */
+  viewportTopInset?: number;
   /** 홈 카드 클릭 등 외부 진입 시 해당 클러스터 노드 뷰로 시작 (스코프 전달 — D21) */
   initialCluster?: string;
   /** 셸 네임스페이스 선택값. null이면 클러스터의 모든 네임스페이스를 본다. */
@@ -1030,7 +1032,7 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
     : 8;
 
   return (
-    <div className="op">
+    <div className="op" data-embedded={embedded ? "true" : "false"}>
       <div style={{ width: embedded ? "100%" : 1220, maxWidth: "100%", margin: "0 auto", padding: embedded ? 0 : "32px 24px 48px" }}>
         {!embedded && (
         <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
@@ -1203,7 +1205,7 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
                     ) : nodePods.length === 0 ? (
                       <EmptyState icon={<Box size={18} strokeWidth={1.75} />} label="관측된 파드가 없습니다"
                         hint="이 노드에 귀속된 파드가 아직 관측되지 않았습니다." flush />
-                    ) : (<div style={{ maxHeight: 480, overflowY: "auto", scrollbarGutter: "stable", overscrollBehavior: "contain" }}>
+                    ) : (<div style={embedded ? undefined : { maxHeight: 480, overflowY: "auto", scrollbarGutter: "stable", overscrollBehavior: "contain" }}>
                       <div style={{ display: "grid", gridTemplateColumns: "12px minmax(160px,1.8fr) minmax(90px,1fr) 92px 96px", alignItems: "center", gap: 12, padding: "0 10px 7px", borderBottom: `1px solid ${UI.line}`, fontSize: TYPE.caption, fontWeight: 600, letterSpacing: "0.07em", color: UI.ink3 }}>
                         <span /><span>파드</span><span>네임스페이스</span><span>상태</span><span>헬스</span>
                       </div>
@@ -1219,6 +1221,7 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
 
           <SidePanel key={lensTab ?? "default"} forcedTab={lensTab ?? null} scaled={embedded}
             onAddRepo={onAddRepo} onOpenRepository={onOpenRepository} stickyTop={stickyTop}
+            viewportTopInset={viewportTopInset}
             activeCluster={activeCluster} selectedNamespace={selectedNamespace}
             onHighlightTarget={setPodHighlightTarget}
             pendingRepos={pendingRepos} connectedRepos={connectedRepos}
@@ -1278,7 +1281,8 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
 
       <style>{`
         html, body { background: ${UI.bg}; }
-        .op { min-height: 100vh; background: ${UI.bg}; font-family: var(--font-sans); font-weight: var(--font-weight-body); -webkit-font-smoothing: antialiased; }
+        .op { background: ${UI.bg}; font-family: var(--font-sans); font-weight: var(--font-weight-body); -webkit-font-smoothing: antialiased; }
+        .op:not([data-embedded="true"]) { min-height: 100vh; }
         .op .opsia-content-layout { container: opsia-content / inline-size; }
         .op .opsia-main-pane { container: opsia-main / inline-size; }
         .op .node-slot-grid { justify-content: start; }
@@ -1417,12 +1421,13 @@ function PodSkeleton() {
 
 // ── 우측 패널 ─────────────────────────────
 // 서비스/구성 탭은 현재 드릴된 클러스터/네임스페이스 범위의 read-only projection을 보여준다.
-function SidePanel({ forcedTab, scaled, onAddRepo, onOpenRepository, stickyTop, activeCluster, selectedNamespace, onHighlightTarget, pendingRepos, connectedRepos, repositoryGroups, onRepositoryDisconnected }: {
+function SidePanel({ forcedTab, scaled, onAddRepo, onOpenRepository, stickyTop, viewportTopInset = 0, activeCluster, selectedNamespace, onHighlightTarget, pendingRepos, connectedRepos, repositoryGroups, onRepositoryDisconnected }: {
   forcedTab?: "svc" | "cfg" | "git" | null;
   scaled?: boolean;
   onAddRepo?: () => void;
   onOpenRepository?: (repositoryRef: string) => void;
   stickyTop?: number;
+  viewportTopInset?: number;
   activeCluster?: string | null;
   selectedNamespace?: string | null;
   onHighlightTarget?: (target: PodHighlightTarget | null) => void;
@@ -1433,7 +1438,7 @@ function SidePanel({ forcedTab, scaled, onAddRepo, onOpenRepository, stickyTop, 
 }) {
   const [tab, setTab] = useState<"svc" | "cfg" | "git">(forcedTab ?? "svc");
   return (
-    <aside className="opsia-side-panel" style={{ width: 270, flexShrink: 0, alignSelf: "flex-start", background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 16, position: "static", top: stickyTop ?? 24, height: scaled ? `calc(100vh / ${PRESENT_SCALE} - ${(stickyTop ?? 24) + 16}px)` : "calc(100vh - 60px)", maxHeight: scaled ? `calc(100vh / ${PRESENT_SCALE} - ${(stickyTop ?? 24) + 16}px)` : "calc(100vh - 60px)", overflow: "hidden", display: "flex" }}>
+    <aside className="opsia-side-panel" style={{ width: 270, flexShrink: 0, alignSelf: "flex-start", background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 16, position: "sticky", top: stickyTop ?? 24, height: scaled ? `calc(100vh / ${PRESENT_SCALE} - ${viewportTopInset + (stickyTop ?? 24) + 16}px)` : "calc(100vh - 60px)", maxHeight: scaled ? `calc(100vh / ${PRESENT_SCALE} - ${viewportTopInset + (stickyTop ?? 24) + 16}px)` : "calc(100vh - 60px)", overflow: "hidden", display: "flex" }}>
     <div style={{ flex: 1, minWidth: 0, minHeight: 0, padding: "14px 6px 14px 14px", display: "flex", flexDirection: "column", gap: 12, overflow: "hidden" }}>
       {/* 탭이 이미 콘텐츠 종류를 설명하므로 내부에 제목을 반복하지 않는다. */}
       <div role="tablist" aria-label="인프라 보조 정보" style={{ display: "flex", gap: 3, flexShrink: 0, background: UI.bg2, borderRadius: 10, padding: 3, zIndex: 2, boxShadow: `0 6px 12px -12px ${inkA(0.3)}` }}>

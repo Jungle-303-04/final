@@ -176,7 +176,7 @@ function RepositoryRow({
             {group.repositoryRef}
           </strong>
           <span style={{ display: "block", marginTop: 2, color: summary.statusColor, fontSize: TYPE.caption, lineHeight: 1.35, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            내장 GitOps · {summary.branch} · {summary.status}
+            {summary.branch} · {summary.status}
           </span>
         </span>
         <span aria-label={`애플리케이션 ${group.applications.length}개`} style={{ flex: "0 0 auto", color: selected ? BLUE : UI.ink3, fontSize: TYPE.label, fontWeight: 700 }}>

@@ -107,6 +107,9 @@ type Cell = { t: "text" } | { t: "mono" } | { t: "ns" } | { t: "ready" } | { t: 
 type Col = { k: string; label: string; w?: string; cell: Cell };
 type Row = Record<string, unknown>;
 type TableDensity = "default" | "compact";
+// 리소스 본문의 유일한 sticky 기준선. 관점 전환 바가 이 높이를 차지하고,
+// 표 헤더와 보조 패널은 정확히 그 아래에서 고정된다.
+const RESOURCE_VIEW_STICKY_TOP = 56;
 
 const COLUMN_LABEL_KO: Record<string, string> = {
   "ACCESS MODES": "접근 모드",
@@ -441,10 +444,10 @@ function ResourceTable({ kind, rows, q, density, filterDesc = "", onClearFilter,
   const grid = spec.cols.map((c) => { const w = c.w ?? "1fr"; return w.endsWith("px") ? `minmax(48px, ${w})` : w; }).join(" ");
   const rowPad = density === "compact" ? "7px 16px" : "12px 16px";
   return (
-    /* 긴 표는 카드 안에서 세로 스크롤(헤더 고정) */
-    <div style={{ background: UI.card, border: `1px solid ${UI.line}`, borderRadius: RADIUS.card, overflowY: "auto", overflowX: "hidden", maxHeight: `min(calc(64vh / ${PRESENT_SCALE}), 680px)`, scrollbarGutter: "stable" }}>
+    /* 표는 셸 본문과 함께 스크롤한다. 카드 내부에 두 번째 세로 스크롤을 만들지 않는다. */
+    <div data-resource-table="true" style={{ background: UI.card, border: `1px solid ${UI.line}`, borderRadius: RADIUS.card, overflow: "visible" }}>
     <div>
-      <div style={{ display: "grid", gridTemplateColumns: grid, gap: 14, padding: density === "compact" ? "9px 16px" : "11px 16px", borderBottom: `1px solid ${UI.line}`, background: UI.bg2, position: "sticky", top: 0, zIndex: 2 }}>
+      <div data-resource-table-header="true" style={{ display: "grid", gridTemplateColumns: grid, gap: 14, padding: density === "compact" ? "9px 16px" : "11px 16px", borderBottom: `1px solid ${UI.line}`, background: UI.bg2, borderRadius: `${RADIUS.card}px ${RADIUS.card}px 0 0`, position: "sticky", top: RESOURCE_VIEW_STICKY_TOP, zIndex: 6, boxShadow: `0 5px 10px -10px ${inkA(0.35)}` }}>
         {/* 정렬 미구현 — 동작 없는 정렬 셰브론을 그리지 않는다(가짜 컨트롤 금지) */}
         {spec.cols.map((c) => (
           <span key={c.k} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: TYPE.caption, fontWeight: 600, letterSpacing: "0.05em", color: UI.ink3, whiteSpace: "nowrap" }}>
@@ -1247,9 +1250,9 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
 // ── 종류 탐색 — 우측 패널 '리소스' 탭 내용 (보조 사이드바를 통합·대체) ─────────────────────────────
 
 // ── 트래픽 보조 패널 — 서비스 호출 상태·포커스(D22: 세 관점 모두 같은 자리 보조 패널) ──
-function TrafficPanel({ clusterIds, focus, onFocus, onOpen, stickyTop, stacked = false }: {
+function TrafficPanel({ clusterIds, focus, onFocus, onOpen, stickyTop, viewportTopInset = 0, stacked = false }: {
   clusterIds: readonly string[]; focus: string | null; onFocus: (id: string | null) => void;
-  onOpen: (node: RelationNodeView) => void; stickyTop: number; stacked?: boolean;
+  onOpen: (node: RelationNodeView) => void; stickyTop: number; viewportTopInset?: number; stacked?: boolean;
 }) {
   // 실 관계 토폴로지(GET /api/topology?view=relations)의 서비스/워크로드 노드 — svcCatalog fixture·합성 RPS 제거.
   // 계약이 RPS/p99를 노출하지 않으므로 호출량 수치는 표기하지 않는다(관측 안 됨).
@@ -1263,7 +1266,7 @@ function TrafficPanel({ clusterIds, focus, onFocus, onOpen, stickyTop, stacked =
   const visibleRows = rows.slice(0, 40);
   const hiddenCount = Math.max(0, rows.length - visibleRows.length);
   return (
-    <aside style={{ width: stacked ? "100%" : 248, boxSizing: "border-box", flexShrink: 0, alignSelf: "flex-start", position: stacked ? "relative" : "sticky", top: stacked ? undefined : stickyTop, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: RADIUS.card, padding: 10, maxHeight: stacked ? 300 : `calc(100vh / ${PRESENT_SCALE} - ${stickyTop + 48}px)`, overflowY: "auto", scrollbarGutter: "stable", display: "flex", flexDirection: "column", gap: 2 }}>
+    <aside style={{ width: stacked ? "100%" : 248, boxSizing: "border-box", flexShrink: 0, alignSelf: "flex-start", position: stacked ? "relative" : "sticky", top: stacked ? undefined : stickyTop, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: RADIUS.card, padding: 10, maxHeight: stacked ? 300 : `calc(100vh / ${PRESENT_SCALE} - ${viewportTopInset + stickyTop + 16}px)`, overflowY: "auto", overscrollBehavior: "contain", scrollbarGutter: "stable", display: "flex", flexDirection: "column", gap: 2 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "2px 2px 7px" }}>
         <span style={{ fontSize: TYPE.body, fontWeight: 600, letterSpacing: "-0.02em", color: UI.heading }}>관계 노드</span>
         <span style={{ fontSize: TYPE.caption, color: UI.ink3 }}>{rows.length}개{topo.omittedNodeCount > 0 ? ` · ${topo.omittedNodeCount}개 생략` : ""}</span>
@@ -2618,10 +2621,25 @@ function App() {
           onOpenPod={(name) => openRef("Pod", name)}
           onPickNs={(n) => { if (nsOptions.includes(n)) setNs(n); setKindId("Pod"); setSurface("resources"); setResView("list"); }} />
       ) : (
-        <main style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: SPACE.card, padding: "12px 18px 40px" }}>
+        <main style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: SPACE.card, padding: "12px 18px 16px" }}>
           {/* ── D18 관점 세그먼트 — 한 서피스, 세 관점(지도·목록·흐름). "지도 밑 표" 구조 폐지.
                 스코프(클러스터·노드·ns·검색어)는 관점을 넘어 보존된다 ── */}
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div
+            data-resource-view-switcher="true"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              position: "sticky",
+              top: 0,
+              zIndex: 8,
+              height: RESOURCE_VIEW_STICKY_TOP,
+              boxSizing: "border-box",
+              margin: "-12px -18px 0",
+              padding: "12px 18px 8px",
+              background: UI.bg,
+            }}
+          >
             <span style={{ display: "flex", gap: 2, background: inkA(0.05), borderRadius: 9, padding: 2 }}>
               {([["map", "인프라"], ["list", "쿠버네티스"], ["flow", "트래픽"]] as const).map(([v, l]) => (
                 <button type="button" className="product-focusable product-control" aria-pressed={resView === v} key={v} onClick={() => setResView(v)}
@@ -2645,7 +2663,8 @@ function App() {
                 onAddCluster={() => setConnectModal("cluster")}
                 onAddRepo={() => setConnectModal("repo")}
                 onOpenRepository={(repositoryRef) => { setDeployRepositoryFilter(repositoryRef); setSurface("deploy"); }}
-                stickyTop={12}
+                stickyTop={RESOURCE_VIEW_STICKY_TOP + 12}
+                viewportTopInset={topH}
               />
               {/* 종류(kind) 탐색은 쿠버네티스 관점의 본문이 오너 — 인프라 뷰 패널에 같은 목록을 두 번 두지 않는다 */}
             </>
@@ -2714,7 +2733,7 @@ function App() {
               {/* 종류 선택 패널 — 지도 관점의 탐색 패널과 같은 KindIndex 하나를 공유(두 번째 구현 금지).
                   좁은 화면에서는 위 종류 select로 대체하고 사이드바를 렌더하지 않아 표를 가리지 않는다. */}
               {!narrowList && (
-              <aside style={{ width: 248, flexShrink: 0, alignSelf: "flex-start", position: "sticky", top: 12, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: RADIUS.card, padding: 10, maxHeight: `calc(100vh / ${PRESENT_SCALE} - ${topH + 60}px)`, overflowY: "auto", scrollbarGutter: "stable" }}>
+              <aside data-resource-kind-index="true" style={{ width: 248, flexShrink: 0, alignSelf: "flex-start", position: "sticky", top: RESOURCE_VIEW_STICKY_TOP + 12, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: RADIUS.card, padding: 10, maxHeight: `calc(100vh / ${PRESENT_SCALE} - ${topH + RESOURCE_VIEW_STICKY_TOP + 28}px)`, overflowY: "auto", overscrollBehavior: "contain", scrollbarGutter: "stable" }}>
                 <KindIndex sel={kindId} onPick={(k) => setKindId(k.id)} showEmpty={showEmpty} setShowEmpty={setShowEmpty} pinned={pinned} togglePin={togglePin} filter={q} counts={kindCounts} />
               </aside>
               )}
@@ -2727,7 +2746,7 @@ function App() {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <TopologyView embedded clusterIds={scope.cluster ? [scope.cluster] : clusterIds} focusId={trafficFocus} onFocusService={setTrafficFocus} onOpenService={openTrafficService} />
               </div>
-              <TrafficPanel clusterIds={scope.cluster ? [scope.cluster] : clusterIds} focus={trafficFocus} onFocus={setTrafficFocus} onOpen={openTrafficService} stickyTop={12} stacked={narrowFlow} />
+              <TrafficPanel clusterIds={scope.cluster ? [scope.cluster] : clusterIds} focus={trafficFocus} onFocus={setTrafficFocus} onOpen={openTrafficService} stickyTop={RESOURCE_VIEW_STICKY_TOP + 12} viewportTopInset={topH} stacked={narrowFlow} />
             </div>
           )}
         </main>
