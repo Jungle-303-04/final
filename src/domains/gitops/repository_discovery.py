@@ -621,6 +621,68 @@ class RepositoryDiscoveryService:
             raise RepositoryDiscoveryError(422, "selected manifest is not valid utf-8") from exc
         return validate_manifest_text(repo_ref, branch, manifest_path, text, source_type)
 
+    async def render_desired_objects(
+        self, payload: RepositoryManifestValidationRequest
+    ) -> tuple[str, list[JsonMap], list[str]]:
+        """연결 프리뷰용 — 선택 매니페스트를 실제 리비전에서 렌더/조회해 full desired
+        Kubernetes 오브젝트 목록과 revision 을 반환한다(식별자 축약 전).
+
+        validate_manifest 와 동일한 소스타입 디스패치(raw 조회 / kustomize·helm 렌더)를
+        써서 프리뷰가 검증·연결과 같은 산출물을 본다.
+        """
+        repo_ref = normalize_repo_ref(payload.repo_ref)
+        branch = normalize_branch(payload.branch)
+        manifest_path = normalize_manifest_path(payload.manifest_path)
+        values_path = (
+            normalize_manifest_path(payload.values_path)
+            if payload.values_path is not None
+            else None
+        )
+        source_type = normalize_source_type(payload.source_type) or source_type_from_path(
+            manifest_path
+        )
+        if values_path is not None and source_type != "helm":
+            raise ValueError("values_path is valid only for Helm manifest validation")
+        revision = await self.resolve_branch_revision(repo_ref, branch)
+        warnings: list[str] = []
+        if source_type in {"kustomize", "helm"}:
+            with TemporaryDirectory(prefix="repo-preview-render-") as tmp:
+                checkout_root = Path(tmp) / "repo"
+                checkout_root.mkdir()
+                render_path, export_warnings = await export_render_source(
+                    self.client,
+                    repo_ref,
+                    branch,
+                    manifest_path,
+                    source_type,
+                    checkout_root,
+                    values_path=values_path,
+                )
+                warnings.extend(export_warnings)
+                render_values_path = (
+                    safe_checkout_file_path(checkout_root, values_path)
+                    if values_path is not None
+                    else None
+                )
+                text = await render_source(
+                    source_type,
+                    render_path,
+                    self.render_executor,
+                    values_path=render_values_path,
+                )
+            parse_source = "raw-yaml"
+        else:
+            content = await self.client.content(repo_ref, branch, manifest_path)
+            try:
+                text = content.decode("utf-8")
+            except UnicodeDecodeError as exc:
+                raise RepositoryDiscoveryError(
+                    422, "selected manifest is not valid utf-8"
+                ) from exc
+            parse_source = source_type
+        objects = flatten_manifest_objects(parse_manifest_documents(text, parse_source))
+        return revision, objects, warnings
+
     async def validate_manifests_at_revision(
         self,
         payloads: Sequence[RepositoryManifestValidationRequest],
@@ -1897,6 +1959,21 @@ def parse_manifest_documents(text: str, source_type: str) -> list[Any]:
             return parsed
         return [parsed]
     return list(yaml.safe_load_all(text))
+
+
+def flatten_manifest_objects(docs: Sequence[Any]) -> list[JsonMap]:
+    """파싱된 문서를 개별 Kubernetes 오브젝트 목록으로 평탄화(List kind 전개, 비객체 제외)."""
+    objects: list[JsonMap] = []
+    for doc in docs:
+        if not isinstance(doc, Mapping):
+            continue
+        if str(doc.get("kind") or "") == "List" and isinstance(doc.get("items"), list):
+            for item in doc["items"]:
+                if isinstance(item, Mapping):
+                    objects.append(dict(item))
+            continue
+        objects.append(dict(doc))
+    return objects
 
 
 def resource_items_from_document(

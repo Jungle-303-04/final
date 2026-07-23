@@ -720,6 +720,29 @@ class RepositoryManifestValidationRequest(StrictModel):
         return self
 
 
+class RepositoryConnectionPreviewRequest(StrictModel):
+    """연결 직전 desired(git) vs live(cluster) 프리뷰 요청.
+
+    선택한 매니페스트를 대상 클러스터/네임스페이스에 연결하면 무엇이 생성·변경·유지
+    되는지 실제 리컨사일과 동일한 diffing 의미로 미리 계산한다.
+    """
+
+    repo_ref: str = Field(min_length=1, max_length=240)
+    branch: str = Field(default=DEFAULT_REPO_BRANCH, min_length=1, max_length=200)
+    manifest_path: str = Field(default=DEFAULT_MANIFEST_PATH, min_length=1, max_length=500)
+    source_type: str = Field(default="", max_length=40)
+    values_path: str | None = Field(default=None, min_length=1, max_length=500)
+    cluster_id: str = Field(min_length=1, max_length=120)
+    namespace: str = Sandbox.NAMESPACE
+    installation_id: str | None = Field(default=None, min_length=1, max_length=40)
+
+    @model_validator(mode="after")
+    def values_override_requires_helm(self) -> RepositoryConnectionPreviewRequest:
+        if self.values_path is not None and self.source_type.strip().lower() not in {"", "helm"}:
+            raise ValueError("values_path is valid only for Helm manifest validation")
+        return self
+
+
 class DeploymentBindingUpsertRequest(StrictModel):
     cluster_id: str = Target.DEFAULT_CLUSTER_ID
     namespace: str = Sandbox.NAMESPACE

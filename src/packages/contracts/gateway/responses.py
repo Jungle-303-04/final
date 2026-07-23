@@ -3733,6 +3733,53 @@ class RepositoryManifestValidationResponse(StrictModel):
     errors: list[str] = Field(default_factory=list)
 
 
+class RepositoryConnectionPreviewFieldChange(StrictModel):
+    """관리필드 단위 변경 한 건(연결 시 desired 로 수렴)."""
+
+    field_path: str
+    classification: str
+    before: str
+    after: str
+
+
+class RepositoryConnectionPreviewResource(StrictModel):
+    """연결하면 이 리소스가 어떻게 되는지 — create/update/in_sync/conflict."""
+
+    api_version: str = ""
+    kind: str
+    namespace: str | None = None
+    name: str
+    # create=클러스터에 없음(생성) · update=있으나 변경 · in_sync=있고 일치 유지 ·
+    # conflict=다른 활성 앱이 이미 소유(연결 시 상호 덮어쓰기 위험)
+    change: Literal["create", "update", "in_sync", "conflict"]
+    live_observed: bool = False
+    status: str = ""
+    field_changes: list[RepositoryConnectionPreviewFieldChange] = Field(default_factory=list)
+    # conflict 인 경우 이미 소유 중인 앱 식별자
+    owned_by: str | None = None
+
+
+class RepositoryConnectionPreviewResponse(StrictModel):
+    """연결 전 desired vs live 프리뷰 결과."""
+
+    repo_ref: str
+    branch: str
+    manifest_path: str
+    cluster_id: str
+    namespace: str
+    revision: str = ""
+    valid: bool = False
+    # 하나라도 live 관측이 있었는지 — 전부 미관측이면 클러스터가 비었거나 관측 전.
+    live_observed: bool = False
+    create_count: int = 0
+    update_count: int = 0
+    in_sync_count: int = 0
+    conflict_count: int = 0
+    resources: list[RepositoryConnectionPreviewResource] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    errors: list[str] = Field(default_factory=list)
+
+
 class DeploymentBindingResponse(StrictModel):
     deployment: JsonMap
 
