@@ -285,7 +285,13 @@ def _deployment_resource(policy: AgentPolicy, payload: TargetRegisterRequest) ->
 
 
 def _runtime_config_resource(policy: AgentPolicy, payload: TargetRegisterRequest) -> AgentPolicy:
-    """Own runtime image and OTel endpoint leaves, ordered before agent rollout."""
+    """Own only the image leaves understood by every deployed target agent.
+
+    The target runtime ConfigMap is merge-patched, so installation-owned
+    telemetry settings remain intact.  Keeping this resource image-only is a
+    backward-compatibility boundary: older agents reject any additional key
+    before they can apply the Deployment that upgrades themselves.
+    """
 
     body = policy.model_dump()
     matches: list[tuple[str, int, JsonObject]] = []
@@ -312,7 +318,6 @@ def _runtime_config_resource(policy: AgentPolicy, payload: TargetRegisterRequest
         "data": {
             TARGET_AGENT_IMAGE_KEY: payload.image,
             NODE_COLLECTOR_IMAGE_KEY: payload.image,
-            "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT": payload.otel_traces_endpoint,
         },
     }
     resource = DesiredResource(

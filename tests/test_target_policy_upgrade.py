@@ -2,6 +2,8 @@ from domains.target.evidence_policy import default_agent_policy
 from domains.target.policy_upgrade import build_target_upgrade_plan
 from packages.contracts.gateway.requests import AgentPolicy
 from packages.contracts.target import (
+    NODE_COLLECTOR_IMAGE_KEY,
+    TARGET_AGENT_IMAGE_KEY,
     TARGET_NAMESPACE,
     TARGET_OTEL_TRACES_ENDPOINT,
     TARGET_RUNTIME_CONFIG_NAME,
@@ -54,6 +56,7 @@ def test_policy_upgrade_enables_traces_and_backfills_otel_endpoint() -> None:
     assert plan.policy.evidence.providers["traces"].queries
     assert plan.settings_patch["otel_traces_endpoint"] == TARGET_OTEL_TRACES_ENDPOINT
     runtime_config = desired_runtime_config(plan.policy)
-    assert runtime_config["data"]["OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"] == (
-        TARGET_OTEL_TRACES_ENDPOINT
-    )
+    assert runtime_config["data"] == {
+        TARGET_AGENT_IMAGE_KEY: NEW_IMAGE,
+        NODE_COLLECTOR_IMAGE_KEY: NEW_IMAGE,
+    }
