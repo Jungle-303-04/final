@@ -1183,46 +1183,42 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
         {tip && (
           <motion.div key="tip" initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.98 }} transition={{ duration: DUR.micro }}
             style={{
-              position: "fixed", left: Math.max(8, Math.min(tip.x + 14, window.innerWidth - 280)), top: Math.min(tip.y + 16, window.innerHeight - 110), zIndex: 60, pointerEvents: "none",
-              background: cardA(0.96), backdropFilter: "blur(10px)", border: `1px solid ${UI.line}`, borderRadius: 11, padding: "9px 11px",
-              boxShadow: `0 10px 30px -12px ${inkA(0.22)}`, width: 368, maxWidth: "calc(100vw - 16px)",
+              // 카드 폭은 내용(max-content)에 맞춰 늘어난다 — 고정 368px + 고정 컬럼 트랙에서
+              // "제한 1000m"/"사용량 관측 안 됨" 같은 값이 카드 밖으로 넘치던 문제의 교정.
+              position: "fixed", left: Math.max(8, Math.min(tip.x + 14, window.innerWidth - 476)), top: Math.min(tip.y + 16, window.innerHeight - 110), zIndex: 60, pointerEvents: "none",
+              background: cardA(0.96), backdropFilter: "blur(10px)", border: `1px solid ${UI.line}`, borderRadius: 11, padding: "9px 12px",
+              boxShadow: `0 10px 30px -12px ${inkA(0.22)}`, width: "max-content", minWidth: 260, maxWidth: "min(468px, calc(100vw - 16px))",
             }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
               <span style={{ width: 7, height: 7, borderRadius: 999, background: sevColor(healthSev(tip.health)), flexShrink: 0 }} />
-              <span style={{ fontSize: TYPE.label, fontWeight: 600, fontFamily: MONO, color: UI.ink, letterSpacing: "-0.01em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tip.label}</span>
+              <span style={{ flex: 1, minWidth: 0, fontSize: TYPE.label, fontWeight: 600, fontFamily: MONO, color: UI.ink, letterSpacing: "-0.01em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tip.label}</span>
             </div>
             <div style={{ fontSize: TYPE.caption, color: UI.ink3, marginTop: 3, marginLeft: 13 }}>
               <span style={{ color: sevColor(healthSev(tip.health)), fontWeight: 600 }}>{tip.health ? statusLabel(tip.health) : "헬스 관측 안 됨"}</span>
               <span> · {tip.status ? statusLabel(tip.status) : "상태 관측 안 됨"}</span>
             </div>
+            {/* 모든 행이 같은 그리드 트랙(max-content)을 공유 — 열은 내용만큼 넓어지고
+                행 간 정렬은 유지된다. 셀은 nowrap, 카드가 내용에 맞춰 커진다. */}
             {tip.metrics && (
-              <div style={{ display: "grid", gridTemplateColumns: "52px minmax(0, 1fr)", columnGap: 10, rowGap: 3, alignItems: "baseline", fontSize: TYPE.caption, marginTop: 7, marginLeft: 13, fontVariantNumeric: "tabular-nums" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "52px max-content 8px max-content 8px max-content", columnGap: 4, rowGap: 3, alignItems: "baseline", fontSize: TYPE.caption, marginTop: 7, marginLeft: 13, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
                 {tip.metrics.map((metric) => (
                   <div key={metric.label} style={{ display: "contents" }}>
                     <span style={{ color: UI.ink3 }}>{metric.label}</span>
-                    <span style={{
-                      display: "grid",
-                      gridTemplateColumns: "minmax(108px, 1fr) 8px 78px 8px 62px",
-                      columnGap: 4,
-                      alignItems: "baseline",
-                      whiteSpace: "nowrap",
-                    }}>
-                      <span style={{ color: metric.limitSeverity === "crit" ? HP.crit : metric.limitSeverity === "warn" ? TINT.warn.fg : UI.ink, fontWeight: 600 }}>
-                        {metric.usage}
-                      </span>
-                      {metric.request ? (
-                        <>
-                          <span style={{ color: UI.ink3, textAlign: "center" }}>·</span>
-                          <span style={{ color: UI.ink3 }}>{metric.request}</span>
-                        </>
-                      ) : <><span /><span /></>}
-                      {metric.limit ? (
-                        <>
-                          <span style={{ color: UI.ink3, textAlign: "center" }}>·</span>
-                          <span style={{ color: UI.ink2 }}>{metric.limit}</span>
-                        </>
-                      ) : <><span /><span /></>}
+                    <span style={{ color: metric.limitSeverity === "crit" ? HP.crit : metric.limitSeverity === "warn" ? TINT.warn.fg : UI.ink, fontWeight: 600 }}>
+                      {metric.usage}
                     </span>
+                    {metric.request ? (
+                      <>
+                        <span style={{ color: UI.ink3, textAlign: "center" }}>·</span>
+                        <span style={{ color: UI.ink3 }}>{metric.request}</span>
+                      </>
+                    ) : <><span /><span /></>}
+                    {metric.limit ? (
+                      <>
+                        <span style={{ color: UI.ink3, textAlign: "center" }}>·</span>
+                        <span style={{ color: UI.ink2 }}>{metric.limit}</span>
+                      </>
+                    ) : <><span /><span /></>}
                   </div>
                 ))}
               </div>
