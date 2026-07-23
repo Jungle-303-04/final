@@ -97,11 +97,11 @@ export function WidgetFrame({ title, info, onDeepLink, editing, span, widgetType
             (CSS word-break: normal은 CJK를 임의 글자에서 끊으므로 nowrap이 필요하다.) */}
         {navigable ? (
           <button type="button" onClick={onDeepLink} aria-label={`${title} 화면으로 이동`}
-            style={{ border: "none", background: "transparent", padding: 0, textAlign: "left", cursor: "pointer", fontSize: TYPE.body, fontWeight: 600, letterSpacing: "-0.01em", color: UI.ink, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            style={{ border: "none", background: "transparent", padding: 0, textAlign: "left", cursor: "pointer", fontSize: TYPE.body, fontWeight: 600, letterSpacing: "-0.01em", color: UI.heading, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {title}
           </button>
         ) : (
-          <span style={{ fontSize: TYPE.body, fontWeight: 600, letterSpacing: "-0.01em", color: UI.ink, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</span>
+          <span style={{ fontSize: TYPE.body, fontWeight: 600, letterSpacing: "-0.01em", color: UI.heading, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</span>
         )}
         {info && (
           <span style={{ position: "relative", display: "grid", flexShrink: 0 }} onClick={(event) => event.stopPropagation()} onMouseEnter={() => setTip(true)} onMouseLeave={() => setTip(false)}>

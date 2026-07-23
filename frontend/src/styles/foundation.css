@@ -49,8 +49,72 @@
   }
 
   ::selection {
-    color: var(--primary-foreground);
-    background: var(--primary);
+    color: white;
+    background: var(--action);
+  }
+}
+
+@layer components {
+  .product-focusable {
+    transition:
+      color 150ms ease,
+      background-color 150ms ease,
+      border-color 150ms ease,
+      box-shadow 150ms ease,
+      transform 120ms ease;
+  }
+
+  .product-focusable:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--focus-ring) !important;
+  }
+
+  .product-action {
+    background: var(--action) !important;
+    color: white !important;
+  }
+
+  .product-action:hover:not(:disabled) {
+    background: var(--action-hover) !important;
+  }
+
+  .product-action:active:not(:disabled) {
+    background: var(--action-pressed) !important;
+    transform: translateY(1px);
+  }
+
+  .product-destructive:hover:not(:disabled) {
+    color: white !important;
+    background: var(--destructive) !important;
+  }
+
+  .product-destructive:active:not(:disabled) {
+    transform: translateY(1px);
+  }
+
+  .product-control:hover:not(:disabled):not([aria-selected="true"]) {
+    background: var(--control-hover) !important;
+  }
+
+  .product-control[aria-selected="true"],
+  .product-control[aria-pressed="true"],
+  .product-control[aria-expanded="true"] {
+    background: var(--control-selected);
+  }
+
+  .product-input-surface:focus-within {
+    border-color: var(--action) !important;
+    box-shadow: 0 0 0 3px var(--focus-ring);
+  }
+
+  .product-focusable:disabled,
+  .product-focusable[aria-disabled="true"] {
+    color: var(--disabled-foreground) !important;
+    background: var(--disabled-background) !important;
+    border-color: var(--border) !important;
+    box-shadow: none !important;
+    cursor: not-allowed !important;
+    opacity: 1 !important;
   }
 }
 

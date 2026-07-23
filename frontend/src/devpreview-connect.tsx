@@ -61,6 +61,7 @@ import {
   type ProviderAvailability,
 } from "./devpreview/connectFeed";
 import { reasonLabel } from "./devpreview/statusLabel";
+import { BLUE, HP, INSET, UI, blueA, critA, inkA, okA, warnA } from "./devpreview/theme";
 import {
   getGithubAppConfig,
   getGithubAppInstallUrl,
@@ -195,8 +196,8 @@ function FloatingToast({ message, onDismiss }: { message: string | null; onDismi
             initial={{ opacity: 0, y: -16, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -16, scale: 0.96 }}
             transition={{ type: "spring", visualDuration: 0.34, bounce: 0.3 }}
             className="pointer-events-auto flex max-w-[460px] items-center gap-3"
-            style={{ background: "var(--surface)", border: "1px solid rgba(239,68,68,0.28)", borderRadius: 14, padding: "13px 18px", boxShadow: "0 24px 60px -16px rgba(0,0,0,0.4), 0 6px 16px -6px rgba(0,0,0,0.16)" }}>
-            <span className="grid size-6 shrink-0 place-items-center rounded-full" style={{ background: "rgba(239,68,68,0.12)" }}><AlertCircle className="size-[15px] c-red" strokeWidth={2.4} /></span>
+            style={{ background: "var(--surface)", border: `1px solid ${critA(0.28)}`, borderRadius: 14, padding: "13px 18px", boxShadow: "0 24px 60px -16px rgba(0,0,0,0.4), 0 6px 16px -6px rgba(0,0,0,0.16)" }}>
+            <span className="grid size-6 shrink-0 place-items-center rounded-full" style={{ background: critA(0.12) }}><AlertCircle className="size-[15px] c-red" strokeWidth={2.4} /></span>
             <span className="text-body font-medium c-ink">{message}</span>
           </motion.div>
         )}
@@ -236,13 +237,13 @@ function Steps({ steps, active }: { steps: string[]; active: number }) {
           <div key={s} className="flex items-center" style={{ flex: i < steps.length - 1 ? "1 1 0%" : "0 0 auto" }}>
             <div className="flex items-center gap-3">
               <motion.span layout className="grid shrink-0 place-items-center rounded-full font-bold" style={{ width: 34, height: 34, fontSize: "var(--type-section)" }}
-                animate={{ backgroundColor: done || now ? "var(--accent)" : "rgba(0,0,0,0.07)", color: done || now ? "#fff" : "var(--ink-3)", boxShadow: now ? "0 0 0 5px rgba(0,113,227,0.15)" : "0 0 0 0px rgba(0,113,227,0)" }} transition={{ duration: 0.3 }}>
+                animate={{ backgroundColor: done || now ? "var(--accent)" : inkA(0.07), color: done || now ? UI.card : "var(--ink-3)", boxShadow: now ? `0 0 0 5px ${blueA(0.15)}` : `0 0 0 0px ${blueA(0)}` }} transition={{ duration: 0.3 }}>
                 {done ? <Check className="size-[18px]" strokeWidth={3} /> : i + 1}
               </motion.span>
               <span className="text-body font-semibold tracking-[-0.01em]" style={{ color: done || now ? "var(--ink)" : "var(--ink-3)" }}>{s}</span>
             </div>
             {i < steps.length - 1 && (
-              <div className="mx-3 h-[3px] flex-1 overflow-hidden rounded-full" style={{ background: "rgba(0,0,0,0.08)" }}>
+              <div className="mx-3 h-[3px] flex-1 overflow-hidden rounded-full" style={{ background: inkA(0.08) }}>
                 <motion.div className="h-full bg-accent" initial={false} animate={{ width: done ? "100%" : "0%" }} transition={{ duration: 0.4, ease: EASE }} />
               </div>
             )}
@@ -574,8 +575,8 @@ function RepoStep({ providers, onNext }: { providers: ClusterProvidersView; onNe
               padding: "13px 16px",
               background:
                 appReturn.kind === "mismatch" || appReturn.kind === "error"
-                  ? "var(--err-bg, rgba(239,68,68,0.08))"
-                  : "rgba(34,197,94,0.10)",
+                  ? `var(--err-bg, ${critA(0.08)})`
+                  : okA(0.10),
             }}
           >
             {appReturn.kind === "verifying" ? (
@@ -638,7 +639,7 @@ function RepoStep({ providers, onNext }: { providers: ClusterProvidersView; onNe
                 {!appAvailable && (
                   <>
                     <div className="flex items-center gap-2 px-0.5 text-caption c-3">
-                      <span className="h-px flex-1" style={{ background: "rgba(120,120,120,0.22)" }} />또는 액세스 토큰<span className="h-px flex-1" style={{ background: "rgba(120,120,120,0.22)" }} />
+                      <span className="h-px flex-1" style={{ background: UI.line }} />또는 액세스 토큰<span className="h-px flex-1" style={{ background: UI.line }} />
                     </div>
                     <div className="grid gap-2.5">
                       <span className="px-0.5 text-label font-medium c-2">비공개 저장소 · 액세스 토큰 <span className="c-red">*</span></span>
@@ -1044,7 +1045,7 @@ function InstallProgress({ conn, activation, reinstalling, onReinstall }: {
         <span className="flex-1 text-body font-semibold c-ink">{label}</span>
         {!terminal && <span className="text-label font-medium c-3" style={{ fontVariantNumeric: "tabular-nums" }}>{step}/3</span>}
       </div>
-      <div className="overflow-hidden rounded-full" style={{ height: 6, background: "rgba(17,19,24,0.08)" }}>
+      <div className="overflow-hidden rounded-full" style={{ height: 6, background: inkA(0.08) }}>
         <motion.div initial={false} animate={{ width: `${pct}%` }} transition={{ type: "spring", visualDuration: 0.5, bounce: 0 }} style={{ height: "100%", borderRadius: 999, background: color }} />
       </div>
       <span className="text-label leading-[1.5] c-2">{sub}</span>
@@ -1135,10 +1136,10 @@ function ClusterInstallStep({ platform, name, onConnected }: { platform: Platfor
                 {([["posix", "macOS/Linux"], ["powershell", "Windows PowerShell"]] as const).map(([id, label]) => (
                   <button key={id} role="tab" aria-selected={shell === id} onClick={() => setShell(id)}
                     className="rounded-full px-2.5 py-1 text-caption font-semibold"
-                    style={{ color: shell === id ? "var(--ink)" : "var(--ink-3)", background: shell === id ? "rgba(17,19,24,0.07)" : "transparent" }}>{label}</button>
+                    style={{ color: shell === id ? "var(--ink)" : "var(--ink-3)", background: shell === id ? inkA(0.07) : "transparent" }}>{label}</button>
                 ))}
               </span>
-              <button onClick={copy} className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-label font-semibold transition-colors" style={{ color: copied ? "var(--green)" : "var(--ink-2)", background: copied ? "rgba(34,197,94,0.12)" : "rgba(17,19,24,0.05)" }}>
+              <button onClick={copy} className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-label font-semibold transition-colors" style={{ color: copied ? "var(--green)" : "var(--ink-2)", background: copied ? okA(0.12) : inkA(0.05) }}>
                 {copied ? <><Check className="size-3.5" strokeWidth={3} />복사됨</> : <><Copy className="size-3.5" />복사</>}
               </button>
             </div>
@@ -1168,7 +1169,7 @@ function ClusterDoneStep({ name, connection, onDone }: { name: string; connectio
           <div className="text-section font-bold tracking-[-0.01em] c-ink">{connection.agentVersion ?? "—"}</div>
           <div className="mt-0.5 text-caption font-medium c-3">에이전트 버전</div>
         </div>
-        <div className="flex-1 text-center" style={{ padding: "15px 0", borderLeft: "1px solid rgba(17,19,24,0.06)" }}>
+        <div className="flex-1 text-center" style={{ padding: "15px 0", borderLeft: `1px solid ${inkA(0.06)}` }}>
           <div className="text-section font-bold tracking-[-0.01em] c-ink">{connection.connectedAt ? new Date(connection.connectedAt).toLocaleTimeString() : "—"}</div>
           <div className="mt-0.5 text-caption font-medium c-3">연결 시각</div>
         </div>
@@ -1297,14 +1298,14 @@ export function ConnectWizard({
 
       <style>{`
         .opsia-connect {
-          --surface: #FFFFFF;
-          --ink: #111318; --ink-2: #6B7280; --ink-3: #9AA1AC;
-          --line: rgba(17,19,24,0.07);
+          --surface: ${UI.card};
+          --ink: ${UI.ink}; --ink-2: ${UI.ink2}; --ink-3: ${UI.ink3};
+          --line: ${UI.line};
           /* 셸 팔레트와 통일: BLUE #0A84FF · HP.ok #30D158 · HP.warn #FFB340 · HP.crit #FF5F55 */
-          --blue: #0A84FF; --accent: #0A84FF; --lime: #30D158;
-          --green: #30D158; --orange: #FFB340; --red: #FF5F55;
-          --soft: rgba(10,132,255,0.06); --soft-b: rgba(10,132,255,0.32);
-          --fill: #F2F3F7; --fill-2: #E9EBF1;
+          --blue: ${BLUE}; --accent: ${BLUE}; --lime: ${HP.ok};
+          --green: ${HP.ok}; --orange: ${HP.warn}; --red: ${HP.crit};
+          --soft: ${blueA(0.06)}; --soft-b: ${blueA(0.32)};
+          --fill: ${INSET}; --fill-2: ${UI.bg};
           font-family: var(--font-sans);
           font-weight: var(--font-weight-body);
           color: var(--ink);
@@ -1313,38 +1314,50 @@ export function ConnectWizard({
         .c-accent { color: var(--blue); } .c-green { color: var(--green); } .c-orange { color: var(--orange); } .c-red { color: var(--red); }
         .bg-surface { background: var(--surface); } .bg-soft { background: var(--soft); }
         .bg-accent { background: var(--blue); } .bg-green { background: var(--green); } .bg-lime { background: var(--lime); }
-        .green-bg { background: rgba(48,209,88,0.14); } .orange-bg { background: rgba(255,179,64,0.16); } .lime-bg { background: var(--lime); }
-        .err-bg { background: rgba(255,95,85,0.06); border: 1px solid rgba(255,95,85,0.18); }
-        .err-ic-bg { background: rgba(255,95,85,0.14); }
+        .green-bg { background: ${okA(0.14)}; } .orange-bg { background: ${warnA(0.16)}; } .lime-bg { background: var(--lime); }
+        .err-bg { background: ${critA(0.06)}; border: 1px solid ${critA(0.18)}; }
+        .err-ic-bg { background: ${critA(0.14)}; }
         .dot-r { background: var(--red); } .dot-o { background: var(--orange); } .dot-g { background: var(--green); }
-        .ping-g { background: rgba(48,209,88,0.5); }
-        .toggle-off { background: rgba(17,19,24,0.14); }
+        .ping-g { background: ${okA(0.5)}; }
+        .toggle-off { background: ${inkA(0.14)}; }
         .hairline { height: 1px; background: var(--line); }
         .hdr-grad { background: var(--blue); }
         /* 머티리얼: 테두리 대신 부드러운 그림자로 깊이 */
         .modal-surface { background: var(--surface); }
         .notif { background: var(--surface); box-shadow: 0 14px 34px -10px rgba(17,19,24,0.24), 0 2px 8px rgba(17,19,24,0.06); }
         .field { background: var(--fill); border: 1px solid transparent; transition: background .18s, border-color .18s, box-shadow .18s; }
-        .field:focus-within { background: #fff; border-color: var(--soft-b); box-shadow: 0 0 0 4px rgba(10,132,255,0.12); }
+        .field:focus-within { background: ${UI.card}; border-color: var(--soft-b); box-shadow: 0 0 0 4px rgba(10,132,255,0.12); }
         /* 트레이형 리스트: 회색 트레이 + 선택 시 흰 카드가 떠오름 */
         .inset { background: var(--fill); border-radius: 18px; padding: 6px; display: flex; flex-direction: column; gap: 4px; }
         .inset-row { display: flex; align-items: center; gap: 13px; width: 100%; text-align: left; padding: 11px 13px; border-radius: 13px; transition: background .15s, box-shadow .15s; }
         .inset-row:hover { background: rgba(17,19,24,0.035); }
-        .inset-row-on, .inset-row-on:hover { background: #fff; box-shadow: 0 1px 2px rgba(17,19,24,0.06), 0 6px 16px -8px rgba(17,19,24,0.14); }
-        .badge { font-size: var(--type-caption); font-weight: 600; color: var(--ink-2); background: #fff; padding: 3px 9px; border-radius: 999px; box-shadow: 0 1px 2px rgba(17,19,24,0.06); }
-        .check-off { border-color: rgba(17,19,24,0.2); background: #fff; }
+        .inset-row-on, .inset-row-on:hover { background: ${UI.card}; box-shadow: 0 1px 2px rgba(17,19,24,0.06), 0 6px 16px -8px rgba(17,19,24,0.14); }
+        .badge { font-size: var(--type-caption); font-weight: 600; color: var(--ink-2); background: ${UI.card}; padding: 3px 9px; border-radius: 999px; box-shadow: 0 1px 2px rgba(17,19,24,0.06); }
+        .check-off { border-color: rgba(17,19,24,0.2); background: ${UI.card}; }
         .inset-row:hover .check-off { border-color: rgba(17,19,24,0.3); }
         .seg { background: var(--fill); }
         .card { background: var(--fill); border: 1px solid transparent; transition: background .16s, border-color .16s, box-shadow .16s; }
         .card:hover { background: var(--fill-2); }
-        .card-on, .card-on:hover { background: #fff; border-color: var(--soft-b); box-shadow: 0 1px 2px rgba(17,19,24,0.06), 0 6px 16px -8px rgba(17,19,24,0.14); }
+        .card-on, .card-on:hover { background: ${UI.card}; border-color: var(--soft-b); box-shadow: 0 1px 2px rgba(17,19,24,0.06), 0 6px 16px -8px rgba(17,19,24,0.14); }
         .cmd { background: var(--fill); border: none; }
         .stat { display: flex; background: var(--fill); border-radius: 16px; overflow: hidden; }
-        .btn-primary { background: var(--blue); color: #fff; box-shadow: 0 8px 18px -8px rgba(10,132,255,0.55); transition: background .16s, transform .12s; }
-        .btn-primary:not(:disabled):hover { background: #0973E6; }
+        .btn-primary { background: var(--blue); color: ${UI.card}; box-shadow: 0 8px 18px -8px rgba(10,132,255,0.55); transition: background .16s, transform .12s; }
+        .btn-primary:not(:disabled):hover { background: var(--action-hover); }
         .btn-primary:not(:disabled):active { transform: scale(0.99); }
         .btn-ghost { background: var(--fill); border: none; transition: background .16s; }
         .btn-ghost:hover { background: var(--fill-2); }
+        .opsia-connect button:focus-visible {
+          outline: none;
+          box-shadow: 0 0 0 3px var(--focus-ring) !important;
+        }
+        .opsia-connect button:disabled {
+          color: var(--disabled-foreground) !important;
+          background: var(--disabled-background) !important;
+          border-color: var(--border) !important;
+          box-shadow: none !important;
+          cursor: not-allowed !important;
+          opacity: 1 !important;
+        }
         @media (prefers-reduced-motion: reduce) { *,*::before,*::after { animation-duration:.01ms !important; transition-duration:.01ms !important; } }
       `}</style>
     </div>

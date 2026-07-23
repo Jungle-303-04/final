@@ -26,6 +26,16 @@
   --text-code: var(--type-code);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-heading: var(--heading-foreground);
+  --color-inactive-foreground: var(--inactive-foreground);
+  --color-action: var(--action);
+  --color-action-hover: var(--action-hover);
+  --color-action-pressed: var(--action-pressed);
+  --color-focus-ring: var(--focus-ring);
+  --color-control-hover: var(--control-hover);
+  --color-control-selected: var(--control-selected);
+  --color-disabled-background: var(--disabled-background);
+  --color-disabled-foreground: var(--disabled-foreground);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
   --color-popover: var(--popover);
@@ -90,8 +100,18 @@
   --product-floating-action-clearance: calc(
     var(--product-floating-action-size) + var(--product-floating-action-block-end)
   );
-  --background: oklch(0.96 0.004 264);
+  --background: #E9EBF0;
   --foreground: oklch(0.145 0 0);
+  --heading-foreground: #2B2F36;
+  --inactive-foreground: #9AA0AA;
+  --action: #0A84FF;
+  --action-hover: #0973E6;
+  --action-pressed: #0068D9;
+  --focus-ring: rgba(10, 132, 255, 0.32);
+  --control-hover: #F4F5F7;
+  --control-selected: #EDF4FF;
+  --disabled-background: #F3F4F6;
+  --disabled-foreground: #9AA0AA;
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
@@ -134,6 +154,16 @@
   color-scheme: dark;
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
+  --heading-foreground: oklch(0.92 0 0);
+  --inactive-foreground: oklch(0.70 0 0);
+  --action: #0A84FF;
+  --action-hover: #409CFF;
+  --action-pressed: #0A84FF;
+  --focus-ring: rgba(64, 156, 255, 0.38);
+  --control-hover: oklch(0.269 0 0);
+  --control-selected: rgba(10, 132, 255, 0.18);
+  --disabled-background: oklch(0.24 0 0);
+  --disabled-foreground: oklch(0.60 0 0);
   --card: oklch(0.205 0 0);
   --card-foreground: oklch(0.985 0 0);
   --popover: oklch(0.205 0 0);

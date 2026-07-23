@@ -4,12 +4,13 @@
 
 // 표면·잉크 (Geist: background / surface / border, 3단 잉크)
 export const UI = {
-  bg: "#F2F3F6",     // 페이지 배경 — 흰 카드와 층위가 보이는 중성 회색
+  bg: "#E9EBF0",     // 페이지 배경 — 밝은 환경에서도 흰 카드와 구분되는 중성 회색
   bg2: "#F7F8FA",    // 표면 안 보조 배경 (표 헤더·인셋)
   card: "#FFFFFF",   // 표면
   line: "#E0E3E8",   // 헤어라인 (구분 1순위 — 그림자보다 먼저)
   line2: "#EBEDF1",  // 보조 헤어라인
   ink: "#111318",    // 본문·제목
+  heading: "#2B2F36",// 카드·섹션 제목
   ink2: "#5F6570",   // 보조 텍스트
   ink3: "#9AA0AA",   // 라벨·자리표시
 } as const;
@@ -26,6 +27,18 @@ export const warnA = (a: number) => `rgba(255,179,64,${a})`;
 // 액센트 — 선택·포커스·링크 전용 (상태 표현에 쓰지 않는다)
 export const BLUE = "#0A84FF";
 export const BLUE2 = "#5AC8FA"; // 브랜드 그라디언트 종점 전용
+
+// 상호작용 — 액션과 중립 컨트롤의 상태를 컴포넌트별로 재정의하지 않는다.
+export const INTERACTION = {
+  action: BLUE,
+  actionHover: "#0973E6",
+  actionPressed: "#0068D9",
+  focusRing: blueA(0.32),
+  controlHover: "#F4F5F7",
+  controlSelected: "#EDF4FF",
+  disabledBg: "#F3F4F6",
+  disabledText: "#9AA0AA",
+} as const;
 
 // 보조 중립 — 호버 헤어라인·어포던스·인셋 (회색 리터럴 난립 금지)
 export const LINE3 = "#DADDE3";  // 호버·점선 보더

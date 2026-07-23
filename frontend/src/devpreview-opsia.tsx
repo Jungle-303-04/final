@@ -432,7 +432,7 @@ function AddClusterCard({ onClick, delay = 0, compact = false }: { onClick: () =
         : { display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, minHeight: 200,
             border: `1.5px dashed ${LINE3}`, borderRadius: 16, background: "transparent", cursor: "pointer" }}>
       <span style={{ width: compact ? 26 : 34, height: compact ? 26 : 34, borderRadius: 999, background: blueA(0.09), display: "grid", placeItems: "center", color: BLUE, fontSize: compact ? TYPE.body : TYPE.section, fontWeight: 600, lineHeight: 1 }}>+</span>
-      <span style={{ fontSize: TYPE.body, fontWeight: 600, color: UI.ink }}>클러스터 연결</span>
+      <span style={{ fontSize: TYPE.body, fontWeight: 600, color: UI.heading }}>클러스터 연결</span>
       <span style={{ fontSize: TYPE.caption, color: UI.ink3 }}>에이전트 설치로 등록</span>
     </motion.button>
   );

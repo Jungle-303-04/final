@@ -332,7 +332,7 @@ function AssistantTurn({ turn, onComplete }: { turn: AiTurn; onComplete: () => v
 
   return (
     <div onClick={onSurfaceClick}
-      className={`group/msg mr-auto w-full max-w-[97%] overflow-hidden border border-black/[0.04] bg-card shadow-[0_2px_10px_-4px_rgba(0,0,0,0.06),0_18px_44px_-22px_rgba(0,0,0,0.2)] animate-in fade-in-0 slide-in-from-bottom-2 duration-300 ${collapsed ? "is-collapsed" : ""} ${clickable ? "cursor-pointer" : ""}`}
+      className={`group/msg mr-auto w-full max-w-[97%] overflow-hidden border border-border bg-card shadow-[0_2px_10px_-4px_rgba(0,0,0,0.06),0_18px_44px_-22px_rgba(0,0,0,0.2)] animate-in fade-in-0 slide-in-from-bottom-2 duration-300 ${collapsed ? "is-collapsed" : ""} ${clickable ? "cursor-pointer" : ""}`}
       style={{ borderRadius: 20 }}>
       {/* 접힌 요약 */}
       <div className="ac-cap">
@@ -375,7 +375,7 @@ function UserTurn({ turn, onShown }: { turn: AiTurn; onShown: () => void }) {
 function CollapsedTurn({ turn, onShown }: { turn: AiTurn; onShown: () => void }) {
   useEffect(() => { const id = window.setTimeout(onShown, TIMING.collapsedShownMs); return () => window.clearTimeout(id); }, []);
   return (
-    <div className="group mr-auto flex w-full items-center gap-2.5 rounded-full border border-black/[0.06] bg-card/85 px-3.5 py-2 shadow-[0_1px_2px_rgba(0,0,0,0.05),0_10px_24px_-16px_rgba(0,0,0,0.3)] backdrop-blur-xl transition-[transform,box-shadow] duration-300 hover:-translate-y-px" style={{ animation: `islandIn 0.5s ${SPRING}` }}>
+    <div className="group mr-auto flex w-full items-center gap-2.5 rounded-full border border-border bg-card/85 px-3.5 py-2 shadow-[0_1px_2px_rgba(0,0,0,0.05),0_10px_24px_-16px_rgba(0,0,0,0.3)] backdrop-blur-xl transition-[transform,box-shadow] duration-300 hover:-translate-y-px" style={{ animation: `islandIn 0.5s ${SPRING}` }}>
       <span className="size-2 shrink-0 rounded-full island-pulse" style={{ background: toneHex.critical }} />
       <span className="min-w-0 flex-1 truncate text-label font-medium text-muted-foreground">{turn.summary}</span>
       <ChevronDown className="size-3.5 shrink-0 -rotate-90 text-muted-foreground/40" />
@@ -466,10 +466,10 @@ export function AiPanel({ onClose, embedded = false, contextView = "resources", 
     <div className={`opsia-ai relative flex ${embedded ? "h-full w-full min-w-0" : "h-screen w-[460px]"} flex-col overflow-hidden border-l border-black/[0.06] bg-gradient-to-b from-[oklch(0.99_0.002_255)] to-[oklch(0.97_0.003_255)] shadow-2xl`}>
       <header className="flex items-center gap-2.5 border-b border-black/[0.05] bg-white/60 px-3.5 py-3 backdrop-blur-xl">
         <span className="grid size-9 shrink-0 place-items-center rounded-[13px] bg-gradient-to-br from-primary to-[color-mix(in_oklch,var(--primary)_75%,black)] text-primary-foreground shadow-[0_2px_8px_-2px_color-mix(in_oklch,var(--primary)_55%,transparent)]"><Sparkles className="size-4" /></span>
-        <div className="min-w-0 flex-1"><h2 className="text-body font-semibold leading-tight tracking-[-0.01em] text-black">Kyro AI</h2></div>
-        <button className="grid size-8 place-items-center rounded-full text-black/65 transition-colors hover:bg-black/[0.05] hover:text-black" onClick={() => newChat()} title="새 대화" type="button"><Play className="size-[17px]" /></button>
-        <button className="grid size-8 place-items-center rounded-full text-black/65 transition-colors hover:bg-black/[0.05] hover:text-black" onClick={() => setListOpen((v) => !v)} title="대화 목록" type="button"><SquarePen className="size-[17px]" /></button>
-        <button className="grid size-8 place-items-center rounded-full text-black/65 transition-colors hover:bg-black/[0.05] hover:text-black" onClick={onClose} title="닫기" type="button"><X className="size-[17px]" /></button>
+        <div className="min-w-0 flex-1"><h2 className="text-body font-semibold leading-tight tracking-[-0.01em] text-heading">Kyro AI</h2></div>
+        <button className="grid size-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" onClick={() => newChat()} title="새 대화" type="button"><Play className="size-[17px]" /></button>
+        <button className="grid size-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" onClick={() => setListOpen((v) => !v)} title="대화 목록" type="button"><SquarePen className="size-[17px]" /></button>
+        <button className="grid size-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" onClick={onClose} title="닫기" type="button"><X className="size-[17px]" /></button>
       </header>
       <div className="flex items-center gap-1.5 border-b border-black/[0.04] bg-white/30 px-3.5 py-2 text-black backdrop-blur">
         <span className="text-caption font-medium text-black">맥락</span>
@@ -481,12 +481,12 @@ export function AiPanel({ onClose, embedded = false, contextView = "resources", 
           {conversations.status === "loading" ? (
             <p className="flex items-center gap-2 px-3.5 py-3 text-label text-muted-foreground"><Spinner className="size-3.5 ap-accent" decorative /> 대화 목록 불러오는 중…</p>
           ) : conversations.status === "unavailable" ? (
-            <p className="flex items-center gap-1.5 px-3.5 py-3 text-label text-muted-foreground"><CircleAlert className="size-3.5" /> 대화 목록을 불러올 수 없습니다.</p>
+            <p className="flex items-center gap-1.5 px-3.5 py-3 text-label text-inactive-foreground"><CircleAlert className="size-3.5" /> 대화 목록을 불러올 수 없습니다.</p>
           ) : conversations.items.length === 0 ? (
-            <p className="px-3.5 py-3 text-label text-muted-foreground">저장된 대화가 없습니다.</p>
+            <p className="px-3.5 py-3 text-label text-inactive-foreground">저장된 대화가 없습니다.</p>
           ) : (
             <ul className="grid gap-0.5 p-2">{conversations.items.map((c) => (
-              <li key={c.id}><button className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-body text-black/80 transition-colors hover:bg-black/[0.04] hover:text-black" onClick={() => openConversation(c.id)} type="button"><Sparkles className="size-3.5 shrink-0 text-black/60" /><span className="flex-1 truncate">{c.title}</span>{c.updatedAt ? <span className="shrink-0 text-caption text-black/60">{c.updatedAt}</span> : null}</button></li>
+              <li key={c.id}><button className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-body text-foreground transition-colors hover:bg-muted" onClick={() => openConversation(c.id)} type="button"><Sparkles className="size-3.5 shrink-0 text-muted-foreground" /><span className="flex-1 truncate">{c.title}</span>{c.updatedAt ? <span className="shrink-0 text-caption text-muted-foreground">{c.updatedAt}</span> : null}</button></li>
             ))}</ul>
           )}
         </div>
@@ -533,9 +533,9 @@ export function AiPanel({ onClose, embedded = false, contextView = "resources", 
 
       <div className="border-t border-black/[0.05] bg-white/50 px-3.5 pb-3.5 pt-3 backdrop-blur-xl">
         {suggestions.status === "ready" && suggestions.items.length > 0 ? (
-          <div className="mb-2.5 flex flex-wrap gap-1.5">{suggestions.items.map((s) => <button className="rounded-full border border-black/[0.07] bg-white/80 px-3 py-1.5 text-caption font-medium text-muted-foreground shadow-[0_1px_2px_rgba(0,0,0,0.03)] transition-all hover:-translate-y-px hover:border-black/[0.12] hover:text-foreground hover:shadow-[0_2px_6px_-2px_rgba(0,0,0,0.12)]" key={s.id} onClick={() => send(s.prompt)} type="button">{s.label}</button>)}</div>
+          <div className="mb-2.5 flex flex-wrap gap-1.5">{suggestions.items.map((s) => <button className="rounded-full border border-border bg-card/80 px-3 py-1.5 text-caption font-medium text-muted-foreground shadow-[0_1px_2px_rgba(0,0,0,0.03)] transition-all hover:-translate-y-px hover:border-ring hover:text-foreground hover:shadow-[0_2px_6px_-2px_rgba(0,0,0,0.12)]" key={s.id} onClick={() => send(s.prompt)} type="button">{s.label}</button>)}</div>
         ) : null}
-        <div className="relative rounded-[20px] border border-black/[0.08] bg-white/90 shadow-[0_1px_2px_rgba(0,0,0,0.04),inset_0_1px_0_rgba(255,255,255,0.6)] transition-all focus-within:border-primary/40 focus-within:shadow-[0_0_0_4px_color-mix(in_oklch,var(--primary)_12%,transparent)]">
+        <div className="relative rounded-[20px] border border-border bg-card/90 shadow-[0_1px_2px_rgba(0,0,0,0.04),inset_0_1px_0_rgba(255,255,255,0.6)] transition-all focus-within:border-primary/40 focus-within:shadow-[0_0_0_4px_color-mix(in_oklch,var(--primary)_12%,transparent)]">
           <textarea
             className="min-h-[60px] w-full resize-none rounded-[20px] bg-transparent px-3.5 py-3 pr-12 text-body leading-relaxed tracking-[-0.006em] text-black outline-none placeholder:text-muted-foreground/60"
             onChange={(e) => setInput(e.currentTarget.value)}
@@ -565,11 +565,22 @@ export function AiPanel({ onClose, embedded = false, contextView = "resources", 
            — 제품 토큰의 --primary(검정)를 패널 스코프에서 셸 블루로 오버라이드 */
         .opsia-ai { --ap-blue:#0A84FF; --ap-red:#FF5F55; --ap-orange:#FFB340; --ap-green:#30D158; --ap-gray:#8E8E93;
           --primary:#0A84FF; --primary-foreground:#FFFFFF; --destructive:#FF5F55; }
+        .opsia-ai button:focus-visible {
+          outline: none;
+          box-shadow: 0 0 0 3px var(--focus-ring);
+        }
+        .opsia-ai button:disabled {
+          color: var(--disabled-foreground);
+          background: var(--disabled-background);
+          border-color: var(--border);
+          cursor: not-allowed;
+          opacity: 1;
+        }
         .ap-accent { color: var(--ap-blue); }
         .ap-ok { color: var(--ap-green); }
         .ap-ok-bg { background: color-mix(in srgb, var(--ap-green) 15%, transparent); }
         .ap-link { font-weight: 500; color: var(--ap-blue); text-decoration: underline; text-underline-offset: 3px; text-decoration-color: color-mix(in srgb, var(--ap-blue) 30%, transparent); transition: color .15s, text-decoration-color .15s; }
-        .ap-link:hover { color: color-mix(in srgb, var(--ap-blue) 82%, black); text-decoration-color: var(--ap-blue); }
+        .ap-link:hover { color: var(--action-hover); text-decoration-color: var(--action-hover); }
         /* 접힘/펼침 아코디언 (grid-rows 0fr↔1fr, 타이밍은 TIMING 주입) */
         .ac-cap, .ac-full { display: grid; }
         .ac-cap { grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows ${TIMING.collapseSlideMs}ms cubic-bezier(0.4,0,0.2,1), opacity ${TIMING.collapseFadeMs}ms ease; }

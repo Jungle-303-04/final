@@ -277,7 +277,7 @@ export function LiveResourceManifestEditor({
       <div style={{ padding: "18px 0", display: "grid", gap: 10 }}>
         <LiveManifestPanel source={source} />
         <ManifestNotice tone="warn" title="애플리케이션 소스를 선택하세요">동일 리소스를 소유한 실제 Git 소스가 여러 개입니다.</ManifestNotice>
-        <select aria-label="YAML 애플리케이션 소스" value={applicationId}
+        <select className="product-focusable" aria-label="YAML 애플리케이션 소스" value={applicationId}
           onChange={(event) => { const id = event.currentTarget.value; setApplicationId(id); if (id) void load(id); }}
           style={selectStyle}>
           <option value="">애플리케이션 선택</option>
@@ -469,7 +469,7 @@ function Pill({ tone = "neutral", children }: { tone?: "neutral" | "ok" | "warn"
 }
 
 function ActionButton({ primary = false, disabled, onClick, children }: { primary?: boolean; disabled: boolean; onClick: () => void; children: React.ReactNode }) {
-  return <button type="button" disabled={disabled} onClick={onClick} style={{ border: primary ? "none" : `1px solid ${UI.line}`, background: primary ? BLUE : UI.card, color: primary ? UI.card : BLUE, borderRadius: 9, padding: "7px 12px", fontSize: TYPE.label, fontWeight: 600, cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.5 : 1 }}>{children}</button>;
+  return <button type="button" className={`product-focusable ${primary ? "product-action" : "product-control"}`} disabled={disabled} onClick={onClick} style={{ border: primary ? "none" : `1px solid ${UI.line}`, background: primary ? BLUE : UI.card, color: primary ? UI.card : BLUE, borderRadius: 9, padding: "7px 12px", fontSize: TYPE.label, fontWeight: 600, cursor: disabled ? "not-allowed" : "pointer" }}>{children}</button>;
 }
 
 const selectStyle: React.CSSProperties = { width: "100%", border: `1px solid ${UI.line}`, borderRadius: 9, padding: "8px 10px", background: UI.card, color: UI.ink, fontSize: TYPE.body };

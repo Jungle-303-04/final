@@ -174,7 +174,7 @@ function Page({ title, icon: I, action, tabs, tab, onTab, ensureVerticalScroll =
       {tabs && (
         <div style={{ display: "flex", gap: 2, background: inkA(0.05), borderRadius: 9, padding: 2, width: "fit-content" }}>
           {tabs.map((t) => (
-            <button key={t} onClick={() => onTab?.(t)}
+            <button key={t} className="product-focusable product-control" aria-selected={tab === t} onClick={() => onTab?.(t)}
               style={{ position: "relative", border: "none", background: "transparent", borderRadius: 7, padding: "5px 16px", fontSize: TYPE.label, fontWeight: 600, color: tab === t ? UI.ink : UI.ink3, cursor: "pointer" }}>
               {tab === t && <motion.span layoutId={`ptab-${title}`} transition={SOFT} style={{ position: "absolute", inset: 0, background: UI.card, borderRadius: 7, boxShadow: `0 1px 4px ${inkA(0.14)}` }} />}
               <span style={{ position: "relative" }}>{t}</span>
@@ -194,7 +194,7 @@ const SettingsRow = ({ icon: I, title, sub, right }: { icon: React.ComponentType
   <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 15px", borderBottom: `1px solid ${UI.line2}` }}>
     <span style={{ width: 32, height: 32, borderRadius: 9, background: inkA(0.05), display: "grid", placeItems: "center", flexShrink: 0 }}><I size={16} style={{ color: UI.ink2 }} /></span>
     <span style={{ minWidth: 0, flex: 1 }}>
-      <span style={{ display: "block", fontSize: TYPE.body, fontWeight: 600, color: UI.ink }}>{title}</span>
+      <span style={{ display: "block", fontSize: TYPE.body, fontWeight: 600, color: UI.heading }}>{title}</span>
       <span style={{ display: "block", fontSize: TYPE.caption, color: UI.ink3, marginTop: 1 }}>{sub}</span>
     </span>
     {right}
@@ -326,7 +326,7 @@ function GateStage({ label, state, evidence, href, actionLabel, onAction }: {
         <div title={evidence} style={{ marginTop: 2, fontFamily: MONO, fontSize: TYPE.caption, color: UI.ink3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{evidence}</div>
       </div>
       {actionLabel && onAction ? (
-        <button type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); onAction(); }}
+        <button type="button" className="product-focusable product-control" onClick={(event) => { event.preventDefault(); event.stopPropagation(); onAction(); }}
           style={{ flexShrink: 0, border: `1px solid ${tone.bd}`, background: UI.card, color: tone.fg, borderRadius: 7, padding: "5px 8px", fontSize: TYPE.caption, fontWeight: 600, cursor: "pointer" }}>
           {actionLabel}
         </button>
@@ -390,12 +390,12 @@ function ScenarioGate({ runs, repositoryRef, status, onRefresh, onOpenRef, onOpe
     <Card pad={12}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 10 }}>
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: TYPE.body, fontWeight: 600, color: UI.ink }}>GitOps 배포 게이트</div>
+          <div style={{ fontSize: TYPE.body, fontWeight: 600, color: UI.heading }}>GitOps 배포 게이트</div>
           <div style={{ marginTop: 2, fontFamily: MONO, fontSize: TYPE.caption, color: UI.ink3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {latest?.workflowRunId ?? (status === "loading" ? "실행 기록 확인 중" : "실행 기록 없음")}
           </div>
         </div>
-        <button onClick={onRefresh} aria-label="배포 증거 새로고침" style={{ width: 30, height: 30, borderRadius: 8, border: `1px solid ${UI.line}`, background: UI.card, color: UI.ink2, cursor: "pointer", display: "grid", placeItems: "center" }}><RefreshCw size={14} /></button>
+        <button className="product-focusable product-control" onClick={onRefresh} aria-label="배포 증거 새로고침" style={{ width: 30, height: 30, borderRadius: 8, border: `1px solid ${UI.line}`, background: UI.card, color: UI.ink2, cursor: "pointer", display: "grid", placeItems: "center" }}><RefreshCw size={14} /></button>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8 }}>
         <GateStage label="Git commit" state={gitDone ? "done" : "pending"} evidence={commitSha ?? "커밋 증거 없음"} href={commitUrl} />
@@ -450,7 +450,7 @@ export function DeploySurface({ pendingRepos = [], repositoryFilter = null, onOp
   return (
     <Page title="배포" icon={Rocket} tabs={["애플리케이션", "GitOps", "워크플로우", "Helm 릴리스"]} tab={tab} onTab={setTab} ensureVerticalScroll
       action={tab === "GitOps"
-        ? <button onClick={onAddRepo} style={{ display: "flex", alignItems: "center", gap: 6, border: "none", background: BLUE, color: UI.card, borderRadius: 9, padding: "6px 13px", fontSize: TYPE.label, fontWeight: 600, cursor: "pointer" }}>+ 저장소 연결</button>
+        ? <button className="product-focusable product-action" onClick={onAddRepo} style={{ display: "flex", alignItems: "center", gap: 6, border: "none", background: BLUE, color: UI.card, borderRadius: 9, padding: "6px 13px", fontSize: TYPE.label, fontWeight: 600, cursor: "pointer" }}>+ 저장소 연결</button>
         : null}>
       <ChipRow chips={[
         { label: "앱", value: appsFeed.status === "ready" ? apps.length : "—" },
@@ -666,12 +666,13 @@ function RecoveryCandidateDetails({
     <div style={{ display: "grid", gap: 16 }}>
       <dl style={{ display: "grid", gridTemplateColumns: "72px minmax(0, 1fr)", alignItems: "center", gap: "8px 10px", margin: 0, paddingBottom: 14 }}>
         <dt style={{ fontSize: TYPE.caption, color: UI.ink2 }}>조치 위험도</dt>
-        <dd style={{ margin: 0, fontSize: TYPE.caption, lineHeight: 1.5, color: UI.ink }}>{candidate.risk_level || "미확인"}</dd>
+        <dd style={{ margin: 0, fontSize: TYPE.caption, lineHeight: 1.5, color: candidate.risk_level ? UI.ink : UI.ink3 }}>{candidate.risk_level || "미확인"}</dd>
         <dt style={{ fontSize: TYPE.caption, color: UI.ink2 }}>영향 범위</dt>
         <dd style={{ minWidth: 0, maxWidth: "100%", margin: 0 }}>
           {onOpenTarget ? (
             <button
               type="button"
+              className="product-focusable product-control"
               title={`${candidate.blast_radius || "대상 리소스"} 상세 열기`}
               onClick={onOpenTarget}
               style={{ maxWidth: "100%", border: "none", borderRadius: 7, background: TINT.gray.bg, color: UI.ink2, padding: "2px 7px", fontSize: TYPE.caption, fontWeight: 400, lineHeight: 1.35, cursor: "pointer", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", transition: `background ${DUR.micro}s ease, color ${DUR.micro}s ease` }}
@@ -683,7 +684,7 @@ function RecoveryCandidateDetails({
               {candidate.blast_radius || "미확인"}
             </button>
           ) : (
-            <span title={candidate.blast_radius} style={{ display: "block", width: "fit-content", maxWidth: "100%", borderRadius: 7, background: TINT.gray.bg, color: UI.ink2, padding: "2px 7px", fontSize: TYPE.caption, lineHeight: 1.35, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{candidate.blast_radius || "미확인"}</span>
+            <span title={candidate.blast_radius} style={{ display: "block", width: "fit-content", maxWidth: "100%", borderRadius: 7, background: TINT.gray.bg, color: candidate.blast_radius ? UI.ink2 : UI.ink3, padding: "2px 7px", fontSize: TYPE.caption, lineHeight: 1.35, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{candidate.blast_radius || "미확인"}</span>
           )}
         </dd>
       </dl>
@@ -696,6 +697,7 @@ function RecoveryCandidateDetails({
       <div style={{ display: "flex", justifyContent: "flex-end", paddingTop: 2 }}>
         <button
           type="button"
+          className={selected ? undefined : "product-focusable product-action"}
           disabled={selected || pending}
           onClick={onSelect}
           style={{ border: selected ? `1px solid ${TINT.ok.bd}` : "none", borderRadius: 8, background: selected ? TINT.ok.bg : pending ? UI.bg2 : BLUE, color: selected ? TINT.ok.fg : pending ? UI.ink3 : UI.card, padding: "7px 13px", fontSize: TYPE.label, fontWeight: 600, cursor: selected || pending ? "default" : "pointer", boxShadow: selected || pending ? "none" : `0 2px 6px ${blueA(0.2)}` }}
@@ -737,7 +739,7 @@ function RecoveryRollbackSection({ candidate }: { candidate: RecoveryActionCandi
   if (!candidate.rollback_plan) return null;
   return (
     <section style={{ display: "grid", gap: 7, paddingTop: 14, borderTop: `1px dashed ${UI.line}` }}>
-      <h4 style={{ margin: 0, fontSize: ISSUE_DETAIL_TYPE.sectionTitle, fontWeight: 700, color: UI.ink }}>실패 시 복원</h4>
+      <h4 style={{ margin: 0, fontSize: ISSUE_DETAIL_TYPE.sectionTitle, fontWeight: 700, color: UI.heading }}>실패 시 복원</h4>
       {candidate.rollback_reason && (
         <div style={{ display: "grid", gridTemplateColumns: "64px minmax(0, 1fr)", gap: 8, alignItems: "start" }}>
           <span style={{ fontSize: TYPE.caption, lineHeight: 1.55, color: UI.ink3 }}>복원 조건</span>
@@ -755,7 +757,7 @@ function RecoveryRollbackSection({ candidate }: { candidate: RecoveryActionCandi
 function RecoveryCandidateSection({ title, text }: { title: string; text: string }) {
   return (
     <section style={{ display: "grid", gap: 7, paddingTop: 14, borderTop: `1px dashed ${UI.line}` }}>
-      <h4 style={{ margin: 0, fontSize: ISSUE_DETAIL_TYPE.sectionTitle, fontWeight: 700, color: UI.ink }}>{title}</h4>
+      <h4 style={{ margin: 0, fontSize: ISSUE_DETAIL_TYPE.sectionTitle, fontWeight: 700, color: UI.heading }}>{title}</h4>
       <p style={{ margin: 0, fontSize: ISSUE_DETAIL_TYPE.body, lineHeight: 1.6, color: UI.ink2 }}>{text}</p>
     </section>
   );
@@ -764,7 +766,7 @@ function RecoveryCandidateSection({ title, text }: { title: string; text: string
 function RecoveryCandidateList({ title, items }: { title: string; items: readonly string[] }) {
   return (
     <section style={{ display: "grid", gap: 7, paddingTop: 14, borderTop: `1px dashed ${UI.line}` }}>
-      <h4 style={{ margin: 0, fontSize: ISSUE_DETAIL_TYPE.sectionTitle, fontWeight: 700, color: UI.ink }}>{title}</h4>
+      <h4 style={{ margin: 0, fontSize: ISSUE_DETAIL_TYPE.sectionTitle, fontWeight: 700, color: UI.heading }}>{title}</h4>
       <ul style={{ display: "grid", gap: 5, margin: 0, padding: 0, listStyle: "none" }}>
         {items.map((item, index) => <li key={`${item}-${index}`} style={{ display: "grid", gridTemplateColumns: "14px minmax(0, 1fr)", gap: 5, fontSize: ISSUE_DETAIL_TYPE.body, lineHeight: 1.5, color: UI.ink2 }}><Check size={12} style={{ marginTop: 2, color: TINT.ok.fg }} /><span>{item}</span></li>)}
       </ul>
@@ -788,7 +790,7 @@ function RecoveryAlternativeCandidate({
   const [open, setOpen] = useState(false);
   return (
     <div style={{ borderTop: `1px dashed ${UI.line}`, background: open ? UI.bg2 : UI.card }}>
-      <button type="button" aria-expanded={open} onClick={() => setOpen((current) => !current)}
+      <button type="button" className="product-focusable product-control" aria-expanded={open} onClick={() => setOpen((current) => !current)}
         style={{ width: "100%", minWidth: 0, display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto auto", alignItems: "center", gap: 10, border: "none", background: "transparent", padding: 12, textAlign: "left", cursor: "pointer" }}>
         <span style={{ minWidth: 0, display: "flex", alignItems: "center", gap: 7 }}>
           <Lightbulb size={14} style={{ flexShrink: 0, color: UI.ink3 }} />
@@ -830,7 +832,7 @@ function RecoveryPlanPanel({
           <div style={{ display: "grid", gap: 13, padding: 15 }}>
             <div style={{ minWidth: 0, display: "flex", alignItems: "center", gap: 8 }}>
               <Lightbulb size={15} style={{ flexShrink: 0, color: UI.ink3 }} />
-              <strong title={recommended.title} style={{ minWidth: 0, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: ISSUE_DETAIL_TYPE.itemTitle, color: UI.ink }}>{recommended.title}</strong>
+              <strong title={recommended.title} style={{ minWidth: 0, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: ISSUE_DETAIL_TYPE.itemTitle, color: UI.heading }}>{recommended.title}</strong>
               <span style={{ border: `1px solid ${TINT.blue.bd}`, borderRadius: 999, background: TINT.blue.bg, color: TINT.blue.fg, padding: "2px 7px", fontSize: TYPE.caption, fontWeight: 600 }}>권장</span>
               <span style={{ fontSize: ISSUE_DETAIL_TYPE.label, color: UI.ink2, fontVariantNumeric: "tabular-nums" }}>{Math.round(recommended.score * 100)}%</span>
             </div>
@@ -882,7 +884,7 @@ function RcaSection({ title, children }: { title: string; children: React.ReactN
 function RcaCardSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section style={{ flexShrink: 0, overflow: "hidden", border: `1px solid ${UI.line}`, borderRadius: 10, background: UI.card }}>
-      <h2 style={{ margin: 0, padding: "12px 15px", borderBottom: `1px solid ${UI.line}`, background: inkA(0.018), fontSize: ISSUE_DETAIL_TYPE.sectionTitle, fontWeight: 700, color: UI.ink }}>{title}</h2>
+      <h2 style={{ margin: 0, padding: "12px 15px", borderBottom: `1px solid ${UI.line}`, background: inkA(0.018), fontSize: ISSUE_DETAIL_TYPE.sectionTitle, fontWeight: 700, color: UI.heading }}>{title}</h2>
       {children}
     </section>
   );
@@ -1061,7 +1063,7 @@ function ReportNumberedSection({ number, title, sectionRef, children }: { number
         <span>{number}</span><span style={{ width: 1, height: "100%", background: inkA(0.28) }} />
       </span>
       <div style={{ minWidth: 0, display: "grid", gap: 11 }}>
-        <h3 style={{ margin: 0, fontSize: TYPE.body, fontWeight: 600, color: UI.ink }}>{title}</h3>
+        <h3 style={{ margin: 0, fontSize: TYPE.body, fontWeight: 600, color: UI.heading }}>{title}</h3>
         {children}
       </div>
     </section>
@@ -1080,7 +1082,7 @@ function CandidateEvidenceTokens({ label, items, tone, references = [], onEviden
           const linked = tone === "ok" && references.some((reference) => evidenceReferenceMatches(item, reference));
           const content = evidenceReferenceLabel(item, references);
           return linked ? (
-            <button key={`${item}-${index}`} type="button" title="해당 근거 상세로 이동" onClick={() => onEvidenceSelect?.(item)}
+            <button key={`${item}-${index}`} className="product-focusable" type="button" title="해당 근거 상세로 이동" onClick={() => onEvidenceSelect?.(item)}
               onMouseEnter={(event) => { event.currentTarget.style.color = UI.ink; }} onMouseLeave={(event) => { event.currentTarget.style.color = UI.ink2; }}
               onFocus={(event) => { event.currentTarget.style.color = UI.ink; }} onBlur={(event) => { event.currentTarget.style.color = UI.ink2; }}
               style={{ border: "none", borderRadius: 4, background: "transparent", color: UI.ink2, padding: 0, font: "inherit", cursor: "pointer", textDecoration: "underline", textUnderlineOffset: 3, transition: `color ${DUR.micro}s ease` }}>{content}</button>
@@ -1145,7 +1147,7 @@ function RcaCandidateList({ report, fallbackCause, onEvidenceSelect }: { report:
         <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
           <span title={selected.title ?? selected.candidate_id} style={{ minWidth: 0, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: TYPE.label, fontWeight: 600, color: UI.ink }}>{selected.title ?? rcaDisplayLabel(selected.candidate_id)}</span>
           <span style={{ flexShrink: 0, borderRadius: 999, border: `1px solid ${TINT.ok.bd}`, background: TINT.ok.bg, color: TINT.ok.fg, padding: "2px 7px", fontSize: TYPE.caption, fontWeight: 600 }}>권장</span>
-          <span style={{ flexShrink: 0, fontSize: TYPE.caption, color: UI.ink2 }}>{selected.score === null ? "미확인" : `${Math.round(selected.score * 100)}%`}</span>
+          <span style={{ flexShrink: 0, fontSize: TYPE.caption, color: selected.score === null ? UI.ink3 : UI.ink2 }}>{selected.score === null ? "미확인" : `${Math.round(selected.score * 100)}%`}</span>
         </div>
         <span style={{ fontSize: TYPE.caption, color: UI.ink2, lineHeight: 1.5 }}>- 필요한 근거 {selectedTotal}개 중 {selectedConfirmed}개가 확인되었습니다.</span>
         {selected.reason && <p style={{ margin: 0, fontSize: TYPE.caption, color: UI.ink2, lineHeight: 1.5 }}>- {selected.reason}</p>}
@@ -1314,7 +1316,7 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
                 ))}
               </div>
             </div>
-            <button type="button" aria-label="상세 닫기" onClick={onClose} style={{ width: 30, height: 30, padding: 0, borderRadius: 999, border: "none", background: inkA(0.06), color: UI.ink2, cursor: "pointer", flexShrink: 0, display: "grid", placeItems: "center", lineHeight: 1 }}><X size={15} /></button>
+            <button type="button" className="product-focusable product-control" aria-label="상세 닫기" onClick={onClose} style={{ width: 30, height: 30, padding: 0, borderRadius: 999, border: "none", background: inkA(0.06), color: UI.ink2, cursor: "pointer", flexShrink: 0, display: "grid", placeItems: "center", lineHeight: 1 }}><X size={15} /></button>
           </div>
           <div role="tablist" aria-label="이슈 상세 보기" style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", padding: "0 20px", borderBottom: `1px solid ${UI.line}` }}>
             {([
@@ -1323,7 +1325,7 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
             ] as const).map(([id, label]) => {
               const selected = activeTab === id;
               return (
-                <button key={id} type="button" role="tab" aria-selected={selected} onClick={() => setActiveTab(id)}
+                <button key={id} className="product-focusable product-control" type="button" role="tab" aria-selected={selected} onClick={() => setActiveTab(id)}
                   style={{ position: "relative", height: 42, border: "none", background: "transparent", color: selected ? UI.ink : UI.ink3, fontSize: TYPE.label, fontWeight: selected ? 600 : 500, cursor: "pointer" }}>
                   {label}
                   {selected && <span aria-hidden="true" style={{ position: "absolute", left: 0, right: 0, bottom: -1, height: 2, background: BLUE, borderRadius: "2px 2px 0 0" }} />}
@@ -1334,8 +1336,8 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
           <div style={{ flex: 1, minHeight: 0, overflowY: "auto", overscrollBehavior: "contain", scrollbarGutter: "stable", display: "flex", flexDirection: "column", gap: 20, padding: "18px 20px" }}>
             {activeTab === "detail" ? <>
             <section aria-labelledby="issue-summary-heading" style={{ flexShrink: 0, display: "grid", gap: 14, border: `1px solid ${UI.line}`, borderRadius: 10, background: UI.card, padding: 16, boxShadow: `0 6px 16px -10px ${inkA(0.26)}, 0 1px 3px ${inkA(0.06)}` }}>
-              <h2 id="issue-summary-heading" style={{ margin: 0, fontSize: ISSUE_DETAIL_TYPE.itemTitle, fontWeight: 700, color: UI.ink }}>상황 요약</h2>
-              <p style={{ margin: 0, fontSize: TYPE.body, fontWeight: 600, color: UI.ink, lineHeight: 1.65 }}>{situationSummary?.trim() || "상황 요약 정보가 아직 없습니다."}</p>
+              <h2 id="issue-summary-heading" style={{ margin: 0, fontSize: ISSUE_DETAIL_TYPE.itemTitle, fontWeight: 700, color: UI.heading }}>상황 요약</h2>
+              <p style={{ margin: 0, fontSize: TYPE.body, fontWeight: 600, color: situationSummary?.trim() ? UI.ink : UI.ink3, lineHeight: 1.65 }}>{situationSummary?.trim() || "상황 요약 정보가 아직 없습니다."}</p>
               {(reportFirstSeenAt || reportElapsed || reportImpact) && <dl style={{ display: "grid", gridTemplateColumns: "86px minmax(0, 1fr)", gap: "7px 10px", margin: 0, paddingTop: 12, borderTop: `1px solid ${UI.line2}`, fontSize: TYPE.caption, lineHeight: 1.5 }}>
                 {reportFirstSeenAt && <><dt style={{ color: UI.ink3 }}>장애 시작</dt><dd style={{ margin: 0, color: UI.ink2 }}>{reportTimeLabel(reportFirstSeenAt)}</dd></>}
                 {reportElapsed && <><dt style={{ color: UI.ink3 }}>분석 시점까지</dt><dd style={{ margin: 0, color: UI.ink2 }}>{reportElapsed}</dd></>}
@@ -1344,7 +1346,7 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
               <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
                 <span style={{ border: `1px solid ${UI.line}`, borderRadius: 999, padding: "3px 9px", fontSize: TYPE.caption, color: UI.ink2, background: UI.card }}>{observedStatus}</span>
                 {conf !== null && <span style={{ border: `1px solid ${UI.line}`, borderRadius: 999, padding: "3px 9px", fontSize: TYPE.caption, color: UI.ink2, background: UI.card }}>신뢰도 {conf}%</span>}
-                <button type="button" onClick={() => evidenceSummaryRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                <button type="button" className="product-focusable product-control" onClick={() => evidenceSummaryRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
                   onMouseEnter={() => setEvidenceChipActive(true)} onMouseLeave={() => setEvidenceChipActive(false)} onFocus={() => setEvidenceChipActive(true)} onBlur={() => setEvidenceChipActive(false)}
                   style={{ border: `1px solid ${evidenceChipActive ? UI.ink3 : UI.line}`, borderRadius: 999, padding: "3px 9px", fontSize: TYPE.caption, color: evidenceChipActive ? UI.ink : UI.ink2, background: evidenceChipActive ? inkA(0.055) : UI.card, cursor: "pointer", transition: `background ${DUR.micro}s ease, color ${DUR.micro}s ease, border-color ${DUR.micro}s ease` }}>확인된 근거 {support.length}</button>
               </div>
@@ -1371,7 +1373,7 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
                     </div>
                   </div>
                 ) : recentChanges.status === "idle" || recentChanges.items.length === 0 ? (
-                  <div style={{ padding: 14, fontSize: TYPE.label, color: UI.ink2 }}>장애 이전에 확인된 변경이 없습니다.</div>
+                  <div style={{ padding: 14, fontSize: TYPE.label, color: UI.ink3 }}>장애 이전에 확인된 변경이 없습니다.</div>
                 ) : recentChanges.items.map((change, index) => (
                   <div key={change.event_id} style={{ display: "grid", gap: 8, padding: 13, borderTop: index > 0 ? `1px solid ${UI.line2}` : "none" }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
@@ -1383,14 +1385,14 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
                         {change.image_before && <div style={{ display: "grid", gridTemplateColumns: "auto 88px minmax(0, 1fr)", alignItems: "center", gap: 8 }}>
                           <ArrowLeft size={13} style={{ color: UI.ink2 }} />
                           <span style={{ color: UI.ink2 }}>이전 배포 버전</span>
-                          <button type="button" title={`${change.resource_kind} ${change.resource_name} 상세 열기`} onClick={() => onOpenRef(change.resource_kind, change.resource_name)}
+                          <button type="button" className="product-focusable product-control" title={`${change.resource_kind} ${change.resource_name} 상세 열기`} onClick={() => onOpenRef(change.resource_kind, change.resource_name)}
                             onMouseEnter={() => setDeploymentLinkActive(`${change.event_id}-before`)} onMouseLeave={() => setDeploymentLinkActive(null)} onFocus={() => setDeploymentLinkActive(`${change.event_id}-before`)} onBlur={() => setDeploymentLinkActive(null)}
                             style={{ minWidth: 0, justifySelf: "start", maxWidth: "100%", border: "none", borderRadius: 5, background: deploymentLinkActive === `${change.event_id}-before` ? inkA(0.06) : "transparent", color: deploymentLinkActive === `${change.event_id}-before` ? UI.ink : UI.ink2, padding: "2px 4px", fontFamily: MONO, fontSize: TYPE.caption, cursor: "pointer", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{change.image_before}</button>
                         </div>}
                         {change.image_after && <div style={{ display: "grid", gridTemplateColumns: "auto 88px minmax(0, 1fr)", alignItems: "center", gap: 8 }}>
                           <ArrowRight size={13} style={{ color: UI.ink2 }} />
                           <span style={{ color: UI.ink2 }}>현재 배포 버전</span>
-                          <button type="button" title={`${change.resource_kind} ${change.resource_name} 상세 열기`} onClick={() => onOpenRef(change.resource_kind, change.resource_name)}
+                          <button type="button" className="product-focusable product-control" title={`${change.resource_kind} ${change.resource_name} 상세 열기`} onClick={() => onOpenRef(change.resource_kind, change.resource_name)}
                             onMouseEnter={() => setDeploymentLinkActive(`${change.event_id}-after`)} onMouseLeave={() => setDeploymentLinkActive(null)} onFocus={() => setDeploymentLinkActive(`${change.event_id}-after`)} onBlur={() => setDeploymentLinkActive(null)}
                             style={{ minWidth: 0, justifySelf: "start", maxWidth: "100%", border: "none", borderRadius: 5, background: deploymentLinkActive === `${change.event_id}-after` ? inkA(0.06) : "transparent", color: deploymentLinkActive === `${change.event_id}-after` ? UI.ink : UI.ink2, padding: "2px 4px", fontFamily: MONO, fontSize: TYPE.caption, cursor: "pointer", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{change.image_after}</button>
                         </div>}
@@ -1414,14 +1416,14 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
                     ["장애 심각도", reportRiskLabel(report?.severity ?? severity)],
                     ["신뢰도", reportConfidencePercent === null ? "미확인" : `${reportConfidencePercent}%`],
                     ["시간", reportTimeLabel(report?.created_at ?? updatedAt)],
-                  ].map(([label, value]) => <div key={label} style={{ minWidth: 0, display: "grid", gap: 3 }}><span style={{ fontSize: TYPE.caption, color: UI.ink2 }}>{label}</span><strong title={value} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: TYPE.caption, color: UI.ink }}>{value}</strong></div>)}
+                  ].map(([label, value]) => <div key={label} style={{ minWidth: 0, display: "grid", gap: 3 }}><span style={{ fontSize: TYPE.caption, color: UI.ink2 }}>{label}</span><strong title={value} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: TYPE.caption, color: value === "미확인" ? UI.ink3 : UI.ink }}>{value}</strong></div>)}
                 </div>
                 <dl style={{ display: "grid", gridTemplateColumns: "52px minmax(0, 1fr)", gap: "7px 8px", margin: 0, padding: "14px 0" }}>
                   <dt style={{ fontSize: TYPE.caption, color: UI.ink2 }}>증상</dt><dd title={reportSymptom} style={{ margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: TYPE.caption, color: UI.ink }}>{reportSymptom}</dd>
-                  <dt style={{ fontSize: TYPE.caption, color: UI.ink2 }}>영향 범위</dt><dd title={reportScope} style={{ margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: TYPE.caption, color: UI.ink }}>{reportScope || "미확인"}</dd>
+                  <dt style={{ fontSize: TYPE.caption, color: UI.ink2 }}>영향 범위</dt><dd title={reportScope} style={{ margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: TYPE.caption, color: reportScope ? UI.ink : UI.ink3 }}>{reportScope || "미확인"}</dd>
                 </dl>
                 <ReportNumberedSection number="01" title="최종 판단">
-                  <p style={{ margin: 0, fontSize: TYPE.label, color: UI.ink2, lineHeight: 1.6 }}>{report?.narrative?.executive_summary || situationSummary || (rootCause ? `${rootCause}로 ${reportSymptom} 증상이 발생한 것으로 판단했습니다.` : "최종 판단 정보가 아직 없습니다.")}</p>
+                  <p style={{ margin: 0, fontSize: TYPE.label, color: report?.narrative?.executive_summary || situationSummary || rootCause ? UI.ink2 : UI.ink3, lineHeight: 1.6 }}>{report?.narrative?.executive_summary || situationSummary || (rootCause ? `${rootCause}로 ${reportSymptom} 증상이 발생한 것으로 판단했습니다.` : "최종 판단 정보가 아직 없습니다.")}</p>
                 </ReportNumberedSection>
                 <ReportNumberedSection number="02" title="최종 원인">
                   {latestReport.status === "loading" && <span style={{ fontSize: TYPE.caption, color: UI.ink2 }}>원인 후보를 불러오는 중…</span>}
@@ -1432,16 +1434,16 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
                   {evidenceSummary || evidenceBundleSummary ? <div style={{ display: "grid", gap: 7 }}>
                     {evidenceSummary && <div style={{ display: "grid", gridTemplateColumns: "16px minmax(0, 1fr)", gap: 7, alignItems: "start" }}><span aria-hidden="true" style={{ width: 16, height: 20, display: "grid", placeItems: "center", color: TINT.ok.fg }}><CircleCheck size={14} /></span><p style={{ margin: 0, fontSize: TYPE.label, color: UI.ink2, lineHeight: 1.55 }}>{evidenceSummary}</p></div>}
                     {evidenceBundleSummary && <p style={{ margin: "0 0 0 23px", fontSize: TYPE.caption, color: UI.ink2, lineHeight: 1.5 }}>{evidenceBundleSummary}</p>}
-                  </div> : <p style={{ margin: 0, fontSize: TYPE.label, color: UI.ink2 }}>근거 요약이 아직 없습니다.</p>}
+                  </div> : <p style={{ margin: 0, fontSize: TYPE.label, color: UI.ink3 }}>근거 요약이 아직 없습니다.</p>}
                 </ReportNumberedSection>
                 <ReportNumberedSection number="04" title="근거 상세">
                   {(report?.supporting_evidence_refs.length ?? 0) > 0 ? <div style={{ display: "grid", borderBottom: `1px dashed ${UI.line}` }}>
                     {report!.supporting_evidence_refs.map((evidence, index) => <EvidenceDetailItem key={`${evidence.source}-${evidence.name}-${index}`} id={evidenceDetailAnchor(index)} evidence={evidence} highlighted={highlightedEvidenceIndex === index} onOpenChange={(open) => { if (!open) setHighlightedEvidenceIndex((current) => current === index ? null : current); }} />)}
-                  </div> : support.length > 0 ? <ul style={{ display: "grid", gap: 7, margin: 0, padding: 0, listStyle: "none" }}>{support.map((item, index) => <li key={`${item}-${index}`} style={{ fontSize: TYPE.label, color: UI.ink2, lineHeight: 1.5 }}>{item}</li>)}</ul> : <p style={{ margin: 0, fontSize: TYPE.label, color: UI.ink2 }}>근거 상세가 아직 없습니다.</p>}
+                  </div> : support.length > 0 ? <ul style={{ display: "grid", gap: 7, margin: 0, padding: 0, listStyle: "none" }}>{support.map((item, index) => <li key={`${item}-${index}`} style={{ fontSize: TYPE.label, color: UI.ink2, lineHeight: 1.5 }}>{item}</li>)}</ul> : <p style={{ margin: 0, fontSize: TYPE.label, color: UI.ink3 }}>근거 상세가 아직 없습니다.</p>}
                 </ReportNumberedSection>
                 <ReportNumberedSection number="05" title="권장 조치">
-                  <p style={{ margin: 0, fontSize: TYPE.label, color: UI.ink2, lineHeight: 1.55 }}>{recommendedActionSummary || report?.narrative?.recommended_action || "권장 조치가 아직 없습니다."}</p>
-                  <button type="button" onClick={() => setActiveTab("recovery")} style={{ justifySelf: "end", border: `1px solid ${blueA(0.32)}`, borderRadius: 8, background: blueA(0.07), color: BLUE, padding: "7px 12px", fontSize: TYPE.caption, fontWeight: 600, cursor: "pointer" }}>복구 플랜 보기</button>
+                  <p style={{ margin: 0, fontSize: TYPE.label, color: recommendedActionSummary || report?.narrative?.recommended_action ? UI.ink2 : UI.ink3, lineHeight: 1.55 }}>{recommendedActionSummary || report?.narrative?.recommended_action || "권장 조치가 아직 없습니다."}</p>
+                  <button type="button" className="product-focusable product-control" onClick={() => setActiveTab("recovery")} style={{ justifySelf: "end", border: `1px solid ${blueA(0.32)}`, borderRadius: 8, background: blueA(0.07), color: BLUE, padding: "7px 12px", fontSize: TYPE.caption, fontWeight: 600, cursor: "pointer" }}>복구 플랜 보기</button>
                 </ReportNumberedSection>
               </div>
             </RcaCardSection>
@@ -1520,6 +1522,7 @@ function IssueSeverityFilters({ active, criticalCount, warningCount, onChange, t
         return (
           <button
             key={filter.id}
+            className="product-focusable"
             type="button"
             aria-pressed={selected}
             onClick={() => onChange(filter.id)}
@@ -1605,6 +1608,7 @@ function IssueCard({ issue, recoverySelectionAccepted, onOpen, onOpenTarget }: {
             {onOpenTarget ? (
               <button
                 type="button"
+                className="product-focusable product-control"
                 onClick={(event) => {
                   event.preventDefault();
                   event.stopPropagation();
@@ -1631,7 +1635,7 @@ function IssueCard({ issue, recoverySelectionAccepted, onOpen, onOpenTarget }: {
 
         <span style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
           <Pill tone={state.tone} label={state.label} />
-          <button type="button" onClick={(event) => { event.stopPropagation(); onOpen(); }} style={{ display: "inline-flex", alignItems: "center", gap: 3, border: "none", background: "transparent", padding: 0, color: BLUE, fontSize: TYPE.label, fontWeight: 600, cursor: "pointer" }}>열기 <ChevronRight size={14} /></button>
+          <button type="button" className="product-focusable product-control" onClick={(event) => { event.stopPropagation(); onOpen(); }} style={{ display: "inline-flex", alignItems: "center", gap: 3, border: "none", background: "transparent", padding: "3px 5px", color: BLUE, borderRadius: 6, fontSize: TYPE.label, fontWeight: 600, cursor: "pointer" }}>열기 <ChevronRight size={14} /></button>
         </span>
       </span>
     </motion.div>
@@ -1679,7 +1683,7 @@ export function IssuesSurface({ incidentClusterIds, recoverySelectionCorrelation
   });
   return (
     <Page title="이슈" icon={AlertTriangle} tabs={["진행 중", "해결됨", "예방 점검"]} tab={tab} onTab={setTab}
-      action={tab === "진행 중" ? <button onClick={onAskAi} style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${blueA(0.4)}`, background: blueA(0.07), color: BLUE, borderRadius: 9, padding: "6px 13px", fontSize: TYPE.label, fontWeight: 600, cursor: "pointer" }}>AI로 원인 분석</button> : null}>
+      action={tab === "진행 중" ? <button className="product-focusable product-control" onClick={onAskAi} style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${blueA(0.4)}`, background: blueA(0.07), color: BLUE, borderRadius: 9, padding: "6px 13px", fontSize: TYPE.label, fontWeight: 600, cursor: "pointer" }}>AI로 원인 분석</button> : null}>
       {tab === "진행 중" && (
         <IssueSeverityFilters active={severityFilter} criticalCount={critCount} warningCount={warnCount} onChange={setSeverityFilter} totalCount={activeIssues.length} />
       )}
@@ -1690,7 +1694,7 @@ export function IssuesSurface({ incidentClusterIds, recoverySelectionCorrelation
           ) : issues.status === "unavailable" && visibleIssues.length === 0 ? (
             <Card><div style={{ fontSize: TYPE.label, color: UI.ink3 }}>이슈를 불러오지 못했습니다.</div></Card>
           ) : visibleIssues.length === 0 ? (
-            <Card><div style={{ fontSize: TYPE.label, color: UI.ink2 }}>{tab === "해결됨" ? "해결된 이슈가 없습니다." : severityFilter === "all" ? "진행 중인 이슈가 없습니다." : `${severityFilter === "critical" ? "장애" : "주의"} 이슈가 없습니다.`}</div></Card>
+            <Card><div style={{ fontSize: TYPE.label, color: UI.ink3 }}>{tab === "해결됨" ? "해결된 이슈가 없습니다." : severityFilter === "all" ? "진행 중인 이슈가 없습니다." : `${severityFilter === "critical" ? "장애" : "주의"} 이슈가 없습니다.`}</div></Card>
           ) : visibleIssues.map((iss) => {
             const resourceKind = iss.resourceKind;
             const resourceName = iss.resourceName;
@@ -1766,7 +1770,7 @@ export function TimelineSurface({ onOpenRef: _onOpenRef }: { onOpenRef: (kind: s
       )}
       <div style={{ display: "flex", gap: 6 }}>
         {(["전체", "배포", "이슈", "구성"] as const).map((c) => (
-          <button key={c} onClick={() => { setCat(c); setPage(0); }}
+          <button key={c} className="product-focusable product-control" aria-selected={cat === c} onClick={() => { setCat(c); setPage(0); }}
             style={{ display: "flex", alignItems: "center", gap: 5, border: `1px solid ${cat === c ? blueA(0.45) : UI.line}`, background: cat === c ? blueA(0.07) : UI.card, color: cat === c ? BLUE : UI.ink2, borderRadius: 999, padding: "4px 13px", fontSize: TYPE.label, fontWeight: 600, cursor: "pointer" }}>{c}
             <span style={{ fontVariantNumeric: "tabular-nums", fontSize: TYPE.caption, color: cat === c ? BLUE : UI.ink3 }}>{c === "전체" ? items.length : items.filter((i) => i.cat === c).length}</span>
           </button>
@@ -1789,9 +1793,9 @@ export function TimelineSurface({ onOpenRef: _onOpenRef }: { onOpenRef: (kind: s
             <span style={{ marginRight: "auto", fontSize: TYPE.caption, color: UI.ink3 }}>
               {safePage * pageSize + 1}–{Math.min((safePage + 1) * pageSize, shown.length)} / {shown.length}
             </span>
-            <button type="button" disabled={safePage === 0} onClick={() => setPage((value) => Math.max(0, value - 1))}
+            <button type="button" className="product-focusable product-control" disabled={safePage === 0} onClick={() => setPage((value) => Math.max(0, value - 1))}
               style={{ border: `1px solid ${UI.line}`, background: UI.card, color: safePage === 0 ? UI.ink3 : UI.ink2, borderRadius: 7, padding: "4px 9px", fontSize: TYPE.caption, cursor: safePage === 0 ? "default" : "pointer" }}>이전</button>
-            <button type="button" disabled={safePage >= pageCount - 1} onClick={() => setPage((value) => Math.min(pageCount - 1, value + 1))}
+            <button type="button" className="product-focusable product-control" disabled={safePage >= pageCount - 1} onClick={() => setPage((value) => Math.min(pageCount - 1, value + 1))}
               style={{ border: `1px solid ${UI.line}`, background: UI.card, color: safePage >= pageCount - 1 ? UI.ink3 : UI.ink2, borderRadius: 7, padding: "4px 9px", fontSize: TYPE.caption, cursor: safePage >= pageCount - 1 ? "default" : "pointer" }}>다음</button>
           </div>
         )}
@@ -1918,7 +1922,7 @@ function Segmented<T extends string>({ value, options, onPick, disabled }: {
       {options.map((o) => {
         const active = o.id === value;
         return (
-          <button key={o.id} onClick={() => { if (!disabled && !active) onPick(o.id); }} disabled={disabled}
+          <button key={o.id} className="product-focusable product-control" aria-selected={active} onClick={() => { if (!disabled && !active) onPick(o.id); }} disabled={disabled}
             style={{ border: "none", background: active ? UI.card : "transparent", color: active ? UI.ink : UI.ink3, borderRadius: 7, padding: "4px 12px", fontSize: TYPE.label, fontWeight: 600, cursor: disabled ? "not-allowed" : active ? "default" : "pointer", boxShadow: active ? `0 1px 3px ${inkA(0.14)}` : "none", opacity: disabled ? 0.55 : 1 }}>
             {o.label}
           </button>
@@ -1966,7 +1970,7 @@ export function SettingsSurface() {
             onPick={(locale) => prefs.save({ locale })}
             options={[{ id: "en", label: "English" }, { id: "ko", label: "한국어" }]} />} />
         <SettingsRow icon={Bell} title="토스트 알림" sub="장애 사건만 토스트로 알림 · 벨에는 전부 기록 · 이 브라우저에만 저장됩니다" right={
-          <button type="button" role="switch" aria-label="장애 사건 토스트 알림" aria-checked={noise} onClick={toggleNoise} style={{ width: 34, height: 20, borderRadius: 999, border: "none", cursor: "pointer", background: noise ? HP.ok : inkA(0.15), position: "relative", transition: "background .2s" }}>
+          <button type="button" className="product-focusable" role="switch" aria-label="장애 사건 토스트 알림" aria-checked={noise} onClick={toggleNoise} style={{ width: 34, height: 20, borderRadius: 999, border: "none", cursor: "pointer", background: noise ? HP.ok : inkA(0.15), position: "relative", transition: "background .2s" }}>
             <span style={{ position: "absolute", top: 2, left: noise ? 16 : 2, width: 16, height: 16, borderRadius: 999, background: UI.card, boxShadow: `0 1px 3px ${inkA(0.3)}`, transition: "left .2s" }} />
           </button>} />
       </Card>
@@ -2124,7 +2128,7 @@ export function AiHistorySurface({ onOpenPanel }: { onOpenPanel: () => void }) {
             .join("\n");
     return (
       <Page title={selected?.title ?? "AI 대화"} icon={Sparkles}
-        action={<button onClick={() => setSelectedId(null)} style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${UI.line}`, background: UI.card, color: UI.ink2, borderRadius: 9, padding: "6px 13px", fontSize: TYPE.label, fontWeight: 600, cursor: "pointer" }}>← 목록</button>}>
+        action={<button className="product-focusable product-control" onClick={() => setSelectedId(null)} style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${UI.line}`, background: UI.card, color: UI.ink2, borderRadius: 9, padding: "6px 13px", fontSize: TYPE.label, fontWeight: 600, cursor: "pointer" }}>← 목록</button>}>
         <Card>
           {detail.status === "loading" ? (
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -2143,7 +2147,7 @@ export function AiHistorySurface({ onOpenPanel }: { onOpenPanel: () => void }) {
                 {detail.turns.map((turn, i) => (
                   <div key={i} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                     <span style={{ fontSize: TYPE.caption, fontWeight: 600, color: turn.role === "user" ? BLUE : UI.ink2 }}>{turn.role === "user" ? "질문" : "응답"}</span>
-                    <div style={{ fontSize: TYPE.label, color: UI.ink, whiteSpace: "pre-wrap", lineHeight: 1.65 }}>{turnText(turn) || "(내용 없음)"}</div>
+                    <div style={{ fontSize: TYPE.label, color: turnText(turn) ? UI.ink : UI.ink3, whiteSpace: "pre-wrap", lineHeight: 1.65 }}>{turnText(turn) || "(내용 없음)"}</div>
                   </div>
                 ))}
               </div>}
@@ -2154,7 +2158,7 @@ export function AiHistorySurface({ onOpenPanel }: { onOpenPanel: () => void }) {
 
   return (
     <Page title="AI 대화" icon={Sparkles}
-      action={<button onClick={onOpenPanel} style={{ display: "flex", alignItems: "center", gap: 6, border: "none", background: BLUE, color: UI.card, borderRadius: 9, padding: "6px 13px", fontSize: TYPE.label, fontWeight: 600, cursor: "pointer" }}>새 대화</button>}>
+      action={<button className="product-focusable product-action" onClick={onOpenPanel} style={{ display: "flex", alignItems: "center", gap: 6, border: "none", background: BLUE, color: UI.card, borderRadius: 9, padding: "6px 13px", fontSize: TYPE.label, fontWeight: 600, cursor: "pointer" }}>새 대화</button>}>
       <Card pad={0}>
         <THead cols={cols} />
         {feed.status === "loading" ? emptyRow("불러오는 중…")

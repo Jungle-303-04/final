@@ -151,7 +151,7 @@ export function OpsiaServicePanel({ activeCluster, selectedNamespace }: OpsiaSer
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "2px 2px 4px" }}>
-        <span style={{ fontSize: TYPE.body, fontWeight: 600, color: UI.ink }}>서비스</span>
+        <span style={{ fontSize: TYPE.body, fontWeight: 600, color: UI.heading }}>서비스</span>
         <span style={{ fontSize: TYPE.caption, color: UI.ink3 }}>
           {serviceStatusLabel(serviceView.status, serviceView.rows.length)}
         </span>
