@@ -145,7 +145,7 @@ function GapBanner({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex items-start gap-3 orange-bg" style={{ borderRadius: 14, padding: "13px 15px" }}>
       <Info className="mt-0.5 size-[17px] shrink-0 c-orange" />
-      <div className="text-[12.5px] leading-[1.55] c-2">{children}</div>
+      <div className="text-label leading-[1.55] c-2">{children}</div>
     </div>
   );
 }
@@ -156,7 +156,7 @@ function ProviderChips({ providers }: { providers: ProviderAvailability[] }) {
     <div className="flex flex-wrap items-center gap-1.5">
       {providers.map((p) => (
         <span key={p.key} title={p.unavailableReason ? reasonLabel(p.unavailableReason) : undefined}
-          className={`inline-flex items-center gap-1 rounded-full px-2 py-[3px] text-[11px] font-semibold ${p.available ? "green-bg c-green" : "orange-bg c-orange"}`}>
+          className={`inline-flex items-center gap-1 rounded-full px-2 py-[3px] text-caption font-semibold ${p.available ? "green-bg c-green" : "orange-bg c-orange"}`}>
           {p.available ? <Check className="size-3" strokeWidth={2.5} /> : <X className="size-3" strokeWidth={2.5} />}
           {p.label}
         </span>
@@ -170,7 +170,7 @@ function NextButton({ show, label, onClick }: { show: boolean; label: string; on
     <AnimatePresence initial={false}>
       {show && (
         <motion.div key="next" initial={{ opacity: 0, height: 0, marginTop: 0 }} animate={{ opacity: 1, height: "auto", marginTop: 4 }} exit={{ opacity: 0, height: 0, marginTop: 0 }} transition={{ duration: 0.28, ease: EASE }} className="overflow-hidden">
-          <button onClick={onClick} className="btn-primary flex w-full items-center justify-center gap-1.5 text-[15px] font-semibold tracking-[-0.01em]" style={{ borderRadius: 14, paddingTop: 14, paddingBottom: 14 }}>
+          <button onClick={onClick} className="btn-primary flex w-full items-center justify-center gap-1.5 text-section font-semibold tracking-[-0.01em]" style={{ borderRadius: 14, paddingTop: 14, paddingBottom: 14 }}>
             {label} <ArrowRight className="size-[17px]" />
           </button>
         </motion.div>
@@ -197,7 +197,7 @@ function FloatingToast({ message, onDismiss }: { message: string | null; onDismi
             className="pointer-events-auto flex max-w-[460px] items-center gap-3"
             style={{ background: "var(--surface)", border: "1px solid rgba(239,68,68,0.28)", borderRadius: 14, padding: "13px 18px", boxShadow: "0 24px 60px -16px rgba(0,0,0,0.4), 0 6px 16px -6px rgba(0,0,0,0.16)" }}>
             <span className="grid size-6 shrink-0 place-items-center rounded-full" style={{ background: "rgba(239,68,68,0.12)" }}><AlertCircle className="size-[15px] c-red" strokeWidth={2.4} /></span>
-            <span className="text-[13px] font-medium c-ink">{message}</span>
+            <span className="text-body font-medium c-ink">{message}</span>
           </motion.div>
         )}
       </AnimatePresence>
@@ -217,8 +217,8 @@ function ShellHeader({ icon: Icon, title, sub, onClose, onBack }: { icon: typeof
           <span className="grid size-12 shrink-0 place-items-center hdr-grad text-white" style={{ borderRadius: 15, boxShadow: "0 8px 18px -6px rgba(47,91,255,0.5)" }}><Icon className="size-[22px]" /></span>
         )}
         <div className="min-w-0 flex-1">
-          <h1 className="text-[19px] font-semibold tracking-[-0.02em] c-ink">{title}</h1>
-          <p className="mt-1 text-[13px] c-2">{sub}</p>
+          <h1 className="text-section font-semibold tracking-[-0.02em] c-ink">{title}</h1>
+          <p className="mt-1 text-body c-2">{sub}</p>
         </div>
         <button onClick={onClose} aria-label="닫기" className="grid size-9 place-items-center rounded-full c-3 transition-colors hover:bg-soft" style={{ marginTop: -4 }}><X className="size-5" /></button>
       </div>
@@ -235,11 +235,11 @@ function Steps({ steps, active }: { steps: string[]; active: number }) {
         return (
           <div key={s} className="flex items-center" style={{ flex: i < steps.length - 1 ? "1 1 0%" : "0 0 auto" }}>
             <div className="flex items-center gap-3">
-              <motion.span layout className="grid shrink-0 place-items-center rounded-full font-bold" style={{ width: 34, height: 34, fontSize: 15 }}
+              <motion.span layout className="grid shrink-0 place-items-center rounded-full font-bold" style={{ width: 34, height: 34, fontSize: "var(--type-section)" }}
                 animate={{ backgroundColor: done || now ? "var(--accent)" : "rgba(0,0,0,0.07)", color: done || now ? "#fff" : "var(--ink-3)", boxShadow: now ? "0 0 0 5px rgba(0,113,227,0.15)" : "0 0 0 0px rgba(0,113,227,0)" }} transition={{ duration: 0.3 }}>
                 {done ? <Check className="size-[18px]" strokeWidth={3} /> : i + 1}
               </motion.span>
-              <span className="text-[14.5px] font-semibold tracking-[-0.01em]" style={{ color: done || now ? "var(--ink)" : "var(--ink-3)" }}>{s}</span>
+              <span className="text-body font-semibold tracking-[-0.01em]" style={{ color: done || now ? "var(--ink)" : "var(--ink-3)" }}>{s}</span>
             </div>
             {i < steps.length - 1 && (
               <div className="mx-3 h-[3px] flex-1 overflow-hidden rounded-full" style={{ background: "rgba(0,0,0,0.08)" }}>
@@ -324,11 +324,11 @@ function GithubAppConnect({
 
   const banner =
     registerNote === "created" ? (
-      <span className="px-0.5 text-[11.5px] c-green">GitHub App 등록 완료 — 이제 원클릭으로 연결됩니다.</span>
+      <span className="px-0.5 text-caption c-green">GitHub App 등록 완료 — 이제 원클릭으로 연결됩니다.</span>
     ) : registerNote === "error" ? (
-      <span className="px-0.5 text-[11.5px] c-red">GitHub App 등록에 실패했습니다. 다시 시도하세요.</span>
+      <span className="px-0.5 text-caption c-red">GitHub App 등록에 실패했습니다. 다시 시도하세요.</span>
     ) : null;
-  const noteEl = note ? <span className="px-0.5 text-[11.5px] c-red">{note}</span> : null;
+  const noteEl = note ? <span className="px-0.5 text-caption c-red">{note}</span> : null;
 
   // ① 구성됨 → 누구나 원클릭 연결
   if (config.install_available) {
@@ -337,7 +337,7 @@ function GithubAppConnect({
         <button
           onClick={() => void connectWithApp()}
           disabled={busy}
-          className="btn-primary flex w-full items-center justify-center gap-2 rounded-[14px] py-3.5 text-[15px] font-semibold disabled:cursor-not-allowed disabled:opacity-60"
+          className="btn-primary flex w-full items-center justify-center gap-2 rounded-[14px] py-3.5 text-section font-semibold disabled:cursor-not-allowed disabled:opacity-60"
         >
           GitHub App으로 연결 <ArrowRight className="size-[17px]" />
         </button>
@@ -351,8 +351,8 @@ function GithubAppConnect({
   if (!isAdmin) {
     return (
       <motion.div layout {...REVEAL} className="grid gap-1.5 rounded-[14px] p-3.5" style={{ background: "var(--fill)" }}>
-        <div className="text-[12.5px] font-medium c-2">GitHub App이 아직 설정되지 않았어요</div>
-        <span className="text-[11.5px] c-3">
+        <div className="text-label font-medium c-2">GitHub App이 아직 설정되지 않았어요</div>
+        <span className="text-caption c-3">
           관리자가 GitHub App을 등록하면 토큰 없이 연결됩니다. 지금은 아래 액세스 토큰으로 연결하세요.
         </span>
         {banner}
@@ -363,11 +363,11 @@ function GithubAppConnect({
   // ③ 미구성 + 어드민 → 원클릭 자동 등록(주소 입력 불필요)
   return (
     <motion.div layout {...REVEAL} className="grid gap-2.5 rounded-[14px] p-3.5" style={{ background: "var(--fill)" }}>
-      <div className="text-[12.5px] font-medium c-2">GitHub App 미설정 · 운영자 1회 자동 등록</div>
+      <div className="text-label font-medium c-2">GitHub App 미설정 · 운영자 1회 자동 등록</div>
       <button
         onClick={() => void registerApp()}
         disabled={busy}
-        className="btn-primary flex items-center justify-center gap-2 rounded-[12px] py-3 text-[14px] font-semibold disabled:opacity-60"
+        className="btn-primary flex items-center justify-center gap-2 rounded-[12px] py-3 text-body font-semibold disabled:opacity-60"
       >
         GitHub에서 자동 등록 <ArrowRight className="size-4" />
       </button>
@@ -546,18 +546,18 @@ function RepoStep({ providers, onNext }: { providers: ClusterProvidersView; onNe
 
   return (
     <motion.div key="repo" {...swap} style={{ wordBreak: "keep-all", textWrap: "pretty" }} className="grid gap-5">
-      <p className="text-[14px] leading-[1.55] c-2">Git 저장소 주소를 확인한 뒤 서버가 선택한 브랜치와 매니페스트를 실제 리비전에서 검증합니다.</p>
+      <p className="text-body leading-[1.55] c-2">Git 저장소 주소를 확인한 뒤 서버가 선택한 브랜치와 매니페스트를 실제 리비전에서 검증합니다.</p>
 
       {providers.status === "ready" && providers.sourceProviders.length > 0 && (
         <div className="grid gap-2">
-          <span className="px-0.5 text-[12px] font-medium c-3">서버 지원 소스 제공자(라이브)</span>
+          <span className="px-0.5 text-label font-medium c-3">서버 지원 소스 제공자(라이브)</span>
           <ProviderChips providers={providers.sourceProviders} />
         </div>
       )}
 
       <div className="field flex items-center gap-3 bg-surface" style={{ borderRadius: 14, padding: "15px 16px" }}>
         {status === "detecting" ? <Spin c="size-[18px] c-accent" /> : <Search className="size-[18px] c-3" />}
-        <input value={input} onChange={(e) => handleInputChange(e.currentTarget.value)} placeholder="https://github.com/org/repo" className="w-full bg-transparent font-mono text-[14px] c-ink outline-none placeholder:font-sans placeholder:c-3" />
+        <input value={input} onChange={(e) => handleInputChange(e.currentTarget.value)} placeholder="https://github.com/org/repo" className="w-full bg-transparent font-mono text-body c-ink outline-none placeholder:font-sans placeholder:c-3" />
       </div>
 
       {/* GitHub App 원클릭 복귀 배너 — 설치 검증 결과를 그대로 노출. */}
@@ -585,21 +585,21 @@ function RepoStep({ providers, onNext }: { providers: ClusterProvidersView; onNe
             ) : (
               <AlertCircle className="mt-0.5 size-4 c-red" />
             )}
-            <span className="text-[12.5px] leading-[1.5] c-2">{appReturn.text}</span>
+            <span className="text-label leading-[1.5] c-2">{appReturn.text}</span>
           </motion.div>
         )}
       </AnimatePresence>
 
       <AnimatePresence mode="popLayout">
         {status === "detecting" && (
-          <motion.p key="det" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex items-center gap-2 px-0.5 text-[13px] c-2"><Spin c="size-3.5 c-accent" /> 주소 형식 확인 중…</motion.p>
+          <motion.p key="det" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex items-center gap-2 px-0.5 text-body c-2"><Spin c="size-3.5 c-accent" /> 주소 형식 확인 중…</motion.p>
         )}
         {status === "error" && (
           <motion.div key="err" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={SPRING} className="flex items-center gap-3.5 err-bg" style={{ borderRadius: 16, padding: "15px 18px" }}>
             <span className="grid size-9 shrink-0 place-items-center rounded-full err-ic-bg"><AlertCircle className="size-5 c-red" /></span>
             <div className="min-w-0 flex-1">
-              <div className="text-[13.5px] font-semibold c-ink">주소 형식을 확인할 수 없어요</div>
-              <div className="mt-0.5 text-[12.5px] c-2">Git 저장소 주소가 맞는지 확인해주세요 · 예: github.com/org/repo</div>
+              <div className="text-body font-semibold c-ink">주소 형식을 확인할 수 없어요</div>
+              <div className="mt-0.5 text-label c-2">Git 저장소 주소가 맞는지 확인해주세요 · 예: github.com/org/repo</div>
             </div>
           </motion.div>
         )}
@@ -609,19 +609,19 @@ function RepoStep({ providers, onNext }: { providers: ClusterProvidersView; onNe
               <span className="grid size-11 shrink-0 place-items-center bg-surface" style={{ borderRadius: 13, boxShadow: "0 1px 3px rgba(0,0,0,0.08)" }}><Folder className="size-[22px] c-2" /></span>
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
-                  <span className="truncate text-[15px] font-semibold tracking-[-0.015em] c-ink">{repo.full}</span>
+                  <span className="truncate text-section font-semibold tracking-[-0.015em] c-ink">{repo.full}</span>
                   {/* 뱃지는 클라이언트 추측(parseRepo)이 아니라 무인증 probe 실측(access)으로 표시한다. */}
                   {access === "probing" && (
-                    <span className="inline-flex items-center gap-1 rounded-full px-2 py-[3px] text-[11px] font-semibold c-2" style={{ background: "var(--fill)" }}><Spin c="size-3 c-accent" />접근 확인 중</span>
+                    <span className="inline-flex items-center gap-1 rounded-full px-2 py-[3px] text-caption font-semibold c-2" style={{ background: "var(--fill)" }}><Spin c="size-3 c-accent" />접근 확인 중</span>
                   )}
                   {access === "public" && (
-                    <span className="inline-flex items-center gap-1 rounded-full green-bg px-2 py-[3px] text-[11px] font-semibold c-green"><Globe className="size-3" strokeWidth={2.5} />공개 저장소</span>
+                    <span className="inline-flex items-center gap-1 rounded-full green-bg px-2 py-[3px] text-caption font-semibold c-green"><Globe className="size-3" strokeWidth={2.5} />공개 저장소</span>
                   )}
                   {access === "auth" && (
-                    <span className="inline-flex items-center gap-1 rounded-full orange-bg px-2 py-[3px] text-[11px] font-semibold c-orange"><Lock className="size-3" strokeWidth={2.5} />비공개 · 인증 필요</span>
+                    <span className="inline-flex items-center gap-1 rounded-full orange-bg px-2 py-[3px] text-caption font-semibold c-orange"><Lock className="size-3" strokeWidth={2.5} />비공개 · 인증 필요</span>
                   )}
                 </div>
-                <div className="mt-1.5 flex items-center gap-1.5 text-[12.5px] c-2">
+                <div className="mt-1.5 flex items-center gap-1.5 text-label c-2">
                   <GitBranch className="size-3.5 c-3" /><span className="font-mono">{repo.full}</span><span className="c-3">·</span><span>{access === "public" ? "토큰 없이 연결 가능" : access === "auth" ? "액세스 토큰으로 인증" : "접근 확인 중"}</span>
                 </div>
               </div>
@@ -637,16 +637,16 @@ function RepoStep({ providers, onNext }: { providers: ClusterProvidersView; onNe
                 {/* App이 구성되면 토큰 칸을 숨긴다(App 기본). 미구성 시에만 토큰 폴백 노출. */}
                 {!appAvailable && (
                   <>
-                    <div className="flex items-center gap-2 px-0.5 text-[11px] c-3">
+                    <div className="flex items-center gap-2 px-0.5 text-caption c-3">
                       <span className="h-px flex-1" style={{ background: "rgba(120,120,120,0.22)" }} />또는 액세스 토큰<span className="h-px flex-1" style={{ background: "rgba(120,120,120,0.22)" }} />
                     </div>
                     <div className="grid gap-2.5">
-                      <span className="px-0.5 text-[12.5px] font-medium c-2">비공개 저장소 · 액세스 토큰 <span className="c-red">*</span></span>
+                      <span className="px-0.5 text-label font-medium c-2">비공개 저장소 · 액세스 토큰 <span className="c-red">*</span></span>
                       <div className="field flex items-center gap-3 bg-surface" style={{ borderRadius: 14, padding: "15px 16px" }}>
                         <Lock className="size-[18px] c-3" />
-                        <input value={token} onChange={(e) => setToken(e.currentTarget.value)} placeholder="필수 · ghp_••••••••••••••••" type="password" autoComplete="new-password" className="w-full bg-transparent font-mono text-[14px] c-ink outline-none placeholder:c-3" />
+                        <input value={token} onChange={(e) => setToken(e.currentTarget.value)} placeholder="필수 · ghp_••••••••••••••••" type="password" autoComplete="new-password" className="w-full bg-transparent font-mono text-body c-ink outline-none placeholder:c-3" />
                       </div>
-                      <span className="px-0.5 text-[11.5px] c-3">토큰은 브라우저 저장소에 남기지 않으며, 연결 성공 시 서버의 암호화된 저장소 자격증명으로 보관됩니다.</span>
+                      <span className="px-0.5 text-caption c-3">토큰은 브라우저 저장소에 남기지 않으며, 연결 성공 시 서버의 암호화된 저장소 자격증명으로 보관됩니다.</span>
                     </div>
                   </>
                 )}
@@ -655,7 +655,7 @@ function RepoStep({ providers, onNext }: { providers: ClusterProvidersView; onNe
             {/* 공개는 토큰 없이 진행하되, 쓰기(PR)엔 이후 자격증명이 필요함을 정직하게 안내한다. */}
             {access === "public" && (
               <motion.div key="pub" layout {...REVEAL} className="grid gap-3">
-                <div className="flex items-start gap-2 px-0.5 text-[12px] leading-[1.5] c-2">
+                <div className="flex items-start gap-2 px-0.5 text-label leading-[1.5] c-2">
                   <Globe className="mt-0.5 size-3.5 shrink-0 c-green" />
                   <span>공개 저장소는 토큰 없이 연결·동기화됩니다. 화면에서 YAML을 수정해 PR을 만들려면(쓰기) GitHub App 연결이 필요합니다.</span>
                 </div>
@@ -671,12 +671,12 @@ function RepoStep({ providers, onNext }: { providers: ClusterProvidersView; onNe
       {failure && (
         <motion.div key="fail" layout {...REVEAL} role="alert" className="flex items-start gap-3.5 err-bg" style={{ borderRadius: 16, padding: "14px 16px" }}>
           <AlertCircle className="mt-0.5 size-5 shrink-0 c-red" />
-          <div><div className="text-[13.5px] font-semibold c-ink">저장소 연결 확인 실패</div><div className="mt-1 break-words text-[12.5px] leading-[1.5] c-2">{failure}</div></div>
+          <div><div className="text-body font-semibold c-ink">저장소 연결 확인 실패</div><div className="mt-1 break-words text-label leading-[1.5] c-2">{failure}</div></div>
         </motion.div>
       )}
       {/* 토큰 경로 버튼: 공개는 항상, 비공개는 App 미가용일 때만(App 가용 시 App 버튼이 경로). */}
       {resolved && (access === "public" || !appAvailable) && (
-        <motion.button key="confirm" layout {...REVEAL} disabled={!ready || probeStatus === "submitting"} onClick={() => void verify()} className="btn-primary flex w-full items-center justify-center gap-2 rounded-[14px] py-3.5 text-[15px] font-semibold disabled:cursor-not-allowed disabled:opacity-60">
+        <motion.button key="confirm" layout {...REVEAL} disabled={!ready || probeStatus === "submitting"} onClick={() => void verify()} className="btn-primary flex w-full items-center justify-center gap-2 rounded-[14px] py-3.5 text-section font-semibold disabled:cursor-not-allowed disabled:opacity-60">
           {probeStatus === "submitting" ? <><Spin c="size-4 text-white" /> 저장소·브랜치 확인 중…</> : <>저장소 확인 · 배포 대상 선택 <ArrowRight className="size-[17px]" /></>}
         </motion.button>
       )}
@@ -814,8 +814,8 @@ function RepoTargetStep({ source, context, onComplete }: {
       <div className="flex items-center gap-4 bg-soft" style={{ borderRadius: 16, padding: "16px 18px" }}>
         <span className="grid size-11 shrink-0 place-items-center bg-surface" style={{ borderRadius: 13, boxShadow: "0 1px 3px rgba(0,0,0,0.08)" }}><Folder className="size-[22px] c-2" /></span>
         <div className="min-w-0 flex-1">
-          <div className="truncate text-[15px] font-semibold tracking-[-0.015em] c-ink">{repoRef}</div>
-          <div className="mt-1 text-[12.5px] c-2">서버가 Git 리비전과 매니페스트를 검증한 뒤 배포 대상을 등록합니다.</div>
+          <div className="truncate text-section font-semibold tracking-[-0.015em] c-ink">{repoRef}</div>
+          <div className="mt-1 text-label c-2">서버가 Git 리비전과 매니페스트를 검증한 뒤 배포 대상을 등록합니다.</div>
         </div>
       </div>
 
@@ -824,38 +824,38 @@ function RepoTargetStep({ source, context, onComplete }: {
           ["애플리케이션 이름", "name", input.name],
           ["네임스페이스", "namespace", input.namespace],
         ] as const).map(([label, key, value]) => (
-          <label key={key} className="grid gap-1.5 text-[12px] font-semibold c-2">
+          <label key={key} className="grid gap-1.5 text-label font-semibold c-2">
             {label}
-            <input value={value} onChange={(event) => update(key, event.currentTarget.value)} className="field min-w-0 rounded-xl px-3.5 py-3 font-mono text-[13px] font-normal c-ink outline-none" />
+            <input value={value} onChange={(event) => update(key, event.currentTarget.value)} className="field min-w-0 rounded-xl px-3.5 py-3 font-mono text-body font-normal c-ink outline-none" />
           </label>
         ))}
-        <label className="grid gap-1.5 text-[12px] font-semibold c-2">
+        <label className="grid gap-1.5 text-label font-semibold c-2">
           브랜치
-          <select aria-label="브랜치" value={input.branch} onChange={(event) => update("branch", event.currentTarget.value)} className="field min-w-0 rounded-xl px-3.5 py-3 font-mono text-[13px] font-normal c-ink outline-none">
+          <select aria-label="브랜치" value={input.branch} onChange={(event) => update("branch", event.currentTarget.value)} className="field min-w-0 rounded-xl px-3.5 py-3 font-mono text-body font-normal c-ink outline-none">
             {(source.branches.length ? source.branches : [{ name: source.defaultBranch, protected: false, default: true }]).map((branch) => <option key={branch.name} value={branch.name}>{branch.name}{branch.default ? " · 기본" : ""}{branch.protected ? " · 보호" : ""}</option>)}
           </select>
         </label>
-        <label className="grid gap-1.5 text-[12px] font-semibold c-2">
+        <label className="grid gap-1.5 text-label font-semibold c-2">
           매니페스트
-          <select aria-label="매니페스트" value={input.manifestPath} disabled={manifestStatus !== "ready" || manifests.length === 0} onChange={(event) => update("manifestPath", event.currentTarget.value)} className="field min-w-0 rounded-xl px-3.5 py-3 font-mono text-[13px] font-normal c-ink outline-none">
+          <select aria-label="매니페스트" value={input.manifestPath} disabled={manifestStatus !== "ready" || manifests.length === 0} onChange={(event) => update("manifestPath", event.currentTarget.value)} className="field min-w-0 rounded-xl px-3.5 py-3 font-mono text-body font-normal c-ink outline-none">
             {manifestStatus === "loading" && <option value="">매니페스트 탐색 중…</option>}
             {manifestStatus === "error" && <option value="">매니페스트를 불러오지 못함</option>}
             {manifestStatus === "ready" && manifests.length === 0 && <option value="">발견된 매니페스트 없음</option>}
             {manifests.map((candidate) => <option key={candidate.path} value={candidate.path}>{candidate.display_name || candidate.path} · {candidate.path}</option>)}
           </select>
         </label>
-        <label className="grid gap-1.5 text-[12px] font-semibold c-2">
+        <label className="grid gap-1.5 text-label font-semibold c-2">
           연결된 클러스터
-          <select aria-label="연결된 클러스터" value={input.clusterId} disabled={clusterStatus !== "ready" || clusters.length === 0} onChange={(event) => update("clusterId", event.currentTarget.value)} className="field min-w-0 rounded-xl px-3.5 py-3 text-[13px] font-normal c-ink outline-none">
+          <select aria-label="연결된 클러스터" value={input.clusterId} disabled={clusterStatus !== "ready" || clusters.length === 0} onChange={(event) => update("clusterId", event.currentTarget.value)} className="field min-w-0 rounded-xl px-3.5 py-3 text-body font-normal c-ink outline-none">
             {clusterStatus === "loading" && <option value="">클러스터 확인 중…</option>}
             {clusterStatus === "error" && <option value="">클러스터를 불러오지 못함</option>}
             {clusterStatus === "ready" && clusters.length === 0 && <option value="">연결된 클러스터 없음</option>}
             {clusters.map((cluster) => <option key={cluster.cluster_id} value={cluster.cluster_id}>{cluster.name} · {cluster.environment}</option>)}
           </select>
         </label>
-        <label className="grid gap-1.5 text-[12px] font-semibold c-2">
+        <label className="grid gap-1.5 text-label font-semibold c-2">
           환경
-          <select aria-label="환경" value={input.environment} onChange={(event) => update("environment", event.currentTarget.value)} className="field min-w-0 rounded-xl px-3.5 py-3 text-[13px] font-normal c-ink outline-none">
+          <select aria-label="환경" value={input.environment} onChange={(event) => update("environment", event.currentTarget.value)} className="field min-w-0 rounded-xl px-3.5 py-3 text-body font-normal c-ink outline-none">
             <option value="development">개발</option><option value="staging">스테이징</option><option value="production">운영</option>
           </select>
         </label>
@@ -865,7 +865,7 @@ function RepoTargetStep({ source, context, onComplete }: {
       {clusterStatus === "ready" && clusters.length === 0 && <GapBanner>먼저 클러스터를 연결해야 저장소 배포 대상을 등록할 수 있습니다.</GapBanner>}
       {manifestStatus === "ready" && manifests.length === 0 && <GapBanner>선택한 브랜치에서 배포 가능한 Kubernetes 매니페스트를 찾지 못했습니다.</GapBanner>}
       <FloatingToast message={failure || null} onDismiss={() => setFailure("")} />
-      <button disabled={!complete || submitStatus === "submitting"} onClick={() => void submit()} className="btn-primary flex w-full items-center justify-center gap-2 rounded-[14px] text-[15px] font-semibold disabled:cursor-not-allowed disabled:opacity-45">
+      <button disabled={!complete || submitStatus === "submitting"} onClick={() => void submit()} className="btn-primary flex w-full items-center justify-center gap-2 rounded-[14px] text-section font-semibold disabled:cursor-not-allowed disabled:opacity-45">
         {submitStatus === "submitting" ? <><Spin c="size-4 text-white" /> 서버 검증·등록 중…</> : <>서버 검증 후 연결 <ArrowRight className="size-[17px]" /></>}
       </button>
     </motion.div>
@@ -876,8 +876,8 @@ function RepoDoneStep({ repo, onDone }: { repo: string; onDone: () => void }) {
   return (
     <motion.div key="repodone" {...swap} className="grid gap-5 text-center">
       <span className="mx-auto grid size-16 place-items-center rounded-full green-bg"><Check className="size-8 c-green" strokeWidth={2.6} /></span>
-      <div><h2 className="text-[18px] font-semibold c-ink">저장소 연결 완료</h2><p className="mt-2 text-[13px] c-2"><span className="font-mono c-ink">{repo}</span>의 검증된 배포 대상이 등록되었습니다.</p></div>
-      <button onClick={onDone} className="btn-primary rounded-[14px] py-3.5 text-[15px] font-semibold">GitOps에서 확인</button>
+      <div><h2 className="text-section font-semibold c-ink">저장소 연결 완료</h2><p className="mt-2 text-body c-2"><span className="font-mono c-ink">{repo}</span>의 검증된 배포 대상이 등록되었습니다.</p></div>
+      <button onClick={onDone} className="btn-primary rounded-[14px] py-3.5 text-section font-semibold">GitOps에서 확인</button>
     </motion.div>
   );
 }
@@ -920,9 +920,9 @@ function ClusterInfoStep({
         {/* 로딩 상태는 라벨 행 안에서만 표시한다. 별도 줄로 띄우면 로드 완료 시
             사라지면서 아래 전체가 위로 밀려(reflow) 줄바꿈처럼 보이는 버그가 된다. */}
         <div className="flex items-center justify-between px-0.5" style={{ minHeight: 18 }}>
-          <span className="text-[12.5px] font-semibold c-2">플랫폼</span>
+          <span className="text-label font-semibold c-2">플랫폼</span>
           {providers.status === "loading" && (
-            <span className="flex items-center gap-1.5 text-[11.5px] c-3"><Spin c="size-3 c-accent" /> 확인 중</span>
+            <span className="flex items-center gap-1.5 text-caption c-3"><Spin c="size-3 c-accent" /> 확인 중</span>
           )}
         </div>
         <div className="grid grid-cols-2 gap-2.5">
@@ -934,8 +934,8 @@ function ClusterInfoStep({
               <button key={p.id} disabled={disabled} onClick={() => setPlatform(p.id)} className={`card flex items-center gap-3 ${on ? "card-on" : ""} ${disabled ? "opacity-45" : ""}`} style={{ borderRadius: 14, padding: "12px 13px" }}>
                 <span className="grid shrink-0 place-items-center" style={{ width: 34, height: 34, borderRadius: 10, background: `${p.color}1A` }}><Icon size={21} stroke={2} style={{ color: p.color }} /></span>
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-[13px] font-semibold tracking-[-0.01em] c-ink">{p.name}</div>
-                  <div className="text-[11px] c-3">{p.sub}</div>
+                  <div className="truncate text-body font-semibold tracking-[-0.01em] c-ink">{p.name}</div>
+                  <div className="text-caption c-3">{p.sub}</div>
                 </div>
                 <span className="grid shrink-0 place-items-center" style={{ width: 18, height: 18 }}>
                   <motion.span animate={{ scale: on ? 1 : 0, opacity: on ? 1 : 0 }} initial={false} transition={{ type: "spring", visualDuration: 0.26, bounce: 0.3 }} style={{ display: "grid" }}>
@@ -951,10 +951,10 @@ function ClusterInfoStep({
         {/* P0 이름-only 연결: 플랫폼 선택 후 입력은 표시 이름 하나뿐이다. region/EKS 이름/
             context alias/환경은 UI 에서 받지 않는다 — 실제 클러스터 식별은 사용자가 자기
             터미널(이미 로그인된 컨텍스트)에서 설치 명령을 실행할 때 결정된다. */}
-        <span className="px-0.5 text-[12.5px] font-semibold c-2">클러스터 표시 이름</span>
+        <span className="px-0.5 text-label font-semibold c-2">클러스터 표시 이름</span>
         <div className="field flex items-center gap-3 bg-surface" style={{ borderRadius: 14, padding: "15px 16px" }}>
           <Server className="size-[18px] c-3" />
-          <input aria-label="클러스터 표시 이름" value={name} onChange={(e) => setName(e.currentTarget.value)} placeholder="game-server-apne2" className="w-full bg-transparent font-mono text-[14px] c-ink outline-none placeholder:font-sans placeholder:c-3" />
+          <input aria-label="클러스터 표시 이름" value={name} onChange={(e) => setName(e.currentTarget.value)} placeholder="game-server-apne2" className="w-full bg-transparent font-mono text-body c-ink outline-none placeholder:font-sans placeholder:c-3" />
         </div>
       </div>
       <NextButton show={name.trim().length > 1 && !selectedDisabled}
@@ -1041,15 +1041,15 @@ function InstallProgress({ conn, activation, reinstalling, onReinstall }: {
         ) : (
           <Spin c="size-[18px] c-accent" />
         )}
-        <span className="flex-1 text-[13.5px] font-semibold c-ink">{label}</span>
-        {!terminal && <span className="text-[12px] font-medium c-3" style={{ fontVariantNumeric: "tabular-nums" }}>{step}/3</span>}
+        <span className="flex-1 text-body font-semibold c-ink">{label}</span>
+        {!terminal && <span className="text-label font-medium c-3" style={{ fontVariantNumeric: "tabular-nums" }}>{step}/3</span>}
       </div>
       <div className="overflow-hidden rounded-full" style={{ height: 6, background: "rgba(17,19,24,0.08)" }}>
         <motion.div initial={false} animate={{ width: `${pct}%` }} transition={{ type: "spring", visualDuration: 0.5, bounce: 0 }} style={{ height: "100%", borderRadius: 999, background: color }} />
       </div>
-      <span className="text-[12px] leading-[1.5] c-2">{sub}</span>
+      <span className="text-label leading-[1.5] c-2">{sub}</span>
       {terminal && (
-        <button onClick={onReinstall} disabled={reinstalling} className="btn-primary flex w-full items-center justify-center gap-1.5 text-[14px] font-semibold disabled:opacity-50" style={{ borderRadius: 12, paddingTop: 11, paddingBottom: 11, marginTop: 2 }}>
+        <button onClick={onReinstall} disabled={reinstalling} className="btn-primary flex w-full items-center justify-center gap-1.5 text-body font-semibold disabled:opacity-50" style={{ borderRadius: 12, paddingTop: 11, paddingBottom: 11, marginTop: 2 }}>
           {reinstalling ? <><Spin c="size-4 text-white" /> 명령 재발급 중…</> : <><RotateCw className="size-4" /> 재설치</>}
         </button>
       )}
@@ -1118,7 +1118,7 @@ function ClusterInstallStep({ platform, name, onConnected }: { platform: Platfor
   return (
     <motion.div key="cinstall" {...swap} className="grid gap-5">
       {!receipt && (
-        <button onClick={runRegister} disabled={phase === "registering"} className="btn-primary flex w-full items-center justify-center gap-1.5 text-[15px] font-semibold disabled:opacity-50" style={{ borderRadius: 14, paddingTop: 14, paddingBottom: 14 }}>
+        <button onClick={runRegister} disabled={phase === "registering"} className="btn-primary flex w-full items-center justify-center gap-1.5 text-section font-semibold disabled:opacity-50" style={{ borderRadius: 14, paddingTop: 14, paddingBottom: 14 }}>
           {phase === "registering" ? <><Spin c="size-[17px]" /> 명령 생성 중…</> : <>설치 명령 생성</>}
         </button>
       )}
@@ -1130,19 +1130,19 @@ function ClusterInstallStep({ platform, name, onConnected }: { platform: Platfor
         <>
           <div className="cmd overflow-hidden" style={{ borderRadius: 16 }}>
             <div className="flex items-center justify-between" style={{ padding: "10px 14px", borderBottom: "1px solid var(--line)" }}>
-              <span className="flex items-center gap-2 text-[12px] font-semibold c-2"><Icon size={15} stroke={2} style={{ color: pf.color }} />Kyro Agent · {pf.name}</span>
+              <span className="flex items-center gap-2 text-label font-semibold c-2"><Icon size={15} stroke={2} style={{ color: pf.color }} />Kyro Agent · {pf.name}</span>
               <span className="flex items-center gap-1" role="tablist" aria-label="설치 명령 셸 선택">
                 {([["posix", "macOS/Linux"], ["powershell", "Windows PowerShell"]] as const).map(([id, label]) => (
                   <button key={id} role="tab" aria-selected={shell === id} onClick={() => setShell(id)}
-                    className="rounded-full px-2.5 py-1 text-[11.5px] font-semibold"
+                    className="rounded-full px-2.5 py-1 text-caption font-semibold"
                     style={{ color: shell === id ? "var(--ink)" : "var(--ink-3)", background: shell === id ? "rgba(17,19,24,0.07)" : "transparent" }}>{label}</button>
                 ))}
               </span>
-              <button onClick={copy} className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-semibold transition-colors" style={{ color: copied ? "var(--green)" : "var(--ink-2)", background: copied ? "rgba(34,197,94,0.12)" : "rgba(17,19,24,0.05)" }}>
+              <button onClick={copy} className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-label font-semibold transition-colors" style={{ color: copied ? "var(--green)" : "var(--ink-2)", background: copied ? "rgba(34,197,94,0.12)" : "rgba(17,19,24,0.05)" }}>
                 {copied ? <><Check className="size-3.5" strokeWidth={3} />복사됨</> : <><Copy className="size-3.5" />복사</>}
               </button>
             </div>
-            <pre className="max-w-full whitespace-pre-wrap break-words font-mono text-[12.5px] leading-[1.7] c-ink [overflow-wrap:anywhere]" style={{ padding: "14px 16px" }}><code>{cmd}</code></pre>
+            <pre className="max-w-full whitespace-pre-wrap break-words font-mono text-label leading-[1.7] c-ink [overflow-wrap:anywhere]" style={{ padding: "14px 16px" }}><code>{cmd}</code></pre>
           </div>
 
           <InstallProgress conn={conn} activation={activation} reinstalling={reinstalling} onReinstall={reinstall} />
@@ -1159,26 +1159,26 @@ function ClusterDoneStep({ name, connection, onDone }: { name: string; connectio
       <div className="flex flex-col items-center gap-3 pt-1 text-center">
         <motion.span initial={{ scale: 0, rotate: -18 }} animate={{ scale: 1, rotate: 0 }} transition={{ type: "spring", visualDuration: 0.45, bounce: 0.5 }} className="grid size-16 place-items-center rounded-full lime-bg"><Check className="size-8 c-ink" strokeWidth={3} /></motion.span>
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.14 }}>
-          <div className="text-[19px] font-bold tracking-[-0.02em] c-ink">클러스터가 연결됐어요</div>
-          <div className="mt-1 text-[13.5px] c-2"><span className="font-mono c-ink">{name}</span> · Kyro Agent 실행 중</div>
+          <div className="text-section font-bold tracking-[-0.02em] c-ink">클러스터가 연결됐어요</div>
+          <div className="mt-1 text-body c-2"><span className="font-mono c-ink">{name}</span> · Kyro Agent 실행 중</div>
         </motion.div>
       </div>
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.22 }} className="stat">
         <div className="flex-1 text-center" style={{ padding: "15px 0" }}>
-          <div className="text-[15px] font-bold tracking-[-0.01em] c-ink">{connection.agentVersion ?? "—"}</div>
-          <div className="mt-0.5 text-[11.5px] font-medium c-3">에이전트 버전</div>
+          <div className="text-section font-bold tracking-[-0.01em] c-ink">{connection.agentVersion ?? "—"}</div>
+          <div className="mt-0.5 text-caption font-medium c-3">에이전트 버전</div>
         </div>
         <div className="flex-1 text-center" style={{ padding: "15px 0", borderLeft: "1px solid rgba(17,19,24,0.06)" }}>
-          <div className="text-[15px] font-bold tracking-[-0.01em] c-ink">{connection.connectedAt ? new Date(connection.connectedAt).toLocaleTimeString() : "—"}</div>
-          <div className="mt-0.5 text-[11.5px] font-medium c-3">연결 시각</div>
+          <div className="text-section font-bold tracking-[-0.01em] c-ink">{connection.connectedAt ? new Date(connection.connectedAt).toLocaleTimeString() : "—"}</div>
+          <div className="mt-0.5 text-caption font-medium c-3">연결 시각</div>
         </div>
       </motion.div>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }} className="flex items-center gap-2.5 bg-soft" style={{ borderRadius: 14, padding: "13px 16px" }}>
         <span className="relative flex size-2.5"><span className="absolute inline-flex size-full animate-ping rounded-full ping-g" /><span className="relative inline-flex size-2.5 rounded-full dot-g" /></span>
-        <span className="text-[13px] font-medium c-ink">메트릭·이벤트 수집 중</span>
-        <span className="ml-auto text-[12px] c-3">실시간</span>
+        <span className="text-body font-medium c-ink">메트릭·이벤트 수집 중</span>
+        <span className="ml-auto text-label c-3">실시간</span>
       </motion.div>
-      <button onClick={onDone} className="btn-primary flex w-full items-center justify-center text-[15px] font-semibold" style={{ borderRadius: 14, paddingTop: 14, paddingBottom: 14 }}>완료</button>
+      <button onClick={onDone} className="btn-primary flex w-full items-center justify-center text-section font-semibold" style={{ borderRadius: 14, paddingTop: 14, paddingBottom: 14 }}>완료</button>
     </motion.div>
   );
 }
@@ -1209,14 +1209,14 @@ function Launcher({ onPick }: { onPick: (v: "repo" | "cluster") => void }) {
       <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ type: "spring", visualDuration: 0.4, bounce: 0.2 }} className="modal-surface" style={{ width: 460, maxWidth: "100%", borderRadius: 24, boxShadow: "0 30px 70px -26px rgba(0,0,0,0.35)", padding: 28 }}>
         <div className="flex items-center gap-2.5">
           <span className="grid size-8 place-items-center hdr-grad text-white" style={{ borderRadius: 10 }}><Sparkles className="size-[17px]" /></span>
-          <div><h1 className="text-[16px] font-semibold tracking-[-0.02em] c-ink">환경 연결</h1></div>
+          <div><h1 className="text-section font-semibold tracking-[-0.02em] c-ink">환경 연결</h1></div>
         </div>
-        <p className="mt-2 text-[13px] c-2">무엇을 연결할까요?</p>
+        <p className="mt-2 text-body c-2">무엇을 연결할까요?</p>
         <div className="mt-4 inset">
           {items.map(({ id, icon: Icon, title, sub }) => (
             <button key={id} onClick={() => onPick(id)} className="inset-row">
               <span className="grid size-10 shrink-0 place-items-center bg-soft" style={{ borderRadius: 12 }}><Icon className="size-[19px] c-accent" /></span>
-              <div className="min-w-0 flex-1"><div className="text-[14.5px] font-semibold tracking-[-0.01em] c-ink">{title}</div><div className="mt-0.5 text-[12px] c-3">{sub}</div></div>
+              <div className="min-w-0 flex-1"><div className="text-body font-semibold tracking-[-0.01em] c-ink">{title}</div><div className="mt-0.5 text-label c-3">{sub}</div></div>
               <ChevronRight className="size-[18px] shrink-0 c-3" />
             </button>
           ))}
@@ -1331,7 +1331,7 @@ export function ConnectWizard({
         .inset-row { display: flex; align-items: center; gap: 13px; width: 100%; text-align: left; padding: 11px 13px; border-radius: 13px; transition: background .15s, box-shadow .15s; }
         .inset-row:hover { background: rgba(17,19,24,0.035); }
         .inset-row-on, .inset-row-on:hover { background: #fff; box-shadow: 0 1px 2px rgba(17,19,24,0.06), 0 6px 16px -8px rgba(17,19,24,0.14); }
-        .badge { font-size: 10.5px; font-weight: 600; color: var(--ink-2); background: #fff; padding: 3px 9px; border-radius: 999px; box-shadow: 0 1px 2px rgba(17,19,24,0.06); }
+        .badge { font-size: var(--type-caption); font-weight: 600; color: var(--ink-2); background: #fff; padding: 3px 9px; border-radius: 999px; box-shadow: 0 1px 2px rgba(17,19,24,0.06); }
         .check-off { border-color: rgba(17,19,24,0.2); background: #fff; }
         .inset-row:hover .check-off { border-color: rgba(17,19,24,0.3); }
         .seg { background: var(--fill); }

@@ -275,14 +275,14 @@ const GROUP_TOTAL = (g: string, counts: Record<string, number>) =>
 function CellView({ cell, v, bad }: { cell: Cell; v: unknown; bad?: boolean }) {
   // 계약이 노출하지 않는 필드는 값이 없다 — "undefined"/NaN 대신 관측 안 됨("–")을 낸다.
   if (v === undefined || v === null || v === "") {
-    return <span style={{ fontSize: TYPE.label2, color: UI.ink3 }}>–</span>;
+    return <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>–</span>;
   }
   if (cell.t === "meter") {
     const m = v as { used: string; lim: string; pct: number };
     const c = m.pct >= 90 ? HP.crit : m.pct >= 60 ? HP.warn : HP.ok;
     return (
       <span style={{ display: "flex", flexDirection: "column", gap: 3, minWidth: 0 }}>
-        <span style={{ fontSize: TYPE.caption2, fontVariantNumeric: "tabular-nums", color: UI.ink2, whiteSpace: "nowrap" }}>{m.used} / {m.lim} <span style={{ color: UI.ink3 }}>{m.pct}%</span></span>
+        <span style={{ fontSize: TYPE.caption, fontVariantNumeric: "tabular-nums", color: UI.ink2, whiteSpace: "nowrap" }}>{m.used} / {m.lim} <span style={{ color: UI.ink3 }}>{m.pct}%</span></span>
         <span style={{ height: 3, borderRadius: 999, background: inkA(0.07), overflow: "hidden" }}>
           <span style={{ display: "block", height: "100%", width: `${m.pct}%`, background: c, borderRadius: 999 }} />
         </span>
@@ -300,10 +300,10 @@ function CellView({ cell, v, bad }: { cell: Cell; v: unknown; bad?: boolean }) {
     return <Badge text={statusLabel(s)} tone={tone} />;
   }
   if (cell.t === "badge") return <Badge text={statusLabel(String(v))} tone={bad ? "red" : cell.tone ?? "gray"} />;
-  if (cell.t === "num") return <span style={{ fontSize: TYPE.label2, fontVariantNumeric: "tabular-nums", color: UI.ink2 }}>{String(v)}</span>;
-  if (cell.t === "ns") return <span style={{ fontSize: TYPE.label2, color: UI.ink2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{String(v)}</span>;
+  if (cell.t === "num") return <span style={{ fontSize: TYPE.label, fontVariantNumeric: "tabular-nums", color: UI.ink2 }}>{String(v)}</span>;
+  if (cell.t === "ns") return <span style={{ fontSize: TYPE.label, color: UI.ink2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{String(v)}</span>;
   if (cell.t === "mono") return <span style={{ fontSize: TYPE.label, fontFamily: MONO, color: UI.ink3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{String(v)}</span>;
-  return <span style={{ fontSize: TYPE.label2, color: UI.ink2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{String(v)}</span>;
+  return <span style={{ fontSize: TYPE.label, color: UI.ink2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{String(v)}</span>;
 }
 function Badge({ text, tone }: { text: string; tone: "blue" | "green" | "gray" | "purple" | "red" }) {
   const S = { blue: [TINT.blue.fg, TINT.blue.bg, TINT.blue.bd], green: [TINT.ok.fg, TINT.ok.bg, TINT.ok.bd], gray: [UI.ink2, TINT.gray.bg, TINT.gray.bd], purple: [TINT.purple.fg, TINT.purple.bg, TINT.purple.bd], red: [TINT.crit.fg, TINT.crit.bg, TINT.crit.bd] }[tone];
@@ -334,7 +334,7 @@ function ResourceTable({ kind, rows, q, filterDesc = "", onClearFilter, onOpen }
       <div style={{ display: "grid", gridTemplateColumns: grid, gap: 14, padding: "10px 16px", borderBottom: `1px solid ${UI.line}`, background: UI.bg2, position: "sticky", top: 0, zIndex: 2 }}>
         {/* 정렬 미구현 — 동작 없는 정렬 셰브론을 그리지 않는다(가짜 컨트롤 금지) */}
         {spec.cols.map((c) => (
-          <span key={c.k} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: TYPE.micro, fontWeight: 600, letterSpacing: "0.05em", color: UI.ink3 }}>
+          <span key={c.k} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: TYPE.caption, fontWeight: 600, letterSpacing: "0.05em", color: UI.ink3 }}>
             {c.label}
           </span>
         ))}
@@ -396,7 +396,7 @@ function KV({ k, v, mono, tone }: { k: string; v: string; mono?: boolean; tone?:
   return (
     <div style={{ display: "grid", gridTemplateColumns: "132px 1fr", gap: 12, padding: "7px 0", borderBottom: `1px solid ${UI.line2}` }}>
       <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>{k}</span>
-      <span style={{ fontSize: TYPE.label2, color: tone ?? UI.ink, fontFamily: mono ? MONO : undefined, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v}</span>
+      <span style={{ fontSize: TYPE.label, color: tone ?? UI.ink, fontFamily: mono ? MONO : undefined, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v}</span>
     </div>
   );
 }
@@ -441,13 +441,13 @@ function UsageMiniChart({ title, unit, values, observed, total }: { title: strin
   return (
     <div>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 6 }}>
-        <span style={{ fontSize: TYPE.label2, fontWeight: 700, color: UI.ink2 }}>{title}</span>
-        {last !== undefined && <span style={{ fontSize: TYPE.label2, fontVariantNumeric: "tabular-nums", color: UI.ink }}>{last.toFixed(0)} {unit}</span>}
+        <span style={{ fontSize: TYPE.label, fontWeight: 700, color: UI.ink2 }}>{title}</span>
+        {last !== undefined && <span style={{ fontSize: TYPE.label, fontVariantNumeric: "tabular-nums", color: UI.ink }}>{last.toFixed(0)} {unit}</span>}
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" width="100%" height={44} style={{ display: "block", overflow: "visible" }} role="img" aria-label={`${title} 사용량 추이`}>
         <path d={d.trim()} fill="none" stroke={BLUE} strokeWidth={1.5} vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />
       </svg>
-      <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4, fontSize: TYPE.micro, color: UI.ink3 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4, fontSize: TYPE.caption, color: UI.ink3 }}>
         <span>표본 {observed}/{total}{observed < total ? " · 부분 관측" : ""}</span>
         <span>최대 {max.toFixed(0)} · 최소 {min.toFixed(0)} {unit}</span>
       </div>
@@ -460,7 +460,7 @@ function RetryNote({ onRetry, label }: { onRetry: () => void; label?: string }) 
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 0", flexWrap: "wrap" }}>
       <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>{label ?? "일시적 오류로 관측값을 불러오지 못했습니다."}</span>
-      <button type="button" onClick={onRetry} style={{ border: `1px solid ${UI.line}`, background: UI.card, color: BLUE, borderRadius: 8, padding: "5px 11px", fontSize: TYPE.label2, fontWeight: 700, cursor: "pointer" }}>다시 시도</button>
+      <button type="button" onClick={onRetry} style={{ border: `1px solid ${UI.line}`, background: UI.card, color: BLUE, borderRadius: 8, padding: "5px 11px", fontSize: TYPE.label, fontWeight: 700, cursor: "pointer" }}>다시 시도</button>
     </div>
   );
 }
@@ -562,7 +562,7 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
               <kind.icon size={15} style={{ color: BLUE }} />
             </span>
             <div style={{ minWidth: 0, flex: 1 }}>
-              <div style={{ fontSize: TYPE.title3, fontWeight: 700, fontFamily: MONO, color: UI.ink, letterSpacing: "-0.02em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</div>
+              <div style={{ fontSize: TYPE.section, fontWeight: 700, fontFamily: MONO, color: UI.ink, letterSpacing: "-0.02em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</div>
               <div style={{ fontSize: TYPE.label, color: UI.ink3, marginTop: 2 }}>{kind.label} · {ns}</div>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -628,12 +628,12 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
                     })()
                   : ([["상태", phase], ["헬스", healthVal], ["클러스터", clusterVal], ["노드", "관측 안 됨"], ["파드 IP", "관측 안 됨"], ["호스트 IP", "관측 안 됨"], ["QoS 클래스", "관측 안 됨"], ["ServiceAccount", "관측 안 됨"]] as const).map(([k, v]) => <KV key={k} k={k} v={v} mono tone={k === "상태" ? (bad ? TINT.crit.fg : v === "관측 안 됨" ? undefined : TINT.ok.fg) : undefined} />)}
                 {isWorkload && wd.coverageAvailability === "partial" && (
-                  <div style={{ fontSize: TYPE.caption2, color: UI.ink3, marginTop: 8 }}>일부 범위만 관측된 부분 스냅샷입니다.</div>
+                  <div style={{ fontSize: TYPE.caption, color: UI.ink3, marginTop: 8 }}>일부 범위만 관측된 부분 스냅샷입니다.</div>
                 )}
                 {isWorkload && wd.status === "error" && <RetryNote onRetry={wd.retry} label="상세 관측값을 불러오지 못했습니다." />}
                 <div style={{ display: "flex", gap: 7, marginTop: 12 }}>
                   {isWorkload && <button onClick={onShowPods ? () => onShowPods(name) : undefined}
-                    style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${UI.line}`, background: UI.card, borderRadius: 8, padding: "6px 11px", fontSize: TYPE.label2, fontWeight: 600, color: BLUE, cursor: "pointer" }}><Boxes size={12} />관리 중인 파드 보기</button>}
+                    style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${UI.line}`, background: UI.card, borderRadius: 8, padding: "6px 11px", fontSize: TYPE.label, fontWeight: 600, color: BLUE, cursor: "pointer" }}><Boxes size={12} />관리 중인 파드 보기</button>}
                 </div>
               </Sec>
 
@@ -651,8 +651,8 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <span style={{ fontSize: TYPE.body, fontWeight: 700, fontFamily: MONO, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
                   </div>
-                  <div style={{ fontSize: TYPE.caption2, color: UI.ink3, marginTop: 4 }}>이미지 관측 안 됨</div>
-                  <div style={{ fontSize: TYPE.caption2, color: UI.ink3, marginTop: 3 }}>포트 관측 안 됨</div>
+                  <div style={{ fontSize: TYPE.caption, color: UI.ink3, marginTop: 4 }}>이미지 관측 안 됨</div>
+                  <div style={{ fontSize: TYPE.caption, color: UI.ink3, marginTop: 3 }}>포트 관측 안 됨</div>
                 </div>
               </Sec>
               )}
@@ -726,11 +726,11 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
                   : (<div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                       {wd.pods.map((p) => (
                         <div key={`${p.namespace ?? ""}/${p.name}`} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, border: `1px solid ${UI.line2}`, background: UI.bg2, borderRadius: 8, padding: "7px 11px" }}>
-                          <span style={{ fontSize: TYPE.caption2, fontFamily: MONO, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</span>
-                          <span style={{ fontSize: TYPE.caption2, color: UI.ink3, flexShrink: 0 }}>{statusLabel(p.health)}</span>
+                          <span style={{ fontSize: TYPE.caption, fontFamily: MONO, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</span>
+                          <span style={{ fontSize: TYPE.caption, color: UI.ink3, flexShrink: 0 }}>{statusLabel(p.health)}</span>
                         </div>
                       ))}
-                      {wd.podsExcludedCount > 0 && <div style={{ fontSize: TYPE.caption2, color: UI.ink3 }}>수집 한도로 {wd.podsExcludedCount}개 생략됨</div>}
+                      {wd.podsExcludedCount > 0 && <div style={{ fontSize: TYPE.caption, color: UI.ink3 }}>수집 한도로 {wd.podsExcludedCount}개 생략됨</div>}
                     </div>)}
               </Sec>
 
@@ -743,8 +743,8 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
                   : (<div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                       {wd.events.map((e, i) => (
                         <div key={`${e.reason ?? "ev"}-${i}`} style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, border: `1px solid ${UI.line2}`, background: UI.bg2, borderRadius: 8, padding: "7px 11px" }}>
-                          <span style={{ fontSize: TYPE.caption2, color: UI.ink }}>{statusLabel(e.reason)}{e.type ? ` · ${statusLabel(e.type)}` : ""}{e.count != null && e.count > 1 ? ` ×${e.count}` : ""}</span>
-                          {e.lastAt && <span style={{ fontSize: TYPE.caption2, color: UI.ink3, flexShrink: 0 }}>{e.lastAt.replace("T", " ").slice(0, 16)}</span>}
+                          <span style={{ fontSize: TYPE.caption, color: UI.ink }}>{statusLabel(e.reason)}{e.type ? ` · ${statusLabel(e.type)}` : ""}{e.count != null && e.count > 1 ? ` ×${e.count}` : ""}</span>
+                          {e.lastAt && <span style={{ fontSize: TYPE.caption, color: UI.ink3, flexShrink: 0 }}>{e.lastAt.replace("T", " ").slice(0, 16)}</span>}
                         </div>
                       ))}
                     </div>)}
@@ -755,7 +755,7 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
                 {wd.status === "ready" && wd.labels.length > 0
                   ? (<div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                       {wd.labels.map((l) => (
-                        <span key={l.key} style={{ fontSize: TYPE.micro, fontFamily: MONO, color: UI.ink2, border: `1px solid ${UI.line2}`, background: UI.bg2, borderRadius: 6, padding: "3px 7px" }}>{l.key}{l.value ? `=${l.value}` : ""}</span>
+                        <span key={l.key} style={{ fontSize: TYPE.caption, fontFamily: MONO, color: UI.ink2, border: `1px solid ${UI.line2}`, background: UI.bg2, borderRadius: 6, padding: "3px 7px" }}>{l.key}{l.value ? `=${l.value}` : ""}</span>
                       ))}
                     </div>)
                   : wd.status === "ready" && wd.labels.length === 0 ? <Empty>관측된 레이블이 없습니다.</Empty>
@@ -813,13 +813,13 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
                           {event.message && (
                             <EventMessageText
                               color={UI.ink3}
-                              fontSize={TYPE.caption2}
+                              fontSize={TYPE.caption}
                               message={event.message}
                               reasonLabel={statusLabel(event.reason)}
                             />
                           )}
                         </span>
-                        {event.lastAt && <span style={{ fontSize: TYPE.caption2, color: UI.ink3, flexShrink: 0 }}>{event.lastAt.replace("T", " ").slice(0, 16)}</span>}
+                        {event.lastAt && <span style={{ fontSize: TYPE.caption, color: UI.ink3, flexShrink: 0 }}>{event.lastAt.replace("T", " ").slice(0, 16)}</span>}
                       </div>
                     ))}
                   </div>)}
@@ -863,8 +863,8 @@ function TrafficPanel({ clusterIds, focus, onFocus, onOpen, stickyTop, stacked =
   return (
     <aside style={{ width: stacked ? "100%" : 248, boxSizing: "border-box", flexShrink: 0, alignSelf: "flex-start", position: stacked ? "relative" : "sticky", top: stacked ? undefined : stickyTop, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 14, padding: 10, maxHeight: stacked ? 300 : `calc(100vh / ${PRESENT_SCALE} - ${stickyTop + 48}px)`, overflowY: "auto", scrollbarGutter: "stable", display: "flex", flexDirection: "column", gap: 2 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "2px 2px 7px" }}>
-        <span style={{ fontSize: TYPE.bodyStrong, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink }}>관계 노드</span>
-        <span style={{ fontSize: TYPE.caption2, color: UI.ink3 }}>{rows.length}개{topo.omittedNodeCount > 0 ? ` · ${topo.omittedNodeCount}개 생략` : ""}</span>
+        <span style={{ fontSize: TYPE.body, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink }}>관계 노드</span>
+        <span style={{ fontSize: TYPE.caption, color: UI.ink3 }}>{rows.length}개{topo.omittedNodeCount > 0 ? ` · ${topo.omittedNodeCount}개 생략` : ""}</span>
         {focus && <button type="button" aria-label="서비스 포커스 해제" onClick={() => onFocus(null)} style={{ marginLeft: "auto", border: "none", background: inkA(0.05), color: UI.ink3, borderRadius: 999, padding: "2px 9px", fontSize: TYPE.caption, fontWeight: 700, cursor: "pointer" }}>해제</button>}
       </div>
       {topo.status === "loading" && <span style={{ fontSize: TYPE.caption, color: UI.ink3, padding: "6px 2px" }}>불러오는 중…</span>}
@@ -876,7 +876,7 @@ function TrafficPanel({ clusterIds, focus, onFocus, onOpen, stickyTop, stacked =
           style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", minHeight: 46, textAlign: "left", border: `1px solid ${focus === r.id ? TINT.blue.bd : "transparent"}`, background: focus === r.id ? TINT.blue.bg : "transparent", borderRadius: 8, padding: "5px 8px", cursor: "pointer" }}>
           <span style={{ width: 8, height: 8, borderRadius: 3, background: r.bad ? HP.crit : HP.ok, flexShrink: 0 }} />
           <span style={{ minWidth: 0, flex: 1 }}>
-            <span style={{ display: "block", fontSize: TYPE.label2, fontWeight: 700, fontFamily: MONO, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name}</span>
+            <span style={{ display: "block", fontSize: TYPE.label, fontWeight: 700, fontFamily: MONO, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name}</span>
             <span style={{ display: "block", fontSize: TYPE.caption, color: UI.ink3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.kind} · {r.ns ?? "클러스터 범위"}</span>
           </span>
           {r.bad
@@ -885,7 +885,7 @@ function TrafficPanel({ clusterIds, focus, onFocus, onOpen, stickyTop, stacked =
         </button>
       ))}
       {hiddenCount > 0 && (
-        <span style={{ fontSize: TYPE.caption2, color: UI.ink3, padding: "8px 9px", borderTop: `1px solid ${UI.line2}` }}>
+        <span style={{ fontSize: TYPE.caption, color: UI.ink3, padding: "8px 9px", borderTop: `1px solid ${UI.line2}` }}>
           현재 범위의 나머지 서비스 {hiddenCount}개는 검색·범위 축소 후 표시됩니다.
         </span>
       )}
@@ -919,7 +919,7 @@ function KindIndex({ sel, onPick, showEmpty, setShowEmpty, pinned, togglePin, fi
     <nav style={{ width: "100%", display: "flex", flexDirection: "column", gap: 12 }}>
       {pinned.length > 0 && (
       <div>
-        <div style={{ fontSize: TYPE.micro, fontWeight: 600, letterSpacing: "0.07em", color: UI.ink3, padding: "0 9px 5px" }}>즐겨찾기</div>
+        <div style={{ fontSize: TYPE.caption, fontWeight: 600, letterSpacing: "0.07em", color: UI.ink3, padding: "0 9px 5px" }}>즐겨찾기</div>
         {KINDS.filter((k) => pinned.includes(k.id)).map((k) => <Row key={k.id} k={k} />)}
       </div>
       )}
@@ -929,8 +929,8 @@ function KindIndex({ sel, onPick, showEmpty, setShowEmpty, pinned, togglePin, fi
         return (
           <div key={g}>
             <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "0 9px 5px" }}>
-              <span style={{ fontSize: TYPE.micro, fontWeight: 600, letterSpacing: "0.07em", color: UI.ink3 }}>{g}</span>
-              <span style={{ marginLeft: "auto", fontSize: TYPE.micro, fontVariantNumeric: "tabular-nums", color: UI.ink3 }}>{GROUP_TOTAL(g, counts)}</span>
+              <span style={{ fontSize: TYPE.caption, fontWeight: 600, letterSpacing: "0.07em", color: UI.ink3 }}>{g}</span>
+              <span style={{ marginLeft: "auto", fontSize: TYPE.caption, fontVariantNumeric: "tabular-nums", color: UI.ink3 }}>{GROUP_TOTAL(g, counts)}</span>
             </div>
             {list.map((k) => <Row key={k.id} k={k} />)}
           </div>
@@ -998,7 +998,7 @@ function GlobalNav({ collapsed, setCollapsed, surface, onSurface }: {
         <span style={{ width: 26, height: 26, borderRadius: 8, background: `linear-gradient(135deg, ${BLUE}, ${BLUE2})`, display: "grid", placeItems: "center", flexShrink: 0 }}>
           <span style={{ width: 9, height: 9, borderRadius: 999, border: `2px solid ${UI.card}` }} />
         </span>
-        {!collapsed && <span style={{ fontSize: TYPE.title3, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink }}>Kyro</span>}
+        {!collapsed && <span style={{ fontSize: TYPE.section, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink }}>Kyro</span>}
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>{NAV_ITEMS.map((it) => <Item key={it.id} it={it} />)}</div>
       <div style={{ marginTop: "auto", display: "flex", flexDirection: "column", gap: 1, borderTop: `1px solid ${UI.line2}`, paddingTop: 8 }}>
@@ -1141,8 +1141,8 @@ function HomeSurface({ clusterMeta, incidentClusterIds, onDrillCluster, onCluste
       case "W1":
         return <HomeClustersWidget onOpen={onDrillCluster} onSettings={onClusterSettings} onDisconnect={onClusterDisconnect} pending={pendingCl} />;
       case "W2":
-        if (issues.status === "loading") return <span style={{ fontSize: TYPE.label2, color: UI.ink3 }}>불러오는 중…</span>;
-        if (issues.status === "unavailable") return <span style={{ fontSize: TYPE.label2, color: UI.ink3 }}>이슈를 불러오지 못했습니다</span>;
+        if (issues.status === "loading") return <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>불러오는 중…</span>;
+        if (issues.status === "unavailable") return <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>이슈를 불러오지 못했습니다</span>;
         return issues.items.length
           ? <RankList onPick={onOpenIssues ? () => onOpenIssues() : undefined} rows={issues.items.slice(0, 3).map((iss) => ({
               id: iss.correlationId,
@@ -1151,58 +1151,58 @@ function HomeSurface({ clusterMeta, incidentClusterIds, onDrillCluster, onCluste
               sub: [iss.namespace, iss.clusterId].filter(Boolean).join(" · ") || statusLabel(iss.status),
               right: statusLabel(iss.status),
             }))} />
-          : <span style={{ fontSize: TYPE.label2, color: UI.ink2 }}>활성 이슈가 없습니다</span>;
+          : <span style={{ fontSize: TYPE.label, color: UI.ink2 }}>활성 이슈가 없습니다</span>;
       case "W3":
-        if (apps.status === "loading") return <span style={{ fontSize: TYPE.label2, color: UI.ink3 }}>불러오는 중…</span>;
-        if (apps.status === "unavailable") return <span style={{ fontSize: TYPE.label2, color: UI.ink3 }}>애플리케이션을 불러오지 못했습니다</span>;
-        if (apps.items.length === 0) return <span style={{ fontSize: TYPE.label2, color: UI.ink2 }}>관측된 애플리케이션이 없습니다</span>;
+        if (apps.status === "loading") return <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>불러오는 중…</span>;
+        if (apps.status === "unavailable") return <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>애플리케이션을 불러오지 못했습니다</span>;
+        if (apps.items.length === 0) return <span style={{ fontSize: TYPE.label, color: UI.ink2 }}>관측된 애플리케이션이 없습니다</span>;
         {
           const outSyncApps = apps.items.filter((a) => a.deliveryStatus && /pending|outofsync|drift|degraded|error/i.test(a.deliveryStatus)).length;
           const syncedApps = apps.items.length - outSyncApps;
           return (
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               <RatioBar a={syncedApps} b={outSyncApps} aLabel="동기화" bLabel="대기/드리프트" />
-              {pendingRepo.length > 0 && <span style={{ fontSize: TYPE.caption2, color: TINT.blue.fg }}>연결 중 {pendingRepo.length} · 초기 동기화 대기</span>}
+              {pendingRepo.length > 0 && <span style={{ fontSize: TYPE.caption, color: TINT.blue.fg }}>연결 중 {pendingRepo.length} · 초기 동기화 대기</span>}
             </div>
           );
         }
       case "W4":
-        if (changeTimeline.status === "loading") return <span style={{ fontSize: TYPE.label2, color: UI.ink3 }}>불러오는 중…</span>;
-        if (changeTimeline.status === "unavailable") return <span style={{ fontSize: TYPE.label2, color: UI.ink3 }}>활동 관측 안 됨</span>;
-        if (changeTimeline.buckets.length === 0) return <span style={{ fontSize: TYPE.label2, color: UI.ink2 }}>관측된 활동이 없습니다</span>;
+        if (changeTimeline.status === "loading") return <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>불러오는 중…</span>;
+        if (changeTimeline.status === "unavailable") return <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>활동 관측 안 됨</span>;
+        if (changeTimeline.buckets.length === 0) return <span style={{ fontSize: TYPE.label, color: UI.ink2 }}>관측된 활동이 없습니다</span>;
         return <MultiLine series={[
           { label: "전체", color: BLUE, values: changeTimeline.buckets.map((b) => b.total) },
           { label: "경고", color: HP.warn, values: changeTimeline.buckets.map((b) => b.warnings) },
         ]} />;
       case "W5":
-        if (nsView.status === "loading") return <span style={{ fontSize: TYPE.label2, color: UI.ink3 }}>불러오는 중…</span>;
-        if (nsView.status === "unavailable") return <span style={{ fontSize: TYPE.label2, color: UI.ink3 }}>네임스페이스 관측 안 됨</span>;
+        if (nsView.status === "loading") return <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>불러오는 중…</span>;
+        if (nsView.status === "unavailable") return <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>네임스페이스 관측 안 됨</span>;
         return nsDist.length
           ? <div style={{ flex: 1, display: "flex", alignItems: "center" }}><Donut items={nsDist} onPick={(l) => l !== "기타" && onPickNs(l)} /></div>
-          : <span style={{ fontSize: TYPE.label2, color: UI.ink2 }}>관측된 파드가 없습니다</span>;
+          : <span style={{ fontSize: TYPE.label, color: UI.ink2 }}>관측된 파드가 없습니다</span>;
       case "W6":
-        if (issues.status === "loading") return <span style={{ fontSize: TYPE.label2, color: UI.ink3 }}>불러오는 중…</span>;
-        if (issues.status === "unavailable") return <span style={{ fontSize: TYPE.label2, color: UI.ink3 }}>불러오지 못했습니다</span>;
+        if (issues.status === "loading") return <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>불러오는 중…</span>;
+        if (issues.status === "unavailable") return <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>불러오지 못했습니다</span>;
         return watch.length
           ? <RankList onPick={onOpenIssues ? () => onOpenIssues() : undefined} rows={watch} />
-          : <span style={{ fontSize: TYPE.label2, color: UI.ink2 }}>주의가 필요한 리소스가 없습니다</span>;
+          : <span style={{ fontSize: TYPE.label, color: UI.ink2 }}>주의가 필요한 리소스가 없습니다</span>;
       case "W7": {
-        if (cost.status === "loading") return <span style={{ fontSize: TYPE.label2, color: UI.ink3 }}>불러오는 중…</span>;
-        if (cost.status === "error") return <span style={{ fontSize: TYPE.label2, color: UI.ink3 }}>비용을 불러오지 못했습니다</span>;
+        if (cost.status === "loading") return <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>불러오는 중…</span>;
+        if (cost.status === "error") return <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>비용을 불러오지 못했습니다</span>;
         // 현 dev 계약: 비용 관측 unavailable. 가짜 총액을 backfill하지 않고 정직 상태 표시.
         return (
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             <span style={{ fontSize: TYPE.body, fontWeight: 700, color: UI.ink2 }}>비용 관측 안 됨</span>
-            <span style={{ fontSize: TYPE.caption2, color: UI.ink3 }}>{reasonLabel(cost.reasonCodes[0] ?? "cost_observation_unavailable")}</span>
+            <span style={{ fontSize: TYPE.caption, color: UI.ink3 }}>{reasonLabel(cost.reasonCodes[0] ?? "cost_observation_unavailable")}</span>
           </div>
         );
       }
       case "W8":
-        if (changeTimeline.status === "loading") return <span style={{ fontSize: TYPE.label2, color: UI.ink3 }}>불러오는 중…</span>;
-        if (changeTimeline.status === "unavailable") return <span style={{ fontSize: TYPE.label2, color: UI.ink3 }}>최근 변경 관측 안 됨</span>;
+        if (changeTimeline.status === "loading") return <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>불러오는 중…</span>;
+        if (changeTimeline.status === "unavailable") return <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>최근 변경 관측 안 됨</span>;
         {
           const recent = [...changeTimeline.events].reverse().slice(0, 6);
-          if (recent.length === 0) return <span style={{ fontSize: TYPE.label2, color: UI.ink2 }}>최근 변경이 없습니다</span>;
+          if (recent.length === 0) return <span style={{ fontSize: TYPE.label, color: UI.ink2 }}>최근 변경이 없습니다</span>;
           return <MiniTimeline columns={2} items={recent.map((e) => ({
             id: e.id,
             time: clockTime(e.occurredMs),
@@ -1251,7 +1251,7 @@ function HomeSurface({ clusterMeta, incidentClusterIds, onDrillCluster, onCluste
           <span style={{ display: "flex", gap: 2, background: inkA(0.05), borderRadius: 8, padding: 2 }}>
             {(["오늘", "7일", "30일"] as const).map((p) => (
               <button key={p} onClick={() => setPeriod(p)}
-                style={{ border: "none", borderRadius: 6, padding: "3px 10px", fontSize: TYPE.caption2, fontWeight: 600, cursor: "pointer", background: period === p ? UI.card : "transparent", color: period === p ? UI.ink : UI.ink3, boxShadow: period === p ? `0 1px 3px ${inkA(0.12)}` : "none" }}>{p}</button>
+                style={{ border: "none", borderRadius: 6, padding: "3px 10px", fontSize: TYPE.caption, fontWeight: 600, cursor: "pointer", background: period === p ? UI.card : "transparent", color: period === p ? UI.ink : UI.ink3, boxShadow: period === p ? `0 1px 3px ${inkA(0.12)}` : "none" }}>{p}</button>
             ))}
           </span>
           <button onClick={() => setEditing(!editing)}
@@ -1259,7 +1259,7 @@ function HomeSurface({ clusterMeta, incidentClusterIds, onDrillCluster, onCluste
             <Pencil size={12} />{editing ? "편집 완료" : "레이아웃 편집"}
           </button>
           <button onClick={onConnect}
-            style={{ display: "flex", alignItems: "center", gap: 6, border: "none", background: BLUE, color: UI.card, borderRadius: 9, padding: "6px 13px", fontSize: TYPE.label2, fontWeight: 700, cursor: "pointer" }}>+ 클러스터 연결</button>
+            style={{ display: "flex", alignItems: "center", gap: 6, border: "none", background: BLUE, color: UI.card, borderRadius: 9, padding: "6px 13px", fontSize: TYPE.label, fontWeight: 700, cursor: "pointer" }}>+ 클러스터 연결</button>
         </span>
       </div>
 
@@ -1828,7 +1828,7 @@ function App() {
                 style={{ position: "absolute", top: 40, left: 0, minWidth: 190, zIndex: 65, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 12, boxShadow: `0 18px 50px -18px ${inkA(0.28)}`, padding: 5, overflow: "hidden" }}>
                 {nsOptions.map((o) => (
                   <button key={o} className="rrow" onClick={() => { setNs(o); setNsOpen(false); }}
-                    style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left", border: "none", background: ns === o ? blueA(0.08) : "transparent", borderRadius: 8, padding: "7px 10px", fontSize: TYPE.label2, fontWeight: ns === o ? 700 : 500, color: ns === o ? BLUE : UI.ink, cursor: "pointer" }}>
+                    style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left", border: "none", background: ns === o ? blueA(0.08) : "transparent", borderRadius: 8, padding: "7px 10px", fontSize: TYPE.label, fontWeight: ns === o ? 700 : 500, color: ns === o ? BLUE : UI.ink, cursor: "pointer" }}>
                     {o}{ns === o && <Check size={12} style={{ marginLeft: "auto" }} />}
                   </button>
                 ))}
@@ -1858,7 +1858,7 @@ function App() {
             <Bell size={14} />
           </button>
           {alertTotal > 0 && (
-            <span style={{ position: "absolute", top: -3, right: -3, minWidth: 15, height: 15, borderRadius: 999, background: liveAlerts.some((e) => e.severity === "critical") ? HP.crit : HP.warn, color: UI.card, fontSize: TYPE.micro, fontWeight: 700, display: "grid", placeItems: "center", padding: "0 4px", border: `2px solid ${UI.card}`, boxSizing: "content-box" }}>{alertTotal}</span>
+            <span style={{ position: "absolute", top: -3, right: -3, minWidth: 15, height: 15, borderRadius: 999, background: liveAlerts.some((e) => e.severity === "critical") ? HP.crit : HP.warn, color: UI.card, fontSize: TYPE.caption, fontWeight: 700, display: "grid", placeItems: "center", padding: "0 4px", border: `2px solid ${UI.card}`, boxSizing: "content-box" }}>{alertTotal}</span>
           )}
           <AnimatePresence>
             {/* 애플 알림 센터 스타일 — 반투명 블러 패널 위 카드 스택 */}
@@ -1867,8 +1867,8 @@ function App() {
                 style={{ position: "absolute", top: 38, right: 0, width: 344, zIndex: 65, background: GLASS, backdropFilter: "blur(26px)", WebkitBackdropFilter: "blur(26px)",
                   border: `1px solid ${inkA(0.08)}`, borderRadius: 18, boxShadow: `0 28px 70px -24px ${inkA(0.38)}`, padding: 10, maxHeight: `min(calc(70vh / ${PRESENT_SCALE}), 560px)`, overflowY: "auto", scrollbarGutter: "stable" }}>
                 <div style={{ display: "flex", alignItems: "baseline", gap: 7, padding: "2px 8px 8px" }}>
-                  <span style={{ fontSize: 15, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink }}>알림</span>
-                  <span style={{ fontSize: TYPE.caption2, fontWeight: 600, color: UI.ink3 }}>{alertTotal}</span>
+                  <span style={{ fontSize: TYPE.section, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink }}>알림</span>
+                  <span style={{ fontSize: TYPE.caption, fontWeight: 600, color: UI.ink3 }}>{alertTotal}</span>
                 </div>
                 {(pendingCl.length + pendingRepo.length > 0) && (
                   <div style={{ padding: "0 8px 8px" }}>
@@ -1877,7 +1877,7 @@ function App() {
                       <div key={x.id} style={{ display: "flex", alignItems: "center", gap: 10, background: cardA(0.85), border: `1px solid ${inkA(0.05)}`, borderRadius: 14, padding: "10px 12px", marginBottom: 6 }}>
                         <span className="pulsedot" style={{ width: 8, height: 8, borderRadius: 999, background: BLUE, flexShrink: 0 }} />
                         <span style={{ minWidth: 0, flex: 1 }}>
-                          <span style={{ display: "block", fontSize: TYPE.label2, fontWeight: 700, fontFamily: MONO, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{x.t}</span>
+                          <span style={{ display: "block", fontSize: TYPE.label, fontWeight: 700, fontFamily: MONO, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{x.t}</span>
                           <span style={{ display: "block", fontSize: TYPE.caption, color: UI.ink2, marginTop: 1 }}>{x.b}</span>
                         </span>
                         <span style={{ width: 34, height: 4, borderRadius: 999, background: blueA(0.15), overflow: "hidden", flexShrink: 0 }}>
@@ -1900,10 +1900,10 @@ function App() {
                       <span style={{ minWidth: 0, flex: 1 }}>
                         <span style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
                           <span style={{ flex: 1, minWidth: 0, fontSize: TYPE.body, fontWeight: 700, fontFamily: MONO, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</span>
-                          <span style={{ fontSize: TYPE.micro, color: UI.ink3, flexShrink: 0 }}>{time}</span>
+                          <span style={{ fontSize: TYPE.caption, color: UI.ink3, flexShrink: 0 }}>{time}</span>
                         </span>
-                        <span style={{ display: "block", fontSize: TYPE.caption2, color: UI.ink2, marginTop: 2, lineHeight: 1.45 }}>{body}</span>
-                        {right && <span style={{ display: "block", fontSize: TYPE.micro, fontFamily: MONO, color: UI.ink3, marginTop: 3 }}>{right}</span>}
+                        <span style={{ display: "block", fontSize: TYPE.caption, color: UI.ink2, marginTop: 2, lineHeight: 1.45 }}>{body}</span>
+                        {right && <span style={{ display: "block", fontSize: TYPE.caption, fontFamily: MONO, color: UI.ink3, marginTop: 3 }}>{right}</span>}
                       </span>
                     </button>
                   );
@@ -1919,7 +1919,7 @@ function App() {
                           right={ev.cluster} onClick={() => { setBellOpen(false); openRef(ev.kind, ev.name); }} />
                       ))}
                       {alertEvents.status === "unavailable" && notes.length === 0 && (
-                        <div style={{ padding: "10px 12px", fontSize: TYPE.caption2, color: UI.ink3 }}>알림 이벤트 관측 안 됨</div>
+                        <div style={{ padding: "10px 12px", fontSize: TYPE.caption, color: UI.ink3 }}>알림 이벤트 관측 안 됨</div>
                       )}
                     </>
                   );
@@ -1938,16 +1938,16 @@ function App() {
                 style={{ position: "absolute", top: 38, right: 0, width: 244, zIndex: 65, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 12, boxShadow: `0 18px 50px -18px ${inkA(0.28)}`, padding: 6, overflow: "hidden" }}>
                 <div style={{ padding: "8px 10px 9px", borderBottom: `1px solid ${UI.line2}` }}>
                   <div style={{ fontSize: TYPE.body, fontWeight: 700, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{session.status === "loading" ? "확인 중…" : session.displayName ?? session.userId ?? "알 수 없음"}</div>
-                  <div style={{ fontSize: TYPE.caption2, fontFamily: MONO, color: UI.ink3, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{session.email ?? (session.roles.length ? session.roles.map(statusLabel).join(" · ") : session.authMode ? `인증 모드: ${statusLabel(session.authMode)}` : "이메일 없음")}</div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: TYPE.caption2, color: UI.ink2, marginTop: 6 }}><Building2 size={11} style={{ color: UI.ink3 }} />{workspaceLabel(session.workspaceId ?? contract.workspaceId)} 워크스페이스</div>
+                  <div style={{ fontSize: TYPE.caption, fontFamily: MONO, color: UI.ink3, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{session.email ?? (session.roles.length ? session.roles.map(statusLabel).join(" · ") : session.authMode ? `인증 모드: ${statusLabel(session.authMode)}` : "이메일 없음")}</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: TYPE.caption, color: UI.ink2, marginTop: 6 }}><Building2 size={11} style={{ color: UI.ink3 }} />{workspaceLabel(session.workspaceId ?? contract.workspaceId)} 워크스페이스</div>
                 </div>
                 {session.logoutSupported ? (
                   <button className="rrow" onClick={() => { void logoutApi().then(() => window.location.reload()).catch(() => undefined); }}
-                    style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left", border: "none", background: "transparent", borderRadius: 8, padding: "8px 10px", marginTop: 3, fontSize: TYPE.label2, fontWeight: 600, color: UI.ink2, cursor: "pointer" }}>
+                    style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left", border: "none", background: "transparent", borderRadius: 8, padding: "8px 10px", marginTop: 3, fontSize: TYPE.label, fontWeight: 600, color: UI.ink2, cursor: "pointer" }}>
                     <LogOut size={13} style={{ color: UI.ink3 }} />로그아웃
                   </button>
                 ) : (
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "8px 10px", marginTop: 3, fontSize: TYPE.caption2, color: UI.ink3 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "8px 10px", marginTop: 3, fontSize: TYPE.caption, color: UI.ink3 }}>
                     <LogOut size={13} style={{ color: UI.ink3 }} />{session.authMode === "trusted_proxy" ? "상위 프록시 인증 — 로그아웃은 상위에서" : "이 세션은 로그아웃을 지원하지 않습니다"}
                   </div>
                 )}
@@ -2016,7 +2016,7 @@ function App() {
             <span style={{ display: "flex", gap: 2, background: inkA(0.05), borderRadius: 9, padding: 2 }}>
               {([["map", "인프라"], ["list", "쿠버네티스"], ["flow", "트래픽"]] as const).map(([v, l]) => (
                 <button type="button" aria-pressed={resView === v} key={v} onClick={() => setResView(v)}
-                  style={{ position: "relative", border: "none", background: "transparent", borderRadius: 7, padding: "5px 16px", fontSize: TYPE.label2, fontWeight: 700, color: resView === v ? UI.ink : UI.ink3, cursor: "pointer" }}>
+                  style={{ position: "relative", border: "none", background: "transparent", borderRadius: 7, padding: "5px 16px", fontSize: TYPE.label, fontWeight: 700, color: resView === v ? UI.ink : UI.ink3, cursor: "pointer" }}>
                   {resView === v && <motion.span layoutId="resview" transition={SOFT} style={{ position: "absolute", inset: 0, background: UI.card, borderRadius: 7, boxShadow: `0 1px 4px ${inkA(0.14)}` }} />}
                   <span style={{ position: "relative" }}>{l}</span>
                 </button>
@@ -2059,9 +2059,9 @@ function App() {
               <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 12 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                   <kind.icon size={15} style={{ color: BLUE }} />
-                  <span style={{ fontSize: TYPE.title3, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink }}>{kind.label}</span>
+                  <span style={{ fontSize: TYPE.section, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink }}>{kind.label}</span>
                   <span style={{ fontSize: TYPE.label, fontVariantNumeric: "tabular-nums", color: UI.ink3 }}>{shownRows.length}{shownRows.length !== allRows.length ? ` / ${allRows.length}` : ""}</span>
-                  <span style={{ fontSize: TYPE.caption2, fontWeight: 600, color: inScope ? BLUE : UI.ink2, background: inScope ? blueA(0.08) : inkA(0.045), borderRadius: 999, padding: "3px 11px" }}>범위 · {scopeLabel}</span>
+                  <span style={{ fontSize: TYPE.caption, fontWeight: 600, color: inScope ? BLUE : UI.ink2, background: inScope ? blueA(0.08) : inkA(0.045), borderRadius: 999, padding: "3px 11px" }}>범위 · {scopeLabel}</span>
                 </div>
                 {/* 표 교체는 대기 없이 즉시 — exit를 기다리면 전환이 느리고, 탭 스로틀 시 멈춘다 */}
                 <motion.div key={kindId} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={SOFT}>
@@ -2206,7 +2206,7 @@ function App() {
               </span>
               <span style={{ minWidth: 0 }}>
                 <span style={{ display: "block", fontSize: TYPE.body, fontWeight: 700, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.title}</span>
-                <span style={{ display: "block", fontSize: TYPE.caption2, color: UI.ink2, marginTop: 1 }}>{t.sub}</span>
+                <span style={{ display: "block", fontSize: TYPE.caption, color: UI.ink2, marginTop: 1 }}>{t.sub}</span>
               </span>
             </motion.div>
           ))}

@@ -321,22 +321,22 @@ export function LiveResourceManifestEditor({
     <div style={{ padding: "16px 0 24px", display: "grid", gap: 12 }}>
       <LiveManifestPanel source={source} />
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-        <b style={{ color: UI.ink, fontSize: TYPE.bodyStrong }}>Git 원본 · IDE 편집</b>
+        <b style={{ color: UI.ink, fontSize: TYPE.body }}>Git 원본 · IDE 편집</b>
         {source.edit_target && (
-          <span style={{ color: UI.ink3, fontSize: TYPE.caption2 }}>
+          <span style={{ color: UI.ink3, fontSize: TYPE.caption }}>
             {source.edit_target.relationship === "owner" ? "Owner " : ""}
             {source.edit_target.kind}/{source.edit_target.name}
           </span>
         )}
       </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap", fontSize: TYPE.caption2, color: UI.ink2 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap", fontSize: TYPE.caption, color: UI.ink2 }}>
         <Pill>{source.selected.repository_ref}</Pill><Pill>{source.selected.branch}</Pill>
         <span style={{ fontFamily: MONO }}>{source.selected.manifest_path}</span>
         <span style={{ marginLeft: "auto", fontFamily: MONO, color: UI.ink3 }}>commit {source.base_sha?.slice(0, 12)}</span>
       </div>
       <textarea aria-label="Git YAML 원본 편집기" value={yaml} disabled={busy || !!approval || !!emergencyApproval || !!applyReceipt}
         onChange={(event) => { setYaml(event.currentTarget.value); setPreview(null); setConfirmed(false); }} spellCheck={false}
-        style={{ width: "100%", minHeight: 360, resize: "vertical", boxSizing: "border-box", border: `1px solid ${UI.line}`, borderRadius: 12, padding: 14, background: "#0d1117", color: "#e6edf3", fontFamily: MONO, fontSize: 12, lineHeight: 1.6, outline: "none" }} />
+        style={{ width: "100%", minHeight: 360, resize: "vertical", boxSizing: "border-box", border: `1px solid ${UI.line}`, borderRadius: 12, padding: 14, background: "#0d1117", color: "#e6edf3", fontFamily: MONO, fontSize: TYPE.code, lineHeight: 1.6, outline: "none" }} />
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
         <ActionButton disabled={busy} onClick={() => void runPreview()}>
           {phase === "previewing" ? "검증 중…" : "변경 검증·미리보기"}
@@ -346,7 +346,7 @@ export function LiveResourceManifestEditor({
           {preview.apply_availability === "available" ? "즉시 적용 가능" : "Safe PR만 가능"}
         </Pill>}
       </div>
-      {preview?.diff && <pre style={{ margin: 0, maxHeight: 280, overflow: "auto", whiteSpace: "pre-wrap", overflowWrap: "anywhere", border: `1px solid ${UI.line}`, borderRadius: 12, padding: 14, background: UI.bg2, color: UI.ink, fontFamily: MONO, fontSize: 11, lineHeight: 1.55 }}>{preview.diff}</pre>}
+      {preview?.diff && <pre style={{ margin: 0, maxHeight: 280, overflow: "auto", whiteSpace: "pre-wrap", overflowWrap: "anywhere", border: `1px solid ${UI.line}`, borderRadius: 12, padding: 14, background: UI.bg2, color: UI.ink, fontFamily: MONO, fontSize: TYPE.code, lineHeight: 1.55 }}>{preview.diff}</pre>}
       {preview?.errors.map((item) => <ManifestNotice key={item} tone="error" title="검증 오류">{item}</ManifestNotice>)}
       {preview?.warnings.map((item) => <ManifestNotice key={item} tone="warn" title="검토 필요">{item}</ManifestNotice>)}
       {preview?.apply_reason_codes.map((item) => <ManifestNotice key={item} tone="warn" title="즉시 적용 제한">{reasonLabel(item)}</ManifestNotice>)}
@@ -443,12 +443,12 @@ function LiveManifestPanel({ source }: { source: ResourceManifestSourceEndpoint 
   return (
     <section aria-label="Live YAML 읽기 전용" style={{ display: "grid", gap: 8 }}>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-        <b style={{ color: UI.ink, fontSize: TYPE.bodyStrong }}>Live YAML · 읽기 전용</b>
-        {source.live_observed_at && <span style={{ color: UI.ink3, fontVariantNumeric: "tabular-nums", fontSize: TYPE.micro }}>관측 {source.live_observed_at}</span>}
+        <b style={{ color: UI.ink, fontSize: TYPE.body }}>Live YAML · 읽기 전용</b>
+        {source.live_observed_at && <span style={{ color: UI.ink3, fontVariantNumeric: "tabular-nums", fontSize: TYPE.caption }}>관측 {source.live_observed_at}</span>}
       </div>
       {source.live_yaml ? (
         <textarea aria-label="Live YAML" value={source.live_yaml} readOnly spellCheck={false}
-          style={{ width: "100%", minHeight: 190, resize: "vertical", boxSizing: "border-box", border: `1px solid ${UI.line}`, borderRadius: 12, padding: 14, background: UI.bg2, color: UI.ink2, fontFamily: MONO, fontSize: 12, lineHeight: 1.6, outline: "none" }} />
+          style={{ width: "100%", minHeight: 190, resize: "vertical", boxSizing: "border-box", border: `1px solid ${UI.line}`, borderRadius: 12, padding: 14, background: UI.bg2, color: UI.ink2, fontFamily: MONO, fontSize: TYPE.code, lineHeight: 1.6, outline: "none" }} />
       ) : (
         <ManifestNotice tone="warn" title="Live YAML 관측 불가">{source.live_reason ?? "현재 inventory snapshot에 원문이 없습니다."}</ManifestNotice>
       )}
@@ -465,11 +465,11 @@ function ManifestNotice({ title, tone = "neutral", children }: { title: string; 
 
 function Pill({ tone = "neutral", children }: { tone?: "neutral" | "ok" | "warn"; children: React.ReactNode }) {
   const color = tone === "ok" ? HP.ok : tone === "warn" ? HP.warn : UI.ink2;
-  return <span style={{ border: `1px solid ${tone === "neutral" ? UI.line : `${color}55`}`, background: tone === "neutral" ? inkA(0.035) : `${color}12`, borderRadius: 999, padding: "3px 8px", color, fontSize: TYPE.caption2, fontWeight: 700 }}>{children}</span>;
+  return <span style={{ border: `1px solid ${tone === "neutral" ? UI.line : `${color}55`}`, background: tone === "neutral" ? inkA(0.035) : `${color}12`, borderRadius: 999, padding: "3px 8px", color, fontSize: TYPE.caption, fontWeight: 700 }}>{children}</span>;
 }
 
 function ActionButton({ primary = false, disabled, onClick, children }: { primary?: boolean; disabled: boolean; onClick: () => void; children: React.ReactNode }) {
-  return <button type="button" disabled={disabled} onClick={onClick} style={{ border: primary ? "none" : `1px solid ${UI.line}`, background: primary ? BLUE : UI.card, color: primary ? UI.card : BLUE, borderRadius: 9, padding: "7px 12px", fontSize: TYPE.label2, fontWeight: 700, cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.5 : 1 }}>{children}</button>;
+  return <button type="button" disabled={disabled} onClick={onClick} style={{ border: primary ? "none" : `1px solid ${UI.line}`, background: primary ? BLUE : UI.card, color: primary ? UI.card : BLUE, borderRadius: 9, padding: "7px 12px", fontSize: TYPE.label, fontWeight: 700, cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.5 : 1 }}>{children}</button>;
 }
 
 const selectStyle: React.CSSProperties = { width: "100%", border: `1px solid ${UI.line}`, borderRadius: 9, padding: "8px 10px", background: UI.card, color: UI.ink, fontSize: TYPE.body };

@@ -56,10 +56,10 @@ function HealthChip({ health }: { health: string }) {
   const sev = healthSev(health);
   const label = statusLabel(health); // 매핑에 없는 원시값은 원문 유지(honest)
   if (sev === "unknown") {
-    return <span style={{ fontSize: TYPE.micro, fontWeight: 600, color: UI.ink3, border: `1px solid ${UI.line}`, borderRadius: 5, padding: "1px 6px", whiteSpace: "nowrap" }}>{label}</span>;
+    return <span style={{ fontSize: TYPE.caption, fontWeight: 600, color: UI.ink3, border: `1px solid ${UI.line}`, borderRadius: 5, padding: "1px 6px", whiteSpace: "nowrap" }}>{label}</span>;
   }
   const c = sevColor(sev);
-  return <span style={{ fontSize: TYPE.micro, fontWeight: 700, color: c, background: `${c}14`, border: `1px solid ${c}33`, borderRadius: 5, padding: "1px 6px", whiteSpace: "nowrap" }}>{label}</span>;
+  return <span style={{ fontSize: TYPE.caption, fontWeight: 700, color: c, background: `${c}14`, border: `1px solid ${c}33`, borderRadius: 5, padding: "1px 6px", whiteSpace: "nowrap" }}>{label}</span>;
 }
 
 // ── 관측 안 됨 표기(사용률 계약이 없을 때) ─────────────────────────────
@@ -74,7 +74,7 @@ function ClusterMiniUsage({ label, value }: { label: string; value: number | nul
   const normalized = Math.min(100, Math.max(0, value ?? 0));
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-      <span style={{ width: 34, fontSize: TYPE.micro, fontWeight: 600, letterSpacing: "0.05em", color: UI.ink3, flexShrink: 0 }}>{label}</span>
+      <span style={{ width: 34, fontSize: TYPE.caption, fontWeight: 600, letterSpacing: "0.05em", color: UI.ink3, flexShrink: 0 }}>{label}</span>
       <span style={{ flex: 1, height: 5, borderRadius: 999, background: inkA(0.07), overflow: "hidden" }}>
         <motion.span
           initial={false}
@@ -86,7 +86,7 @@ function ClusterMiniUsage({ label, value }: { label: string; value: number | nul
           }}
         />
       </span>
-      <span style={{ width: 66, textAlign: "right", fontSize: observed ? TYPE.label2 : TYPE.micro, fontWeight: observed ? 700 : 600, color: observed ? UI.ink : UI.ink3, fontVariantNumeric: "tabular-nums", flexShrink: 0, whiteSpace: "nowrap" }}>
+      <span style={{ width: 66, textAlign: "right", fontSize: observed ? TYPE.label : TYPE.caption, fontWeight: observed ? 700 : 600, color: observed ? UI.ink : UI.ink3, fontVariantNumeric: "tabular-nums", flexShrink: 0, whiteSpace: "nowrap" }}>
         <AnimatedPercentageValue value={value} reducedMotion={Boolean(reducedMotion)} />
       </span>
     </div>
@@ -185,11 +185,11 @@ function ClusterRow({ cl, summary, topology, onOpen }: {
         </span>
         <span style={{ minWidth: 0, flex: 1 }}>
           <span style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
-            <span title={cl.displayName} style={{ fontSize: TYPE.title3, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cl.displayName}</span>
-            {cl.environment === "production" && <span style={{ fontSize: TYPE.micro, fontWeight: 600, color: TINT.warn.fg, border: `1px solid ${TINT.warn.bd}`, background: TINT.warn.bg, borderRadius: 5, padding: "1px 6px", flexShrink: 0 }}>prod</span>}
-            {cl.readOnly && <span style={{ fontSize: TYPE.micro, fontWeight: 600, color: UI.ink2, border: `1px solid ${UI.line}`, background: UI.bg2, borderRadius: 5, padding: "1px 6px", flexShrink: 0 }}>읽기 전용</span>}
+            <span title={cl.displayName} style={{ fontSize: TYPE.section, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cl.displayName}</span>
+            {cl.environment === "production" && <span style={{ fontSize: TYPE.caption, fontWeight: 600, color: TINT.warn.fg, border: `1px solid ${TINT.warn.bd}`, background: TINT.warn.bg, borderRadius: 5, padding: "1px 6px", flexShrink: 0 }}>prod</span>}
+            {cl.readOnly && <span style={{ fontSize: TYPE.caption, fontWeight: 600, color: UI.ink2, border: `1px solid ${UI.line}`, background: UI.bg2, borderRadius: 5, padding: "1px 6px", flexShrink: 0 }}>읽기 전용</span>}
           </span>
-          <span style={{ display: "block", fontSize: TYPE.caption2, color: UI.ink3, marginTop: 2 }}>
+          <span style={{ display: "block", fontSize: TYPE.caption, color: UI.ink3, marginTop: 2 }}>
             {cl.provider.toUpperCase()} · {cl.kubernetesVersion ?? "—"}
             {summary?.stale === true && <span aria-label="실시간 관측 지연" style={{ color: TINT.warn.fg, fontWeight: 700 }}> · 관측 지연</span>}
           </span>
@@ -264,11 +264,11 @@ function CompactUsage({ label, value }: { label: string; value: number | null })
   const shown = useSmoothedValue(value);
   return (
     <span style={{ display: "grid", gridTemplateColumns: "30px minmax(48px, 1fr) 38px", alignItems: "center", gap: 6, minWidth: 0 }}>
-      <span style={{ fontSize: TYPE.micro, fontWeight: 700, color: UI.ink3 }}>{label}</span>
+      <span style={{ fontSize: TYPE.caption, fontWeight: 700, color: UI.ink3 }}>{label}</span>
       <span style={{ height: 4, borderRadius: 999, background: inkA(0.06), overflow: "hidden" }}>
         {shown !== null && <span style={{ display: "block", width: `${Math.min(100, shown)}%`, height: "100%", borderRadius: 999, background: shown >= 90 ? HP.crit : shown >= 75 ? HP.warn : HP.ok }} />}
       </span>
-      <span style={{ textAlign: "right", fontSize: TYPE.micro, fontWeight: 700, fontVariantNumeric: "tabular-nums", color: shown === null ? UI.ink3 : UI.ink }}>{shown === null ? "—" : `${Math.round(shown)}%`}</span>
+      <span style={{ textAlign: "right", fontSize: TYPE.caption, fontWeight: 700, fontVariantNumeric: "tabular-nums", color: shown === null ? UI.ink3 : UI.ink }}>{shown === null ? "—" : `${Math.round(shown)}%`}</span>
     </span>
   );
 }
@@ -327,17 +327,17 @@ function CompactClusterRow({ cl, summary, onOpen, onSettings, onDisconnect }: {
       <span style={{ display: "flex", alignItems: "center", gap: 9, minWidth: 0 }}>
         <span style={{ width: 27, height: 27, borderRadius: 8, background: `linear-gradient(135deg, ${BRAND.awsA}, ${BRAND.awsB})`, display: "grid", placeItems: "center", flexShrink: 0 }}><AwsIcon size={15} style={{ color: UI.card }} /></span>
         <span style={{ minWidth: 0 }}>
-          <span title={cl.displayName} style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: TYPE.label2, fontWeight: 750, color: UI.ink }}>{cl.displayName}</span>
-          <span style={{ display: "block", marginTop: 1, fontSize: TYPE.micro, color: UI.ink3 }}>{cl.environment ?? cl.provider.toUpperCase()}</span>
+          <span title={cl.displayName} style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: TYPE.label, fontWeight: 750, color: UI.ink }}>{cl.displayName}</span>
+          <span style={{ display: "block", marginTop: 1, fontSize: TYPE.caption, color: UI.ink3 }}>{cl.environment ?? cl.provider.toUpperCase()}</span>
         </span>
         {incidents > 0 ? (
-          <span style={{ marginLeft: "auto", flexShrink: 0, fontSize: TYPE.micro, fontWeight: 700, color: HP.crit, background: TINT.crit.bg, borderRadius: 999, padding: "2px 6px" }}>장애 {incidents}</span>
+          <span style={{ marginLeft: "auto", flexShrink: 0, fontSize: TYPE.caption, fontWeight: 700, color: HP.crit, background: TINT.crit.bg, borderRadius: 999, padding: "2px 6px" }}>장애 {incidents}</span>
         ) : connectionWarning ? (
-          <span style={{ marginLeft: "auto", flexShrink: 0, fontSize: TYPE.micro, fontWeight: 700, color: TINT.warn.fg, background: TINT.warn.bg, borderRadius: 999, padding: "2px 6px" }}>{statusLabel(cl.connectionStage ?? cl.connectionStatus)}</span>
+          <span style={{ marginLeft: "auto", flexShrink: 0, fontSize: TYPE.caption, fontWeight: 700, color: TINT.warn.fg, background: TINT.warn.bg, borderRadius: 999, padding: "2px 6px" }}>{statusLabel(cl.connectionStage ?? cl.connectionStatus)}</span>
         ) : summary?.stale === true ? (
           <span
             aria-label="실시간 관측 지연"
-            style={{ marginLeft: "auto", flexShrink: 0, fontSize: TYPE.micro, fontWeight: 700, color: TINT.warn.fg }}
+            style={{ marginLeft: "auto", flexShrink: 0, fontSize: TYPE.caption, fontWeight: 700, color: TINT.warn.fg }}
           >
             <Clock3 size={11} aria-hidden="true" /> 관측 지연
           </span>
@@ -345,13 +345,13 @@ function CompactClusterRow({ cl, summary, onOpen, onSettings, onDisconnect }: {
           <span
             aria-label="메트릭 수집 대기: CPU·메모리 최신 샘플 미수신"
             title="CPU·메모리 최신 샘플을 아직 수신하지 못했습니다."
-            style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 4, flexShrink: 0, fontSize: TYPE.micro, fontWeight: 700, lineHeight: 1, color: TINT.warn.fg }}
+            style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 4, flexShrink: 0, fontSize: TYPE.caption, fontWeight: 700, lineHeight: 1, color: TINT.warn.fg }}
           >
             <Clock3 size={11} aria-hidden="true" />메트릭 수집 대기
           </span>
         ) : null}
       </span>
-      <span className="home-cluster-compact-facts" style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, auto))", alignItems: "baseline", gap: 12, minWidth: 0, fontSize: TYPE.caption2, lineHeight: 1.2, color: UI.ink3, fontVariantNumeric: "tabular-nums" }}>
+      <span className="home-cluster-compact-facts" style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, auto))", alignItems: "baseline", gap: 12, minWidth: 0, fontSize: TYPE.caption, lineHeight: 1.2, color: UI.ink3, fontVariantNumeric: "tabular-nums" }}>
         <span style={{ display: "inline-flex", alignItems: "baseline", gap: 4, whiteSpace: "nowrap" }}>노드 <b style={{ color: UI.ink, fontVariantNumeric: "tabular-nums" }}>{fmt(ready)}/{fmt(nodes)}</b></span>
         <span style={{ display: "inline-flex", alignItems: "baseline", gap: 4, whiteSpace: "nowrap" }}>파드 <b style={{ color: UI.ink, fontVariantNumeric: "tabular-nums" }}>{fmt(pods)}</b></span>
         <span style={{ display: "inline-flex", alignItems: "baseline", gap: 4, whiteSpace: "nowrap" }}>NS <b style={{ color: UI.ink, fontVariantNumeric: "tabular-nums" }}>{cl.namespaceCount ?? "—"}</b></span>
@@ -388,7 +388,7 @@ function CompactClusterRow({ cl, summary, onOpen, onSettings, onDisconnect }: {
 
 const compactMenuStyle: React.CSSProperties = {
   display: "flex", alignItems: "center", gap: 7, width: "100%", border: "none", borderRadius: 7,
-  background: "transparent", color: UI.ink2, padding: "7px 8px", textAlign: "left", fontSize: TYPE.caption2,
+  background: "transparent", color: UI.ink2, padding: "7px 8px", textAlign: "left", fontSize: TYPE.caption,
   fontWeight: 600, cursor: "pointer",
 };
 
@@ -410,12 +410,12 @@ export function HomeClustersWidget({ onOpen, onSettings, onDisconnect, pending =
       ))}
       {pending.map((name) => (
         <div key={name} style={{ display: "grid", gridTemplateColumns: "minmax(170px, 1.35fr) minmax(210px, 1.25fr) minmax(180px, 1fr) 28px", alignItems: "center", gap: 14, minHeight: 54, padding: "8px 4px", borderTop: `1px solid ${UI.line2}` }}>
-          <span style={{ minWidth: 0, fontSize: TYPE.label2, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
-          <span style={{ fontSize: TYPE.caption2, color: TINT.blue.fg }}>부트스트랩 중 · 첫 인벤토리 대기</span>
-          <span style={{ fontSize: TYPE.caption2, color: UI.ink3 }}>CPU — · MEM —</span><span />
+          <span style={{ minWidth: 0, fontSize: TYPE.label, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
+          <span style={{ fontSize: TYPE.caption, color: TINT.blue.fg }}>부트스트랩 중 · 첫 인벤토리 대기</span>
+          <span style={{ fontSize: TYPE.caption, color: UI.ink3 }}>CPU — · MEM —</span><span />
         </div>
       ))}
-      {clusters.length === 0 && pending.length === 0 && <span style={{ display: "block", padding: "18px 4px", color: UI.ink3, fontSize: TYPE.label2 }}>연결된 클러스터가 없습니다.</span>}
+      {clusters.length === 0 && pending.length === 0 && <span style={{ display: "block", padding: "18px 4px", color: UI.ink3, fontSize: TYPE.label }}>연결된 클러스터가 없습니다.</span>}
     </div>
   );
 }
@@ -431,9 +431,9 @@ function AddClusterCard({ onClick, delay = 0, compact = false }: { onClick: () =
             border: `1.5px dashed ${LINE3}`, borderRadius: 14, background: "transparent", cursor: "pointer" }
         : { display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, minHeight: 200,
             border: `1.5px dashed ${LINE3}`, borderRadius: 16, background: "transparent", cursor: "pointer" }}>
-      <span style={{ width: compact ? 26 : 34, height: compact ? 26 : 34, borderRadius: 999, background: blueA(0.09), display: "grid", placeItems: "center", color: BLUE, fontSize: compact ? TYPE.bodyStrong : TYPE.heading, fontWeight: 600, lineHeight: 1 }}>+</span>
+      <span style={{ width: compact ? 26 : 34, height: compact ? 26 : 34, borderRadius: 999, background: blueA(0.09), display: "grid", placeItems: "center", color: BLUE, fontSize: compact ? TYPE.body : TYPE.section, fontWeight: 600, lineHeight: 1 }}>+</span>
       <span style={{ fontSize: TYPE.body, fontWeight: 700, color: UI.ink }}>클러스터 연결</span>
-      <span style={{ fontSize: TYPE.caption2, color: UI.ink3 }}>에이전트 설치로 등록</span>
+      <span style={{ fontSize: TYPE.caption, color: UI.ink3 }}>에이전트 설치로 등록</span>
     </motion.button>
   );
 }
@@ -450,8 +450,8 @@ export function PendingClusterCard({ name, delay = 0 }: { name: string; delay?: 
           <AwsIcon size={17} style={{ color: UI.ink3 }} />
         </span>
         <span style={{ minWidth: 0, flex: 1 }}>
-          <span style={{ fontSize: TYPE.title3, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
-          <span style={{ display: "block", fontSize: TYPE.caption2, color: UI.ink3, marginTop: 2 }}>Amazon EKS · 버전 관측 대기</span>
+          <span style={{ fontSize: TYPE.section, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
+          <span style={{ display: "block", fontSize: TYPE.caption, color: UI.ink3, marginTop: 2 }}>Amazon EKS · 버전 관측 대기</span>
         </span>
         <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: TYPE.caption, fontWeight: 700, color: TINT.blue.fg, background: blueA(0.08), border: `1px solid ${blueA(0.25)}`, borderRadius: 999, padding: "3px 9px", flexShrink: 0 }}><span className="pulsedot" style={{ width: 6, height: 6, borderRadius: 999, background: BLUE }} />부트스트랩 중</span>
       </div>
@@ -515,7 +515,7 @@ export function NodeCard({ node, pods, problemPodCount, onOpen, onTip }: {
         <Server size={13} strokeWidth={2} style={{ color: UI.ink3, flexShrink: 0, marginTop: 2 }} />
         <div style={{ minWidth: 0, flex: 1 }}>
           <div title={node.name} style={{ fontSize: TYPE.body, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink, fontFamily: MONO, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", lineHeight: 1.35 }}>{node.name}</div>
-          {showStatus && <div style={{ fontSize: TYPE.caption2, color: UI.ink3, marginTop: 2 }}>{statusText}</div>}
+          {showStatus && <div style={{ fontSize: TYPE.caption, color: UI.ink3, marginTop: 2 }}>{statusText}</div>}
         </div>
         {sev !== "ok" && <span style={{ width: 8, height: 8, borderRadius: 999, background: sevColor(sev), flexShrink: 0, marginTop: 4 }} />}
       </div>
@@ -835,8 +835,8 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
         {!embedded && (
         <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 14 }}>
-            <h1 style={{ margin: 0, fontSize: TYPE.title1, fontWeight: 700, letterSpacing: "-0.03em", color: UI.ink }}>통합 맵</h1>
-            <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: TYPE.label2, fontWeight: 600, color: UI.ink2 }}>
+            <h1 style={{ margin: 0, fontSize: TYPE.page, fontWeight: 700, letterSpacing: "-0.03em", color: UI.ink }}>통합 맵</h1>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: TYPE.label, fontWeight: 600, color: UI.ink2 }}>
               <span className="pulsedot" style={{ width: 6, height: 6, borderRadius: 999, background: HP.ok }} />
               실시간 · {clusters.length} 클러스터
             </div>
@@ -982,13 +982,13 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
                     <div style={{ display: "flex", alignItems: "flex-start", gap: 8, background: UI.bg2, border: `1px solid ${UI.line}`, borderRadius: 10, padding: "9px 12px", marginBottom: 14 }}>
                       <Network size={13} strokeWidth={2} style={{ color: UI.ink3, flexShrink: 0, marginTop: 1 }} />
                       <div style={{ minWidth: 0 }}>
-                        <div style={{ fontSize: TYPE.label2, fontWeight: 600, color: UI.ink2 }}>
+                        <div style={{ fontSize: TYPE.label, fontWeight: 600, color: UI.ink2 }}>
                           표시된 파드 {nodePods.length}개
                           {activeNode?.matchedPodCount !== null && activeNode?.matchedPodCount !== undefined
                             ? ` / 노드 일치 ${activeNode.matchedPodCount}개`
                             : ""}
                         </div>
-                        <div style={{ fontSize: TYPE.caption2, color: UI.ink3, marginTop: 2 }}>
+                        <div style={{ fontSize: TYPE.caption, color: UI.ink3, marginTop: 2 }}>
                           실제 물리 토폴로지의 server_id가 이 노드를 가리키는 파드만 표시합니다.
                           {topology.partial && " 일부 관측 응답이므로 나머지는 생략될 수 있습니다."}
                         </div>
@@ -1003,7 +1003,7 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
                       <EmptyState icon={<Box size={18} strokeWidth={1.75} />} label="관측된 파드가 없습니다"
                         hint="이 노드에 귀속된 파드가 아직 관측되지 않았습니다." flush />
                     ) : (<div style={{ maxHeight: 480, overflowY: "auto", scrollbarGutter: "stable", overscrollBehavior: "contain" }}>
-                      <div style={{ display: "grid", gridTemplateColumns: "12px minmax(160px,1.8fr) minmax(90px,1fr) 92px 96px", alignItems: "center", gap: 12, padding: "0 10px 7px", borderBottom: `1px solid ${UI.line}`, fontSize: TYPE.micro, fontWeight: 600, letterSpacing: "0.07em", color: UI.ink3 }}>
+                      <div style={{ display: "grid", gridTemplateColumns: "12px minmax(160px,1.8fr) minmax(90px,1fr) 92px 96px", alignItems: "center", gap: 12, padding: "0 10px 7px", borderBottom: `1px solid ${UI.line}`, fontSize: TYPE.caption, fontWeight: 600, letterSpacing: "0.07em", color: UI.ink3 }}>
                         <span /><span>파드</span><span>네임스페이스</span><span>상태</span><span>헬스</span>
                       </div>
                       {nodePods.map((p) => (
@@ -1035,7 +1035,7 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
             }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <span style={{ width: 7, height: 7, borderRadius: 999, background: sevColor(healthSev(tip.health)), flexShrink: 0 }} />
-              <span style={{ fontSize: TYPE.label2, fontWeight: 700, fontFamily: MONO, color: UI.ink, letterSpacing: "-0.01em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tip.label}</span>
+              <span style={{ fontSize: TYPE.label, fontWeight: 700, fontFamily: MONO, color: UI.ink, letterSpacing: "-0.01em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tip.label}</span>
             </div>
             <div style={{ fontSize: TYPE.caption, color: UI.ink3, marginTop: 3, marginLeft: 13 }}>
               {(tip.status ? statusLabel(tip.status) : "상태 관측 안 됨")} · {tip.health ? statusLabel(tip.health) : "헬스 관측 안 됨"}
@@ -1146,7 +1146,7 @@ function PodSkeleton() {
   const cols = "12px minmax(160px,1.8fr) minmax(90px,1fr) 92px 96px";
   return (
     <div>
-      <div style={{ display: "grid", gridTemplateColumns: cols, alignItems: "center", gap: 12, padding: "0 10px 7px", borderBottom: `1px solid ${UI.line}`, fontSize: TYPE.micro, fontWeight: 600, letterSpacing: "0.07em", color: UI.ink3 }}>
+      <div style={{ display: "grid", gridTemplateColumns: cols, alignItems: "center", gap: 12, padding: "0 10px 7px", borderBottom: `1px solid ${UI.line}`, fontSize: TYPE.caption, fontWeight: 600, letterSpacing: "0.07em", color: UI.ink3 }}>
         <span /><span>파드</span><span>네임스페이스</span><span>상태</span><span>헬스</span>
       </div>
       {Array.from({ length: 6 }).map((_, i) => (
@@ -1188,7 +1188,7 @@ function SidePanel({ forcedTab, scaled, onAddRepo, onOpenRepository, stickyTop, 
         {([["svc", "서비스", Plug], ["cfg", "구성", FileCog], ["git", "저장소", GithubIcon]] as const).map(([id, label, I]) => {
           const on = tab === id;
           return (
-            <button key={id} onClick={() => setTab(id)} style={{ position: "relative", flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, padding: "6px 0", borderRadius: 8, border: "none", background: "transparent", cursor: "pointer", fontSize: TYPE.label2, fontWeight: 600, color: on ? UI.ink : UI.ink3 }}>
+            <button key={id} onClick={() => setTab(id)} style={{ position: "relative", flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, padding: "6px 0", borderRadius: 8, border: "none", background: "transparent", cursor: "pointer", fontSize: TYPE.label, fontWeight: 600, color: on ? UI.ink : UI.ink3 }}>
               {on && <motion.span layoutId="ptab" transition={SOFT} style={{ position: "absolute", inset: 0, borderRadius: 8, background: UI.card, boxShadow: `0 1px 3px ${inkA(0.12)}` }} />}
               <span style={{ position: "relative", display: "flex", alignItems: "center", gap: 5 }}><I size={12} />{label}</span>
             </button>
@@ -1203,7 +1203,7 @@ function SidePanel({ forcedTab, scaled, onAddRepo, onOpenRepository, stickyTop, 
       {tab === "cfg" && (
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "26px 14px", textAlign: "center" }}>
           <FileCog size={20} style={{ color: INK4 }} />
-          <span style={{ fontSize: TYPE.label2, fontWeight: 600, color: UI.ink2 }}>구성 관계 관측 안 됨</span>
+          <span style={{ fontSize: TYPE.label, fontWeight: 600, color: UI.ink2 }}>구성 관계 관측 안 됨</span>
           <span style={{ fontSize: TYPE.caption, color: UI.ink3 }}>ConfigMap·Secret 참조는 쿠버네티스 관점의 리소스 상세에서 확인하세요.</span>
         </div>
       )}
@@ -1218,8 +1218,8 @@ function SidePanel({ forcedTab, scaled, onAddRepo, onOpenRepository, stickyTop, 
             <div key={`connected-${r}`} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", borderRadius: 9, padding: "7px 10px", background: TINT.ok.bg }}>
               <GithubIcon size={14} style={{ color: UI.ink3, flexShrink: 0 }} />
               <span style={{ minWidth: 0, flex: 1 }}>
-                <span style={{ display: "block", fontSize: TYPE.label2, fontWeight: 600, fontFamily: MONO, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r}</span>
-                <span style={{ display: "block", fontSize: TYPE.micro, color: TINT.ok.fg, marginTop: 1 }}>연결됨 · GitOps 관리</span>
+                <span style={{ display: "block", fontSize: TYPE.label, fontWeight: 600, fontFamily: MONO, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r}</span>
+                <span style={{ display: "block", fontSize: TYPE.caption, color: TINT.ok.fg, marginTop: 1 }}>연결됨 · GitOps 관리</span>
               </span>
               <Check size={13} style={{ color: TINT.ok.fg, flexShrink: 0 }} />
             </div>
@@ -1228,8 +1228,8 @@ function SidePanel({ forcedTab, scaled, onAddRepo, onOpenRepository, stickyTop, 
             <div key={r} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", borderRadius: 9, padding: "7px 10px", background: blueA(0.05) }}>
               <GithubIcon size={14} style={{ color: UI.ink3, flexShrink: 0 }} />
               <span style={{ minWidth: 0, flex: 1 }}>
-                <span style={{ display: "block", fontSize: TYPE.label2, fontWeight: 600, fontFamily: MONO, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r}</span>
-                <span style={{ display: "block", fontSize: TYPE.micro, color: TINT.blue.fg, marginTop: 1 }}>연결 중 · 초기 동기화 대기</span>
+                <span style={{ display: "block", fontSize: TYPE.label, fontWeight: 600, fontFamily: MONO, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r}</span>
+                <span style={{ display: "block", fontSize: TYPE.caption, color: TINT.blue.fg, marginTop: 1 }}>연결 중 · 초기 동기화 대기</span>
               </span>
               <span className="pulsedot" style={{ width: 6, height: 6, borderRadius: 999, background: BLUE, flexShrink: 0 }} />
             </div>
@@ -1241,7 +1241,7 @@ function SidePanel({ forcedTab, scaled, onAddRepo, onOpenRepository, stickyTop, 
           {onAddRepo && (
             <button onClick={onAddRepo}
               style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 7, width: "100%", marginTop: 6, padding: "9px 0",
-                border: `1.5px dashed ${LINE3}`, borderRadius: 11, background: "transparent", cursor: "pointer", fontSize: TYPE.label2, fontWeight: 700, color: BLUE }}>
+                border: `1.5px dashed ${LINE3}`, borderRadius: 11, background: "transparent", cursor: "pointer", fontSize: TYPE.label, fontWeight: 700, color: BLUE }}>
               + 저장소 연결
             </button>
           )}

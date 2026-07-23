@@ -148,7 +148,7 @@ function ReasonNotes({ codes }: { codes: string[] }) {
   return (
     <ul style={{ display: "flex", flexDirection: "column", gap: 5, margin: "8px 0 0", padding: 0, listStyle: "none" }}>
       {rows.map((k) => (
-        <li key={k} style={{ display: "flex", alignItems: "baseline", gap: 8, fontSize: TYPE.caption2, color: UI.ink2 }}>
+        <li key={k} style={{ display: "flex", alignItems: "baseline", gap: 8, fontSize: TYPE.caption, color: UI.ink2 }}>
           <span style={{ width: 4, height: 4, borderRadius: 999, background: HP.warn, flexShrink: 0, transform: "translateY(-2px)" }} />
           {/* M27/M28: 원시 reason code는 사용자에게 노출하지 않는다 — 한글 honest 라벨만 표기. */}
           <span style={{ flex: 1, minWidth: 0 }}>{reasonLabel(k)}</span>
@@ -168,14 +168,14 @@ function Page({ title, icon: I, action, tabs, tab, onTab, ensureVerticalScroll =
     <main style={{ minWidth: 0, minHeight: ensureVerticalScroll ? `calc(100vh / ${PRESENT_SCALE})` : undefined, boxSizing: "border-box", display: "flex", flexDirection: "column", gap: 16, padding: "14px 18px 40px" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
         <I size={17} style={{ color: BLUE }} />
-        <span style={{ fontSize: TYPE.heading, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink }}>{title}</span>
+        <span style={{ fontSize: TYPE.page, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink }}>{title}</span>
         <span style={{ marginLeft: "auto" }}>{action}</span>
       </div>
       {tabs && (
         <div style={{ display: "flex", gap: 2, background: inkA(0.05), borderRadius: 9, padding: 2, width: "fit-content" }}>
           {tabs.map((t) => (
             <button key={t} onClick={() => onTab?.(t)}
-              style={{ position: "relative", border: "none", background: "transparent", borderRadius: 7, padding: "5px 16px", fontSize: TYPE.label2, fontWeight: 700, color: tab === t ? UI.ink : UI.ink3, cursor: "pointer" }}>
+              style={{ position: "relative", border: "none", background: "transparent", borderRadius: 7, padding: "5px 16px", fontSize: TYPE.label, fontWeight: 700, color: tab === t ? UI.ink : UI.ink3, cursor: "pointer" }}>
               {tab === t && <motion.span layoutId={`ptab-${title}`} transition={SOFT} style={{ position: "absolute", inset: 0, background: UI.card, borderRadius: 7, boxShadow: `0 1px 4px ${inkA(0.14)}` }} />}
               <span style={{ position: "relative" }}>{t}</span>
             </button>
@@ -195,7 +195,7 @@ const SettingsRow = ({ icon: I, title, sub, right }: { icon: React.ComponentType
     <span style={{ width: 32, height: 32, borderRadius: 9, background: inkA(0.05), display: "grid", placeItems: "center", flexShrink: 0 }}><I size={16} style={{ color: UI.ink2 }} /></span>
     <span style={{ minWidth: 0, flex: 1 }}>
       <span style={{ display: "block", fontSize: TYPE.body, fontWeight: 700, color: UI.ink }}>{title}</span>
-      <span style={{ display: "block", fontSize: TYPE.caption2, color: UI.ink3, marginTop: 1 }}>{sub}</span>
+      <span style={{ display: "block", fontSize: TYPE.caption, color: UI.ink3, marginTop: 1 }}>{sub}</span>
     </span>
     {right}
   </div>
@@ -212,7 +212,7 @@ const Pill = ({ tone, label }: { tone: "ok" | "warn" | "crit" | "info"; label: s
 function THead({ cols }: { cols: [string, string][] }) {
   return (
     <div style={{ display: "grid", gridTemplateColumns: cols.map(([, w]) => w).join(" "), gap: 12, padding: "8px 14px", borderBottom: `1px solid ${UI.line}`, background: UI.bg2 }}>
-      {cols.map(([l]) => <span key={l} style={{ fontSize: TYPE.micro, fontWeight: 600, letterSpacing: "0.05em", color: UI.ink3 }}>{l}</span>)}
+      {cols.map(([l]) => <span key={l} style={{ fontSize: TYPE.caption, fontWeight: 600, letterSpacing: "0.05em", color: UI.ink3 }}>{l}</span>)}
     </div>
   );
 }
@@ -221,7 +221,7 @@ function TRow({ cols, cells, onClick, i = 0 }: { cols: [string, string][]; cells
     <motion.button initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} transition={{ ...SOFT, delay: Math.min(i, 8) * 0.04 }}
       onClick={onClick} disabled={!onClick} className={onClick ? "rrow" : undefined}
       style={{ display: "grid", gridTemplateColumns: cols.map(([, w]) => w).join(" "), gap: 12, alignItems: "center", width: "100%", textAlign: "left", border: "none", background: "transparent", borderBottom: `1px solid ${UI.line2}`, padding: "10px 14px", cursor: onClick ? "pointer" : "default" }}>
-      {cells.map((c, j) => <span key={j} style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: TYPE.label2, color: UI.ink }}>{c}</span>)}
+      {cells.map((c, j) => <span key={j} style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: TYPE.label, color: UI.ink }}>{c}</span>)}
     </motion.button>
   );
 }
@@ -263,7 +263,7 @@ function deliveryPill(status: string | null): React.ReactNode {
   if (status === "pending" || status === "progressing" || status === "running") return <Pill tone="info" label={koLabel(status)} />;
   return <Pill tone="warn" label={koLabel(status)} />;
 }
-const emptyRow = (msg: string) => <div style={{ padding: "14px 15px", fontSize: TYPE.label2, color: UI.ink3 }}>{msg}</div>;
+const emptyRow = (msg: string) => <div style={{ padding: "14px 15px", fontSize: TYPE.label, color: UI.ink3 }}>{msg}</div>;
 
 function workflowStep(run: ApplicationRunView | null, name: string): WorkflowStepView | null {
   return run?.steps.find((step) => step.name === name) ?? null;
@@ -322,12 +322,12 @@ function GateStage({ label, state, evidence, href, actionLabel, onAction }: {
         {state === "done" ? <Check size={13} strokeWidth={3} /> : state === "observed" ? <AlertTriangle size={12} /> : <span style={{ width: 6, height: 6, borderRadius: 999, background: UI.ink3 }} />}
       </span>
       <div style={{ minWidth: 0, flex: 1 }}>
-        <div style={{ fontSize: TYPE.label2, fontWeight: 750, color: state === "pending" ? UI.ink2 : tone.fg }}>{label}</div>
-        <div title={evidence} style={{ marginTop: 2, fontFamily: MONO, fontSize: TYPE.caption2, color: UI.ink3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{evidence}</div>
+        <div style={{ fontSize: TYPE.label, fontWeight: 750, color: state === "pending" ? UI.ink2 : tone.fg }}>{label}</div>
+        <div title={evidence} style={{ marginTop: 2, fontFamily: MONO, fontSize: TYPE.caption, color: UI.ink3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{evidence}</div>
       </div>
       {actionLabel && onAction ? (
         <button type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); onAction(); }}
-          style={{ flexShrink: 0, border: `1px solid ${tone.bd}`, background: UI.card, color: tone.fg, borderRadius: 7, padding: "5px 8px", fontSize: TYPE.caption2, fontWeight: 750, cursor: "pointer" }}>
+          style={{ flexShrink: 0, border: `1px solid ${tone.bd}`, background: UI.card, color: tone.fg, borderRadius: 7, padding: "5px 8px", fontSize: TYPE.caption, fontWeight: 750, cursor: "pointer" }}>
           {actionLabel}
         </button>
       ) : null}
@@ -391,7 +391,7 @@ function ScenarioGate({ runs, repositoryRef, status, onRefresh, onOpenRef, onOpe
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 10 }}>
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: TYPE.body, fontWeight: 800, color: UI.ink }}>GitOps 배포 게이트</div>
-          <div style={{ marginTop: 2, fontFamily: MONO, fontSize: TYPE.caption2, color: UI.ink3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          <div style={{ marginTop: 2, fontFamily: MONO, fontSize: TYPE.caption, color: UI.ink3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {latest?.workflowRunId ?? (status === "loading" ? "실행 기록 확인 중" : "실행 기록 없음")}
           </div>
         </div>
@@ -450,7 +450,7 @@ export function DeploySurface({ pendingRepos = [], repositoryFilter = null, onOp
   return (
     <Page title="배포" icon={Rocket} tabs={["애플리케이션", "GitOps", "워크플로우", "Helm 릴리스"]} tab={tab} onTab={setTab} ensureVerticalScroll
       action={tab === "GitOps"
-        ? <button onClick={onAddRepo} style={{ display: "flex", alignItems: "center", gap: 6, border: "none", background: BLUE, color: UI.card, borderRadius: 9, padding: "6px 13px", fontSize: TYPE.label2, fontWeight: 700, cursor: "pointer" }}>+ 저장소 연결</button>
+        ? <button onClick={onAddRepo} style={{ display: "flex", alignItems: "center", gap: 6, border: "none", background: BLUE, color: UI.card, borderRadius: 9, padding: "6px 13px", fontSize: TYPE.label, fontWeight: 700, cursor: "pointer" }}>+ 저장소 연결</button>
         : null}>
       <ChipRow chips={[
         { label: "앱", value: appsFeed.status === "ready" ? apps.length : "—" },
@@ -536,7 +536,7 @@ export function DeploySurface({ pendingRepos = [], repositoryFilter = null, onOp
             : helm.items.length === 0 ? (
               <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: "14px 15px" }}>
                 <span style={{ fontSize: TYPE.body, fontWeight: 700, color: UI.ink2 }}>Helm 릴리스 관측 안 됨</span>
-                <span style={{ fontSize: TYPE.label2, color: UI.ink3 }}>현재 스코프에서 Helm 저장소 관측이 완결되지 않았습니다.</span>
+                <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>현재 스코프에서 Helm 저장소 관측이 완결되지 않았습니다.</span>
                 <ReasonNotes codes={helm.reasonCodes} />
               </div>
             )
@@ -597,10 +597,10 @@ function issueAnalysisState(issue: { status?: string | null; rootCause?: string 
 }
 const RECOVERY_STEP_LABELS = ["승인", "제출", "실행", "검증", "완료"] as const;
 const ISSUE_DETAIL_TYPE = {
-  sectionTitle: TYPE.bodyStrong,
-  itemTitle: TYPE.label2,
-  body: TYPE.label2,
-  label: TYPE.caption,
+  sectionTitle: TYPE.section,
+  itemTitle: TYPE.body,
+  body: TYPE.body,
+  label: TYPE.label,
 } as const;
 
 function RecoveryPlanProgress({ progress }: { progress: RecoveryProgressState }) {
@@ -630,16 +630,16 @@ function RecoveryPlanProgress({ progress }: { progress: RecoveryProgressState })
           const markerColor = active ? activeColor : completed ? HP.ok : HP.pending;
           return (
             <li key={label} style={{ minWidth: 0, display: "grid", justifyItems: "center", gap: 5, textAlign: "center" }}>
-              <span aria-hidden="true" style={{ width: 22, height: 22, display: "grid", placeItems: "center", borderRadius: 6, border: `1px solid ${active ? markerColor : UI.line}`, background: active ? markerColor : completed ? TINT.ok.bg : UI.card, color: active ? UI.card : completed ? TINT.ok.fg : UI.ink3, fontSize: TYPE.micro, fontWeight: 700 }}>
+              <span aria-hidden="true" style={{ width: 22, height: 22, display: "grid", placeItems: "center", borderRadius: 6, border: `1px solid ${active ? markerColor : UI.line}`, background: active ? markerColor : completed ? TINT.ok.bg : UI.card, color: active ? UI.card : completed ? TINT.ok.fg : UI.ink3, fontSize: TYPE.caption, fontWeight: 700 }}>
                 {completed ? <Check size={12} /> : index + 1}
               </span>
-              <span title={label} style={{ width: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: TYPE.micro, color: active ? UI.ink : UI.ink3, fontWeight: active ? 700 : 500 }}>{label}</span>
+              <span title={label} style={{ width: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: TYPE.caption, color: active ? UI.ink : UI.ink3, fontWeight: active ? 700 : 500 }}>{label}</span>
             </li>
           );
         })}
       </ol>
       {progress.latestEvent && (
-        <span title={progress.latestEvent.subject} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: TYPE.micro, color: UI.ink3 }}>
+        <span title={progress.latestEvent.subject} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: TYPE.caption, color: UI.ink3 }}>
           최근 기록 · {koLabel(progress.latestEvent.subject)} · {fromNow(progress.latestEvent.created_at)}
         </span>
       )}
@@ -666,7 +666,7 @@ function RecoveryCandidateDetails({
     <div style={{ display: "grid", gap: 16 }}>
       <dl style={{ display: "grid", gridTemplateColumns: "72px minmax(0, 1fr)", alignItems: "center", gap: "8px 10px", margin: 0, paddingBottom: 14 }}>
         <dt style={{ fontSize: TYPE.caption, color: UI.ink2 }}>조치 위험도</dt>
-        <dd style={{ margin: 0, fontSize: TYPE.caption2, lineHeight: 1.5, color: UI.ink }}>{candidate.risk_level || "미확인"}</dd>
+        <dd style={{ margin: 0, fontSize: TYPE.caption, lineHeight: 1.5, color: UI.ink }}>{candidate.risk_level || "미확인"}</dd>
         <dt style={{ fontSize: TYPE.caption, color: UI.ink2 }}>영향 범위</dt>
         <dd style={{ minWidth: 0, maxWidth: "100%", margin: 0 }}>
           {onOpenTarget ? (
@@ -674,7 +674,7 @@ function RecoveryCandidateDetails({
               type="button"
               title={`${candidate.blast_radius || "대상 리소스"} 상세 열기`}
               onClick={onOpenTarget}
-              style={{ maxWidth: "100%", border: "none", borderRadius: 7, background: TINT.gray.bg, color: UI.ink2, padding: "2px 7px", fontSize: TYPE.caption2, fontWeight: 400, lineHeight: 1.35, cursor: "pointer", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", transition: `background ${DUR.micro}s ease, color ${DUR.micro}s ease` }}
+              style={{ maxWidth: "100%", border: "none", borderRadius: 7, background: TINT.gray.bg, color: UI.ink2, padding: "2px 7px", fontSize: TYPE.caption, fontWeight: 400, lineHeight: 1.35, cursor: "pointer", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", transition: `background ${DUR.micro}s ease, color ${DUR.micro}s ease` }}
               onMouseEnter={(event) => { event.currentTarget.style.background = TINT.gray.bd; event.currentTarget.style.color = UI.ink; }}
               onMouseLeave={(event) => { event.currentTarget.style.background = TINT.gray.bg; event.currentTarget.style.color = UI.ink2; }}
               onFocus={(event) => { event.currentTarget.style.background = TINT.gray.bd; event.currentTarget.style.color = UI.ink; }}
@@ -683,7 +683,7 @@ function RecoveryCandidateDetails({
               {candidate.blast_radius || "미확인"}
             </button>
           ) : (
-            <span title={candidate.blast_radius} style={{ display: "block", width: "fit-content", maxWidth: "100%", borderRadius: 7, background: TINT.gray.bg, color: UI.ink2, padding: "2px 7px", fontSize: TYPE.caption2, lineHeight: 1.35, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{candidate.blast_radius || "미확인"}</span>
+            <span title={candidate.blast_radius} style={{ display: "block", width: "fit-content", maxWidth: "100%", borderRadius: 7, background: TINT.gray.bg, color: UI.ink2, padding: "2px 7px", fontSize: TYPE.caption, lineHeight: 1.35, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{candidate.blast_radius || "미확인"}</span>
           )}
         </dd>
       </dl>
@@ -698,7 +698,7 @@ function RecoveryCandidateDetails({
           type="button"
           disabled={selected || pending}
           onClick={onSelect}
-          style={{ border: selected ? `1px solid ${TINT.ok.bd}` : "none", borderRadius: 8, background: selected ? TINT.ok.bg : pending ? UI.bg2 : BLUE, color: selected ? TINT.ok.fg : pending ? UI.ink3 : UI.card, padding: "7px 13px", fontSize: TYPE.label2, fontWeight: 700, cursor: selected || pending ? "default" : "pointer", boxShadow: selected || pending ? "none" : `0 2px 6px ${blueA(0.2)}` }}
+          style={{ border: selected ? `1px solid ${TINT.ok.bd}` : "none", borderRadius: 8, background: selected ? TINT.ok.bg : pending ? UI.bg2 : BLUE, color: selected ? TINT.ok.fg : pending ? UI.ink3 : UI.card, padding: "7px 13px", fontSize: TYPE.label, fontWeight: 700, cursor: selected || pending ? "default" : "pointer", boxShadow: selected || pending ? "none" : `0 2px 6px ${blueA(0.2)}` }}
         >
           {selected ? "선택됨" : pending ? "선택 중…" : recoveryActionButtonLabel(candidate.route)}
         </button>
@@ -792,9 +792,9 @@ function RecoveryAlternativeCandidate({
         style={{ width: "100%", minWidth: 0, display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto auto", alignItems: "center", gap: 10, border: "none", background: "transparent", padding: 12, textAlign: "left", cursor: "pointer" }}>
         <span style={{ minWidth: 0, display: "flex", alignItems: "center", gap: 7 }}>
           <Lightbulb size={14} style={{ flexShrink: 0, color: UI.ink3 }} />
-          <strong title={candidate.title} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: TYPE.label2, color: UI.ink }}>{candidate.title}</strong>
+          <strong title={candidate.title} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: TYPE.label, color: UI.ink }}>{candidate.title}</strong>
         </span>
-        <span style={{ fontSize: TYPE.caption2, color: UI.ink2, fontVariantNumeric: "tabular-nums" }}>{Math.round(candidate.score * 100)}%</span>
+        <span style={{ fontSize: TYPE.caption, color: UI.ink2, fontVariantNumeric: "tabular-nums" }}>{Math.round(candidate.score * 100)}%</span>
         <Sparkle size={14} style={{ color: UI.ink3, transform: open ? "rotate(45deg)" : "none", transition: `transform ${DUR.micro}s ease` }} />
       </button>
       {open && <div style={{ padding: "0 12px 14px" }}><RecoveryCandidateDetails candidate={candidate} selected={selected} pending={pending} onSelect={onSelect} onOpenTarget={onOpenTarget} /></div>}
@@ -824,14 +824,14 @@ function RecoveryPlanPanel({
   return (
     <div style={{ display: "grid", gap: 16 }}>
       <RecoveryPlanProgress progress={progress} />
-      {selectionError && <div role="alert" style={{ display: "flex", alignItems: "flex-start", gap: 7, border: `1px solid ${TINT.crit.bd}`, borderRadius: 8, background: TINT.crit.bg, color: TINT.crit.fg, padding: 11, fontSize: TYPE.caption2, lineHeight: 1.45 }}><CircleAlert size={14} style={{ flexShrink: 0, marginTop: 1 }} />{selectionError}</div>}
+      {selectionError && <div role="alert" style={{ display: "flex", alignItems: "flex-start", gap: 7, border: `1px solid ${TINT.crit.bd}`, borderRadius: 8, background: TINT.crit.bg, color: TINT.crit.fg, padding: 11, fontSize: TYPE.caption, lineHeight: 1.45 }}><CircleAlert size={14} style={{ flexShrink: 0, marginTop: 1 }} />{selectionError}</div>}
       {recommended ? (
         <RcaCardSection title="권장 복구 조치">
           <div style={{ display: "grid", gap: 13, padding: 15 }}>
             <div style={{ minWidth: 0, display: "flex", alignItems: "center", gap: 8 }}>
               <Lightbulb size={15} style={{ flexShrink: 0, color: UI.ink3 }} />
               <strong title={recommended.title} style={{ minWidth: 0, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: ISSUE_DETAIL_TYPE.itemTitle, color: UI.ink }}>{recommended.title}</strong>
-              <span style={{ border: `1px solid ${TINT.blue.bd}`, borderRadius: 999, background: TINT.blue.bg, color: TINT.blue.fg, padding: "2px 7px", fontSize: TYPE.micro, fontWeight: 700 }}>권장</span>
+              <span style={{ border: `1px solid ${TINT.blue.bd}`, borderRadius: 999, background: TINT.blue.bg, color: TINT.blue.fg, padding: "2px 7px", fontSize: TYPE.caption, fontWeight: 700 }}>권장</span>
               <span style={{ fontSize: ISSUE_DETAIL_TYPE.label, color: UI.ink2, fontVariantNumeric: "tabular-nums" }}>{Math.round(recommended.score * 100)}%</span>
             </div>
             <RecoveryCandidateDetails
@@ -844,12 +844,12 @@ function RecoveryPlanPanel({
             />
           </div>
         </RcaCardSection>
-      ) : <div style={{ fontSize: TYPE.label2, color: UI.ink3 }}>관측된 복구 후보 없음</div>}
+      ) : <div style={{ fontSize: TYPE.label, color: UI.ink3 }}>관측된 복구 후보 없음</div>}
       {alternatives.length > 0 && (
         <section style={{ display: "grid", gap: 8 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-            <h3 style={{ margin: 0, fontSize: TYPE.caption2, fontWeight: 700, color: UI.ink3 }}>다른 복구 후보</h3>
-            <span style={{ fontSize: TYPE.micro, color: UI.ink3 }}>{alternatives.length}개</span>
+            <h3 style={{ margin: 0, fontSize: TYPE.caption, fontWeight: 700, color: UI.ink3 }}>다른 복구 후보</h3>
+            <span style={{ fontSize: TYPE.caption, color: UI.ink3 }}>{alternatives.length}개</span>
           </div>
           <div style={{ overflow: "hidden", borderBottom: `1px dashed ${UI.line}` }}>
             {alternatives.map((candidate) => (
@@ -1057,11 +1057,11 @@ function evidencePreviewLines(source: string, payload: Record<string, unknown>):
 function ReportNumberedSection({ number, title, sectionRef, children }: { number: string; title: string; sectionRef?: React.RefObject<HTMLElement | null>; children: React.ReactNode }) {
   return (
     <section ref={sectionRef} style={{ display: "grid", gridTemplateColumns: "42px minmax(0, 1fr)", gap: 12, padding: "17px 0", borderTop: `1px dashed ${UI.line}` }}>
-      <span aria-hidden="true" style={{ display: "grid", gridTemplateColumns: "auto 1px", gap: 9, alignSelf: "stretch", color: UI.ink2, fontSize: TYPE.bodyStrong, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>
+      <span aria-hidden="true" style={{ display: "grid", gridTemplateColumns: "auto 1px", gap: 9, alignSelf: "stretch", color: UI.ink2, fontSize: TYPE.body, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>
         <span>{number}</span><span style={{ width: 1, height: "100%", background: inkA(0.28) }} />
       </span>
       <div style={{ minWidth: 0, display: "grid", gap: 11 }}>
-        <h3 style={{ margin: 0, fontSize: TYPE.bodyStrong, fontWeight: 700, color: UI.ink }}>{title}</h3>
+        <h3 style={{ margin: 0, fontSize: TYPE.body, fontWeight: 700, color: UI.ink }}>{title}</h3>
         {children}
       </div>
     </section>
@@ -1075,7 +1075,7 @@ function CandidateEvidenceTokens({ label, items, tone, references = [], onEviden
       <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: TYPE.caption, fontWeight: 700, color: tone === "ok" ? TINT.ok.fg : TINT.warn.fg }}>
         {tone === "warn" && <ShieldAlert size={13} />}{label}
       </span>
-      <span style={{ display: "grid", justifyItems: "start", gap: 3, fontSize: TYPE.caption2, color: UI.ink2, lineHeight: 1.5 }}>
+      <span style={{ display: "grid", justifyItems: "start", gap: 3, fontSize: TYPE.caption, color: UI.ink2, lineHeight: 1.5 }}>
         {items.map((item, index) => {
           const linked = tone === "ok" && references.some((reference) => evidenceReferenceMatches(item, reference));
           const content = evidenceReferenceLabel(item, references);
@@ -1101,7 +1101,7 @@ function EvidenceWindowPreview({ evidenceKey, source, open }: { evidenceKey: str
   const lines = evidencePreviewLines(payloadSource, feed.evidence.payload);
   return lines.length > 0 ? (
     <ul style={{ display: "grid", gap: 6, margin: 0, padding: 0, listStyle: "none" }}>
-      {lines.map((line, index) => <li key={`${line}-${index}`} style={{ display: "grid", gridTemplateColumns: "10px minmax(0, 1fr)", gap: 4, borderRadius: 6, background: UI.card, padding: "7px 8px", fontFamily: source === "logs" || source === "loki" ? MONO : undefined, fontSize: TYPE.caption2, color: UI.ink2, lineHeight: 1.5, overflowWrap: "anywhere" }}><span aria-hidden="true">-</span><span>{line}</span></li>)}
+      {lines.map((line, index) => <li key={`${line}-${index}`} style={{ display: "grid", gridTemplateColumns: "10px minmax(0, 1fr)", gap: 4, borderRadius: 6, background: UI.card, padding: "7px 8px", fontFamily: source === "logs" || source === "loki" ? MONO : undefined, fontSize: TYPE.caption, color: UI.ink2, lineHeight: 1.5, overflowWrap: "anywhere" }}><span aria-hidden="true">-</span><span>{line}</span></li>)}
     </ul>
   ) : <span style={{ fontSize: TYPE.caption, color: UI.ink3 }}>표시할 근거 표본이 없습니다.</span>;
 }
@@ -1113,8 +1113,8 @@ function EvidenceDetailItem({ evidence, id, highlighted = false, onOpenChange }:
     <details id={id} open={open} onToggle={(event) => { const nextOpen = event.currentTarget.open; setOpen(nextOpen); onOpenChange?.(nextOpen); }} style={{ borderTop: `1px dashed ${UI.line}`, borderRadius: highlighted ? 8 : 0, background: highlighted ? UI.bg2 : "transparent", scrollMarginTop: 16, transition: `background ${DUR.fade}s ease` }}>
       <summary style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: 9, alignItems: "center", padding: "11px 4px", cursor: "pointer", listStyle: "none" }}>
         <span style={{ minWidth: 0, display: "grid", gap: 3 }}>
-          <strong title={evidence.name} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: TYPE.label2, color: UI.ink2 }}>{evidenceSourceLabel(evidence.source)} · {evidenceNameLabel(evidence.name)}</strong>
-          <span style={{ fontSize: TYPE.caption2, color: UI.ink2, lineHeight: 1.45 }}>{evidence.summary || "수집된 근거"}</span>
+          <strong title={evidence.name} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: TYPE.label, color: UI.ink2 }}>{evidenceSourceLabel(evidence.source)} · {evidenceNameLabel(evidence.name)}</strong>
+          <span style={{ fontSize: TYPE.caption, color: UI.ink2, lineHeight: 1.45 }}>{evidence.summary || "수집된 근거"}</span>
         </span>
         <ChevronRight size={15} style={{ color: UI.ink2, transform: open ? "rotate(90deg)" : "none", transition: "transform 150ms ease" }} />
       </summary>
@@ -1133,7 +1133,7 @@ function RcaCandidateList({ report, fallbackCause, onEvidenceSelect }: { report:
   const [candidateListOpen, setCandidateListOpen] = useState(false);
   const candidates = report?.candidates ?? [];
   if (candidates.length === 0) {
-    return <p style={{ margin: 0, fontSize: TYPE.label2, color: fallbackCause ? UI.ink2 : UI.ink3, lineHeight: 1.55 }}>{fallbackCause || "원인 후보 정보가 아직 없습니다."}</p>;
+    return <p style={{ margin: 0, fontSize: TYPE.label, color: fallbackCause ? UI.ink2 : UI.ink3, lineHeight: 1.55 }}>{fallbackCause || "원인 후보 정보가 아직 없습니다."}</p>;
   }
   const selected = candidates.find((candidate) => candidate.candidate_id === report?.selected_candidate_id) ?? candidates[0]!;
   const alternatives = candidates.filter((candidate) => candidate.candidate_id !== selected.candidate_id);
@@ -1143,12 +1143,12 @@ function RcaCandidateList({ report, fallbackCause, onEvidenceSelect }: { report:
     <div style={{ display: "grid", gap: 12 }}>
       <div style={{ display: "grid", gap: 9, borderRadius: 8, background: UI.bg2, padding: 11 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-          <span title={selected.title ?? selected.candidate_id} style={{ minWidth: 0, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: TYPE.label2, fontWeight: 700, color: UI.ink }}>{selected.title ?? rcaDisplayLabel(selected.candidate_id)}</span>
-          <span style={{ flexShrink: 0, borderRadius: 999, border: `1px solid ${TINT.ok.bd}`, background: TINT.ok.bg, color: TINT.ok.fg, padding: "2px 7px", fontSize: TYPE.micro, fontWeight: 700 }}>권장</span>
+          <span title={selected.title ?? selected.candidate_id} style={{ minWidth: 0, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: TYPE.label, fontWeight: 700, color: UI.ink }}>{selected.title ?? rcaDisplayLabel(selected.candidate_id)}</span>
+          <span style={{ flexShrink: 0, borderRadius: 999, border: `1px solid ${TINT.ok.bd}`, background: TINT.ok.bg, color: TINT.ok.fg, padding: "2px 7px", fontSize: TYPE.caption, fontWeight: 700 }}>권장</span>
           <span style={{ flexShrink: 0, fontSize: TYPE.caption, color: UI.ink2 }}>{selected.score === null ? "미확인" : `${Math.round(selected.score * 100)}%`}</span>
         </div>
-        <span style={{ fontSize: TYPE.caption2, color: UI.ink2, lineHeight: 1.5 }}>- 필요한 근거 {selectedTotal}개 중 {selectedConfirmed}개가 확인되었습니다.</span>
-        {selected.reason && <p style={{ margin: 0, fontSize: TYPE.caption2, color: UI.ink2, lineHeight: 1.5 }}>- {selected.reason}</p>}
+        <span style={{ fontSize: TYPE.caption, color: UI.ink2, lineHeight: 1.5 }}>- 필요한 근거 {selectedTotal}개 중 {selectedConfirmed}개가 확인되었습니다.</span>
+        {selected.reason && <p style={{ margin: 0, fontSize: TYPE.caption, color: UI.ink2, lineHeight: 1.5 }}>- {selected.reason}</p>}
         <div style={{ display: "grid", gap: 9, marginTop: 2, paddingTop: 10, borderTop: `1px solid ${UI.line}` }}>
           <CandidateEvidenceTokens label="확인된 근거" items={selected.supporting_evidence} tone="ok" references={report?.supporting_evidence_refs} onEvidenceSelect={onEvidenceSelect} />
           <CandidateEvidenceTokens label="추가 확인 필요" items={selected.missing_evidence} tone="warn" />
@@ -1159,14 +1159,14 @@ function RcaCandidateList({ report, fallbackCause, onEvidenceSelect }: { report:
         <div style={{ borderTop: `1px dashed ${UI.line}`, borderBottom: `1px dashed ${UI.line}` }}>
           {alternatives.map((candidate, index) => (
             <details key={candidate.candidate_id} style={{ borderTop: index > 0 ? `1px dashed ${UI.line}` : "none" }}>
-              <summary style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto auto", alignItems: "center", gap: 9, padding: "10px 8px", cursor: "pointer", listStyle: "none", fontSize: TYPE.label2, color: UI.ink2 }}>
+              <summary style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto auto", alignItems: "center", gap: 9, padding: "10px 8px", cursor: "pointer", listStyle: "none", fontSize: TYPE.label, color: UI.ink2 }}>
                 <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{candidate.title ?? rcaDisplayLabel(candidate.candidate_id)}</span>
                 <span>{candidate.score === null ? "미확인" : `${Math.round(candidate.score * 100)}%`}</span>
                 <Sparkle size={14} style={{ color: UI.ink2, transition: "transform 150ms ease" }} />
               </summary>
               <div style={{ display: "grid", gap: 8, padding: "9px 8px 12px", borderTop: `1px solid ${UI.line2}`, background: UI.bg2 }}>
-                <p style={{ margin: 0, fontSize: TYPE.caption2, color: UI.ink2, lineHeight: 1.5 }}>- 필요한 근거 {candidate.supporting_evidence.length + candidate.missing_evidence.length}개 중 {candidate.supporting_evidence.length}개가 확인되었습니다.</p>
-                {candidate.reason && <p style={{ margin: 0, fontSize: TYPE.caption2, color: UI.ink2, lineHeight: 1.5 }}>- {candidate.reason}</p>}
+                <p style={{ margin: 0, fontSize: TYPE.caption, color: UI.ink2, lineHeight: 1.5 }}>- 필요한 근거 {candidate.supporting_evidence.length + candidate.missing_evidence.length}개 중 {candidate.supporting_evidence.length}개가 확인되었습니다.</p>
+                {candidate.reason && <p style={{ margin: 0, fontSize: TYPE.caption, color: UI.ink2, lineHeight: 1.5 }}>- {candidate.reason}</p>}
                 <div style={{ display: "grid", gap: 9, marginTop: 2, paddingTop: 10, borderTop: `1px solid ${UI.line}` }}>
                   <CandidateEvidenceTokens label="확인된 근거" items={candidate.supporting_evidence} tone="ok" references={report?.supporting_evidence_refs} onEvidenceSelect={onEvidenceSelect} />
                   <CandidateEvidenceTokens label="추가 확인 필요" items={candidate.missing_evidence} tone="warn" />
@@ -1307,7 +1307,7 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
                   ["종류", resourceKind ?? "미확인"],
                   ["대상", svc],
                 ].map(([label, value]) => (
-                  <span key={label} style={{ minWidth: 0, display: "flex", alignItems: "baseline", gap: 6, fontSize: TYPE.caption2 }}>
+                  <span key={label} style={{ minWidth: 0, display: "flex", alignItems: "baseline", gap: 6, fontSize: TYPE.caption }}>
                     <span style={{ flexShrink: 0, color: UI.ink3 }}>{label}</span>
                     <span style={{ minWidth: 0, color: UI.ink2, fontFamily: MONO, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{value || "미확인"}</span>
                   </span>
@@ -1324,7 +1324,7 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
               const selected = activeTab === id;
               return (
                 <button key={id} type="button" role="tab" aria-selected={selected} onClick={() => setActiveTab(id)}
-                  style={{ position: "relative", height: 42, border: "none", background: "transparent", color: selected ? UI.ink : UI.ink3, fontSize: TYPE.label2, fontWeight: selected ? 700 : 600, cursor: "pointer" }}>
+                  style={{ position: "relative", height: 42, border: "none", background: "transparent", color: selected ? UI.ink : UI.ink3, fontSize: TYPE.label, fontWeight: selected ? 700 : 600, cursor: "pointer" }}>
                   {label}
                   {selected && <span aria-hidden="true" style={{ position: "absolute", left: 0, right: 0, bottom: -1, height: 2, background: BLUE, borderRadius: "2px 2px 0 0" }} />}
                 </button>
@@ -1336,7 +1336,7 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
             <section aria-labelledby="issue-summary-heading" style={{ flexShrink: 0, display: "grid", gap: 14, border: `1px solid ${UI.line}`, borderRadius: 10, background: UI.card, padding: 16, boxShadow: `0 6px 16px -10px ${inkA(0.26)}, 0 1px 3px ${inkA(0.06)}` }}>
               <h2 id="issue-summary-heading" style={{ margin: 0, fontSize: ISSUE_DETAIL_TYPE.itemTitle, fontWeight: 700, color: UI.ink }}>상황 요약</h2>
               <p style={{ margin: 0, fontSize: TYPE.body, fontWeight: 600, color: UI.ink, lineHeight: 1.65 }}>{situationSummary?.trim() || "상황 요약 정보가 아직 없습니다."}</p>
-              {(reportFirstSeenAt || reportElapsed || reportImpact) && <dl style={{ display: "grid", gridTemplateColumns: "86px minmax(0, 1fr)", gap: "7px 10px", margin: 0, paddingTop: 12, borderTop: `1px solid ${UI.line2}`, fontSize: TYPE.caption2, lineHeight: 1.5 }}>
+              {(reportFirstSeenAt || reportElapsed || reportImpact) && <dl style={{ display: "grid", gridTemplateColumns: "86px minmax(0, 1fr)", gap: "7px 10px", margin: 0, paddingTop: 12, borderTop: `1px solid ${UI.line2}`, fontSize: TYPE.caption, lineHeight: 1.5 }}>
                 {reportFirstSeenAt && <><dt style={{ color: UI.ink3 }}>장애 시작</dt><dd style={{ margin: 0, color: UI.ink2 }}>{reportTimeLabel(reportFirstSeenAt)}</dd></>}
                 {reportElapsed && <><dt style={{ color: UI.ink3 }}>분석 시점까지</dt><dd style={{ margin: 0, color: UI.ink2 }}>{reportElapsed}</dd></>}
                 {reportImpact && <><dt style={{ color: UI.ink3 }}>관측 영향</dt><dd style={{ margin: 0, color: UI.ink2 }}>{reportImpact}</dd></>}
@@ -1352,7 +1352,7 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
                 <div style={{ display: "grid", gap: 8, border: `1px solid ${UI.line}`, borderRadius: 8, background: UI.bg2, padding: 11 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: TYPE.caption, fontWeight: 700, color: UI.ink2 }}><ShieldAlert size={14} style={{ color: TINT.warn.fg }} />추가 확인 필요</div>
                   <ul style={{ display: "grid", gap: 5, margin: 0, padding: 0, listStyle: "none" }}>
-                    {missing.map((item, index) => <li key={`${item}-${index}`} style={{ display: "grid", gridTemplateColumns: "10px minmax(0, 1fr)", gap: 4, fontSize: TYPE.caption2, color: UI.ink2, lineHeight: 1.45 }}><span aria-hidden="true">-</span><span>{missingEvidenceAction(item)}</span></li>)}
+                    {missing.map((item, index) => <li key={`${item}-${index}`} style={{ display: "grid", gridTemplateColumns: "10px minmax(0, 1fr)", gap: 4, fontSize: TYPE.caption, color: UI.ink2, lineHeight: 1.45 }}><span aria-hidden="true">-</span><span>{missingEvidenceAction(item)}</span></li>)}
                   </ul>
                 </div>
               )}
@@ -1361,47 +1361,47 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
             <RcaCardSection title="최근 변경">
               <div>
                 {recentChanges.status === "loading" ? (
-                  <div style={{ padding: 14, fontSize: TYPE.label2, color: UI.ink2 }}>최근 변경을 불러오는 중…</div>
+                  <div style={{ padding: 14, fontSize: TYPE.label, color: UI.ink2 }}>최근 변경을 불러오는 중…</div>
                 ) : recentChanges.status === "unavailable" ? (
                   <div role="alert" style={{ display: "grid", gridTemplateColumns: "auto minmax(0, 1fr)", gap: 9, padding: 15, color: TINT.crit.fg }}>
                     <CircleAlert size={15} style={{ marginTop: 1 }} />
                     <div style={{ display: "grid", gap: 4 }}>
-                      <span style={{ fontSize: TYPE.label2, fontWeight: 700 }}>최근 변경을 불러올 수 없습니다.</span>
-                      <span style={{ fontSize: TYPE.caption2, lineHeight: 1.45 }}>요청한 최근 변경 기록을 확인할 수 없습니다.</span>
+                      <span style={{ fontSize: TYPE.label, fontWeight: 700 }}>최근 변경을 불러올 수 없습니다.</span>
+                      <span style={{ fontSize: TYPE.caption, lineHeight: 1.45 }}>요청한 최근 변경 기록을 확인할 수 없습니다.</span>
                     </div>
                   </div>
                 ) : recentChanges.status === "idle" || recentChanges.items.length === 0 ? (
-                  <div style={{ padding: 14, fontSize: TYPE.label2, color: UI.ink2 }}>장애 이전에 확인된 변경이 없습니다.</div>
+                  <div style={{ padding: 14, fontSize: TYPE.label, color: UI.ink2 }}>장애 이전에 확인된 변경이 없습니다.</div>
                 ) : recentChanges.items.map((change, index) => (
                   <div key={change.event_id} style={{ display: "grid", gap: 8, padding: 13, borderTop: index > 0 ? `1px solid ${UI.line2}` : "none" }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-                      <span style={{ minWidth: 0, fontSize: TYPE.label2, fontWeight: 700, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{change.resource_kind} · {change.resource_name}</span>
+                      <span style={{ minWidth: 0, fontSize: TYPE.label, fontWeight: 700, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{change.resource_kind} · {change.resource_name}</span>
                       <time dateTime={change.changed_at} style={{ flexShrink: 0, fontSize: TYPE.caption, color: UI.ink2 }}>{fromNow(change.changed_at)}</time>
                     </div>
                     {(change.image_before || change.image_after) && (
-                      <div style={{ display: "grid", gap: 8, borderRadius: 8, background: UI.bg2, padding: 10, fontSize: TYPE.caption2, color: UI.ink2 }}>
+                      <div style={{ display: "grid", gap: 8, borderRadius: 8, background: UI.bg2, padding: 10, fontSize: TYPE.caption, color: UI.ink2 }}>
                         {change.image_before && <div style={{ display: "grid", gridTemplateColumns: "auto 88px minmax(0, 1fr)", alignItems: "center", gap: 8 }}>
                           <ArrowLeft size={13} style={{ color: UI.ink2 }} />
                           <span style={{ color: UI.ink2 }}>이전 배포 버전</span>
                           <button type="button" title={`${change.resource_kind} ${change.resource_name} 상세 열기`} onClick={() => onOpenRef(change.resource_kind, change.resource_name)}
                             onMouseEnter={() => setDeploymentLinkActive(`${change.event_id}-before`)} onMouseLeave={() => setDeploymentLinkActive(null)} onFocus={() => setDeploymentLinkActive(`${change.event_id}-before`)} onBlur={() => setDeploymentLinkActive(null)}
-                            style={{ minWidth: 0, justifySelf: "start", maxWidth: "100%", border: "none", borderRadius: 5, background: deploymentLinkActive === `${change.event_id}-before` ? inkA(0.06) : "transparent", color: deploymentLinkActive === `${change.event_id}-before` ? UI.ink : UI.ink2, padding: "2px 4px", fontFamily: MONO, fontSize: TYPE.caption2, cursor: "pointer", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{change.image_before}</button>
+                            style={{ minWidth: 0, justifySelf: "start", maxWidth: "100%", border: "none", borderRadius: 5, background: deploymentLinkActive === `${change.event_id}-before` ? inkA(0.06) : "transparent", color: deploymentLinkActive === `${change.event_id}-before` ? UI.ink : UI.ink2, padding: "2px 4px", fontFamily: MONO, fontSize: TYPE.caption, cursor: "pointer", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{change.image_before}</button>
                         </div>}
                         {change.image_after && <div style={{ display: "grid", gridTemplateColumns: "auto 88px minmax(0, 1fr)", alignItems: "center", gap: 8 }}>
                           <ArrowRight size={13} style={{ color: UI.ink2 }} />
                           <span style={{ color: UI.ink2 }}>현재 배포 버전</span>
                           <button type="button" title={`${change.resource_kind} ${change.resource_name} 상세 열기`} onClick={() => onOpenRef(change.resource_kind, change.resource_name)}
                             onMouseEnter={() => setDeploymentLinkActive(`${change.event_id}-after`)} onMouseLeave={() => setDeploymentLinkActive(null)} onFocus={() => setDeploymentLinkActive(`${change.event_id}-after`)} onBlur={() => setDeploymentLinkActive(null)}
-                            style={{ minWidth: 0, justifySelf: "start", maxWidth: "100%", border: "none", borderRadius: 5, background: deploymentLinkActive === `${change.event_id}-after` ? inkA(0.06) : "transparent", color: deploymentLinkActive === `${change.event_id}-after` ? UI.ink : UI.ink2, padding: "2px 4px", fontFamily: MONO, fontSize: TYPE.caption2, cursor: "pointer", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{change.image_after}</button>
+                            style={{ minWidth: 0, justifySelf: "start", maxWidth: "100%", border: "none", borderRadius: 5, background: deploymentLinkActive === `${change.event_id}-after` ? inkA(0.06) : "transparent", color: deploymentLinkActive === `${change.event_id}-after` ? UI.ink : UI.ink2, padding: "2px 4px", fontFamily: MONO, fontSize: TYPE.caption, cursor: "pointer", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{change.image_after}</button>
                         </div>}
                       </div>
                     )}
                     <div style={{ display: "grid", gridTemplateColumns: "76px minmax(0, 1fr)", gap: "6px 10px", paddingTop: 2, fontSize: TYPE.caption, color: UI.ink2 }}>
                       {change.commit_sha && <><span>커밋</span><b title={change.commit_sha} style={{ minWidth: 0, color: UI.ink2, fontFamily: MONO, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{change.commit_sha.slice(0, 7)}</b></>}
-                      {(change.repository_id || change.repo_ref) && <><span>저장소</span><span style={{ minWidth: 0, display: "flex", alignItems: "center", gap: 7, color: UI.ink2, overflow: "hidden" }}>{change.repo_ref && <span style={{ flexShrink: 0, borderRadius: 6, background: inkA(0.06), padding: "2px 7px", fontSize: TYPE.micro, color: UI.ink2 }}>{change.repo_ref}</span>}<span title={change.repository_id} style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{change.repository_id || "저장소 미확인"}</span></span></>}
+                      {(change.repository_id || change.repo_ref) && <><span>저장소</span><span style={{ minWidth: 0, display: "flex", alignItems: "center", gap: 7, color: UI.ink2, overflow: "hidden" }}>{change.repo_ref && <span style={{ flexShrink: 0, borderRadius: 6, background: inkA(0.06), padding: "2px 7px", fontSize: TYPE.caption, color: UI.ink2 }}>{change.repo_ref}</span>}<span title={change.repository_id} style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{change.repository_id || "저장소 미확인"}</span></span></>}
                       {change.workflow_run_id && <><span>배포 실행</span><span title={`CI/CD 배포 실행 ID: ${change.workflow_run_id}`} style={{ minWidth: 0, color: UI.ink2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{change.workflow_run_id}</span></>}
                     </div>
-                    {change.pr_url && <a href={change.pr_url} target="_blank" rel="noopener noreferrer" style={{ justifySelf: "end", display: "inline-flex", alignItems: "center", gap: 5, color: BLUE, fontSize: TYPE.caption2, fontWeight: 700, textDecoration: "none" }}><ExternalLink size={13} />Pull request 열기</a>}
+                    {change.pr_url && <a href={change.pr_url} target="_blank" rel="noopener noreferrer" style={{ justifySelf: "end", display: "inline-flex", alignItems: "center", gap: 5, color: BLUE, fontSize: TYPE.caption, fontWeight: 700, textDecoration: "none" }}><ExternalLink size={13} />Pull request 열기</a>}
                   </div>
                 ))}
               </div>
@@ -1414,34 +1414,34 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
                     ["장애 심각도", reportRiskLabel(report?.severity ?? severity)],
                     ["신뢰도", reportConfidencePercent === null ? "미확인" : `${reportConfidencePercent}%`],
                     ["시간", reportTimeLabel(report?.created_at ?? updatedAt)],
-                  ].map(([label, value]) => <div key={label} style={{ minWidth: 0, display: "grid", gap: 3 }}><span style={{ fontSize: TYPE.micro, color: UI.ink2 }}>{label}</span><strong title={value} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: TYPE.caption2, color: UI.ink }}>{value}</strong></div>)}
+                  ].map(([label, value]) => <div key={label} style={{ minWidth: 0, display: "grid", gap: 3 }}><span style={{ fontSize: TYPE.caption, color: UI.ink2 }}>{label}</span><strong title={value} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: TYPE.caption, color: UI.ink }}>{value}</strong></div>)}
                 </div>
                 <dl style={{ display: "grid", gridTemplateColumns: "52px minmax(0, 1fr)", gap: "7px 8px", margin: 0, padding: "14px 0" }}>
-                  <dt style={{ fontSize: TYPE.caption, color: UI.ink2 }}>증상</dt><dd title={reportSymptom} style={{ margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: TYPE.caption2, color: UI.ink }}>{reportSymptom}</dd>
-                  <dt style={{ fontSize: TYPE.caption, color: UI.ink2 }}>영향 범위</dt><dd title={reportScope} style={{ margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: TYPE.caption2, color: UI.ink }}>{reportScope || "미확인"}</dd>
+                  <dt style={{ fontSize: TYPE.caption, color: UI.ink2 }}>증상</dt><dd title={reportSymptom} style={{ margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: TYPE.caption, color: UI.ink }}>{reportSymptom}</dd>
+                  <dt style={{ fontSize: TYPE.caption, color: UI.ink2 }}>영향 범위</dt><dd title={reportScope} style={{ margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: TYPE.caption, color: UI.ink }}>{reportScope || "미확인"}</dd>
                 </dl>
                 <ReportNumberedSection number="01" title="최종 판단">
-                  <p style={{ margin: 0, fontSize: TYPE.label2, color: UI.ink2, lineHeight: 1.6 }}>{report?.narrative?.executive_summary || situationSummary || (rootCause ? `${rootCause}로 ${reportSymptom} 증상이 발생한 것으로 판단했습니다.` : "최종 판단 정보가 아직 없습니다.")}</p>
+                  <p style={{ margin: 0, fontSize: TYPE.label, color: UI.ink2, lineHeight: 1.6 }}>{report?.narrative?.executive_summary || situationSummary || (rootCause ? `${rootCause}로 ${reportSymptom} 증상이 발생한 것으로 판단했습니다.` : "최종 판단 정보가 아직 없습니다.")}</p>
                 </ReportNumberedSection>
                 <ReportNumberedSection number="02" title="최종 원인">
-                  {latestReport.status === "loading" && <span style={{ fontSize: TYPE.caption2, color: UI.ink2 }}>원인 후보를 불러오는 중…</span>}
-                  {latestReport.status === "unavailable" && <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: TYPE.caption2, color: TINT.crit.fg }}><CircleAlert size={14} />원인 후보를 불러오지 못했습니다.</span>}
+                  {latestReport.status === "loading" && <span style={{ fontSize: TYPE.caption, color: UI.ink2 }}>원인 후보를 불러오는 중…</span>}
+                  {latestReport.status === "unavailable" && <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: TYPE.caption, color: TINT.crit.fg }}><CircleAlert size={14} />원인 후보를 불러오지 못했습니다.</span>}
                   <RcaCandidateList report={report} fallbackCause={rootCause} onEvidenceSelect={openEvidenceDetail} />
                 </ReportNumberedSection>
                 <ReportNumberedSection number="03" title="근거 요약" sectionRef={evidenceSummaryRef}>
                   {evidenceSummary || evidenceBundleSummary ? <div style={{ display: "grid", gap: 7 }}>
-                    {evidenceSummary && <div style={{ display: "grid", gridTemplateColumns: "16px minmax(0, 1fr)", gap: 7, alignItems: "start" }}><span aria-hidden="true" style={{ width: 16, height: 20, display: "grid", placeItems: "center", color: TINT.ok.fg }}><CircleCheck size={14} /></span><p style={{ margin: 0, fontSize: TYPE.label2, color: UI.ink2, lineHeight: 1.55 }}>{evidenceSummary}</p></div>}
-                    {evidenceBundleSummary && <p style={{ margin: "0 0 0 23px", fontSize: TYPE.caption2, color: UI.ink2, lineHeight: 1.5 }}>{evidenceBundleSummary}</p>}
-                  </div> : <p style={{ margin: 0, fontSize: TYPE.label2, color: UI.ink2 }}>근거 요약이 아직 없습니다.</p>}
+                    {evidenceSummary && <div style={{ display: "grid", gridTemplateColumns: "16px minmax(0, 1fr)", gap: 7, alignItems: "start" }}><span aria-hidden="true" style={{ width: 16, height: 20, display: "grid", placeItems: "center", color: TINT.ok.fg }}><CircleCheck size={14} /></span><p style={{ margin: 0, fontSize: TYPE.label, color: UI.ink2, lineHeight: 1.55 }}>{evidenceSummary}</p></div>}
+                    {evidenceBundleSummary && <p style={{ margin: "0 0 0 23px", fontSize: TYPE.caption, color: UI.ink2, lineHeight: 1.5 }}>{evidenceBundleSummary}</p>}
+                  </div> : <p style={{ margin: 0, fontSize: TYPE.label, color: UI.ink2 }}>근거 요약이 아직 없습니다.</p>}
                 </ReportNumberedSection>
                 <ReportNumberedSection number="04" title="근거 상세">
                   {(report?.supporting_evidence_refs.length ?? 0) > 0 ? <div style={{ display: "grid", borderBottom: `1px dashed ${UI.line}` }}>
                     {report!.supporting_evidence_refs.map((evidence, index) => <EvidenceDetailItem key={`${evidence.source}-${evidence.name}-${index}`} id={evidenceDetailAnchor(index)} evidence={evidence} highlighted={highlightedEvidenceIndex === index} onOpenChange={(open) => { if (!open) setHighlightedEvidenceIndex((current) => current === index ? null : current); }} />)}
-                  </div> : support.length > 0 ? <ul style={{ display: "grid", gap: 7, margin: 0, padding: 0, listStyle: "none" }}>{support.map((item, index) => <li key={`${item}-${index}`} style={{ fontSize: TYPE.label2, color: UI.ink2, lineHeight: 1.5 }}>{item}</li>)}</ul> : <p style={{ margin: 0, fontSize: TYPE.label2, color: UI.ink2 }}>근거 상세가 아직 없습니다.</p>}
+                  </div> : support.length > 0 ? <ul style={{ display: "grid", gap: 7, margin: 0, padding: 0, listStyle: "none" }}>{support.map((item, index) => <li key={`${item}-${index}`} style={{ fontSize: TYPE.label, color: UI.ink2, lineHeight: 1.5 }}>{item}</li>)}</ul> : <p style={{ margin: 0, fontSize: TYPE.label, color: UI.ink2 }}>근거 상세가 아직 없습니다.</p>}
                 </ReportNumberedSection>
                 <ReportNumberedSection number="05" title="권장 조치">
-                  <p style={{ margin: 0, fontSize: TYPE.label2, color: UI.ink2, lineHeight: 1.55 }}>{recommendedActionSummary || report?.narrative?.recommended_action || "권장 조치가 아직 없습니다."}</p>
-                  <button type="button" onClick={() => setActiveTab("recovery")} style={{ justifySelf: "end", border: `1px solid ${blueA(0.32)}`, borderRadius: 8, background: blueA(0.07), color: BLUE, padding: "7px 12px", fontSize: TYPE.caption2, fontWeight: 700, cursor: "pointer" }}>복구 플랜 보기</button>
+                  <p style={{ margin: 0, fontSize: TYPE.label, color: UI.ink2, lineHeight: 1.55 }}>{recommendedActionSummary || report?.narrative?.recommended_action || "권장 조치가 아직 없습니다."}</p>
+                  <button type="button" onClick={() => setActiveTab("recovery")} style={{ justifySelf: "end", border: `1px solid ${blueA(0.32)}`, borderRadius: 8, background: blueA(0.07), color: BLUE, padding: "7px 12px", fontSize: TYPE.caption, fontWeight: 700, cursor: "pointer" }}>복구 플랜 보기</button>
                 </ReportNumberedSection>
               </div>
             </RcaCardSection>
@@ -1449,13 +1449,13 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
             {/* 복구 플랜 — 실 후보 조회, 선택 API, 감사 이벤트를 동일 진행 상태에 연결한다. */}
             <div style={{ display: "grid", gap: 16 }}>
               {recovery.status === "idle" ? (
-                <div style={{ fontSize: TYPE.label2, color: UI.ink3 }}>복구 플랜 없음</div>
+                <div style={{ fontSize: TYPE.label, color: UI.ink3 }}>복구 플랜 없음</div>
               ) : recovery.status === "loading" ? (
-                <div style={{ fontSize: TYPE.label2, color: UI.ink3 }}>복구 플랜 불러오는 중…</div>
+                <div style={{ fontSize: TYPE.label, color: UI.ink3 }}>복구 플랜 불러오는 중…</div>
               ) : recovery.status === "unavailable" || recovery.plan === null ? (
-                <div style={{ fontSize: TYPE.label2, color: UI.ink3 }}>복구 플랜을 불러오지 못했습니다.</div>
+                <div style={{ fontSize: TYPE.label, color: UI.ink3 }}>복구 플랜을 불러오지 못했습니다.</div>
               ) : recovery.plan.candidates.length === 0 ? (
-                <div style={{ fontSize: TYPE.label2, color: UI.ink3 }}>관측된 복구 후보 없음</div>
+                <div style={{ fontSize: TYPE.label, color: UI.ink3 }}>관측된 복구 후보 없음</div>
               ) : (
                 <RecoveryPlanPanel
                   plan={recovery.plan}
@@ -1590,14 +1590,14 @@ function IssueCard({ issue, recoverySelectionAccepted, onOpen, onOpenTarget }: {
         <span style={{ minWidth: 0, display: "flex", alignItems: "center", gap: 10 }}>
           <span style={{ minWidth: 0, flex: 1, display: "flex", alignItems: "center", gap: 8 }}>
             <span role="img" aria-label={`상태: ${indicatorLabel}`} title={`상태: ${indicatorLabel}`} style={{ width: 12, height: 12, flexShrink: 0, alignSelf: "center", cursor: "help", borderRadius: 999, background: indicatorColor }} />
-            <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: TYPE.bodyStrong, lineHeight: 1.35, fontWeight: 700 }}>{title}</span>
+            <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: TYPE.body, lineHeight: 1.35, fontWeight: 700 }}>{title}</span>
           </span>
-          <time dateTime={issue.updatedAt ?? undefined} style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 4, fontSize: TYPE.caption2, color: UI.ink3 }}>
+          <time dateTime={issue.updatedAt ?? undefined} style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 4, fontSize: TYPE.caption, color: UI.ink3 }}>
             <Clock size={12} />{fromNow(issue.updatedAt)}
           </time>
         </span>
 
-        <span style={{ minWidth: 0, display: "grid", gap: 5, fontSize: TYPE.label2, lineHeight: 1.45 }}>
+        <span style={{ minWidth: 0, display: "grid", gap: 5, fontSize: TYPE.label, lineHeight: 1.45 }}>
           <span style={{ color: UI.ink2 }}><strong style={{ color: UI.ink, fontWeight: 600 }}>증상</strong><span style={{ margin: "0 7px", color: UI.line }}>|</span>{symptomWithCode}</span>
           <span style={{ color: UI.ink2 }}><strong style={{ color: UI.ink, fontWeight: 600 }}>원인</strong><span style={{ margin: "0 7px", color: UI.line }}>|</span>{rootCause}</span>
           <span style={{ color: UI.ink2 }}>
@@ -1614,7 +1614,7 @@ function IssueCard({ issue, recoverySelectionAccepted, onOpen, onOpenTarget }: {
                 onMouseLeave={() => setTargetActive(false)}
                 onFocus={() => setTargetActive(true)}
                 onBlur={() => setTargetActive(false)}
-                style={{ maxWidth: "100%", border: "none", borderRadius: 7, background: targetActive ? TINT.gray.bd : TINT.gray.bg, color: targetActive ? UI.ink : UI.ink2, padding: "2px 7px", fontSize: TYPE.caption2, fontWeight: 400, lineHeight: 1.35, cursor: "pointer", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", verticalAlign: "middle", transition: `background ${DUR.micro}s ease, color ${DUR.micro}s ease` }}
+                style={{ maxWidth: "100%", border: "none", borderRadius: 7, background: targetActive ? TINT.gray.bd : TINT.gray.bg, color: targetActive ? UI.ink : UI.ink2, padding: "2px 7px", fontSize: TYPE.caption, fontWeight: 400, lineHeight: 1.35, cursor: "pointer", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", verticalAlign: "middle", transition: `background ${DUR.micro}s ease, color ${DUR.micro}s ease` }}
                 title={`${target} 리소스 상세 열기`}
               >
                 {target}
@@ -1624,14 +1624,14 @@ function IssueCard({ issue, recoverySelectionAccepted, onOpen, onOpenTarget }: {
           <span style={{ color: UI.ink2 }}><strong style={{ color: UI.ink, fontWeight: 600 }}>복구</strong><span style={{ margin: "0 7px", color: UI.line }}>|</span><RecoveryProgress progress={recovery} /></span>
         </span>
 
-        <span style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", paddingTop: 9, borderTop: `1px dashed ${UI.line}`, fontSize: TYPE.caption2, color: UI.ink3 }}>
+        <span style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", paddingTop: 9, borderTop: `1px dashed ${UI.line}`, fontSize: TYPE.caption, color: UI.ink3 }}>
           <span style={{ minWidth: 0, display: "inline-flex", alignItems: "center", gap: 4 }}><MapPin size={12} /><span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{scope}</span></span>
           <span>판단 근거 {evidenceCount}개</span>
         </span>
 
         <span style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
           <Pill tone={state.tone} label={state.label} />
-          <button type="button" onClick={(event) => { event.stopPropagation(); onOpen(); }} style={{ display: "inline-flex", alignItems: "center", gap: 3, border: "none", background: "transparent", padding: 0, color: BLUE, fontSize: TYPE.label2, fontWeight: 700, cursor: "pointer" }}>열기 <ChevronRight size={14} /></button>
+          <button type="button" onClick={(event) => { event.stopPropagation(); onOpen(); }} style={{ display: "inline-flex", alignItems: "center", gap: 3, border: "none", background: "transparent", padding: 0, color: BLUE, fontSize: TYPE.label, fontWeight: 700, cursor: "pointer" }}>열기 <ChevronRight size={14} /></button>
         </span>
       </span>
     </motion.div>
@@ -1679,18 +1679,18 @@ export function IssuesSurface({ incidentClusterIds, recoverySelectionCorrelation
   });
   return (
     <Page title="이슈" icon={AlertTriangle} tabs={["진행 중", "해결됨", "예방 점검"]} tab={tab} onTab={setTab}
-      action={tab === "진행 중" ? <button onClick={onAskAi} style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${blueA(0.4)}`, background: blueA(0.07), color: BLUE, borderRadius: 9, padding: "6px 13px", fontSize: TYPE.label2, fontWeight: 700, cursor: "pointer" }}>AI로 원인 분석</button> : null}>
+      action={tab === "진행 중" ? <button onClick={onAskAi} style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${blueA(0.4)}`, background: blueA(0.07), color: BLUE, borderRadius: 9, padding: "6px 13px", fontSize: TYPE.label, fontWeight: 700, cursor: "pointer" }}>AI로 원인 분석</button> : null}>
       {tab === "진행 중" && (
         <IssueSeverityFilters active={severityFilter} criticalCount={critCount} warningCount={warnCount} onChange={setSeverityFilter} totalCount={activeIssues.length} />
       )}
       {tab !== "예방 점검" && (
         <div style={{ display: "grid", gap: 8 }}>
           {issues.status === "loading" && visibleIssues.length === 0 ? (
-            <Card><div style={{ fontSize: TYPE.label2, color: UI.ink3 }}>불러오는 중…</div></Card>
+            <Card><div style={{ fontSize: TYPE.label, color: UI.ink3 }}>불러오는 중…</div></Card>
           ) : issues.status === "unavailable" && visibleIssues.length === 0 ? (
-            <Card><div style={{ fontSize: TYPE.label2, color: UI.ink3 }}>이슈를 불러오지 못했습니다.</div></Card>
+            <Card><div style={{ fontSize: TYPE.label, color: UI.ink3 }}>이슈를 불러오지 못했습니다.</div></Card>
           ) : visibleIssues.length === 0 ? (
-            <Card><div style={{ fontSize: TYPE.label2, color: UI.ink2 }}>{tab === "해결됨" ? "해결된 이슈가 없습니다." : severityFilter === "all" ? "진행 중인 이슈가 없습니다." : `${severityFilter === "critical" ? "장애" : "주의"} 이슈가 없습니다.`}</div></Card>
+            <Card><div style={{ fontSize: TYPE.label, color: UI.ink2 }}>{tab === "해결됨" ? "해결된 이슈가 없습니다." : severityFilter === "all" ? "진행 중인 이슈가 없습니다." : `${severityFilter === "critical" ? "장애" : "주의"} 이슈가 없습니다.`}</div></Card>
           ) : visibleIssues.map((iss) => {
             const resourceKind = iss.resourceKind;
             const resourceName = iss.resourceName;
@@ -1768,31 +1768,31 @@ export function TimelineSurface({ onOpenRef: _onOpenRef }: { onOpenRef: (kind: s
         {(["전체", "배포", "이슈", "구성"] as const).map((c) => (
           <button key={c} onClick={() => { setCat(c); setPage(0); }}
             style={{ display: "flex", alignItems: "center", gap: 5, border: `1px solid ${cat === c ? blueA(0.45) : UI.line}`, background: cat === c ? blueA(0.07) : UI.card, color: cat === c ? BLUE : UI.ink2, borderRadius: 999, padding: "4px 13px", fontSize: TYPE.label, fontWeight: 700, cursor: "pointer" }}>{c}
-            <span style={{ fontVariantNumeric: "tabular-nums", fontSize: TYPE.micro, color: cat === c ? BLUE : UI.ink3 }}>{c === "전체" ? items.length : items.filter((i) => i.cat === c).length}</span>
+            <span style={{ fontVariantNumeric: "tabular-nums", fontSize: TYPE.caption, color: cat === c ? BLUE : UI.ink3 }}>{c === "전체" ? items.length : items.filter((i) => i.cat === c).length}</span>
           </button>
         ))}
       </div>
       <Card pad={0}>
         <div style={{ height: 440, overflowY: "auto", padding: 15, scrollbarGutter: "stable" }}>
           {feed.status === "loading" ? (
-            <span style={{ fontSize: TYPE.label2, color: UI.ink3 }}>불러오는 중…</span>
+            <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>불러오는 중…</span>
           ) : feed.status === "unavailable" ? (
-            <span style={{ fontSize: TYPE.label2, color: UI.ink3 }}>타임라인을 불러오지 못했습니다.</span>
+            <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>타임라인을 불러오지 못했습니다.</span>
           ) : shown.length === 0 ? (
-            <span style={{ fontSize: TYPE.label2, color: UI.ink3 }}>최근 24시간 내 관측된 변경 없음</span>
+            <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>최근 24시간 내 관측된 변경 없음</span>
           ) : (
             <MiniTimeline items={visibleItems.map(({ cat: _c, ...it }) => it)} />
           )}
         </div>
         {shown.length > pageSize && (
           <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, minHeight: 38, padding: "5px 12px", borderTop: `1px solid ${UI.line2}` }}>
-            <span style={{ marginRight: "auto", fontSize: TYPE.caption2, color: UI.ink3 }}>
+            <span style={{ marginRight: "auto", fontSize: TYPE.caption, color: UI.ink3 }}>
               {safePage * pageSize + 1}–{Math.min((safePage + 1) * pageSize, shown.length)} / {shown.length}
             </span>
             <button type="button" disabled={safePage === 0} onClick={() => setPage((value) => Math.max(0, value - 1))}
-              style={{ border: `1px solid ${UI.line}`, background: UI.card, color: safePage === 0 ? UI.ink3 : UI.ink2, borderRadius: 7, padding: "4px 9px", fontSize: TYPE.caption2, cursor: safePage === 0 ? "default" : "pointer" }}>이전</button>
+              style={{ border: `1px solid ${UI.line}`, background: UI.card, color: safePage === 0 ? UI.ink3 : UI.ink2, borderRadius: 7, padding: "4px 9px", fontSize: TYPE.caption, cursor: safePage === 0 ? "default" : "pointer" }}>이전</button>
             <button type="button" disabled={safePage >= pageCount - 1} onClick={() => setPage((value) => Math.min(pageCount - 1, value + 1))}
-              style={{ border: `1px solid ${UI.line}`, background: UI.card, color: safePage >= pageCount - 1 ? UI.ink3 : UI.ink2, borderRadius: 7, padding: "4px 9px", fontSize: TYPE.caption2, cursor: safePage >= pageCount - 1 ? "default" : "pointer" }}>다음</button>
+              style={{ border: `1px solid ${UI.line}`, background: UI.card, color: safePage >= pageCount - 1 ? UI.ink3 : UI.ink2, borderRadius: 7, padding: "4px 9px", fontSize: TYPE.caption, cursor: safePage >= pageCount - 1 ? "default" : "pointer" }}>다음</button>
           </div>
         )}
       </Card>
@@ -1810,14 +1810,14 @@ export function TimelineSurface({ onOpenRef: _onOpenRef }: { onOpenRef: (kind: s
             <div key={p.pinId} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 15px", borderTop: `1px solid ${UI.line2}` }}>
               <Pill tone="info" label={p.kind === "resource" ? "리소스" : "애플리케이션"} />
               <span style={{ minWidth: 0, flex: 1 }}>
-                <span style={{ display: "block", fontSize: TYPE.label2, fontWeight: 700, fontFamily: MONO, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.label}</span>
-                {p.sublabel && <span style={{ display: "block", fontSize: TYPE.caption2, color: UI.ink3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.sublabel}</span>}
+                <span style={{ display: "block", fontSize: TYPE.label, fontWeight: 700, fontFamily: MONO, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.label}</span>
+                {p.sublabel && <span style={{ display: "block", fontSize: TYPE.caption, color: UI.ink3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.sublabel}</span>}
               </span>
             </div>
           ))}
       </Card>
       {/* 정직한 표기 — 개요/문제/커버리지/고정은 실 timeline API 조회값이다. 관측 소스 모드만 부기 */}
-      <span style={{ fontSize: TYPE.caption2, color: UI.ink3 }}>
+      <span style={{ fontSize: TYPE.caption, color: UI.ink3 }}>
         {board.status === "unavailable"
           ? "타임라인 개요를 불러오지 못했습니다 · 변경 스트림은 최근 24시간"
           : `개요·고정은 실 timeline API 조회 · 관측 소스 ${board.selectedSourceMode ? koLabel(board.selectedSourceMode) : "—"} · 변경 스트림은 최근 24시간`}
@@ -1833,10 +1833,10 @@ export function TimelineSurface({ onOpenRef: _onOpenRef }: { onOpenRef: (kind: s
 function ChecksContent() {
   const checks = useChecksOverview();
   if (checks.status === "loading") {
-    return <Card><span style={{ fontSize: TYPE.label2, color: UI.ink3 }}>불러오는 중…</span></Card>;
+    return <Card><span style={{ fontSize: TYPE.label, color: UI.ink3 }}>불러오는 중…</span></Card>;
   }
   if (checks.status === "error") {
-    return <Card><span style={{ fontSize: TYPE.label2, color: UI.ink3 }}>점검 정보를 불러오지 못했습니다.</span></Card>;
+    return <Card><span style={{ fontSize: TYPE.label, color: UI.ink3 }}>점검 정보를 불러오지 못했습니다.</span></Card>;
   }
   const availabilityLabel = (a: string | null) => a === "available" ? "관측됨" : a === "partial" ? "부분 관측" : "관측 안 됨";
   return (
@@ -1848,20 +1848,20 @@ function ChecksContent() {
       </div>
       <Card>
         <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: "4px 2px" }}>
-          <span style={{ fontSize: TYPE.title3, fontWeight: 700, color: UI.ink2 }}>점검 결과 관측 안 됨</span>
-          <span style={{ fontSize: TYPE.label2, color: UI.ink3 }}>점검 결과 없음</span>
+          <span style={{ fontSize: TYPE.section, fontWeight: 700, color: UI.ink2 }}>점검 결과 관측 안 됨</span>
+          <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>점검 결과 없음</span>
           <ReasonNotes codes={checks.reasonCodes} />
         </div>
       </Card>
       <Card pad={0}>
         <div style={{ padding: "11px 15px", borderBottom: `1px solid ${UI.line2}`, fontSize: TYPE.label, fontWeight: 700, color: UI.ink3 }}>스코프 커버리지 · {availabilityLabel(checks.scopeAvailability)}</div>
         {checks.scopes.length === 0
-          ? <div style={{ padding: "12px 15px", fontSize: TYPE.label2, color: UI.ink3 }}>스코프에 포함된 클러스터가 없습니다.</div>
+          ? <div style={{ padding: "12px 15px", fontSize: TYPE.label, color: UI.ink3 }}>스코프에 포함된 클러스터가 없습니다.</div>
           : checks.scopes.map((s) => (
             <div key={s.clusterId} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "10px 15px", borderTop: `1px solid ${UI.line2}` }}>
               <span style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
-                <span style={{ fontSize: TYPE.label2, fontWeight: 700, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.clusterId}</span>
-                <span style={{ fontSize: TYPE.caption2, color: UI.ink3 }}>{s.namespaces.length ? `${s.namespaces.length}개 네임스페이스` : "전체 네임스페이스"}</span>
+                <span style={{ fontSize: TYPE.label, fontWeight: 700, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.clusterId}</span>
+                <span style={{ fontSize: TYPE.caption, color: UI.ink3 }}>{s.namespaces.length ? `${s.namespaces.length}개 네임스페이스` : "전체 네임스페이스"}</span>
               </span>
               <Pill tone={s.freshness === "live" ? "ok" : s.freshness === "disconnected" ? "crit" : "warn"} label={koLabel(s.freshness)} />
             </div>
@@ -1889,13 +1889,13 @@ export function CostSurface({ onOpenRef: _onOpenRef }: { onOpenRef: (kind: strin
     <Page title="비용" icon={Coins}>
       <Card>
         {cost.status === "loading" ? (
-          <span style={{ fontSize: TYPE.label2, color: UI.ink3 }}>불러오는 중…</span>
+          <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>불러오는 중…</span>
         ) : cost.status === "error" ? (
-          <span style={{ fontSize: TYPE.label2, color: UI.ink3 }}>비용을 불러오지 못했습니다.</span>
+          <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>비용을 불러오지 못했습니다.</span>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "6px 4px" }}>
-            <span style={{ fontSize: TYPE.title3, fontWeight: 700, color: UI.ink2 }}>비용 관측 데이터가 아직 없습니다</span>
-            <span style={{ fontSize: TYPE.label2, color: UI.ink3 }}>현재 스코프에 대해 비용 관측이 아직 연동되지 않았습니다.</span>
+            <span style={{ fontSize: TYPE.section, fontWeight: 700, color: UI.ink2 }}>비용 관측 데이터가 아직 없습니다</span>
+            <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>현재 스코프에 대해 비용 관측이 아직 연동되지 않았습니다.</span>
             <ReasonNotes codes={cost.reasonCodes.length ? cost.reasonCodes : ["cost_observation_unavailable"]} />
           </div>
         )}
@@ -1954,7 +1954,7 @@ export function SettingsSurface() {
           right={session.status === "ready" && session.roles.length ? <Mono dim>{koLabel(session.roles[0])}</Mono> : <Mono dim>—</Mono>} />
         <SettingsRow icon={Building2} title="계정" sub={accountSub}
           right={<span style={{ display: "flex", alignItems: "center", gap: 7 }}>
-            <span style={{ fontSize: TYPE.label2, color: UI.ink2, maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{accountName}</span>
+            <span style={{ fontSize: TYPE.label, color: UI.ink2, maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{accountName}</span>
             <span style={{ width: 26, height: 26, borderRadius: 999, background: inkA(0.08), display: "grid", placeItems: "center", fontSize: TYPE.label, fontWeight: 700, color: UI.ink2 }}>{session.status === "ready" ? sessionInitial(session) : "?"}</span>
           </span>} />
         <SettingsRow icon={Palette} title="테마" sub={prefsSub} right={
@@ -1982,7 +1982,7 @@ export function SettingsSurface() {
           : (
             <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: "12px 15px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                {access.roles.length ? access.roles.map((r) => <Pill key={r} tone="info" label={koLabel(r)} />) : <span style={{ fontSize: TYPE.label2, color: UI.ink3 }}>역할 없음</span>}
+                {access.roles.length ? access.roles.map((r) => <Pill key={r} tone="info" label={koLabel(r)} />) : <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>역할 없음</span>}
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                 <span style={segStyle}>허용 권한 <b style={numStyle}>{access.allowedCount}/{access.permissionCount}</b></span>
@@ -2010,7 +2010,7 @@ export function SettingsSurface() {
                   <Mono>{koLabel(p.key)}</Mono>
                   <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     {p.eventInvalidation && <Pill tone="info" label="이벤트 무효화" />}
-                    <span style={{ fontSize: TYPE.caption2, color: UI.ink3, fontVariantNumeric: "tabular-nums" }}>{p.staleAfterSeconds !== null ? `오래됨 ${p.staleAfterSeconds}초 · ` : ""}갱신 {p.refreshAfterSeconds}초</span>
+                    <span style={{ fontSize: TYPE.caption, color: UI.ink3, fontVariantNumeric: "tabular-nums" }}>{p.staleAfterSeconds !== null ? `오래됨 ${p.staleAfterSeconds}초 · ` : ""}갱신 {p.refreshAfterSeconds}초</span>
                   </span>
                 </div>
               ))}
@@ -2019,8 +2019,8 @@ export function SettingsSurface() {
       </Card>
       {/* 정직한 표기 — 테마·언어는 실 PUT /api/settings 저장(낙관적, 실패 시 롤백).
           접근·자동 갱신 정책은 실 조회. 토스트 토글만 이 브라우저 로컬 데모 설정. */}
-      <span style={{ fontSize: TYPE.caption2, color: UI.ink3 }}>테마·언어는 서버에 저장됩니다(실패 시 이전 값으로 되돌림) · 접근·자동 갱신 정책은 실시간 조회</span>
-      <span style={{ fontSize: TYPE.caption2, fontFamily: MONO, color: UI.ink3 }}>Kyro Console 0.1.0{prefs.revision !== null ? ` · prefs r${prefs.revision}` : ""}</span>
+      <span style={{ fontSize: TYPE.caption, color: UI.ink3 }}>테마·언어는 서버에 저장됩니다(실패 시 이전 값으로 되돌림) · 접근·자동 갱신 정책은 실시간 조회</span>
+      <span style={{ fontSize: TYPE.caption, fontFamily: MONO, color: UI.ink3 }}>Kyro Console 0.1.0{prefs.revision !== null ? ` · prefs r${prefs.revision}` : ""}</span>
     </Page>
   );
 }
@@ -2060,7 +2060,7 @@ export function AlertsSurface({ onOpenRef }: { onOpenRef: (kind: string, name: s
           : events.items.map((n, i) => (
             <TRow key={n.eventId} cols={evCols} i={i} onClick={() => onOpenRef(n.kind, n.name)} cells={[
               <Pill key="s" tone={severityTone(n.severity)} label={koLabel(n.severity)} />,
-              <span key="t" style={{ fontSize: TYPE.label2, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{n.kind} · {n.name}{n.namespace ? ` · ${n.namespace}` : ""}</span>,
+              <span key="t" style={{ fontSize: TYPE.label, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{n.kind} · {n.name}{n.namespace ? ` · ${n.namespace}` : ""}</span>,
               <Mono key="r" dim>{n.ruleName ?? "—"}</Mono>,
               <span key="st" style={{ fontSize: TYPE.label, color: UI.ink3 }}>{koLabel(n.status)}</span>,
               <Mono key="w" dim>{fromNow(n.firedAt)}</Mono>,
@@ -2124,7 +2124,7 @@ export function AiHistorySurface({ onOpenPanel }: { onOpenPanel: () => void }) {
             .join("\n");
     return (
       <Page title={selected?.title ?? "AI 대화"} icon={Sparkles}
-        action={<button onClick={() => setSelectedId(null)} style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${UI.line}`, background: UI.card, color: UI.ink2, borderRadius: 9, padding: "6px 13px", fontSize: TYPE.label2, fontWeight: 700, cursor: "pointer" }}>← 목록</button>}>
+        action={<button onClick={() => setSelectedId(null)} style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${UI.line}`, background: UI.card, color: UI.ink2, borderRadius: 9, padding: "6px 13px", fontSize: TYPE.label, fontWeight: 700, cursor: "pointer" }}>← 목록</button>}>
         <Card>
           {detail.status === "loading" ? (
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -2137,13 +2137,13 @@ export function AiHistorySurface({ onOpenPanel }: { onOpenPanel: () => void }) {
               ))}
             </div>
           )
-            : detail.status === "unavailable" ? <div style={{ fontSize: TYPE.label2, color: UI.ink3, padding: "6px 2px" }}>이 대화의 상세 이력은 관측되지 않습니다.</div>
-            : detail.turns.length === 0 ? <div style={{ fontSize: TYPE.label2, color: UI.ink3, padding: "6px 2px" }}>대화 메시지가 없습니다.</div>
+            : detail.status === "unavailable" ? <div style={{ fontSize: TYPE.label, color: UI.ink3, padding: "6px 2px" }}>이 대화의 상세 이력은 관측되지 않습니다.</div>
+            : detail.turns.length === 0 ? <div style={{ fontSize: TYPE.label, color: UI.ink3, padding: "6px 2px" }}>대화 메시지가 없습니다.</div>
             : <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                 {detail.turns.map((turn, i) => (
                   <div key={i} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                     <span style={{ fontSize: TYPE.caption, fontWeight: 700, color: turn.role === "user" ? BLUE : UI.ink2 }}>{turn.role === "user" ? "질문" : "응답"}</span>
-                    <div style={{ fontSize: TYPE.label2, color: UI.ink, whiteSpace: "pre-wrap", lineHeight: 1.65 }}>{turnText(turn) || "(내용 없음)"}</div>
+                    <div style={{ fontSize: TYPE.label, color: UI.ink, whiteSpace: "pre-wrap", lineHeight: 1.65 }}>{turnText(turn) || "(내용 없음)"}</div>
                   </div>
                 ))}
               </div>}
@@ -2154,7 +2154,7 @@ export function AiHistorySurface({ onOpenPanel }: { onOpenPanel: () => void }) {
 
   return (
     <Page title="AI 대화" icon={Sparkles}
-      action={<button onClick={onOpenPanel} style={{ display: "flex", alignItems: "center", gap: 6, border: "none", background: BLUE, color: UI.card, borderRadius: 9, padding: "6px 13px", fontSize: TYPE.label2, fontWeight: 700, cursor: "pointer" }}>새 대화</button>}>
+      action={<button onClick={onOpenPanel} style={{ display: "flex", alignItems: "center", gap: 6, border: "none", background: BLUE, color: UI.card, borderRadius: 9, padding: "6px 13px", fontSize: TYPE.label, fontWeight: 700, cursor: "pointer" }}>새 대화</button>}>
       <Card pad={0}>
         <THead cols={cols} />
         {feed.status === "loading" ? emptyRow("불러오는 중…")
@@ -2163,8 +2163,8 @@ export function AiHistorySurface({ onOpenPanel }: { onOpenPanel: () => void }) {
           : feed.items.map((c, i) => (
             <TRow key={c.id} cols={cols} i={i} onClick={() => setSelectedId(c.id)} cells={[
               <span key="t" style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
-                <span style={{ fontSize: TYPE.label2, fontWeight: 700, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.title}</span>
-                <span style={{ fontSize: TYPE.micro, fontFamily: MONO, color: UI.ink3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.id}</span>
+                <span style={{ fontSize: TYPE.label, fontWeight: 700, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.title}</span>
+                <span style={{ fontSize: TYPE.caption, fontFamily: MONO, color: UI.ink3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.id}</span>
               </span>,
               <Mono key="w" dim>{fromNow(c.updatedAt)}</Mono>,
             ]} />

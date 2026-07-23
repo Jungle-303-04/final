@@ -192,7 +192,7 @@ function ConnectionProgress({
                   ? <Spinner className="size-3.5" decorative />
                   : <span aria-hidden="true" className="size-1.5 rounded-full bg-current" />}
               </span>
-              <span className="w-full truncate text-[11px] text-muted-foreground" title={t(labelKey)}>
+              <span className="w-full truncate text-caption text-muted-foreground" title={t(labelKey)}>
                 {t(labelKey)}
               </span>
             </li>

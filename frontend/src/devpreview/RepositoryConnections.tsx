@@ -3,6 +3,7 @@ import { useState } from "react";
 import { disconnectRepository } from "../api/repository-connection";
 import { GithubIcon } from "./brandIcons";
 import type { RepositoryGroup } from "./repositoryRegistry";
+import { TYPE } from "./theme";
 
 /**
  * Repository-level summary backed by observed application bindings.
@@ -110,16 +111,16 @@ function RepositoryRow({
               textOverflow: "ellipsis",
               whiteSpace: "nowrap",
               color: "#0f172a",
-              fontSize: 12,
+              fontSize: TYPE.label,
             }}
           >
             {group.repositoryRef}
           </strong>
-          <span style={{ display: "block", marginTop: 2, color: "#16803b", fontSize: 11, lineHeight: 1.35 }}>
+          <span style={{ display: "block", marginTop: 2, color: "#16803b", fontSize: TYPE.caption, lineHeight: 1.35 }}>
             연결됨 · 앱 {group.applications.length}개
           </span>
         </span>
-        <span aria-hidden="true" style={{ color: "#64748b", fontSize: 13, transform: selected ? "rotate(180deg)" : "none", transition: "transform 150ms ease" }}>
+        <span aria-hidden="true" style={{ color: "#64748b", fontSize: TYPE.body, transform: selected ? "rotate(180deg)" : "none", transition: "transform 150ms ease" }}>
           ▾
         </span>
       </button>
@@ -135,14 +136,14 @@ function RepositoryRow({
               style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, minWidth: 0, padding: "9px 10px", border: "1px solid #e5e7eb", borderRadius: 8, background: "#fff" }}
             >
               <span style={{ minWidth: 0 }}>
-                <strong style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "#111827", fontSize: 12 }}>
+                <strong style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "#111827", fontSize: TYPE.label }}>
                   {application.name}
                 </strong>
-                <span style={{ display: "block", marginTop: 2, overflow: "hidden", color: "#9aa0aa", fontSize: 11, textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                <span style={{ display: "block", marginTop: 2, overflow: "hidden", color: "#9aa0aa", fontSize: TYPE.caption, textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {application.manifestPath ?? "매니페스트 경로 관측 안 됨"}
                 </span>
               </span>
-              <span style={{ flex: "0 0 auto", color: "#9aa0aa", fontSize: 11 }}>
+              <span style={{ flex: "0 0 auto", color: "#9aa0aa", fontSize: TYPE.caption }}>
                 {application.branch ?? "브랜치 관측 안 됨"}
               </span>
             </li>
@@ -151,7 +152,7 @@ function RepositoryRow({
           {/* 연결 해제 — 인라인 2단계 확인(브라우저 다이얼로그 미사용). */}
           <li style={{ listStyle: "none", marginTop: 2 }}>
             {error && (
-              <div role="alert" style={{ marginBottom: 6, color: "#b91c1c", fontSize: 11 }}>
+              <div role="alert" style={{ marginBottom: 6, color: "#b91c1c", fontSize: TYPE.caption }}>
                 {error}
               </div>
             )}
@@ -166,7 +167,7 @@ function RepositoryRow({
                   borderRadius: 8,
                   background: "#fff",
                   color: "#b91c1c",
-                  fontSize: 11.5,
+                  fontSize: TYPE.label,
                   fontWeight: 600,
                   cursor: "pointer",
                 }}
@@ -175,7 +176,7 @@ function RepositoryRow({
               </button>
             ) : (
               <div style={{ display: "grid", gap: 6 }}>
-                <span style={{ color: "#7f1d1d", fontSize: 11, lineHeight: 1.45 }}>
+                <span style={{ color: "#7f1d1d", fontSize: TYPE.caption, lineHeight: 1.45 }}>
                   해제하면 이 저장소의 폴링·동기화가 멈추고 앱 {group.applications.length}개가
                   목록에서 내려갑니다. 저장된 자격증명도 삭제됩니다.
                 </span>
@@ -191,7 +192,7 @@ function RepositoryRow({
                       borderRadius: 8,
                       background: busy ? "#f0a3a3" : "#dc2626",
                       color: "#fff",
-                      fontSize: 11.5,
+                      fontSize: TYPE.label,
                       fontWeight: 700,
                       cursor: busy ? "default" : "pointer",
                     }}
@@ -209,7 +210,7 @@ function RepositoryRow({
                       borderRadius: 8,
                       background: "#fff",
                       color: "#374151",
-                      fontSize: 11.5,
+                      fontSize: TYPE.label,
                       fontWeight: 600,
                       cursor: busy ? "default" : "pointer",
                     }}

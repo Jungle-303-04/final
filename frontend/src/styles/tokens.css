@@ -11,6 +11,19 @@
   --font-heading: var(--font-sans);
   --font-sans: "Pretendard Variable", "Pretendard", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-mono: ui-monospace, "SFMono-Regular", monospace;
+  --text-xs: var(--type-caption);
+  --text-sm: var(--type-body);
+  --text-base: var(--type-body);
+  --text-lg: var(--type-section);
+  --text-xl: var(--type-section);
+  --text-2xl: var(--type-page);
+  --text-caption: var(--type-caption);
+  --text-label: var(--type-label);
+  --text-body: var(--type-body);
+  --text-section: var(--type-section);
+  --text-page: var(--type-page);
+  --text-kpi: var(--type-kpi);
+  --text-code: var(--type-code);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -50,6 +63,13 @@
 
 :root {
   color-scheme: light;
+  --type-caption: 12px;
+  --type-label: 14px;
+  --type-body: 15px;
+  --type-section: 17px;
+  --type-page: 24px;
+  --type-kpi: 28px;
+  --type-code: 12px;
   --font-weight-body: 500;
   --font-weight-label: 600;
   --font-weight-numeric: 650;

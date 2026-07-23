@@ -68,7 +68,7 @@ function TextPart({ part, active, onReady }: { part: AiTextPart; active: boolean
   if (((safe.match(/`/g) || []).length) % 2) safe = safe.replace(/`([^`]*)$/, "$1");
   if (((safe.match(/\*\*/g) || []).length) % 2) safe = safe.replace(/\*\*([^*]*)$/, "$1");
   return (
-    <p className="text-[13.5px] leading-[1.7] tracking-[-0.006em] text-foreground/90 [&_code]:rounded-md [&_code]:bg-muted/70 [&_code]:px-1.5 [&_code]:py-px [&_code]:font-mono [&_code]:text-[0.82em] [&_strong]:font-semibold [&_strong]:text-foreground">
+    <p className="text-body leading-[1.7] tracking-[-0.006em] text-foreground/90 [&_code]:rounded-md [&_code]:bg-muted/70 [&_code]:px-1.5 [&_code]:py-px [&_code]:font-mono [&_code]:text-[0.82em] [&_strong]:font-semibold [&_strong]:text-foreground">
       <span dangerouslySetInnerHTML={{ __html: md(safe) }} />
       {active && n < part.markdown.length ? <span className="ml-0.5 inline-block h-3.5 w-[2px] animate-pulse rounded-full bg-primary align-text-bottom" /> : null}
     </p>
@@ -94,7 +94,7 @@ function StepsPart({ part, active, onReady, evidenceCount }: { part: AiStepsPart
   if (collapsed && complete) {
     return (
       <button onClick={() => setCollapsed(false)} type="button"
-        className="group/s flex w-fit items-center gap-1.5 rounded-full text-[11.5px] font-medium text-muted-foreground/80 transition-colors hover:text-foreground"
+        className="group/s flex w-fit items-center gap-1.5 rounded-full text-caption font-medium text-muted-foreground/80 transition-colors hover:text-foreground"
         style={{ animation: `fadeUp 0.4s ${SPRING}` }}>
         <span className="grid size-4 place-items-center rounded-full ap-ok-bg"><Check className="size-2.5 ap-ok" /></span>
         <span>근거 {total}단계 확인{evidenceCount ? ` · ${evidenceCount}건` : ""}</span>
@@ -104,7 +104,7 @@ function StepsPart({ part, active, onReady, evidenceCount }: { part: AiStepsPart
   }
   return (
     <div className="grid gap-2">
-      <div className="flex items-center gap-1.5 text-[11.5px] font-medium text-muted-foreground">
+      <div className="flex items-center gap-1.5 text-caption font-medium text-muted-foreground">
         {complete ? <Check className="size-3.5 ap-ok" /> : <Spinner className="size-3.5 ap-accent" decorative />}
         <span className="tracking-[-0.01em]">{complete ? "근거 확인 완료" : "확인하는 중"}</span>
         <span className="tabular-nums opacity-60">{Math.min(done + (part.running ? 1 : 0), total)}/{total}</span>
@@ -115,7 +115,7 @@ function StepsPart({ part, active, onReady, evidenceCount }: { part: AiStepsPart
           const isRunning = i === done && (part.running || done < total);
           if (!isDone && !isRunning) return null;
           return (
-            <li key={s.id} className="relative flex items-center gap-2 text-[12.5px]" style={{ animation: `stepIn 0.42s ${SPRING}` }}>
+            <li key={s.id} className="relative flex items-center gap-2 text-label" style={{ animation: `stepIn 0.42s ${SPRING}` }}>
               <span className="absolute -left-[21px] grid size-4 place-items-center rounded-full bg-card ring-4 ring-card">
                 {isDone ? <span className="grid size-4 place-items-center rounded-full ap-ok-bg"><Check className="size-2.5 ap-ok" /></span> : <Spinner className="size-3 ap-accent" decorative />}
               </span>
@@ -135,15 +135,15 @@ function ResultPart({ part, first }: { part: AiResultPart; first?: boolean }) {
     <div className={`grid gap-2.5 ${first ? "" : "border-t border-black/[0.05] pt-3"}`} style={{ animation: `fadeUp 0.5s ${SPRING}` }}>
       <div className="flex items-center gap-2">
         <span className="size-1.5 rounded-full" style={{ background: toneHex[part.tone] }} />
-        <span className="text-[13px] font-semibold tracking-[-0.01em]">{part.title}</span>
-        <span className="text-[12px] text-muted-foreground">· {part.summary}</span>
+        <span className="text-body font-semibold tracking-[-0.01em]">{part.title}</span>
+        <span className="text-label text-muted-foreground">· {part.summary}</span>
       </div>
       {part.metrics ? (
         <div className="flex flex-wrap gap-x-8 gap-y-2">
           {part.metrics.map((m) => (
             <div className="grid gap-0.5" key={m.label}>
-              <span className="text-[19px] font-semibold leading-none tracking-[-0.02em] tabular-nums" style={{ color: toneHex[m.tone] }}>{m.value}</span>
-              <span className="text-[10.5px] font-medium uppercase tracking-wide text-muted-foreground/70">{m.label}</span>
+              <span className="text-kpi font-semibold leading-none tracking-[-0.02em] tabular-nums" style={{ color: toneHex[m.tone] }}>{m.value}</span>
+              <span className="text-caption font-medium uppercase tracking-wide text-muted-foreground/70">{m.label}</span>
             </div>
           ))}
         </div>
@@ -161,7 +161,7 @@ const followAiLink = (href: string) => {
 
 function EvidencePart({ part }: { part: Extract<AiMessagePart, { kind: "evidence" }> }) {
   return (
-    <p className="flex flex-wrap items-center gap-x-3.5 gap-y-1.5 text-[12px]" style={{ animation: `fadeUp 0.45s ${SPRING}` }}>
+    <p className="flex flex-wrap items-center gap-x-3.5 gap-y-1.5 text-label" style={{ animation: `fadeUp 0.45s ${SPRING}` }}>
       <span className="font-medium text-muted-foreground/70">근거</span>
       {part.items.map((e) => { const Icon = evIcon(e.type); return (
         <button type="button" key={e.id} onClick={() => followAiLink(e.link ?? "")} className={`inline-flex items-center gap-1 ${LINK}`}><Icon className="size-3 opacity-60" />{e.label}</button>
@@ -172,7 +172,7 @@ function EvidencePart({ part }: { part: Extract<AiMessagePart, { kind: "evidence
 
 function LinksPart({ part }: { part: Extract<AiMessagePart, { kind: "links" }> }) {
   return (
-    <p className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[12px]" style={{ animation: `fadeUp 0.5s ${SPRING}` }}>
+    <p className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-label" style={{ animation: `fadeUp 0.5s ${SPRING}` }}>
       {part.items.map((l) => { const Icon = linkIcon(l.icon); return (
         <button type="button" key={l.href} onClick={() => followAiLink(l.href)} className={`inline-flex items-center gap-1 ${LINK}`}><Icon className="size-3.5 opacity-60" />{l.label}<ArrowUpRight className="size-3 opacity-50" /></button>
       ); })}
@@ -222,7 +222,7 @@ function ActionPart({ part, onIdleChange, first }: { part: Extract<AiMessagePart
   if (created && collapsed) {
     return (
       <button onClick={() => setCollapsed(false)} type="button"
-        className="flex w-fit items-center gap-1.5 text-[12.5px] text-muted-foreground transition-colors hover:text-foreground"
+        className="flex w-fit items-center gap-1.5 text-label text-muted-foreground transition-colors hover:text-foreground"
         style={{ animation: `fadeUp 0.4s ${SPRING}` }}>
         <span className="grid size-4 place-items-center rounded-full ap-ok-bg"><Check className="size-2.5 ap-ok" /></span>
         <span className="font-medium text-foreground/90">{p.name}</span><span>생성됨</span>
@@ -231,30 +231,30 @@ function ActionPart({ part, onIdleChange, first }: { part: Extract<AiMessagePart
   }
   return (
     <div className={`grid gap-2.5 ${first ? "" : "border-t border-black/[0.05] pt-3"}`} style={{ animation: `fadeUp 0.5s ${SPRING}` }}>
-      <div className="flex items-center gap-2 text-[13px] font-semibold tracking-[-0.01em]">
+      <div className="flex items-center gap-2 text-body font-semibold tracking-[-0.01em]">
         <span className={`grid size-5 place-items-center rounded-md ${created ? "ap-ok-bg ap-ok" : "bg-black/[0.05] text-foreground/70"}`}>
           {created ? <Check className="size-3" strokeWidth={ICON} /> : <BellPlus className="size-3" strokeWidth={ICON} />}
         </span>
         {created ? "알림 규칙 생성됨" : "알림 규칙 만들기"}
       </div>
-      <dl className={`grid grid-cols-[auto_1fr] gap-x-5 gap-y-1.5 text-[12px] transition-opacity ${created ? "opacity-55" : ""}`}>
+      <dl className={`grid grid-cols-[auto_1fr] gap-x-5 gap-y-1.5 text-label transition-opacity ${created ? "opacity-55" : ""}`}>
         <dt className="text-muted-foreground/80">이름</dt><dd className="font-medium">{p.name}</dd>
         <dt className="text-muted-foreground/80">조건</dt><dd className="font-medium tabular-nums">{metricLabel} {p.comparator} {p.threshold}{isPct ? "%" : ""}</dd>
         <dt className="text-muted-foreground/80">지속</dt><dd className="font-medium tabular-nums">{p.forSeconds}초 이상</dd>
         <dt className="text-muted-foreground/80">범위</dt><dd className="font-medium">{p.scope.clusters.join(", ") || "현재 화면"}</dd>
-        {created && ruleId ? (<><dt className="text-muted-foreground/80">규칙 ID</dt><dd className="font-mono text-[11.5px]">{ruleId}</dd></>) : null}
+        {created && ruleId ? (<><dt className="text-muted-foreground/80">규칙 ID</dt><dd className="font-mono text-caption">{ruleId}</dd></>) : null}
       </dl>
       {!created ? (
         <div className="flex flex-col gap-2 pt-0.5">
           <div className="flex items-center gap-2">
             <button type="button" disabled={state === "creating"} onClick={create}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2 text-[13px] font-medium text-primary-foreground shadow-[0_1px_2px_rgba(0,0,0,0.12)] transition-all hover:brightness-105 active:scale-[0.97] disabled:opacity-60">
+              className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2 text-body font-medium text-primary-foreground shadow-[0_1px_2px_rgba(0,0,0,0.12)] transition-all hover:brightness-105 active:scale-[0.97] disabled:opacity-60">
               {state === "creating" ? <Spinner className="size-4" decorative /> : <BellPlus className="size-4" />}
               {state === "creating" ? "만드는 중" : state === "error" ? "다시 시도" : "만들기"}
             </button>
           </div>
           {state === "error" ? (
-            <p className="flex items-center gap-1.5 text-[12px]" style={{ color: "var(--ap-red)" }}>
+            <p className="flex items-center gap-1.5 text-label" style={{ color: "var(--ap-red)" }}>
               <CircleAlert className="size-3.5" /> 알림 규칙을 생성하지 못했습니다.
             </p>
           ) : null}
@@ -280,7 +280,7 @@ function PartView({ part, active, onReady, evidenceCount, onIdleChange, first }:
   if (part.kind === "links") return <LinksPart part={part} />;
   if (part.kind === "action") return <ActionPart first={first} onIdleChange={onIdleChange} part={part} />;
   if (part.kind === "status" && part.state === "pending")
-    return <span className="inline-flex w-fit items-center gap-1.5 text-[12.5px] text-muted-foreground"><Spinner className="size-3.5 ap-accent" decorative /> 확인하고 있습니다…</span>;
+    return <span className="inline-flex w-fit items-center gap-1.5 text-label text-muted-foreground"><Spinner className="size-3.5 ap-accent" decorative /> 확인하고 있습니다…</span>;
   return null;
 }
 
@@ -339,7 +339,7 @@ function AssistantTurn({ turn, onComplete }: { turn: AiTurn; onComplete: () => v
         <div className="min-h-0 overflow-hidden">
           <div className="flex items-center gap-2.5 px-4 py-3">
             <span className={`size-2 shrink-0 rounded-full ${summary.tone === "critical" ? "island-pulse" : ""}`} style={{ background: toneHex[summary.tone] }} />
-            <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-muted-foreground group-hover/msg:text-foreground/80">{summary.text}</span>
+            <span className="min-w-0 flex-1 truncate text-label font-medium text-muted-foreground group-hover/msg:text-foreground/80">{summary.text}</span>
             <ChevronDown className="size-4 shrink-0 -rotate-90 text-muted-foreground/40" />
           </div>
         </div>
@@ -369,7 +369,7 @@ function Thinking() {
 
 function UserTurn({ turn, onShown }: { turn: AiTurn; onShown: () => void }) {
   useEffect(() => { const id = window.setTimeout(onShown, TIMING.userShownMs); return () => window.clearTimeout(id); }, []);
-  return <p className="ml-auto w-fit max-w-[80%] rounded-[18px] rounded-br-md bg-primary px-3.5 py-2 text-[13.5px] font-medium leading-relaxed tracking-[-0.006em] text-primary-foreground shadow-[0_2px_8px_-2px_color-mix(in_oklch,var(--primary)_50%,transparent)]" style={{ animation: `userIn 0.42s ${SPRING}` }}>{turn.question}</p>;
+  return <p className="ml-auto w-fit max-w-[80%] rounded-[18px] rounded-br-md bg-primary px-3.5 py-2 text-body font-medium leading-relaxed tracking-[-0.006em] text-primary-foreground shadow-[0_2px_8px_-2px_color-mix(in_oklch,var(--primary)_50%,transparent)]" style={{ animation: `userIn 0.42s ${SPRING}` }}>{turn.question}</p>;
 }
 
 function CollapsedTurn({ turn, onShown }: { turn: AiTurn; onShown: () => void }) {
@@ -377,7 +377,7 @@ function CollapsedTurn({ turn, onShown }: { turn: AiTurn; onShown: () => void })
   return (
     <div className="group mr-auto flex w-full items-center gap-2.5 rounded-full border border-black/[0.06] bg-card/85 px-3.5 py-2 shadow-[0_1px_2px_rgba(0,0,0,0.05),0_10px_24px_-16px_rgba(0,0,0,0.3)] backdrop-blur-xl transition-[transform,box-shadow] duration-300 hover:-translate-y-px" style={{ animation: `islandIn 0.5s ${SPRING}` }}>
       <span className="size-2 shrink-0 rounded-full island-pulse" style={{ background: toneHex.critical }} />
-      <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-muted-foreground">{turn.summary}</span>
+      <span className="min-w-0 flex-1 truncate text-label font-medium text-muted-foreground">{turn.summary}</span>
       <ChevronDown className="size-3.5 shrink-0 -rotate-90 text-muted-foreground/40" />
     </div>
   );
@@ -466,27 +466,27 @@ export function AiPanel({ onClose, embedded = false, contextView = "resources", 
     <div className={`opsia-ai relative flex ${embedded ? "h-full w-full min-w-0" : "h-screen w-[460px]"} flex-col overflow-hidden border-l border-black/[0.06] bg-gradient-to-b from-[oklch(0.99_0.002_255)] to-[oklch(0.97_0.003_255)] shadow-2xl`}>
       <header className="flex items-center gap-2.5 border-b border-black/[0.05] bg-white/60 px-3.5 py-3 backdrop-blur-xl">
         <span className="grid size-9 shrink-0 place-items-center rounded-[13px] bg-gradient-to-br from-primary to-[color-mix(in_oklch,var(--primary)_75%,black)] text-primary-foreground shadow-[0_2px_8px_-2px_color-mix(in_oklch,var(--primary)_55%,transparent)]"><Sparkles className="size-4" /></span>
-        <div className="min-w-0 flex-1"><h2 className="text-[14px] font-semibold leading-tight tracking-[-0.01em] text-black">Kyro AI</h2></div>
+        <div className="min-w-0 flex-1"><h2 className="text-body font-semibold leading-tight tracking-[-0.01em] text-black">Kyro AI</h2></div>
         <button className="grid size-8 place-items-center rounded-full text-black/65 transition-colors hover:bg-black/[0.05] hover:text-black" onClick={() => newChat()} title="새 대화" type="button"><Play className="size-[17px]" /></button>
         <button className="grid size-8 place-items-center rounded-full text-black/65 transition-colors hover:bg-black/[0.05] hover:text-black" onClick={() => setListOpen((v) => !v)} title="대화 목록" type="button"><SquarePen className="size-[17px]" /></button>
         <button className="grid size-8 place-items-center rounded-full text-black/65 transition-colors hover:bg-black/[0.05] hover:text-black" onClick={onClose} title="닫기" type="button"><X className="size-[17px]" /></button>
       </header>
       <div className="flex items-center gap-1.5 border-b border-black/[0.04] bg-white/30 px-3.5 py-2 text-black backdrop-blur">
-        <span className="text-[11px] font-medium text-black">맥락</span>
-        <span className="inline-flex items-center gap-1 rounded-full bg-black/[0.05] px-2 py-0.5 text-[11px] font-medium text-black"><Boxes className="size-3" />{contextView}</span>
-        <span className="inline-flex items-center gap-1 rounded-full bg-black/[0.05] px-2 py-0.5 text-[11px] font-medium text-black"><Server className="size-3" />{contextScope}</span>
+        <span className="text-caption font-medium text-black">맥락</span>
+        <span className="inline-flex items-center gap-1 rounded-full bg-black/[0.05] px-2 py-0.5 text-caption font-medium text-black"><Boxes className="size-3" />{contextView}</span>
+        <span className="inline-flex items-center gap-1 rounded-full bg-black/[0.05] px-2 py-0.5 text-caption font-medium text-black"><Server className="size-3" />{contextScope}</span>
       </div>
       {listOpen ? (
         <div className="absolute inset-x-0 top-[97px] z-10 border-b border-black/[0.06] bg-white/90 shadow-xl backdrop-blur-xl" style={{ animation: `fadeUp 0.2s ${SPRING}` }}>
           {conversations.status === "loading" ? (
-            <p className="flex items-center gap-2 px-3.5 py-3 text-[12.5px] text-muted-foreground"><Spinner className="size-3.5 ap-accent" decorative /> 대화 목록 불러오는 중…</p>
+            <p className="flex items-center gap-2 px-3.5 py-3 text-label text-muted-foreground"><Spinner className="size-3.5 ap-accent" decorative /> 대화 목록 불러오는 중…</p>
           ) : conversations.status === "unavailable" ? (
-            <p className="flex items-center gap-1.5 px-3.5 py-3 text-[12.5px] text-muted-foreground"><CircleAlert className="size-3.5" /> 대화 목록을 불러올 수 없습니다.</p>
+            <p className="flex items-center gap-1.5 px-3.5 py-3 text-label text-muted-foreground"><CircleAlert className="size-3.5" /> 대화 목록을 불러올 수 없습니다.</p>
           ) : conversations.items.length === 0 ? (
-            <p className="px-3.5 py-3 text-[12.5px] text-muted-foreground">저장된 대화가 없습니다.</p>
+            <p className="px-3.5 py-3 text-label text-muted-foreground">저장된 대화가 없습니다.</p>
           ) : (
             <ul className="grid gap-0.5 p-2">{conversations.items.map((c) => (
-              <li key={c.id}><button className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13px] text-black/80 transition-colors hover:bg-black/[0.04] hover:text-black" onClick={() => openConversation(c.id)} type="button"><Sparkles className="size-3.5 shrink-0 text-black/60" /><span className="flex-1 truncate">{c.title}</span>{c.updatedAt ? <span className="shrink-0 text-[11.5px] text-black/60">{c.updatedAt}</span> : null}</button></li>
+              <li key={c.id}><button className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-body text-black/80 transition-colors hover:bg-black/[0.04] hover:text-black" onClick={() => openConversation(c.id)} type="button"><Sparkles className="size-3.5 shrink-0 text-black/60" /><span className="flex-1 truncate">{c.title}</span>{c.updatedAt ? <span className="shrink-0 text-caption text-black/60">{c.updatedAt}</span> : null}</button></li>
             ))}</ul>
           )}
         </div>
@@ -498,14 +498,14 @@ export function AiPanel({ onClose, embedded = false, contextView = "resources", 
           detail.status === "loading" ? (
             <Thinking />
           ) : detail.status === "unavailable" ? (
-            <div className="mr-auto flex w-full max-w-[97%] items-center gap-2.5 rounded-2xl border border-black/[0.06] bg-card px-4 py-3 text-[12.5px]" style={{ animation: `fadeUp 0.35s ${SPRING}` }}>
+            <div className="mr-auto flex w-full max-w-[97%] items-center gap-2.5 rounded-2xl border border-black/[0.06] bg-card px-4 py-3 text-label" style={{ animation: `fadeUp 0.35s ${SPRING}` }}>
               <CircleAlert className="size-4 shrink-0" style={{ color: "var(--ap-red)" }} />
               <span className="flex-1 text-muted-foreground">이 대화의 상세 이력은 관측되지 않습니다.</span>
             </div>
           ) : detail.turns.length === 0 ? (
             <div className="mx-auto mt-8 grid max-w-[85%] place-items-center gap-2 text-center">
               <span className="grid size-11 place-items-center rounded-2xl bg-black/[0.04] text-muted-foreground"><Sparkles className="size-5" /></span>
-              <p className="text-[13px] text-muted-foreground">이 대화의 상세 이력은 관측되지 않습니다.</p>
+              <p className="text-body text-muted-foreground">이 대화의 상세 이력은 관측되지 않습니다.</p>
             </div>
           ) : (
             detail.turns.map(renderTurn)
@@ -515,13 +515,13 @@ export function AiPanel({ onClose, embedded = false, contextView = "resources", 
             {turns.length === 0 && !thinking ? (
               <div className="mx-auto mt-8 grid max-w-[85%] place-items-center gap-2 text-center">
                 <span className="grid size-11 place-items-center rounded-2xl bg-black/[0.04] text-muted-foreground"><Sparkles className="size-5" /></span>
-                <p className="text-[13px] text-muted-foreground">현재 화면 맥락으로 질문해 보세요. 답변은 관측된 근거에 기반합니다.</p>
+                <p className="text-body text-muted-foreground">현재 화면 맥락으로 질문해 보세요. 답변은 관측된 근거에 기반합니다.</p>
               </div>
             ) : null}
             {turns.map(renderTurn)}
             {thinking ? <Thinking /> : null}
             {error !== null ? (
-              <div className="mr-auto flex w-full max-w-[97%] items-center gap-2.5 rounded-2xl border border-black/[0.06] bg-card px-4 py-3 text-[12.5px]" style={{ animation: `fadeUp 0.35s ${SPRING}` }}>
+              <div className="mr-auto flex w-full max-w-[97%] items-center gap-2.5 rounded-2xl border border-black/[0.06] bg-card px-4 py-3 text-label" style={{ animation: `fadeUp 0.35s ${SPRING}` }}>
                 <CircleAlert className="size-4 shrink-0" style={{ color: "var(--ap-red)" }} />
                 <span className="flex-1 text-muted-foreground">답변을 가져오지 못했습니다.</span>
                 <button className="shrink-0 rounded-lg px-2.5 py-1 font-medium ap-accent transition-colors hover:bg-black/[0.04]" onClick={() => send(error)} type="button">다시 시도</button>
@@ -533,11 +533,11 @@ export function AiPanel({ onClose, embedded = false, contextView = "resources", 
 
       <div className="border-t border-black/[0.05] bg-white/50 px-3.5 pb-3.5 pt-3 backdrop-blur-xl">
         {suggestions.status === "ready" && suggestions.items.length > 0 ? (
-          <div className="mb-2.5 flex flex-wrap gap-1.5">{suggestions.items.map((s) => <button className="rounded-full border border-black/[0.07] bg-white/80 px-3 py-1.5 text-[11.5px] font-medium text-muted-foreground shadow-[0_1px_2px_rgba(0,0,0,0.03)] transition-all hover:-translate-y-px hover:border-black/[0.12] hover:text-foreground hover:shadow-[0_2px_6px_-2px_rgba(0,0,0,0.12)]" key={s.id} onClick={() => send(s.prompt)} type="button">{s.label}</button>)}</div>
+          <div className="mb-2.5 flex flex-wrap gap-1.5">{suggestions.items.map((s) => <button className="rounded-full border border-black/[0.07] bg-white/80 px-3 py-1.5 text-caption font-medium text-muted-foreground shadow-[0_1px_2px_rgba(0,0,0,0.03)] transition-all hover:-translate-y-px hover:border-black/[0.12] hover:text-foreground hover:shadow-[0_2px_6px_-2px_rgba(0,0,0,0.12)]" key={s.id} onClick={() => send(s.prompt)} type="button">{s.label}</button>)}</div>
         ) : null}
         <div className="relative rounded-[20px] border border-black/[0.08] bg-white/90 shadow-[0_1px_2px_rgba(0,0,0,0.04),inset_0_1px_0_rgba(255,255,255,0.6)] transition-all focus-within:border-primary/40 focus-within:shadow-[0_0_0_4px_color-mix(in_oklch,var(--primary)_12%,transparent)]">
           <textarea
-            className="min-h-[60px] w-full resize-none rounded-[20px] bg-transparent px-3.5 py-3 pr-12 text-[13.5px] leading-relaxed tracking-[-0.006em] text-black outline-none placeholder:text-muted-foreground/60"
+            className="min-h-[60px] w-full resize-none rounded-[20px] bg-transparent px-3.5 py-3 pr-12 text-body leading-relaxed tracking-[-0.006em] text-black outline-none placeholder:text-muted-foreground/60"
             onChange={(e) => setInput(e.currentTarget.value)}
             onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(input); } }}
             placeholder="질문 입력"
