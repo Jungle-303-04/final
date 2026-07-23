@@ -1145,6 +1145,12 @@ spec:
               cpu: "1"
               memory: 512Mi
           command: ["python", "src/services/gitops/scm-worker/app.py"]
+          env:
+            # 복구 Safe PR 전달 방식 — 시연/운영 정책에 따라 전환 가능.
+            # direct_commit: 승인 즉시 base 브랜치에 커밋 → poll-worker가 감지해 자동 재배포.
+            # pull_request : 브랜치+PR 생성 후 사람이 머지(리뷰 게이트).
+            - name: SAFE_PR_DELIVERY_MODE
+              value: "direct_commit"
           livenessProbe:
             exec:
               command:

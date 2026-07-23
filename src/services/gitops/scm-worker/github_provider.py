@@ -71,6 +71,22 @@ PATCH_COMMIT_MESSAGE_PREFIX = "Apply manifest patch"
 INVALID_REPO_REF_MESSAGE = "safe pr repo_ref must be an owner/repo GitHub repository path"
 INVALID_BRANCH_REF_MESSAGE = "safe pr branch must be a safe GitHub branch ref"
 STALE_BASE_MESSAGE = "safe pr base branch no longer matches the approved commit"
+
+# Safe PR 전달 방식 — 환경설정으로 선택한다(하드코딩 금지).
+#   pull_request(기본): 브랜치 + PR 을 열어 사람이 머지한다(리뷰 게이트).
+#   direct_commit     : 승인된 패치를 base 브랜치에 직접 커밋한다. 커밋은
+#                       github-poll-worker 가 감지해 기존 GitOps 파이프라인
+#                       (render→diff→policy→apply)으로 즉시 재배포된다.
+SAFE_PR_DELIVERY_MODE_ENV = "SAFE_PR_DELIVERY_MODE"
+SAFE_PR_DELIVERY_PULL_REQUEST = "pull_request"
+SAFE_PR_DELIVERY_DIRECT_COMMIT = "direct_commit"
+
+
+def safe_pr_delivery_mode() -> str:
+    value = env(SAFE_PR_DELIVERY_MODE_ENV, SAFE_PR_DELIVERY_PULL_REQUEST).strip().lower()
+    if value == SAFE_PR_DELIVERY_DIRECT_COMMIT:
+        return SAFE_PR_DELIVERY_DIRECT_COMMIT
+    return SAFE_PR_DELIVERY_PULL_REQUEST
 INVALID_SOURCE_RESPONSE_MESSAGE = "GitHub manifest source response is incomplete"
 BRANCH_COLLISION_MESSAGE = "safe pr head branch already exists without a matching open PR"
 AUTHORITY_MISMATCH_MESSAGE = "safe pr structured patch does not match workflow authority"
@@ -299,7 +315,18 @@ class GithubScmProvider:
                     manifest_edit_authority,
                     context,
                 )
-            if structured:
+            direct_commit = safe_pr_delivery_mode() == SAFE_PR_DELIVERY_DIRECT_COMMIT
+            if structured and direct_commit:
+                expected_base_sha = patch_plans[0].expected_base_sha if patch_plans[0] else ""
+                if expected_base_sha != base_sha:
+                    raise RuntimeError(STALE_BASE_MESSAGE)
+                patch_contents = await self.materialize_patch_contents(
+                    client, repo, base_sha, request, patch_plans, context,
+                )
+                await self.put_change_document(client, repo, base_branch, request, context)
+                await self.put_manifest_patches(client, repo, base_branch, patch_contents, context)
+                pr_url = await self.branch_head_commit_url(client, repo, base_branch, context)
+            elif structured:
                 existing = await self.find_existing_pr(
                     client,
                     repo,
@@ -352,6 +379,13 @@ class GithubScmProvider:
                     pr_url = await self.create_or_reuse_pr(
                         client, repo, branch, base_branch, request, context
                     )
+            elif direct_commit:
+                patch_contents = await self.materialize_patch_contents(
+                    client, repo, base_sha, request, patch_plans, context,
+                )
+                await self.put_change_document(client, repo, base_branch, request, context)
+                await self.put_manifest_patches(client, repo, base_branch, patch_contents, context)
+                pr_url = await self.branch_head_commit_url(client, repo, base_branch, context)
             else:
                 patch_contents = await self.materialize_patch_contents(
                     client,
@@ -801,6 +835,23 @@ class GithubScmProvider:
             and change.get("new_desired", change.get("after")) == replacement.current_image
         ]
         return len(matches) == 1
+
+    async def branch_head_commit_url(
+        self,
+        client: httpx.AsyncClient,
+        repo: str,
+        branch: str,
+        context: dict[str, object] | None = None,
+    ) -> str:
+        """direct_commit 전달 결과 링크 — base 브랜치 head 커밋의 실제 URL."""
+        response = await client.get(f"/repos/{repo}/commits/{quote(branch, safe='')}")
+        if context is not None:
+            log_provider_response("github.head_commit", response, context)
+        response.raise_for_status()
+        html_url = response.json().get("html_url")
+        if isinstance(html_url, str) and html_url:
+            return html_url
+        return f"https://github.com/{repo}/commits/{branch}"
 
     async def put_content_file(
         self,
