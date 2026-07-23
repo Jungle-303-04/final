@@ -12,6 +12,9 @@ from sqlalchemy.dialects.postgresql import JSONB
 from domains.dashboard.models import RcaTimeline
 from domains.dashboard.repository import (
     OPEN_INCIDENT_STATUSES,
+    effective_confidence_column,
+    effective_root_cause_column,
+    issue_detail_projection_columns,
     issue_severity_projection,
     serialize_timeline_row,
 )
@@ -367,8 +370,9 @@ def _authorized_issues(workspace_id: str, cluster_ids: set[str]) -> Select[Any]:
             table.c.application_ids_complete,
             table.c.labels,
             table.c.labels_complete,
-            table.c.root_cause,
-            table.c.confidence,
+            effective_root_cause_column(table),
+            effective_confidence_column(table),
+            *issue_detail_projection_columns(table),
             table.c.evidence_ref,
             table.c.supporting_evidence,
             table.c.missing_evidence,

@@ -32,6 +32,21 @@ BACKLOG_STATUS_OPEN = "open"
 BACKLOG_STATUS_RESOLVED = "resolved"
 BACKLOG_RULE_RESOLVED_REASON = "matching RCA rule is now available"
 OPEN_RECOVERY_PLAN_STATUSES = (RECOVERY_PLAN_STATUS_SELECTION_REQUESTED,)
+RCA_REPORT_PAYLOAD_ONLY_FIELDS = (
+    "first_seen_at",
+    "evidence_summary",
+    "evidence_bundle_summary",
+    RCA_NARRATIVE_PAYLOAD_KEY,
+    RCA_NARRATIVE_STATUS_KEY,
+)
+
+
+def rca_report_storage_projection(body: JsonObject) -> JsonObject:
+    """Return only fields backed by dedicated ``rca_reports`` columns."""
+    projection = rca_report_projection(body)
+    for field in RCA_REPORT_PAYLOAD_ONLY_FIELDS:
+        projection.pop(field, None)
+    return projection
 
 
 def _rca_report_summary_columns() -> tuple[Any, ...]:
@@ -461,14 +476,10 @@ class RcaRepository(DatabaseConnection):
         body: JsonObject,
     ) -> None:
         table = RcaReport.__table__
-        projection = rca_report_projection(body)
+        projection = rca_report_storage_projection(body)
         # Narrative and additive evidence summaries remain in the existing
-        # JSON payload. The latter are exposed by ``rca_report_summary`` but
-        # intentionally have no dedicated storage columns.
-        projection.pop(RCA_NARRATIVE_PAYLOAD_KEY, None)
-        projection.pop(RCA_NARRATIVE_STATUS_KEY, None)
-        projection.pop("evidence_summary", None)
-        projection.pop("evidence_bundle_summary", None)
+        # JSON payload. The same is true for first_seen_at; the report list reads
+        # it from payload and ``rca_reports`` intentionally has no such column.
         statement = pg_insert(table).values(
             workspace_id=workspace_id,
             correlation_id=correlation_id,
