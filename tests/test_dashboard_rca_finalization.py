@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from domains.dashboard.repository import (
     OPEN_INCIDENT_STATUSES,
+    _rca_timeline_response_columns,
     issue_detail_projection,
     timeline_update_from_event,
 )
@@ -159,3 +160,30 @@ def test_completed_payload_projects_narrative_copy_for_issue_detail() -> None:
         "evidence_summary": "candidate label과 readiness 503이 함께 관측됐습니다.",
         "evidence_bundle_summary": "5개 provider가 같은 창에서 완료됐습니다.",
     }
+
+
+def test_resolved_historical_issue_gets_human_situation_summary_at_query_time() -> None:
+    payload = {
+        "incident": {
+            "summary": "ReplicaSet game-room-0의 readiness 응답이 실패했습니다.",
+        },
+        "evaluations": [
+            {
+                "reason": "Candidate Pod와 readiness 503 상태를 함께 검토해야 합니다.",
+            }
+        ],
+    }
+    columns = {
+        column.name
+        for column in _rca_timeline_response_columns(include_issue_severity=True)
+    }
+
+    assert {
+        "situation_summary",
+        "recommended_action_summary",
+        "evidence_summary",
+        "evidence_bundle_summary",
+    }.issubset(columns)
+    assert issue_detail_projection(payload)["situation_summary"] == (
+        "ReplicaSet game-room-0의 readiness 응답이 실패했습니다."
+    )
