@@ -2000,6 +2000,60 @@ class InventoryRepository(DatabaseConnection):
             dict(row["summary"] or {}),
         )
 
+    def get_actual_resource_manifest(
+        self,
+        workspace_id: str,
+        cluster_id: str,
+        namespace: str | None,
+        resource: str,
+    ) -> JsonObject | None:
+        """연결 프리뷰용 live 관측 조회 — 최신 inventory 리소스의 관측 요약(raw)과
+        메타를 반환한다. resource 는 gitops resource_ref("kind/name", kind 소문자).
+
+        재구성(live 매니페스트 조립)은 호출부(gitops 프리뷰 서비스)가 담당해 도메인
+        경계를 지킨다. 관측이 없으면 None.
+        """
+        kind, _, name = str(resource).partition("/")
+        if not kind or not name:
+            return None
+        table = ClusterInventoryResourceRecord.__table__
+        statement = (
+            select(
+                table.c.kind,
+                table.c.name,
+                table.c.namespace,
+                table.c.api_version,
+                table.c.resource_version,
+                table.c.raw,
+                table.c.summary,
+                table.c.observed_at,
+            )
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.cluster_id == cluster_id,
+                func.lower(table.c.kind) == kind.strip().lower(),
+                table.c.name == name,
+                table.c.deleted_at.is_(None),
+            )
+            .order_by(table.c.last_seen_at.desc())
+            .limit(1)
+        )
+        if namespace:
+            statement = statement.where(table.c.namespace == namespace)
+        with self.connection() as conn:
+            row = conn.execute(statement).mappings().first()
+        if row is None:
+            return None
+        return {
+            "kind": row["kind"],
+            "name": row["name"],
+            "namespace": row["namespace"],
+            "api_version": row["api_version"],
+            "resource_version": row["resource_version"],
+            "raw": dict(row["raw"] or {}),
+            "summary": dict(row["summary"] or {}),
+        }
+
     def list_cluster_usage_samples(
         self,
         workspace_id: str,

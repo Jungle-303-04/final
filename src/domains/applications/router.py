@@ -13,6 +13,7 @@ from domains.application_filter.query import ApplicationFilters, parse_applicati
 from domains.applications.ownership import (
     candidate_identity_keys,
     find_resource_conflicts,
+    resource_identity_key,
 )
 from domains.applications.product_projection import (
     APPLICATION_TOPOLOGY_NODE_LIMIT,
@@ -27,6 +28,11 @@ from domains.applications.source_validation import (
     persist_repository_connect_validation,
     validated_manifest_resources,
 )
+from domains.gitops.live_projection import (
+    project_resource_diff,
+    reconstruct_live_object,
+)
+from domains.gitops.live_projection import resource_ref as live_resource_ref
 from domains.gitops.repository import (
     derive_application_id,
     derive_repository_id,
@@ -64,6 +70,7 @@ from packages.contracts.gateway.requests import (
     ApplicationConnectRequest,
     ApplicationUpsertRequest,
     DeploymentBindingUpsertRequest,
+    RepositoryConnectionPreviewRequest,
     RepositoryDisconnectRequest,
     RepositoryManifestValidationRequest,
 )
@@ -74,6 +81,9 @@ from packages.contracts.gateway.responses import (
     ApplicationProductListResponse,
     ApplicationResponse,
     DeploymentBindingResponse,
+    RepositoryConnectionPreviewFieldChange,
+    RepositoryConnectionPreviewResource,
+    RepositoryConnectionPreviewResponse,
     RepositoryConnectionStatusResponse,
     RepositoryListItem,
     RepositoryListResponse,
@@ -1084,6 +1094,178 @@ async def upsert_application(
         stored = upsert_application_or_404(db, body)
     application = db.get_application(workspace_id, stored["application_id"]) or stored
     return ApplicationResponse(application=application)
+
+
+@router.post(
+    gateway_routes.APPLICATION_CONNECT_PREVIEW_PATH,
+    response_model=RepositoryConnectionPreviewResponse,
+)
+async def connect_application_preview(
+    payload: RepositoryConnectionPreviewRequest,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+    discovery: RepositoryDiscoveryService = Depends(repository_discovery_service),
+) -> RepositoryConnectionPreviewResponse:
+    """연결 직전 desired(git) vs live(cluster) 프리뷰 — 생성/변경/유지/겹침을 미리 계산.
+
+    읽기 전용: 상태를 만들지 않는다. diff 는 실제 리컨사일과 같은 diffing 엔진을 쓰고,
+    live 는 이미 관측된 inventory 에서 재구성한다. 관측이 없으면 생성 예정으로 본다.
+    """
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    require_deployment_target_cluster(db, workspace_id, payload.cluster_id)
+    require_cluster_access(
+        db,
+        current,
+        workspace_id,
+        payload.cluster_id,
+        Permission.DEPLOY_RUN.value,
+    )
+    try:
+        normalized_repo_ref = normalize_github_repo_ref(payload.repo_ref)
+    except RepositoryDiscoveryError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    preflight_repository = require_repository_manage_if_registered(
+        db,
+        current,
+        workspace_id,
+        normalized_repo_ref,
+    )
+    preflight_repository_id = str(
+        (preflight_repository or {}).get("repository_id")
+        or derive_repository_id({"workspace_id": workspace_id, "repo_ref": normalized_repo_ref})
+    )
+    stored_ref = authorized_stored_repo_credential_ref(
+        db,
+        current,
+        workspace_id,
+        preflight_repository_id,
+        preflight_repository,
+    )
+    credential_ref = stored_ref or str((preflight_repository or {}).get("credential_ref") or "")
+    token = database_credential_token(db, workspace_id, credential_ref)
+    # PAT·저장 자격증명이 없고 App 설치 id 만 있으면(비공개 레포) 설치 토큰 폴백.
+    if token is None and payload.installation_id and payload.installation_id.strip():
+        from domains.scm.github_app_credentials import resolve_installation_token
+
+        try:
+            token = await resolve_installation_token(
+                db, workspace_id, payload.installation_id.strip()
+            )
+        except Exception:  # noqa: BLE001 - App 미구성·발급 실패는 무인증 degrade
+            token = None
+    preview_discovery = discovery_with_token(discovery, token)
+
+    try:
+        revision, desired_objects, warnings = await preview_discovery.render_desired_objects(
+            RepositoryManifestValidationRequest(
+                repo_ref=normalized_repo_ref,
+                branch=payload.branch,
+                manifest_path=payload.manifest_path,
+                source_type=payload.source_type,
+                values_path=payload.values_path,
+            )
+        )
+    except RepositoryDiscoveryError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    owned_lister = getattr(db, "list_owned_resource_identities", None)
+    owned_index = owned_lister(workspace_id, payload.cluster_id) if callable(owned_lister) else {}
+    if not isinstance(owned_index, Mapping):
+        owned_index = {}
+    manifest_reader = getattr(db, "get_actual_resource_manifest", None)
+
+    resources: list[RepositoryConnectionPreviewResource] = []
+    counts = {"create": 0, "update": 0, "in_sync": 0, "conflict": 0}
+    any_live = False
+    seen_identities: set[str] = set()
+    for obj in desired_objects:
+        meta = obj.get("metadata") if isinstance(obj.get("metadata"), Mapping) else {}
+        kind = str(obj.get("kind") or "").strip()
+        name = str((meta or {}).get("name") or "").strip()
+        api_version = str(obj.get("apiVersion") or "").strip()
+        if not kind or not name:
+            continue
+        obj_ns = (meta or {}).get("namespace")
+        effective_ns = str(obj_ns) if obj_ns else payload.namespace
+        identity = resource_identity_key(api_version, kind, effective_ns, name)
+        if identity in seen_identities:
+            continue
+        seen_identities.add(identity)
+
+        owner = owned_index.get(identity)
+        if owner:
+            counts["conflict"] += 1
+            resources.append(
+                RepositoryConnectionPreviewResource(
+                    api_version=api_version,
+                    kind=kind,
+                    namespace=effective_ns,
+                    name=name,
+                    change="conflict",
+                    live_observed=False,
+                    status="review_required",
+                    owned_by=str(owner.get("app_name") or owner.get("application_id") or "")
+                    or None,
+                )
+            )
+            continue
+
+        live_row = None
+        if callable(manifest_reader):
+            live_row = manifest_reader(
+                workspace_id,
+                payload.cluster_id,
+                effective_ns,
+                live_resource_ref(kind, name),
+            )
+        live_obj = (
+            reconstruct_live_object(kind, live_row.get("raw"))
+            if isinstance(live_row, Mapping)
+            else None
+        )
+        live_observed = isinstance(live_row, Mapping)
+        any_live = any_live or live_observed
+        diff = project_resource_diff(obj, live_obj)
+        change = str(diff["change"])
+        counts[change] = counts.get(change, 0) + 1
+        resources.append(
+            RepositoryConnectionPreviewResource(
+                api_version=api_version,
+                kind=kind,
+                namespace=effective_ns,
+                name=name,
+                change=change,
+                live_observed=live_observed,
+                status=str(diff.get("status") or ""),
+                field_changes=[
+                    RepositoryConnectionPreviewFieldChange(**field_change)
+                    for field_change in diff["field_changes"]
+                ],
+            )
+        )
+
+    return RepositoryConnectionPreviewResponse(
+        repo_ref=normalized_repo_ref,
+        branch=payload.branch,
+        manifest_path=payload.manifest_path,
+        cluster_id=payload.cluster_id,
+        namespace=payload.namespace,
+        revision=revision,
+        valid=bool(resources),
+        live_observed=any_live,
+        create_count=counts["create"],
+        update_count=counts["update"],
+        in_sync_count=counts["in_sync"],
+        conflict_count=counts["conflict"],
+        resources=resources,
+        warnings=warnings,
+        errors=[],
+    )
 
 
 @router.post(gateway_routes.APPLICATION_CONNECT_PATH, response_model=ApplicationResponse)
