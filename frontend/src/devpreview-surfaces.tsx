@@ -700,11 +700,18 @@ function RecoveryCandidateDetails({
           onClick={onSelect}
           style={{ border: selected ? `1px solid ${TINT.ok.bd}` : "none", borderRadius: 8, background: selected ? TINT.ok.bg : pending ? UI.bg2 : BLUE, color: selected ? TINT.ok.fg : pending ? UI.ink3 : UI.card, padding: "7px 13px", fontSize: TYPE.label2, fontWeight: 700, cursor: selected || pending ? "default" : "pointer", boxShadow: selected || pending ? "none" : `0 2px 6px ${blueA(0.2)}` }}
         >
-          {selected ? "선택됨" : pending ? "선택 중…" : "복구 조치 선택"}
+          {selected ? "선택됨" : pending ? "선택 중…" : recoveryActionButtonLabel(candidate.route)}
         </button>
       </div>
     </div>
   );
+}
+
+function recoveryActionButtonLabel(route: string): string {
+  if (route === "auto") return "자동 복구 실행";
+  if (route === "safe_pr") return "복구 PR 생성";
+  if (route === "approval_required") return "추가 검토 요청";
+  return "복구 조치 선택";
 }
 
 function RecommendedRecoveryChecks({ candidate }: { candidate: RecoveryActionCandidate }) {
