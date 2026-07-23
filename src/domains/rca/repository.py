@@ -32,21 +32,35 @@ BACKLOG_STATUS_OPEN = "open"
 BACKLOG_STATUS_RESOLVED = "resolved"
 BACKLOG_RULE_RESOLVED_REASON = "matching RCA rule is now available"
 OPEN_RECOVERY_PLAN_STATUSES = (RECOVERY_PLAN_STATUS_SELECTION_REQUESTED,)
-RCA_REPORT_PAYLOAD_ONLY_FIELDS = (
-    "first_seen_at",
-    "evidence_summary",
-    "evidence_bundle_summary",
-    RCA_NARRATIVE_PAYLOAD_KEY,
-    RCA_NARRATIVE_STATUS_KEY,
+RCA_REPORT_REPOSITORY_OWNED_COLUMNS = frozenset(
+    {
+        "id",
+        "workspace_id",
+        "correlation_id",
+        "root_cause",
+        "action",
+        "payload",
+        "created_at",
+    }
+)
+RCA_REPORT_STORAGE_PROJECTION_COLUMNS = frozenset(RcaReport.__table__.c.keys()).difference(
+    RCA_REPORT_REPOSITORY_OWNED_COLUMNS
 )
 
 
 def rca_report_storage_projection(body: JsonObject) -> JsonObject:
-    """Return only fields backed by dedicated ``rca_reports`` columns."""
+    """Filter report projection through the actual storage schema.
+
+    New response-only fields can be added to ``rca_report_projection`` without
+    becoming unexpected INSERT kwargs. A field reaches dedicated storage only
+    after the model/migration explicitly adds its column.
+    """
     projection = rca_report_projection(body)
-    for field in RCA_REPORT_PAYLOAD_ONLY_FIELDS:
-        projection.pop(field, None)
-    return projection
+    return {
+        field: value
+        for field, value in projection.items()
+        if field in RCA_REPORT_STORAGE_PROJECTION_COLUMNS
+    }
 
 
 def _rca_report_summary_columns() -> tuple[Any, ...]:

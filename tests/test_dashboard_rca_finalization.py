@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import domains.rca.repository as rca_repository
 from domains.dashboard.repository import (
     OPEN_INCIDENT_STATUSES,
     _rca_timeline_response_columns,
@@ -47,6 +48,27 @@ def test_rca_report_storage_projection_drops_payload_only_first_seen_at() -> Non
 
     assert "first_seen_at" not in projection
     assert set(projection).issubset(set(RcaReport.__table__.c.keys()))
+
+
+def test_future_payload_only_projection_field_cannot_become_insert_kwarg(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        rca_repository,
+        "rca_report_projection",
+        lambda _body: {
+            "incident_id": "incident-1",
+            "confidence": 0.95,
+            "future_payload_only_field": "must remain inside payload",
+        },
+    )
+
+    projection = rca_repository.rca_report_storage_projection({"future": "value"})
+
+    assert projection == {
+        "incident_id": "incident-1",
+        "confidence": 0.95,
+    }
 
 
 def test_analysis_blocked_projects_its_diagnosis_before_recovery_events() -> None:
