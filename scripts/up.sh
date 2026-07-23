@@ -821,6 +821,7 @@ MANAGEMENT_BASE_URL="http://${MGMT_NODE_IP}:30080"
 
 echo "==> deploying target cluster with management URL: ${MANAGEMENT_BASE_URL}"
 GATEWAY_PORT="${GATEWAY_PORT:-18080}"
+INSTALL_TELEMETRY="${INSTALL_TELEMETRY:-1}"
 BASE_URL="${BASE_URL:-http://localhost:${GATEWAY_PORT}}" \
 MANAGEMENT_BASE_URL="${MANAGEMENT_BASE_URL}" \
 TARGET_CONTEXT="kind-${TARGET_CLUSTER}" \
@@ -828,27 +829,16 @@ TARGET_CLUSTER_ID="${TARGET_RUNTIME_CLUSTER_ID}" \
 TARGET_ENVIRONMENT="test" \
 EVIDENCE_INTERVAL_SECONDS="${EVIDENCE_INTERVAL_SECONDS}" \
 IMAGE_NAME="${IMAGE_NAME}" \
+INSTALL_TELEMETRY="${INSTALL_TELEMETRY}" \
+MINIO_ROOT_USER="${MINIO_ROOT_USER}" \
+MINIO_ROOT_PASSWORD="${MINIO_ROOT_PASSWORD}" \
 INSTALL_SAMPLE_WORKLOAD="${INSTALL_SAMPLE_WORKLOAD:-false}" \
 SAMPLE_WORKLOAD_NAME="${SAMPLE_WORKLOAD_NAME:-}" \
 SAMPLE_WORKLOAD_IMAGE="${SAMPLE_WORKLOAD_IMAGE:-}" \
 bash "${ROOT_DIR}/scripts/register-target.sh"
 
-# target 텔레메트리 스택(Prometheus/Loki/Tempo/OTel) 설치 — evidence provider 실데이터 소스.
-# helm 미설치·오프라인 환경은 INSTALL_TELEMETRY=0 으로 건너뛴 뒤 나중에 수동 실행한다.
-INSTALL_TELEMETRY="${INSTALL_TELEMETRY:-1}"
 if [ "${INSTALL_TELEMETRY}" = "1" ]; then
-  echo "==> installing telemetry stack on target cluster"
-  if MINIO_ROOT_USER="${MINIO_ROOT_USER}" \
-    MINIO_ROOT_PASSWORD="${MINIO_ROOT_PASSWORD}" \
-    TARGET_CONTEXT="kind-${TARGET_CLUSTER}" \
-    bash "${ROOT_DIR}/scripts/install-telemetry.sh"; then
-    echo "==> telemetry stack ready"
-    configure_local_prometheus
-  else
-    echo "WARN: telemetry install failed — 재시도: TARGET_CONTEXT=kind-${TARGET_CLUSTER} bash scripts/install-telemetry.sh" >&2
-  fi
-else
-  echo "==> skipping telemetry install (INSTALL_TELEMETRY=0)"
+  configure_local_prometheus
 fi
 
 echo
