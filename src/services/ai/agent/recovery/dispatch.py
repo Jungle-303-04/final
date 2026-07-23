@@ -152,6 +152,7 @@ DEFAULT_APPROVAL_REQUIRED_CONTEXT: JsonObject = {
     "reason": "선택된 복구 조치는 자동 실행 조건을 충족하지 않아 운영자 확인이 필요합니다.",
     "next_action": "review_recovery_action",
 }
+SAFE_PR_TITLE_MAX_LENGTH = 120
 
 
 @dataclass(frozen=True)
@@ -261,21 +262,9 @@ def build_safe_pr_request_body(
                 "route": selected.route,
             },
         )
-    body = (
-        f"{plan.summary}\n\n"
-        f"선택 조치: {selected.title}\n"
-        f"대상: {draft.namespace}/{draft.resource_kind}/{draft.resource_name}\n"
-        f"위험도: {selected.risk_level}\n"
-        f"영향 범위: {selected.blast_radius}\n\n"
-        f"이유:\n{draft.reason}\n\n"
-        "검증:\n"
-        + "\n".join(f"- {check}" for check in selected.validation_checks)
-        + "\n\n롤백:\n"
-        + selected.rollback_plan
-    )
     return SafePrRequestedBody(
-        title=f"{selected.title}: {draft.resource_name}",
-        body=body,
+        title=recovery_safe_pr_title(selected),
+        body=recovery_safe_pr_body(plan, selected),
         provider=GitHub.PROVIDER,
         patches=patches,
         pr_kind=safe_pr_kind(selected),
@@ -316,6 +305,105 @@ def build_safe_pr_request_body(
         approval_ref=as_optional_str(draft.params.get("approval_ref")),
         policy_decision_ref=as_optional_str(draft.params.get("policy_decision_ref")),
     )
+
+
+def recovery_safe_pr_title(selected: RecoveryActionCandidate) -> str:
+    action = one_line(selected.title) or "복구 설정 적용"
+    resource = one_line(selected.draft.resource_name) or "대상 리소스"
+    title = f"[복구] {resource} - {action}"
+    if len(title) <= SAFE_PR_TITLE_MAX_LENGTH:
+        return title
+    return f"{title[: SAFE_PR_TITLE_MAX_LENGTH - 1].rstrip()}…"
+
+
+def recovery_safe_pr_body(
+    plan: RecoveryPlan,
+    selected: RecoveryActionCandidate,
+) -> str:
+    draft = selected.draft
+    target = " / ".join(
+        part
+        for part in (
+            one_line(draft.namespace),
+            one_line(draft.resource_kind),
+            one_line(draft.resource_name),
+        )
+        if part
+    )
+    reason = selected.recommendation_reason or draft.reason or selected.description
+    expected_outcome = selected.expected_outcome or "적용 후 검증 항목을 기준으로 정상화를 확인합니다."
+    sections = [
+        "## 복구 개요",
+        "",
+        paragraph(plan.summary, "선택한 복구 조치를 GitOps 변경으로 제안합니다."),
+        "",
+        f"- **복구 조치:** {one_line(selected.title) or '복구 설정 적용'}",
+        f"- **대상:** `{target or '대상 미확인'}`",
+        f"- **영향 범위:** {one_line(selected.blast_radius) or '확인 필요'}",
+        f"- **조치 위험도:** {recovery_risk_label(selected.risk_level)}",
+        "",
+        "## 변경 내용",
+        "",
+        paragraph(selected.description, "선택한 복구 조치를 매니페스트에 반영합니다."),
+        "",
+        f"**선택 이유:** {paragraph(reason, '복구 후보의 근거를 확인해 주세요.')}",
+        "",
+        f"**기대 결과:** {paragraph(expected_outcome, '적용 후 정상화 여부를 확인합니다.')}",
+        "",
+        "## 사전 확인",
+        "",
+        *checklist(selected.prerequisites, "별도로 정의된 사전 확인 항목이 없습니다."),
+        "",
+        "## 적용 후 검증",
+        "",
+        *checklist(selected.validation_checks, "별도로 정의된 검증 항목이 없습니다."),
+        "",
+        "## 실패 시 복원",
+        "",
+        paragraph(selected.rollback_plan, "복원 계획이 정의되지 않았습니다."),
+        "",
+        "<details>",
+        "<summary>추적 정보</summary>",
+        "",
+        f"- 복구 계획: `{plan.plan_id}`",
+        f"- 장애: `{plan.incident_id}`",
+        f"- 조치: `{selected.action_id}`",
+        "",
+        "</details>",
+        "",
+        "---",
+        "",
+        "> Kyro 복구 파이프라인에서 생성된 PR입니다. 적용 전 변경 내용과 검증 계획을 확인해 주세요.",
+    ]
+    return "\n".join(sections).strip()
+
+
+def one_line(value: object) -> str:
+    return " ".join(str(value or "").split())
+
+
+def paragraph(value: object, fallback: str) -> str:
+    normalized = str(value or "").strip()
+    return normalized or fallback
+
+
+def checklist(items: list[str], fallback: str) -> list[str]:
+    normalized = [one_line(item) for item in items if one_line(item)]
+    if not normalized:
+        return [f"- {fallback}"]
+    return [f"- [ ] {item}" for item in normalized]
+
+
+def recovery_risk_label(value: str) -> str:
+    normalized = one_line(value).casefold()
+    labels = {
+        "low": "낮음",
+        "medium": "보통",
+        "moderate": "보통",
+        "high": "높음",
+        "critical": "매우 높음",
+    }
+    return labels.get(normalized, one_line(value) or "확인 필요")
 
 
 def safe_pr_kind(selected: RecoveryActionCandidate) -> str:

@@ -24,6 +24,23 @@ export function recoveryDisplayedStep(progress: RecoveryProgressState): number {
   return Math.min(5, progress.step + 1);
 }
 
+export function withCreatedPullRequest(
+  progress: RecoveryProgressState,
+  prUrl: string | null | undefined,
+  label: "PR 생성됨" | "PR 검토 필요",
+): RecoveryProgressState {
+  if (!prUrl?.trim() || progress.phase === "completed" || progress.phase === "failed") {
+    return progress;
+  }
+  return {
+    ...progress,
+    phase: "verifying",
+    label,
+    step: Math.max(progress.step, 3),
+    tone: "approval",
+  };
+}
+
 const ANALYSIS_COMPLETED_STATUSES = new Set([
   "rca_completed",
   "followup_required",
@@ -46,10 +63,17 @@ const VERIFYING_STATUSES = new Set([
 const EXECUTING_STATUSES = new Set(["command_requested", "command_dispatched", "command_queued"]);
 const SELECTED_STATUSES = new Set(["recovery_selected", "approval_recommended"]);
 
-const FAILED_SUBJECTS = new Set(["command.rejected", "safe_pr.failed", "workflow.failed"]);
+const FAILED_SUBJECTS = new Set([
+  "command.rejected",
+  "safe_pr.failed",
+  "workflow.failed",
+  "workflow.run.failed",
+]);
 const COMPLETED_SUBJECTS = new Set(["incident.resolved"]);
 const VERIFYING_SUBJECTS = new Set([
   "command.completed",
+  "rollout.diagnosed",
+  "workflow.run.completed",
   "safe_pr.requested",
   "safe_pr.patch_prepared",
   "safe_pr.ready_for_creation",
@@ -150,7 +174,11 @@ function failureStep(status: string, subject: string, auditSubjects: readonly st
     status === "pr_failed"
     || subject === "safe_pr.failed"
     || subject === "workflow.failed"
-    || auditSubjects.some((value) => value === "safe_pr.failed" || value === "workflow.failed")
+    || auditSubjects.some(
+      (value) => value === "safe_pr.failed"
+        || value === "workflow.failed"
+        || value === "workflow.run.failed",
+    )
   ) return 3;
   if (
     status === "command_rejected"

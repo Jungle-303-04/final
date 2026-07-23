@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/exhaustive-deps, react-hooks/set-state-in-effect */
-// ⚠ VP-021 사용성 프리뷰 (더미 · 자가 스트리밍 재생). 배선 완료 시 삭제.
+// AI 대화와 복구 검토를 실제 대화·복구 계약에 연결한 제품 패널.
 import {
   Activity, ArrowUpRight, BellPlus, Boxes, Check, ChevronDown, CircleAlert,
   CircleStop, FileText, GitBranch, Maximize2, Minimize2, Play, Send, Server, Sparkles, SquarePen, X,
@@ -14,11 +14,21 @@ import {
   createRecoveryConversation, isAiProviderFailureTurn, sendAiChatTurn,
   useAiConversations, useConversationDetail, useAiSuggestions,
 } from "./devpreview/aiFeed";
+import { getAuditTimeline } from "./api/audit-timeline";
+import { listRcaIssues } from "./api/rca-issues";
 import type {
   AiMessagePart, AiPageLink, AiResultPart, AiStepsPart, AiTextPart, AiTone, AiTurn,
 } from "./features/ai-assistant/aiConversationContract";
-import type { AiRecoveryHandoff } from "./features/ai-assistant/aiRecoveryHandoff";
+import type {
+  AiRecoveryExecutionReceipt,
+  AiRecoveryHandoff,
+} from "./features/ai-assistant/aiRecoveryHandoff";
 import { isSafePrRoute, recoveryRouteLabel } from "./devpreview/recoveryRoute";
+import {
+  recoveryOutcomeNotices,
+  type RecoveryOutcomeNotice,
+} from "./devpreview/recoveryOutcome";
+import { pullRequestReference } from "./devpreview/pullRequestReference";
 
 const SPRING = "cubic-bezier(0.22, 1, 0.36, 1)"; // 진입 등장 이징
 
@@ -477,14 +487,46 @@ function recoveryAcceptedMessage(route: string): string {
   ].join("\n");
 }
 
-function recoveryPreviewReviewTurn(request: AiRecoveryHandoff, id: string): AiTurn | null {
-  if (!import.meta.env.DEV || !request.previewReviewResponse) return null;
+function recoveryOutcomeTurn(
+  notice: RecoveryOutcomeNotice,
+  request: AiRecoveryHandoff,
+): AiTurn {
+  const lines = [
+    notice.detail,
+    notice.prUrl ? `🔗 [${pullRequestReference(notice.prUrl).label}](${notice.prUrl})` : null,
+    "---",
+    "⭐ **확인 결과**",
+    notice.kind === "recovery_completed"
+      ? "- 이슈 상태가 **해결됨**으로 변경되었습니다."
+      : notice.kind === "pull_request_created"
+        ? "- PR 생성은 완료됐지만 아직 장애 해결이 확정된 것은 아닙니다."
+        : notice.kind === "execution_completed"
+          ? "- 복구 명령 실행은 완료됐으며 운영 상태 정상화를 계속 확인합니다."
+          : "- 복구 플랜에서 실패 원인을 확인한 뒤 다시 시도해 주세요.",
+    request.validationChecks.length > 0 ? "" : null,
+    request.validationChecks.length > 0 ? "**복구 플랜의 성공 조건**" : null,
+    ...request.validationChecks.map((check) => `- ${check}`),
+    request.validationChecks.length > 0
+      ? "현재 백엔드는 성공 조건별 판정값을 따로 제공하지 않으므로, 위 항목은 검증 기준으로 표시합니다."
+      : null,
+  ].filter((line): line is string => line !== null);
   return {
-    id,
+    id: `recovery-result:${notice.key}`,
     role: "assistant",
     collapsed: false,
     createdAt: now(),
-    parts: [{ kind: "text", markdown: request.previewReviewResponse }],
+    parts: [
+      {
+        kind: "result",
+        title: notice.title,
+        tone: notice.tone,
+        summary: notice.summary,
+      },
+      {
+        kind: "text",
+        markdown: lines.join("\n"),
+      },
+    ],
   };
 }
 
@@ -579,7 +621,10 @@ export function AiPanel({ onClose, onCancelRecovery, onRecoveryReviewStateChange
   const [input, setInput] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [recoveryReviewState, setRecoveryReviewState] = useState<RecoveryReviewState>("idle");
-  const [completionPreviewed, setCompletionPreviewed] = useState(false);
+  const [recoveryExecution, setRecoveryExecution] = useState<{
+    receipt: AiRecoveryExecutionReceipt;
+    submittedAt: string;
+  } | null>(null);
   // AI history: 목록에서 고른 대화 id. null이면 라이브 대화 화면.
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const suggestions = useAiSuggestions(contextView, contextScope);
@@ -591,6 +636,7 @@ export function AiPanel({ onClose, onCancelRecovery, onRecoveryReviewStateChange
   const lastRecoveryRequestId = useRef<string | null>(null);
   const recoveryConversationId = useRef<string | null>(null);
   const recoveryConversationTurnCount = useRef(0);
+  const recoveryOutcomeKeys = useRef<Set<string>>(new Set());
   // 알림 액션 되묻기 누적 — /api/ai/chat 은 무상태라 "알람 만들어 줘" → "CPU" →
   // "80%"처럼 나눠 답하면 매 턴이 따로 파싱된다. 서버가 clarification 을 표시한
   // 동안 보류 문장을 여기 누적해, 다음 전송을 "누적 + 새 입력"으로 합쳐 보낸다
@@ -680,14 +726,11 @@ export function AiPanel({ onClose, onCancelRecovery, onRecoveryReviewStateChange
     void liveReply
       .then((turn) => {
         if (controller.signal.aborted) return;
-        const previewTurn = isRecoveryTurn && isAiProviderFailureTurn(turn)
-          ? recoveryPreviewReviewTurn(recoveryRequest, `${turn.id}-preview`)
-          : null;
-        const displayedTurn = previewTurn ?? turn;
-        alertDraft.current = displayedTurn.clarification === true ? outgoing : null;
-        setThinking(false); setTurns((prev) => [...prev, displayedTurn]);
+        const providerFailed = isRecoveryTurn && isAiProviderFailureTurn(turn);
+        alertDraft.current = turn.clarification === true ? outgoing : null;
+        setThinking(false); setTurns((prev) => [...prev, turn]);
         if (isRecoveryTurn) {
-          setRecoveryReviewState(previewTurn !== null || !isAiProviderFailureTurn(turn) ? "ready" : "error");
+          setRecoveryReviewState(providerFailed ? "error" : "ready");
         }
       })
       .catch((cause: unknown) => {
@@ -696,12 +739,9 @@ export function AiPanel({ onClose, onCancelRecovery, onRecoveryReviewStateChange
           void sendAiChatTurn(context, outgoing, replyId, controller.signal)
             .then((turn) => {
               if (controller.signal.aborted) return;
-              const previewTurn = isAiProviderFailureTurn(turn)
-                ? recoveryPreviewReviewTurn(recoveryRequest, `${turn.id}-preview`)
-                : null;
               setThinking(false);
-              setTurns((prev) => [...prev, previewTurn ?? turn]);
-              setRecoveryReviewState(previewTurn !== null || !isAiProviderFailureTurn(turn) ? "ready" : "error");
+              setTurns((prev) => [...prev, turn]);
+              setRecoveryReviewState(isAiProviderFailureTurn(turn) ? "error" : "ready");
             })
             .catch((fallbackCause: unknown) => {
               if (controller.signal.aborted || isAbort(fallbackCause)) return;
@@ -719,13 +759,67 @@ export function AiPanel({ onClose, onCancelRecovery, onRecoveryReviewStateChange
     lastRecoveryRequestId.current = recoveryRequest.id;
     recoveryConversationId.current = null;
     recoveryConversationTurnCount.current = 0;
+    recoveryOutcomeKeys.current.clear();
+    setRecoveryExecution(null);
     setTurns([]);
     setError(null);
     setInput("");
     setListOpen(false);
-    setCompletionPreviewed(false);
     send(recoveryRequest.prompt, recoveryRequest.id, recoveryRequest.displayPrompt);
   }, [recoveryRequest?.id]);
+
+  useEffect(() => {
+    if (recoveryRequest === null || recoveryExecution === null) return;
+    const controller = new AbortController();
+    let timer: number | undefined;
+    let stopped = false;
+    const poll = async () => {
+      try {
+        const [auditResponse, issuesResponse] = await Promise.all([
+          getAuditTimeline(recoveryExecution.receipt.correlationId, {
+            limit: 100,
+            signal: controller.signal,
+          }),
+          listRcaIssues({ limit: 100, signal: controller.signal }),
+        ]);
+        if (controller.signal.aborted || stopped) return;
+        const issueStatus = issuesResponse.items.find(
+          (item) => item.correlation_id === recoveryExecution.receipt.correlationId,
+        )?.status ?? null;
+        const notices = recoveryOutcomeNotices({
+          actionRoute: recoveryRequest.actionRoute,
+          audit: auditResponse.items,
+          issueStatus,
+          selectionEventId: recoveryExecution.receipt.eventId,
+          submittedAt: recoveryExecution.submittedAt,
+        });
+        const unseen = notices.filter((notice) => !recoveryOutcomeKeys.current.has(notice.key));
+        if (unseen.length > 0) {
+          unseen.forEach((notice) => recoveryOutcomeKeys.current.add(notice.key));
+          setTurns((previous) => [
+            ...previous,
+            ...unseen.map((notice) => recoveryOutcomeTurn(notice, recoveryRequest)),
+          ]);
+          scrollToLatest();
+        }
+        if (notices.some((notice) => notice.terminal)) {
+          stopped = true;
+          return;
+        }
+      } catch (cause: unknown) {
+        if (controller.signal.aborted || isAbort(cause)) return;
+      }
+      if (!stopped && !controller.signal.aborted) {
+        timer = window.setTimeout(poll, 4_000);
+      }
+    };
+    void poll();
+    return () => {
+      stopped = true;
+      controller.abort();
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [recoveryExecution, recoveryRequest?.id]);
   useEffect(() => {
     onRecoveryReviewStateChange?.(recoveryReviewState);
   }, [onRecoveryReviewStateChange, recoveryReviewState]);
@@ -880,45 +974,24 @@ export function AiPanel({ onClose, onCancelRecovery, onRecoveryReviewStateChange
                 </button>
               ) : null}
               {recoveryReviewState === "executed" ? (
-                <div className="grid flex-1 gap-2">
-                  <div className="flex items-center justify-center gap-2 rounded-xl bg-primary/[0.07] px-3 py-2 text-label font-semibold text-primary" role="status">
-                    <Check className="size-3.5" strokeWidth={3} />
-                    {completionPreviewed ? "복구 완료 · 5/5" : recoverySubmittedLabel(recoveryRequest.actionRoute)}
-                  </div>
-                  {!completionPreviewed && recoveryRequest.previewCompletionResponse && recoveryRequest.previewComplete ? (
-                    <button
-                      className="rounded-xl border border-dashed border-border bg-card px-3 py-2 text-caption font-semibold text-muted-foreground transition-colors hover:border-primary/30 hover:bg-primary/[0.03] hover:text-primary"
-                      onClick={() => {
-                        idSeq.current += 1;
-                        setTurns((prev) => [...prev, {
-                          id: `a${idSeq.current}`,
-                          role: "assistant",
-                          collapsed: false,
-                          createdAt: now(),
-                          parts: [{ kind: "text", markdown: recoveryRequest.previewCompletionResponse! }],
-                        }]);
-                        scrollToLatest();
-                        recoveryRequest.previewComplete?.();
-                        setCompletionPreviewed(true);
-                      }}
-                      type="button"
-                    >
-                      완료 상태 미리보기
-                    </button>
-                  ) : null}
+                <div className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary/[0.07] px-3 py-2 text-label font-semibold text-primary" role="status">
+                  <Check className="size-3.5" strokeWidth={3} />
+                  {recoverySubmittedLabel(recoveryRequest.actionRoute)}
                 </div>
               ) : (
                 <button className="flex-1 rounded-xl bg-primary px-3 py-2 text-label font-semibold text-primary-foreground transition-all hover:brightness-105 active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-primary/15 disabled:text-primary/45"
                   disabled={recoveryReviewState !== "ready" || thinking}
                   onClick={() => {
                     setRecoveryReviewState("executing");
+                    const submittedAt = now();
                     const minimumProgressTime = new Promise<void>((resolve) => window.setTimeout(resolve, 900));
                     void Promise.all([recoveryRequest.execute(), minimumProgressTime])
-                      .then(([ok]) => {
-                        if (!ok) {
+                      .then(([receipt]) => {
+                        if (!receipt?.accepted) {
                           setRecoveryReviewState("error");
                           return;
                         }
+                        setRecoveryExecution({ receipt, submittedAt });
                         idSeq.current += 1;
                         setTurns((prev) => [...prev, {
                           id: `a${idSeq.current}`,

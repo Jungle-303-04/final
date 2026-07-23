@@ -1,0 +1,39 @@
+from domains.audit.router import summarize_payload
+
+
+def test_safe_pr_audit_summary_keeps_operator_reference_fields() -> None:
+    summary = summarize_payload(
+        "safe_pr.created",
+        {
+            "pr_url": "https://github.com/kyro/platform/pull/17",
+            "provider": "github",
+            "mode": "pull_request",
+            "patch_sha256": "patch-sha",
+        },
+    )
+
+    assert summary == {
+        "pr_url": "https://github.com/kyro/platform/pull/17",
+        "provider": "github",
+        "mode": "pull_request",
+        "patch_sha256": "patch-sha",
+    }
+
+
+def test_recovery_audit_summary_keeps_operator_result_fields() -> None:
+    summary = summarize_payload(
+        "rollout.diagnosed",
+        {
+            "diagnosis": "rollout command applied and reported healthy",
+            "next_action": "observe",
+            "reason": "unused when diagnosis is present",
+            "summary": "rollout health completed",
+        },
+    )
+
+    assert summary == {
+        "reason": "unused when diagnosis is present",
+        "diagnosis": "rollout command applied and reported healthy",
+        "next_action": "observe",
+        "summary": "rollout health completed",
+    }

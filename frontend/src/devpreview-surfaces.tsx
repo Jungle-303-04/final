@@ -24,7 +24,7 @@ import {
   type RcaIssueDetailView,
 } from "./devpreview/rcaDetailFeed";
 import type { RcaReport } from "./api/evidence-schemas";
-import type { RecoveryActionCandidate, RecoveryPlan } from "./api/recovery-schemas";
+import type { RecoveryActionAccepted, RecoveryActionCandidate, RecoveryPlan } from "./api/recovery-schemas";
 import type { RemediationBundleActionDraft } from "./api/rca-bundle-schemas";
 import { selectRecoveryAction } from "./api/recovery";
 import type { AiRecoveryHandoff, AiRecoveryPreview, AiRecoveryPreviewLine } from "./features/ai-assistant/aiRecoveryHandoff";
@@ -50,8 +50,10 @@ import { RepositoryConnections } from "./devpreview/RepositoryConnections";
 import { RepositoryStatusList } from "./devpreview/RepositoryStatusList";
 import { groupApplicationsByRepository } from "./devpreview/repositoryRegistry";
 import { selectScenarioRuns } from "./devpreview/scenarioGateSelection";
-import { recoveryDisplayedStep, recoveryProgressState, type RecoveryProgressState } from "./devpreview/recoveryProgress";
-import { isRcaPreviewCorrelation } from "./devpreview/rcaPreviewFixtures";
+import { recoveryDisplayedStep, recoveryProgressState, withCreatedPullRequest, type RecoveryProgressState } from "./devpreview/recoveryProgress";
+import { issueAnalysisState } from "./devpreview/issueAnalysisState";
+import { canOpenRecoveryPlan } from "./devpreview/recoveryAccess";
+import { pullRequestReference } from "./devpreview/pullRequestReference";
 import { isSafePrRoute, recoveryRouteLabel } from "./devpreview/recoveryRoute";
 
 // ── 상대 시간 포맷 — 서버 타임스탬프(ISO 또는 epoch ms)를 사람이 읽는 근사치로 ──
@@ -653,42 +655,6 @@ export function DeploySurface({ pendingRepos = [], repositoryFilter = null, onOp
 // 서버가 준 값만 렌더하고, 없으면 정직한 "관측 안 됨"으로 둔다(no backfill).
 // 실제 복구 실행 경로(capability/CSRF)는 이 데모에 배선되어 있지 않으므로 실행
 // 컨트롤은 비활성으로 두고 가짜 성공을 만들지 않는다.
-type IssueAnalysisState = {
-  label: "분석 중" | "원인 분석 완료" | "해결됨";
-  tone: "info" | "ok";
-};
-
-const ANALYSIS_COMPLETED_STATUSES = new Set([
-  "rca_completed",
-  "followup_required",
-  "action_required",
-  "recovery_planned",
-  "selection_required",
-  "recovery_selected",
-  "approval_recommended",
-  "command_requested",
-  "command_dispatched",
-  "command_queued",
-  "command_completed",
-  "command_rejected",
-  "pr_requested",
-  "pr_patch_prepared",
-  "pr_diff_explained",
-  "pr_ready_for_creation",
-  "pr_created",
-  "pr_failed",
-]);
-
-function issueAnalysisState(issue: { status?: string | null; rootCause?: string | null }): IssueAnalysisState {
-  const normalizedStatus = issue.status?.trim().toLowerCase() ?? "";
-  if (["cancelled", "closed", "completed", "dismissed", "incident_resolved", "resolved"].includes(normalizedStatus)) {
-    return { label: "해결됨", tone: "ok" };
-  }
-  if ((issue.rootCause?.trim() ?? "") !== "" || ANALYSIS_COMPLETED_STATUSES.has(normalizedStatus)) {
-    return { label: "원인 분석 완료", tone: "ok" };
-  }
-  return { label: "분석 중", tone: "info" };
-}
 const RECOVERY_STEP_LABELS = ["승인", "제출", "실행", "검증", "완료"] as const;
 const ISSUE_DETAIL_TYPE = {
   sectionTitle: TYPE.section,
@@ -704,6 +670,7 @@ function RecoveryPlanProgress({ progress, prUrl = null }: { progress: RecoveryPr
         : BLUE;
   const displayedStep = recoveryDisplayedStep(progress);
   const progressPercent = displayedStep * 20;
+  const prReference = prUrl ? pullRequestReference(prUrl) : null;
   return (
     <section aria-live="polite" style={{ display: "grid", gap: SPACE.stack, border: `1px solid ${UI.line}`, borderRadius: RADIUS.card, background: UI.card, padding: SPACE.card, boxShadow: `0 6px 16px -10px ${inkA(0.26)}, 0 1px 3px ${inkA(0.06)}` }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -744,16 +711,23 @@ function RecoveryPlanProgress({ progress, prUrl = null }: { progress: RecoveryPr
           최근 기록 · {koLabel(progress.latestEvent.subject)} · {fromNow(progress.latestEvent.created_at)}
         </span>
       )}
-      {prUrl && (
-        <a
-          className="product-focusable"
-          href={prUrl}
-          rel="noopener noreferrer"
-          target="_blank"
-          style={{ width: "fit-content", display: "inline-flex", alignItems: "center", gap: 5, color: BLUE, fontSize: TYPE.label, fontWeight: 600, textDecoration: "none" }}
-        >
-          <ExternalLink size={13} />Pull Request 열기
-        </a>
+      {prUrl && prReference && (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", paddingTop: 10, borderTop: `1px dashed ${UI.line}` }}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, color: UI.ink2, fontSize: TYPE.label }}>
+            <CircleCheck size={14} color={HP.ok} />
+            {progress.phase === "completed" ? "복구에 사용된 PR" : "복구 PR 생성 완료"}
+          </span>
+          <a
+            className="product-focusable"
+            href={prUrl}
+            rel="noopener noreferrer"
+            target="_blank"
+            title={`${prReference.label} 열기`}
+            style={{ width: "fit-content", display: "inline-flex", alignItems: "center", gap: 5, color: BLUE, fontSize: TYPE.label, fontWeight: 600, textDecoration: "none" }}
+          >
+            {prReference.label} <ExternalLink size={13} />
+          </a>
+        </div>
       )}
     </section>
   );
@@ -891,29 +865,6 @@ function recoveryAiPrompt({
     "확인되지 않은 사실은 추정하지 말고, AI는 검토만 수행하며 복구 조치를 직접 실행하지 마세요.",
   );
   return lines.join("\n");
-}
-
-function recoveryAiPreviewReview(candidate: RecoveryActionCandidate): string {
-  const nextAction = candidate.route === "approval_required"
-    ? "아래 **복구 요청** 버튼을 누르면 선택한 복구 조치를 제출합니다."
-    : isSafePrRoute(candidate.route)
-      ? "아래 **복구 PR 생성** 버튼을 누르면 변경 PR 생성을 요청합니다. PR이 준비되면 복구 플랜에 검토 링크가 표시됩니다."
-      : "아래 **자동 복구 요청** 버튼을 누르면 복구 실행과 성공 조건 검증을 시작합니다.";
-  return [
-    "✅ **복구 플랜 검토를 완료했습니다.**",
-    `선택한 조치는 위험도 **${candidate.risk_level || "미확인"}**이며, 현재 확인된 운영 근거와 안전 조건을 기준으로 진행할 수 있습니다.`,
-    "---",
-    nextAction,
-  ].join("\n");
-}
-
-function recoveryAiPreviewCompletion(candidate: RecoveryActionCandidate): string {
-  return [
-    "✅ **복구를 완료했습니다.**",
-    `${candidate.title} 조치를 적용하고 성공 조건을 확인했습니다.`,
-    "---",
-    "이슈를 **해결됨**으로 전환했습니다. 해결됨 탭에서 적용 결과를 다시 확인할 수 있습니다.",
-  ].join("\n");
 }
 
 function recoveryAiDisplayPrompt({
@@ -1347,16 +1298,6 @@ function RecoveryConfirmation({
   );
 }
 
-// ── RCA 상세 모달 — 자체 백드롭·중앙정렬·스크롤(연결 모달과 동일 문법) ──
-function RcaSection({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
-      <span style={{ fontSize: TYPE.caption, fontWeight: 600, letterSpacing: "0.04em", color: UI.ink3, textTransform: "uppercase" }}>{title}</span>
-      {children}
-    </div>
-  );
-}
-
 function RcaCardSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section style={{ flexShrink: 0, overflow: "hidden", border: `1px solid ${UI.line}`, borderRadius: RADIUS.card, background: UI.card }}>
@@ -1680,9 +1621,8 @@ function RcaAlternativeCandidate({
     </details>
   );
 }
-export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resourceKind, incidentId, currentSubject, updatedAt, prUrl, onClose, onOpenRef, onAskAi, onRecoverySelected, onRecoveryCompleted, previewRecoveryCompleted = false, correlationId, status, severity, rootCause, confidence, supportingEvidence, missingEvidence, situationSummary, recommendedActionSummary, evidenceSummary, evidenceBundleSummary, topInset = 0, leftInset = 0, rightInset = 0 }: {
+export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resourceKind, incidentId, currentSubject, updatedAt, prUrl, onClose, onOpenRef, onAskAi, onRecoverySelected, correlationId, status, severity, rootCause, confidence, supportingEvidence, missingEvidence, situationSummary, recommendedActionSummary, evidenceSummary, evidenceBundleSummary, topInset = 0, leftInset = 0, rightInset = 0 }: {
   name: string; symptom: string; cluster: string; svc: string; ns: string; onClose: () => void; onOpenRef: (kind: string, n: string) => void; onAskAi: (request?: AiRecoveryHandoff) => void; onRecoverySelected?: (correlationId: string, route: string, source: "direct" | "ai") => void;
-  onRecoveryCompleted?: (correlationId: string) => void; previewRecoveryCompleted?: boolean;
   rawSymptom?: string | null; resourceKind?: string | null; incidentId?: string | null; currentSubject?: string | null; updatedAt?: string | null; prUrl?: string | null;
   correlationId?: string; status?: string; severity?: "critical" | "warning" | null;
   rootCause?: string | null; confidence?: number | null; supportingEvidence?: string[]; missingEvidence?: string[];
@@ -1730,6 +1670,7 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
   const recentChanges = useIncidentRecentChanges(incidentId ?? null);
   const latestReport = useLatestRcaReport(correlationId ?? null);
   const report = latestReport.report;
+  const recoveryAvailable = canOpenRecoveryPlan(rootCause, report, recovery.plan);
   const conf = typeof confidence === "number" && Number.isFinite(confidence) ? Math.round(confidence * 100) : null;
   const analysisState = issueAnalysisState({ status, rootCause });
   const headerTone = analysisState.label === "해결됨" ? TINT.ok
@@ -1758,7 +1699,7 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
     (candidate) => candidate.action_id === (selectedRecoveryActionId ?? recovery.plan?.selected_action_id),
   ) ?? recovery.plan?.selected_action ?? null;
   const recoveryProgress = recoveryProgressState({
-    status: previewRecoveryCompleted ? "resolved" : status,
+    status,
     currentSubject,
     plan: recovery.plan,
     audit: recoveryAudit.items,
@@ -1772,15 +1713,11 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
   const effectiveRecoveryPrUrl = typeof auditPrUrl === "string" && auditPrUrl.trim()
     ? auditPrUrl
     : prUrl?.trim() || null;
-  const displayedRecoveryProgress: RecoveryProgressState = effectiveRecoveryPrUrl
-    ? {
-        ...recoveryProgress,
-        phase: "verifying",
-        label: "PR 생성됨",
-        step: Math.max(recoveryProgress.step, 3),
-        tone: "approval",
-      }
-    : recoveryProgress;
+  const displayedRecoveryProgress = withCreatedPullRequest(
+    recoveryProgress,
+    effectiveRecoveryPrUrl,
+    "PR 생성됨",
+  );
   const effectiveSelectedActionId = selectedRecoveryActionId ?? recovery.plan?.selected_action_id ?? null;
   const reviewedRecoveryCandidate = recovery.plan?.candidates.find((candidate) => candidate.action_id === recoveryReviewActionId) ?? null;
   const reviewedRecoveryDraft = remediationBundle.bundle?.remediation?.candidates.find(
@@ -1795,29 +1732,25 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
     setRecoveryReviewActionId(null);
     requestAnimationFrame(() => detailScrollRef.current?.scrollTo({ top: recoveryListScrollTopRef.current }));
   };
-  const handleRecoverySelection = async (actionId: string, source: "direct" | "ai" = "direct"): Promise<boolean> => {
-    if (!correlationId || !recovery.plan || recoverySelectionPendingId !== null) return false;
+  const handleRecoverySelection = async (
+    actionId: string,
+    source: "direct" | "ai" = "direct",
+  ): Promise<RecoveryActionAccepted | null> => {
+    if (!correlationId || !recovery.plan || recoverySelectionPendingId !== null) return null;
     const selectedCandidate = recovery.plan.candidates.find((candidate) => candidate.action_id === actionId);
     const selectedRoute = selectedCandidate?.route ?? recovery.plan.execution_route;
     setRecoverySelectionPendingId(actionId);
     setRecoverySelectionError(null);
-    if (import.meta.env.DEV && isRcaPreviewCorrelation(correlationId)) {
-      setSelectedRecoveryActionId(actionId);
-      setRecoverySelectionAccepted(true);
-      onRecoverySelected?.(correlationId, selectedRoute, source);
-      setRecoverySelectionPendingId(null);
-      return true;
-    }
     try {
       const receipt = await selectRecoveryAction(correlationId, recovery.plan.plan_id, actionId);
       if (!receipt.accepted) throw new Error("recovery selection was not accepted");
       setSelectedRecoveryActionId(actionId);
       setRecoverySelectionAccepted(true);
       onRecoverySelected?.(correlationId, selectedRoute, source);
-      return true;
+      return receipt;
     } catch {
       setRecoverySelectionError("복구 조치를 선택하지 못했습니다. 권한과 현재 플랜 상태를 확인해 주세요.");
-      return false;
+      return null;
     } finally {
       setRecoverySelectionPendingId(null);
     }
@@ -1873,9 +1806,12 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
               ["recovery", "복구 플랜"],
             ] as const).map(([id, label]) => {
               const selected = activeTab === id;
+              const disabled = id === "recovery" && !recoveryAvailable;
               return (
-                <button key={id} className="product-focusable product-control" type="button" role="tab" aria-selected={selected} onClick={() => setActiveTab(id)}
-                  style={{ position: "relative", height: 42, border: "none", background: "transparent", color: selected ? UI.ink : UI.ink3, fontSize: TYPE.label, fontWeight: selected ? 600 : 500, cursor: "pointer" }}>
+                <button key={id} className="product-focusable product-control" type="button" role="tab" aria-selected={selected} aria-disabled={disabled} disabled={disabled}
+                  title={disabled ? "원인 후보와 복구 플랜이 확인되면 열 수 있습니다." : undefined}
+                  onClick={() => { if (!disabled) setActiveTab(id); }}
+                  style={{ position: "relative", height: 42, border: "none", background: "transparent", color: disabled ? UI.ink3 : selected ? UI.ink : UI.ink3, opacity: disabled ? 0.52 : 1, fontSize: TYPE.label, fontWeight: selected ? 600 : 500, cursor: disabled ? "not-allowed" : "pointer" }}>
                   {label}
                   {selected && <span aria-hidden="true" style={{ position: "absolute", left: 0, right: 0, bottom: -1, height: 2, background: BLUE, borderRadius: "2px 2px 0 0" }} />}
                 </button>
@@ -1995,10 +1931,13 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
                 </ReportNumberedSection>
                 <ReportNumberedSection number="06" title="권장 조치">
                   <p style={{ margin: 0, fontSize: TYPE.label, color: recommendedActionSummary || report?.narrative?.recommended_action ? UI.ink2 : UI.ink3, lineHeight: 1.55 }}>{recommendedActionSummary || report?.narrative?.recommended_action || "권장 조치가 아직 없습니다."}</p>
-                  <button type="button" className="product-focusable product-control" onClick={() => {
+                  <button type="button" className="product-focusable product-control" disabled={!recoveryAvailable}
+                    title={!recoveryAvailable ? "원인 후보와 복구 플랜이 확인되면 열 수 있습니다." : undefined}
+                    onClick={() => {
+                    if (!recoveryAvailable) return;
                     setActiveTab("recovery");
                     requestAnimationFrame(() => detailScrollRef.current?.scrollTo({ top: 0 }));
-                  }} style={{ justifySelf: "end", border: `1px solid ${blueA(0.32)}`, borderRadius: 8, background: blueA(0.07), color: BLUE, padding: "7px 12px", fontSize: TYPE.caption, fontWeight: 600, cursor: "pointer" }}>복구 플랜 보기</button>
+                  }} style={{ justifySelf: "end", border: `1px solid ${recoveryAvailable ? blueA(0.32) : UI.line}`, borderRadius: 8, background: recoveryAvailable ? blueA(0.07) : UI.bg2, color: recoveryAvailable ? BLUE : UI.ink3, padding: "7px 12px", fontSize: TYPE.caption, fontWeight: 600, cursor: recoveryAvailable ? "pointer" : "not-allowed" }}>복구 플랜 보기</button>
                 </ReportNumberedSection>
               </div>
             </RcaCardSection>
@@ -2021,6 +1960,7 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
                   const actionId = reviewedRecoveryCandidate.action_id;
                   onAskAi({
                     id: `recovery:${correlationId}:${actionId}:${Date.now()}`,
+                    correlationId,
                     prompt: recoveryAiPrompt({
                       candidate: reviewedRecoveryCandidate,
                       cluster,
@@ -2039,19 +1979,19 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
                     }),
                     actionTitle: reviewedRecoveryCandidate.title,
                     actionRoute: reviewedRecoveryCandidate.route,
+                    validationChecks: reviewedRecoveryCandidate.validation_checks,
                     contextView: "복구 플랜",
                     contextScope: cluster,
-                    previewReviewResponse: import.meta.env.DEV && isRcaPreviewCorrelation(correlationId)
-                      ? recoveryAiPreviewReview(reviewedRecoveryCandidate)
-                      : undefined,
-                    previewCompletionResponse: import.meta.env.DEV && isRcaPreviewCorrelation(correlationId)
-                      ? recoveryAiPreviewCompletion(reviewedRecoveryCandidate)
-                      : undefined,
-                    previewComplete: import.meta.env.DEV && isRcaPreviewCorrelation(correlationId)
-                      ? () => onRecoveryCompleted?.(correlationId)
-                      : undefined,
                     preview: recoveryAiPreview(reviewedRecoveryCandidate, reviewedRecoveryDraft),
-                    execute: () => handleRecoverySelection(actionId, "ai"),
+                    execute: async () => {
+                      const receipt = await handleRecoverySelection(actionId, "ai");
+                      return receipt ? {
+                        accepted: receipt.accepted,
+                        eventId: receipt.event_id,
+                        correlationId: receipt.correlation_id,
+                        commandId: receipt.command_id,
+                      } : null;
+                    },
                   });
                 }}
                 onOpenTarget={recoveryTargetKind && recoveryTargetName ? () => onOpenRef(recoveryTargetKind, recoveryTargetName) : null}
@@ -2174,15 +2114,8 @@ function IssueCard({ issue, recoverySelectionRoute, recoveryCompleted, onOpen, o
     actionRoute: recoverySelectionRoute ?? issue.actionRoute,
     selectionAccepted: recoverySelectionRoute !== null,
   });
-  const displayedRecovery: RecoveryProgressState = issue.prUrl
-    ? {
-        ...recovery,
-        phase: "verifying",
-        label: "PR 검토 필요",
-        step: Math.max(recovery.step, 3),
-        tone: "approval",
-      }
-    : recovery;
+  const displayedRecovery = withCreatedPullRequest(recovery, issue.prUrl, "PR 검토 필요");
+  const prReference = issue.prUrl ? pullRequestReference(issue.prUrl) : null;
   const title = issue.resourceName ?? "대상 미확인";
   const symptom = issue.symptom ?? "증상 미확인";
   const rootCause = issue.rootCause ?? "원인 미확인";
@@ -2247,9 +2180,9 @@ function IssueCard({ issue, recoverySelectionRoute, recoveryCompleted, onOpen, o
             ) : target}
           </span>
           <span style={{ color: UI.ink2 }}><strong style={{ color: UI.ink, fontWeight: 600 }}>복구</strong><span style={{ margin: "0 7px", color: UI.line }}>|</span><RecoveryProgress progress={displayedRecovery} /></span>
-          {issue.prUrl && (
+          {issue.prUrl && prReference && (
             <span style={{ color: UI.ink2 }}>
-              <strong style={{ color: UI.ink, fontWeight: 600 }}>PR</strong><span style={{ margin: "0 7px", color: UI.line }}>|</span>
+              <strong style={{ color: UI.ink, fontWeight: 600 }}>복구 PR</strong><span style={{ margin: "0 7px", color: UI.line }}>|</span>
               <a
                 className="product-focusable"
                 href={issue.prUrl}
@@ -2258,7 +2191,7 @@ function IssueCard({ issue, recoverySelectionRoute, recoveryCompleted, onOpen, o
                 target="_blank"
                 style={{ display: "inline-flex", alignItems: "center", gap: 4, color: BLUE, fontSize: TYPE.label, fontWeight: 600, textDecoration: "none" }}
               >
-                Pull Request 열기 <ExternalLink size={12} />
+                {prReference.label} <ExternalLink size={12} />
               </a>
             </span>
           )}
@@ -2278,8 +2211,8 @@ function IssueCard({ issue, recoverySelectionRoute, recoveryCompleted, onOpen, o
   );
 }
 
-export function IssuesSurface({ incidentClusterIds, recoverySelectionRoutes = new Map<string, string>(), previewCompletedRecoveryIds = new Set<string>(), sessionRules: _sessionRules = [], onOpenRef, onAskAi, onOpenRca }: {
-  incidentClusterIds: readonly string[]; recoverySelectionRoutes?: ReadonlyMap<string, string>; previewCompletedRecoveryIds?: ReadonlySet<string>; sessionRules?: string[]; onOpenRef: (kind: string, name: string) => void; onAskAi: () => void; onOpenRca?: (i: RcaIncident) => void;
+export function IssuesSurface({ incidentClusterIds, recoverySelectionRoutes = new Map<string, string>(), sessionRules: _sessionRules = [], onOpenRef, onAskAi, onOpenRca }: {
+  incidentClusterIds: readonly string[]; recoverySelectionRoutes?: ReadonlyMap<string, string>; sessionRules?: string[]; onOpenRef: (kind: string, name: string) => void; onAskAi: () => void; onOpenRca?: (i: RcaIncident) => void;
 }) {
   const [tab, setTab] = useState("진행 중");
   const [severityFilter, setSeverityFilter] = useState<IssueSeverityFilter>("all");
@@ -2287,8 +2220,8 @@ export function IssuesSurface({ incidentClusterIds, recoverySelectionRoutes = ne
   // 큐 항목이 관측 RCA 필드(원인/확신도/증거/AI 요약)를 이미 실어주므로 상세 드로어로 그대로 전달한다.
   const issues = useRcaIssueDetails(incidentClusterIds, recoverySelectionRoutes.size > 0 ? 4000 : 0);
   const issueItems = issues.items;
-  const activeIssues = issueItems.filter((issue) => !previewCompletedRecoveryIds.has(issue.correlationId) && isActiveRcaIssue(issue));
-  const resolvedIssues = issueItems.filter((issue) => previewCompletedRecoveryIds.has(issue.correlationId) || !isActiveRcaIssue(issue));
+  const activeIssues = issueItems.filter(isActiveRcaIssue);
+  const resolvedIssues = issueItems.filter((issue) => !isActiveRcaIssue(issue));
   const critCount = activeIssues.filter((issue) => issue.severity === "critical").length;
   const warnCount = activeIssues.filter((issue) => issue.severity === "warning").length;
   const visibleIssues = tab === "해결됨"
@@ -2340,7 +2273,7 @@ export function IssuesSurface({ incidentClusterIds, recoverySelectionRoutes = ne
                 key={iss.correlationId}
                 issue={iss}
                 recoverySelectionRoute={recoverySelectionRoutes.get(iss.correlationId) ?? null}
-                recoveryCompleted={previewCompletedRecoveryIds.has(iss.correlationId)}
+                recoveryCompleted={!isActiveRcaIssue(iss)}
                 onOpen={() => setRca(iss)}
                 onOpenTarget={resourceKind && resourceName ? () => onOpenRef(resourceKind, resourceName) : null}
               />
