@@ -88,6 +88,7 @@ import {
   resourceAuxiliaryFooterButtonStyle,
   resourceAuxiliaryViewportHeight,
 } from "./devpreview/ResourceAuxiliaryPanel";
+import { SegmentedControl } from "./devpreview/SegmentedControl";
 import { EventMessageText } from "./devpreview/EventMessageText";
 import { usePodResourceDetail } from "./devpreview/podResourceDetailFeed";
 import { useResourceEvents } from "./devpreview/resourceEventsFeed";
@@ -2660,15 +2661,17 @@ function App() {
               background: UI.bg,
             }}
           >
-            <span style={{ display: "flex", gap: 2, background: inkA(0.05), borderRadius: 9, padding: 2 }}>
-              {([["map", "인프라"], ["list", "쿠버네티스"], ["flow", "트래픽"]] as const).map(([v, l]) => (
-                <button type="button" className="product-focusable product-control" aria-pressed={resView === v} key={v} onClick={() => setResView(v)}
-                  style={{ position: "relative", border: "none", background: "transparent", borderRadius: 7, padding: "5px 16px", fontSize: TYPE.label, fontWeight: 600, color: resView === v ? UI.ink : UI.ink3, cursor: "pointer" }}>
-                  {resView === v && <motion.span layoutId="resview" transition={SOFT} style={{ position: "absolute", inset: 0, background: UI.card, borderRadius: 7, boxShadow: `0 1px 4px ${inkA(0.14)}` }} />}
-                  <span style={{ position: "relative" }}>{l}</span>
-                </button>
-              ))}
-            </span>
+            <SegmentedControl
+              active={resView}
+              ariaLabel="리소스 관점"
+              indicatorId="resview"
+              items={[
+                { value: "map", label: "인프라" },
+                { value: "list", label: "쿠버네티스" },
+                { value: "flow", label: "트래픽" },
+              ]}
+              onChange={setResView}
+            />
             {/* P1: UI를 설명하는 데모성 카피("서비스 호출 관점 — 전체 클러스터")는 제거한다. */}
           </div>
 
@@ -2762,12 +2765,6 @@ function App() {
                   height: resourceAuxiliaryViewportHeight(topH, RESOURCE_AUX_STICKY_TOP),
                   maxHeight: resourceAuxiliaryViewportHeight(topH, RESOURCE_AUX_STICKY_TOP),
                 }}
-                header={(
-                  <ResourceAuxiliaryHeader
-                    title="리소스 종류"
-                    value={`${Object.values(kindCounts).reduce((sum, value) => sum + value, 0)}개`}
-                  />
-                )}
               >
                 <KindIndex sel={kindId} onPick={(k) => setKindId(k.id)} showEmpty={showEmpty} setShowEmpty={setShowEmpty} pinned={pinned} togglePin={togglePin} filter={q} counts={kindCounts} />
               </ResourceAuxiliaryPanel>

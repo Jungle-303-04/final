@@ -52,6 +52,7 @@ import { MiniTimeline } from "./devpreview/widgets";
 import { statusLabel } from "./devpreview/statusLabel";
 import { RepositoryConnections } from "./devpreview/RepositoryConnections";
 import { RepositoryStatusList } from "./devpreview/RepositoryStatusList";
+import { SegmentedControl } from "./devpreview/SegmentedControl";
 import { groupApplicationsByRepository } from "./devpreview/repositoryRegistry";
 import { selectScenarioRuns } from "./devpreview/scenarioGateSelection";
 import { recoveryDisplayedStep, recoveryProgressState, withCreatedPullRequest, type RecoveryProgressState } from "./devpreview/recoveryProgress";
@@ -181,16 +182,17 @@ function ReasonNotes({ codes }: { codes: string[] }) {
 
 // ── 공통 프레임: 전역 내비게이션이 화면 이름을 이미 소유하므로 본문 제목은 반복하지 않는다.
 // 탭과 주 액션만 하나의 상단 도구막대에 두고, 제목은 main의 접근 가능한 이름으로 유지한다. ──
-function Page({ title, icon: _icon, action, tabs, tab, onTab, ensureVerticalScroll = false, children }: {
+function Page({ title, icon: _icon, action, navigation, tabs, tab, onTab, ensureVerticalScroll = false, children }: {
   title: string; icon: React.ComponentType<{ size?: number; style?: React.CSSProperties }>;
-  action?: React.ReactNode; tabs?: string[]; tab?: string; onTab?: (t: string) => void;
+  action?: React.ReactNode; navigation?: React.ReactNode;
+  tabs?: string[]; tab?: string; onTab?: (t: string) => void;
   ensureVerticalScroll?: boolean; children: React.ReactNode;
 }) {
   return (
     <main aria-label={title} style={{ minWidth: 0, minHeight: ensureVerticalScroll ? `calc(100vh / ${PRESENT_SCALE})` : undefined, boxSizing: "border-box", display: "flex", flexDirection: "column", gap: SPACE.card, padding: "12px 18px 40px" }}>
-      {(tabs || action) && (
+      {(navigation || tabs || action) && (
         <div data-surface-toolbar="true" style={{ minHeight: 34, display: "flex", alignItems: "center", gap: 10 }}>
-          {tabs && (
+          {navigation ?? (tabs && (
             <div role="tablist" aria-label={`${title} 보기`} style={{ display: "flex", gap: 2, background: inkA(0.05), borderRadius: 9, padding: 2, width: "fit-content" }}>
               {tabs.map((t) => (
                 <button type="button" role="tab" key={t} className="product-focusable product-control" aria-selected={tab === t} onClick={() => onTab?.(t)}
@@ -200,7 +202,7 @@ function Page({ title, icon: _icon, action, tabs, tab, onTab, ensureVerticalScro
                 </button>
               ))}
             </div>
-          )}
+          ))}
           {action && <span style={{ marginLeft: "auto" }}>{action}</span>}
         </div>
       )}
@@ -480,7 +482,22 @@ export function DeploySurface({ pendingRepos = [], repositoryFilter = null, onOp
   const loading = appsFeed.status === "loading";
   return (
     <>
-    <Page title="배포" icon={Rocket} tabs={["애플리케이션", "GitOps", "워크플로우", "Helm 릴리스", "릴리스"]} tab={tab} onTab={setTab} ensureVerticalScroll
+    <Page title="배포" icon={Rocket} ensureVerticalScroll
+      navigation={
+        <SegmentedControl
+          active={tab}
+          ariaLabel="배포 보기"
+          indicatorId="ptab-배포"
+          items={[
+            { value: "애플리케이션", label: "애플리케이션" },
+            { value: "GitOps", label: "GitOps" },
+            { value: "워크플로우", label: "워크플로우" },
+            { value: "Helm 릴리스", label: "Helm 릴리스" },
+            { value: "릴리스", label: "릴리스" },
+          ]}
+          onChange={setTab}
+        />
+      }
       action={tab === "GitOps"
         ? <button className="product-focusable product-action" onClick={onAddRepo} style={{ display: "flex", alignItems: "center", gap: 6, border: "none", background: BLUE, color: UI.card, borderRadius: 9, padding: "6px 13px", fontSize: TYPE.label, fontWeight: 600, cursor: "pointer" }}>+ 저장소 연결</button>
         : null}>
@@ -2260,7 +2277,23 @@ export function IssuesSurface({ incidentClusterIds, recoverySelectionRoutes = ne
     prUrl: iss.prUrl,
   });
   return (
-    <Page title="이슈" icon={AlertTriangle} tabs={["진행 중", "해결됨", "예방 점검"]} tab={tab} onTab={setTab}>
+    <Page
+      title="이슈"
+      icon={AlertTriangle}
+      navigation={
+        <SegmentedControl
+          active={tab}
+          ariaLabel="이슈 보기"
+          indicatorId="ptab-이슈"
+          items={[
+            { value: "진행 중", label: "진행 중" },
+            { value: "해결됨", label: "해결됨" },
+            { value: "예방 점검", label: "예방 점검" },
+          ]}
+          onChange={setTab}
+        />
+      }
+    >
       {tab === "진행 중" && (
         <IssueSeverityFilters active={severityFilter} criticalCount={critCount} warningCount={warnCount} onChange={setSeverityFilter} totalCount={activeIssues.length} />
       )}

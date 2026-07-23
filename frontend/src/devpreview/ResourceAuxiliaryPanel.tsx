@@ -26,7 +26,7 @@ export function resourceAuxiliaryViewportHeight(
 }
 
 interface ResourceAuxiliaryPanelProps extends Omit<HTMLAttributes<HTMLElement>, "children"> {
-  header: ReactNode;
+  header?: ReactNode;
   children: ReactNode;
   bodyStyle?: CSSProperties;
 }
@@ -60,21 +60,23 @@ export function ResourceAuxiliaryPanel({
         ...style,
       }}
     >
-      <div
-        data-resource-aux-header="true"
-        style={{
-          minHeight: RESOURCE_LAYOUT.auxiliaryHeaderHeight,
-          flex: `0 0 ${RESOURCE_LAYOUT.auxiliaryHeaderHeight}px`,
-          boxSizing: "border-box",
-          display: "flex",
-          alignItems: "center",
-          padding: RESOURCE_LAYOUT.auxiliaryHeaderPadding,
-          borderBottom: `1px solid ${UI.line2}`,
-          background: UI.card,
-        }}
-      >
-        {header}
-      </div>
+      {header != null && (
+        <div
+          data-resource-aux-header="true"
+          style={{
+            minHeight: RESOURCE_LAYOUT.auxiliaryHeaderHeight,
+            flex: `0 0 ${RESOURCE_LAYOUT.auxiliaryHeaderHeight}px`,
+            boxSizing: "border-box",
+            display: "flex",
+            alignItems: "center",
+            padding: RESOURCE_LAYOUT.auxiliaryHeaderPadding,
+            borderBottom: `1px solid ${UI.line2}`,
+            background: UI.card,
+          }}
+        >
+          {header}
+        </div>
+      )}
       <div
         data-resource-aux-body="true"
         style={{
