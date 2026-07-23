@@ -14,6 +14,7 @@ import { HomeClustersWidget, OpsiaMap } from "./devpreview-opsia";
 import { DASHBOARD_WIDGET_GRID_CLASS, DASHBOARD_WIDGET_GRID_ITEM_CLASS, WidgetFrame, RatioBar, Donut, RankList, MultiLine, MiniTimeline, dashboardWidgetGridStyle, dashboardWidgetItemStyle, type DashboardWidgetSpan } from "./devpreview/widgets";
 import { DeploySurface, IssuesSurface, TimelineSurface, ChecksSurface, CostSurface, SettingsSurface, AlertsSurface, AiHistorySurface, IssueDetail, type RcaIncident } from "./devpreview-surfaces";
 import { AiPanel } from "./devpreview-ai";
+import type { AiRecoveryHandoff } from "./features/ai-assistant/aiRecoveryHandoff";
 import { onAction, type DemoAction } from "./devpreview/bus";
 import { ConnectWizard, type RepositoryConnectionContext } from "./devpreview-connect";
 import { TopologyView } from "./devpreview-topology";
@@ -1373,9 +1374,10 @@ function App() {
   const [meOpen, setMeOpen] = useState(false); // 계정 메뉴 (헤더 맨 오른쪽, D20)
   const [detail, setDetail] = useState<{ kind: Kind; row: Row } | null>(null);
   const [rcaIncident, setRcaIncident] = useState<RcaIncident | null>(null); // 이슈 RCA 사이드바 — 셸 레벨 렌더(transform 조상 밖)
-  const [recoverySelectionCorrelations, setRecoverySelectionCorrelations] = useState<ReadonlySet<string>>(() => new Set());
+  const [recoverySelectionRoutes, setRecoverySelectionRoutes] = useState<ReadonlyMap<string, string>>(() => new Map());
   const [navCollapsed, setNavCollapsed] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
+  const [aiRecoveryRequest, setAiRecoveryRequest] = useState<AiRecoveryHandoff | null>(null);
   const [aiFull, setAiFull] = useState(false);         // AI 패널 전체 화면 (헤더 ⤢ 토글)
   const [aiW, setAiW] = useState(440);                 // 실제 제품처럼 리사이즈 가능한 도킹 폭
   const [aiDragging, setAiDragging] = useState(false);
@@ -1383,6 +1385,10 @@ function App() {
   const [connectView, setConnectView] = useState<null | "repo" | "cluster">(null); // 연결 위저드 딥오픈 대상 (설정 서피스)
   const [connectModal, setConnectModal] = useState<null | "repo" | "cluster">(null); // 문맥 진입 = 모달 팝업
   const [repositoryConnectContext, setRepositoryConnectContext] = useState<RepositoryConnectionContext | null>(null);
+  const openAi = useCallback((request?: AiRecoveryHandoff) => {
+    setAiRecoveryRequest(request ?? null);
+    setAiOpen(true);
+  }, []);
   // GitHub App 설치 복귀(?github_app_installation_id=...)가 홈으로 떨어져도
   // 연결 위저드를 자동으로 다시 열어 RepoStep 복귀 핸들러가 이어받게 한다.
   useEffect(() => { const p = new URLSearchParams(window.location.search); if (p.get("github_app_installation_id")) setConnectModal("repo"); }, []);
@@ -2072,7 +2078,7 @@ function App() {
         <DeploySurface pendingRepos={pendingRepo} repositoryFilter={deployRepositoryFilter} onOpenRef={openRef}
           onOpenIssues={() => setSurface("issues")} onAskAi={() => setAiOpen(true)} onAddRepo={() => setConnectModal("repo")} />
       ) : surface === "issues" ? (
-        <IssuesSurface incidentClusterIds={incidentClusterIds} recoverySelectionCorrelations={recoverySelectionCorrelations} sessionRules={notes.filter((n) => n.icon === "rule").map((n) => n.body.split(" · ")[0])} onOpenRef={openRef} onAskAi={() => setAiOpen(true)} onOpenRca={setRcaIncident} />
+        <IssuesSurface incidentClusterIds={incidentClusterIds} recoverySelectionRoutes={recoverySelectionRoutes} sessionRules={notes.filter((n) => n.icon === "rule").map((n) => n.body.split(" · ")[0])} onOpenRef={openRef} onAskAi={() => openAi()} onOpenRca={setRcaIncident} />
       ) : surface === "timeline" ? (
         <TimelineSurface onOpenRef={openRef} />
       ) : surface === "checks" ? (
@@ -2219,7 +2225,11 @@ function App() {
                 style={{ width: 1, flexShrink: 0, cursor: "col-resize", background: aiDragging ? blueA(0.35) : UI.line, transition: "background .15s" }} />
             )}
             <div style={{ flex: 1, minWidth: 0 }}>
-              <AiPanel embedded full={aiFull} onToggleFull={() => setAiFull((v) => !v)} onClose={() => { setAiOpen(false); setAiFull(false); }} contextView={surface === "connect" ? "연결 설정" : surface === "home" ? "홈" : surface === "deploy" ? "배포" : surface === "issues" ? "이슈" : surface === "timeline" ? "타임라인" : surface === "checks" ? "점검" : surface === "cost" ? "비용" : surface === "alerts" ? "알림" : surface === "ai" ? "AI 대화" : surface === "settings" ? "설정" : resView === "flow" ? "트래픽" : resView === "list" ? "쿠버네티스 리소스" : "인프라 지도"} contextScope={scope.cluster ?? "전체 클러스터"} />
+              <AiPanel embedded full={aiFull} recoveryRequest={aiRecoveryRequest}
+                onToggleFull={() => setAiFull((v) => !v)}
+                onClose={() => { setAiOpen(false); setAiFull(false); setAiRecoveryRequest(null); }}
+                contextView={aiRecoveryRequest?.contextView ?? (surface === "connect" ? "연결 설정" : surface === "home" ? "홈" : surface === "deploy" ? "배포" : surface === "issues" ? "이슈" : surface === "timeline" ? "타임라인" : surface === "checks" ? "점검" : surface === "cost" ? "비용" : surface === "alerts" ? "알림" : surface === "ai" ? "AI 대화" : surface === "settings" ? "설정" : resView === "flow" ? "트래픽" : resView === "list" ? "쿠버네티스 리소스" : "인프라 지도")}
+                contextScope={aiRecoveryRequest?.contextScope ?? scope.cluster ?? "전체 클러스터"} />
             </div>
           </motion.div>
         )}
@@ -2300,8 +2310,12 @@ function App() {
         {rcaIncident && <IssueDetail key={rcaIncident.name} {...rcaIncident} topInset={topH} leftInset={navCollapsed ? 60 : 208}
           onClose={() => setRcaIncident(null)}
           onOpenRef={(k, n) => openRef(k, n)}
-          onAskAi={() => { setAiOpen(true); }}
-          onRecoverySelected={(correlationId) => setRecoverySelectionCorrelations((current) => new Set(current).add(correlationId))}
+          onAskAi={openAi}
+          onRecoverySelected={(correlationId, route) => setRecoverySelectionRoutes((current) => {
+            const next = new Map(current);
+            next.set(correlationId, route);
+            return next;
+          })}
           rightInset={aiOpen ? aiW : 0} />}
       </AnimatePresence>
 

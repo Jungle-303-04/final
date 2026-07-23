@@ -16,6 +16,7 @@ import {
 import type {
   AiMessagePart, AiPageLink, AiResultPart, AiStepsPart, AiTextPart, AiTone, AiTurn,
 } from "./features/ai-assistant/aiConversationContract";
+import type { AiRecoveryHandoff } from "./features/ai-assistant/aiRecoveryHandoff";
 
 const SPRING = "cubic-bezier(0.22, 1, 0.36, 1)"; // 진입 등장 이징
 
@@ -369,7 +370,18 @@ function Thinking() {
 
 function UserTurn({ turn, onShown }: { turn: AiTurn; onShown: () => void }) {
   useEffect(() => { const id = window.setTimeout(onShown, TIMING.userShownMs); return () => window.clearTimeout(id); }, []);
-  return <p className="ml-auto w-fit max-w-[80%] rounded-[18px] rounded-br-md bg-primary px-3.5 py-2 text-body font-medium leading-relaxed tracking-[-0.006em] text-primary-foreground shadow-[0_2px_8px_-2px_color-mix(in_oklch,var(--primary)_50%,transparent)]" style={{ animation: `userIn 0.42s ${SPRING}` }}>{turn.question}</p>;
+  const question = turn.question ?? "";
+  const recoveryPrompt = question.startsWith("선택한 복구 플랜을 현재 운영 근거로 검토해 주세요.");
+  return (
+    <p
+      className={recoveryPrompt
+        ? "ml-auto w-full max-w-[94%] whitespace-pre-wrap rounded-[18px] rounded-br-md border border-primary/20 bg-primary/[0.07] px-4 py-3 text-body font-normal leading-relaxed text-foreground shadow-[0_2px_8px_-4px_color-mix(in_oklch,var(--primary)_35%,transparent)]"
+        : "ml-auto w-fit max-w-[80%] whitespace-pre-wrap rounded-[18px] rounded-br-md bg-primary px-3.5 py-2 text-body font-medium leading-relaxed text-primary-foreground shadow-[0_2px_8px_-2px_color-mix(in_oklch,var(--primary)_50%,transparent)]"}
+      style={{ animation: `userIn 0.42s ${SPRING}` }}
+    >
+      {question}
+    </p>
+  );
 }
 
 function CollapsedTurn({ turn, onShown }: { turn: AiTurn; onShown: () => void }) {
@@ -386,7 +398,7 @@ function CollapsedTurn({ turn, onShown }: { turn: AiTurn; onShown: () => void })
 const now = () => new Date().toISOString();
 const noop = () => {};
 
-export function AiPanel({ onClose, embedded = false, contextView = "resources", contextScope = "game-server", full = false, onToggleFull }: {
+export function AiPanel({ onClose, embedded = false, contextView = "resources", contextScope = "game-server", full = false, onToggleFull, recoveryRequest = null }: {
   /** 셸 임베드: 닫기 버튼 동작 */
   onClose?: () => void;
   /** 셸 임베드: 고정 460px 대신 컨테이너 폭을 따른다 (리사이즈 핸들 대응) */
@@ -397,12 +409,15 @@ export function AiPanel({ onClose, embedded = false, contextView = "resources", 
   /** 셸 임베드: 전체 화면 상태와 토글 (미전달 시 버튼 미노출) */
   full?: boolean;
   onToggleFull?: () => void;
+  /** 선택한 복구 조치를 AI가 검토한 뒤 기존 실행 흐름으로 넘기는 요청 */
+  recoveryRequest?: AiRecoveryHandoff | null;
 } = {}) {
   const [turns, setTurns] = useState<AiTurn[]>([]);
   const [thinking, setThinking] = useState(false);
   const [listOpen, setListOpen] = useState(false);
   const [input, setInput] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [recoveryReviewState, setRecoveryReviewState] = useState<"idle" | "reviewing" | "ready" | "executing" | "executed" | "error">("idle");
   // AI history: 목록에서 고른 대화 id. null이면 라이브 대화 화면.
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const suggestions = useAiSuggestions(contextView, contextScope);
@@ -411,6 +426,7 @@ export function AiPanel({ onClose, embedded = false, contextView = "resources", 
   const viewingHistory = selectedConversationId !== null;
   const idSeq = useRef(0);
   const chatAbort = useRef<AbortController | null>(null);
+  const lastRecoveryRequestId = useRef<string | null>(null);
   // 알림 액션 되묻기 누적 — /api/ai/chat 은 무상태라 "알람 만들어 줘" → "CPU" →
   // "80%"처럼 나눠 답하면 매 턴이 따로 파싱된다. 서버가 clarification 을 표시한
   // 동안 보류 문장을 여기 누적해, 다음 전송을 "누적 + 새 입력"으로 합쳐 보낸다
@@ -431,9 +447,10 @@ export function AiPanel({ onClose, embedded = false, contextView = "resources", 
   // AI-03: /api/ai/chat 은 뮤테이션 — 사용자가 명시적으로 보낼 때만 호출한다
   // (마운트·타이머 자동 호출 없음). 응답의 answer/evidence/action 필드만 렌더링하고,
   // 서버가 주지 않는 reasoning step·related link 는 만들지 않는다.
-  const send = (text: string) => {
-    const trimmed = text.trim(); if (!trimmed || thinking) return;
+  const send = (text: string, recoveryRequestId?: string) => {
+    const trimmed = text.trim(); if (!trimmed || (thinking && recoveryRequestId === undefined)) return;
     setInput(""); setError(null); setSelectedConversationId(null); // 질문 전송 시 라이브 화면으로
+    if (recoveryRequestId !== undefined) setRecoveryReviewState("reviewing");
     idSeq.current += 1;
     const userTurn: AiTurn = { id: `u${idSeq.current}`, role: "user", question: trimmed, collapsed: false, createdAt: now() };
     setTurns((prev) => [...prev, userTurn]);
@@ -449,12 +466,20 @@ export function AiPanel({ onClose, embedded = false, contextView = "resources", 
         if (controller.signal.aborted) return;
         alertDraft.current = turn.clarification === true ? outgoing : null;
         setThinking(false); setTurns((prev) => [...prev, turn]);
+        if (recoveryRequestId !== undefined) setRecoveryReviewState("ready");
       })
       .catch((cause: unknown) => {
         if (controller.signal.aborted || isAbort(cause)) return;
         setThinking(false); setError(trimmed);
+        if (recoveryRequestId !== undefined) setRecoveryReviewState("error");
       });
   };
+
+  useEffect(() => {
+    if (recoveryRequest === null || lastRecoveryRequestId.current === recoveryRequest.id) return;
+    lastRecoveryRequestId.current = recoveryRequest.id;
+    send(recoveryRequest.prompt, recoveryRequest.id);
+  }, [recoveryRequest?.id]);
 
   // AI history: 목록에서 대화를 고르면 선택 id만 바꾼다. 실제 이력 조회는
   // useConversationDetail(selectedConversationId)가 담당(서버 role/content만 투영).
@@ -476,7 +501,7 @@ export function AiPanel({ onClose, embedded = false, contextView = "resources", 
   return (
     <div className={`opsia-ai relative flex ${embedded ? "h-full w-full min-w-0" : "h-screen w-[460px]"} flex-col overflow-hidden border-l border-black/[0.06] bg-gradient-to-b from-[oklch(0.99_0.002_255)] to-[oklch(0.97_0.003_255)] shadow-2xl`}>
       <header className="flex items-center gap-2.5 border-b border-black/[0.05] bg-white/60 px-3.5 py-3 backdrop-blur-xl">
-        <span className="grid size-9 shrink-0 place-items-center rounded-[13px] bg-gradient-to-br from-primary to-[color-mix(in_oklch,var(--primary)_75%,black)] text-primary-foreground shadow-[0_2px_8px_-2px_color-mix(in_oklch,var(--primary)_55%,transparent)]"><Sparkles className="size-4" /></span>
+        <span className="grid size-9 shrink-0 place-items-center rounded-[13px] bg-[linear-gradient(135deg,#0A84FF,#5AC8FA)] text-primary-foreground shadow-[0_2px_8px_-2px_color-mix(in_oklch,var(--primary)_55%,transparent)]"><Sparkles className="size-4" /></span>
         <div className="min-w-0 flex-1"><h2 className="text-body font-semibold leading-tight tracking-[-0.01em] text-heading">Kyro AI</h2></div>
         {onToggleFull && (
           <button className="grid size-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" onClick={onToggleFull} title={full ? "패널로 축소" : "전체 화면"} type="button" aria-label={full ? "AI 패널 축소" : "AI 패널 전체 화면"}>
@@ -551,6 +576,46 @@ export function AiPanel({ onClose, embedded = false, contextView = "resources", 
       </div>
 
       <div className="border-t border-black/[0.05] bg-white/50 px-3.5 pb-3.5 pt-3 backdrop-blur-xl">
+        {recoveryRequest !== null ? (
+          <div className="mb-3 rounded-2xl border border-primary/20 bg-primary/[0.04] p-3">
+            <div className="flex items-start gap-2">
+              <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary"><Sparkles className="size-3.5" /></span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-label font-semibold text-heading">{recoveryRequest.actionTitle}</p>
+                <p className="mt-0.5 text-caption text-muted-foreground">
+                  {recoveryReviewState === "reviewing" ? "AI가 선택한 복구 플랜과 안전 조건을 검토하고 있습니다."
+                    : recoveryReviewState === "ready" ? "AI 검토가 완료되었습니다. 답변을 확인한 뒤 복구를 요청할 수 있습니다."
+                    : recoveryReviewState === "executing" ? "확인된 복구 조치를 요청하고 있습니다."
+                    : recoveryReviewState === "executed" ? "복구 조치가 정상적으로 요청되었습니다."
+                    : recoveryReviewState === "error" ? "AI 검토 또는 복구 요청을 완료하지 못했습니다."
+                    : "선택한 복구 플랜을 AI와 검토합니다."}
+                </p>
+              </div>
+              <span className="shrink-0 rounded-full bg-black/[0.05] px-2 py-1 text-caption font-medium text-muted-foreground">
+                {recoveryRequest.actionRoute === "auto" ? "자동 복구" : recoveryRequest.actionRoute === "safe_pr" ? "복구 PR" : "승인 검토"}
+              </span>
+            </div>
+            <div className="mt-2.5 flex gap-2">
+              {recoveryReviewState === "error" ? (
+                <button className="flex-1 rounded-xl border border-border bg-card px-3 py-2 text-label font-semibold text-foreground transition-colors hover:bg-muted"
+                  onClick={() => send(recoveryRequest.prompt, recoveryRequest.id)} type="button">
+                  다시 검토
+                </button>
+              ) : null}
+              <button className="flex-1 rounded-xl bg-primary px-3 py-2 text-label font-semibold text-primary-foreground transition-all hover:brightness-105 active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-primary/15 disabled:text-primary/45"
+                disabled={recoveryReviewState !== "ready"}
+                onClick={() => {
+                  setRecoveryReviewState("executing");
+                  void recoveryRequest.execute().then((ok) => setRecoveryReviewState(ok ? "executed" : "error"));
+                }}
+                type="button">
+                {recoveryReviewState === "executing" ? "요청 중"
+                  : recoveryReviewState === "executed" ? "요청 완료"
+                    : `AI 검토 후 ${recoveryRequest.actionRoute === "auto" ? "자동 복구 요청" : recoveryRequest.actionRoute === "safe_pr" ? "복구 PR 생성 요청" : "승인 검토 요청"}`}
+              </button>
+            </div>
+          </div>
+        ) : null}
         {suggestions.status === "ready" && suggestions.items.length > 0 ? (
           <div className="mb-2.5 flex flex-wrap gap-1.5">{suggestions.items.map((s) => <button className="rounded-full border border-border bg-card/80 px-3 py-1.5 text-caption font-medium text-muted-foreground shadow-[0_1px_2px_rgba(0,0,0,0.03)] transition-all hover:-translate-y-px hover:border-ring hover:text-foreground hover:shadow-[0_2px_6px_-2px_rgba(0,0,0,0.12)]" key={s.id} onClick={() => send(s.prompt)} type="button">{s.label}</button>)}</div>
         ) : null}
@@ -582,8 +647,17 @@ export function AiPanel({ onClose, embedded = false, contextView = "resources", 
         /* 애플 팔레트 토큰 + 유틸 */
         /* 셸 팔레트와 통일 (BLUE·HP.ok·HP.warn·HP.crit)
            — 제품 토큰의 --primary(검정)를 패널 스코프에서 셸 블루로 오버라이드 */
-        .opsia-ai { --ap-blue:#0A84FF; --ap-red:#FF5F55; --ap-orange:#FFB340; --ap-green:#30D158; --ap-gray:#8E8E93;
-          --primary:#0A84FF; --primary-foreground:#FFFFFF; --destructive:#FF5F55; }
+        .opsia-ai {
+          color-scheme: light;
+          --ap-blue:#0A84FF; --ap-red:#FF5F55; --ap-orange:#FFB340; --ap-green:#30D158; --ap-gray:#8E8E93;
+          --background:#E9EBF0; --foreground:#111318; --heading-foreground:#2B2F36; --inactive-foreground:#9AA0AA;
+          --card:#FFFFFF; --card-foreground:#111318; --popover:#FFFFFF; --popover-foreground:#111318;
+          --primary:#0A84FF; --primary-foreground:#FFFFFF;
+          --secondary:#F7F8FA; --secondary-foreground:#2B2F36;
+          --muted:#F4F5F7; --muted-foreground:#5F6570;
+          --accent:#EDF4FF; --accent-foreground:#0A6CFF;
+          --destructive:#FF5F55; --border:#E0E3E8; --input:#E0E3E8; --ring:#0A84FF;
+        }
         .opsia-ai button:focus-visible {
           outline: none;
           box-shadow: 0 0 0 3px var(--focus-ring);

@@ -27,6 +27,7 @@ import type { RcaReport } from "./api/evidence-schemas";
 import type { RecoveryActionCandidate, RecoveryPlan } from "./api/recovery-schemas";
 import type { RemediationBundleActionDraft } from "./api/rca-bundle-schemas";
 import { selectRecoveryAction } from "./api/recovery";
+import type { AiRecoveryHandoff } from "./features/ai-assistant/aiRecoveryHandoff";
 import { isActiveRcaIssue } from "./devpreview/rcaIssuesFeed";
 import { useSession, sessionInitial } from "./devpreview/sessionFeed";
 import { useAiConversations, useConversationDetail } from "./devpreview/aiFeed";
@@ -48,7 +49,6 @@ import { RepositoryStatusList } from "./devpreview/RepositoryStatusList";
 import { groupApplicationsByRepository } from "./devpreview/repositoryRegistry";
 import { selectScenarioRuns } from "./devpreview/scenarioGateSelection";
 import { recoveryProgressState, type RecoveryProgressState } from "./devpreview/recoveryProgress";
-import { isRcaPreviewCorrelation } from "./devpreview/rcaPreviewFixtures";
 
 // ── 상대 시간 포맷 — 서버 타임스탬프(ISO 또는 epoch ms)를 사람이 읽는 근사치로 ──
 function fromNow(input: string | number | null): string {
@@ -729,10 +729,77 @@ function RecoveryCandidateDetails({
 }
 
 function recoveryActionModeSummary(route: string): string {
-  if (route === "auto") return "확인 후 자동 복구를 시작합니다.";
-  if (route === "safe_pr") return "검토 가능한 GitOps 복구 PR을 생성합니다.";
+  if (route === "auto") return "검토한 조치를 자동 복구 경로로 요청합니다.";
+  if (route === "safe_pr") return "검토한 변경으로 복구 PR 생성을 요청합니다.";
   if (route === "approval_required") return "운영자 승인 검토 단계로 이동합니다.";
   return "현재 실행 경로로 복구를 요청합니다.";
+}
+
+function recoveryActionSubmitLabel(route: string): string {
+  if (route === "auto") return "자동 복구 요청";
+  if (route === "safe_pr") return "복구 PR 생성 요청";
+  if (route === "approval_required") return "승인 검토 요청";
+  return "복구 조치 요청";
+}
+
+function recoveryActionRouteLabel(route: string): string {
+  if (route === "auto") return "자동 복구";
+  if (route === "safe_pr") return "복구 PR";
+  if (route === "approval_required") return "운영자 승인";
+  return route || "미확인";
+}
+
+function recoveryAiPrompt({
+  candidate,
+  cluster,
+  namespace,
+  resourceKind,
+  resourceName,
+  symptom,
+  rootCause,
+}: {
+  candidate: RecoveryActionCandidate;
+  cluster: string;
+  namespace: string;
+  resourceKind: string;
+  resourceName: string;
+  symptom: string;
+  rootCause: string | null | undefined;
+}): string {
+  const lines = [
+    "선택한 복구 플랜을 현재 운영 근거로 검토해 주세요.",
+    "",
+    "[장애 정보]",
+    `- 대상: ${cluster} / ${namespace} / ${resourceKind} / ${resourceName}`,
+    `- 증상: ${symptom}`,
+    `- 판단된 원인: ${rootCause?.trim() || "미확인"}`,
+    "",
+    "[선택한 복구 조치]",
+    `- 조치: ${candidate.title}`,
+    `- 처리 경로: ${recoveryActionRouteLabel(candidate.route)}`,
+    `- 위험도: ${candidate.risk_level || "미확인"}`,
+    `- 영향 범위: ${candidate.blast_radius || "미확인"}`,
+    `- 조치 내용: ${candidate.description || "미확인"}`,
+  ];
+  if (candidate.recommendation_reason) lines.push(`- 추천 이유: ${candidate.recommendation_reason}`);
+  lines.push("", "[안전 조건]");
+  if (candidate.validation_checks.length > 0) {
+    candidate.validation_checks.slice(0, 4).forEach((check) => lines.push(`- 성공 조건: ${check}`));
+  } else {
+    lines.push("- 성공 조건: 미확인");
+  }
+  lines.push(
+    `- 실패 시 복원: ${candidate.rollback_plan || "미확인"}`,
+    "",
+    "[검토 요청]",
+    "1. 실행 전 추가로 확인할 사항",
+    "2. 예상 영향과 중단 기준",
+    "3. 성공 여부를 확인할 방법",
+    "4. 운영자 판단이 필요한 사항",
+    "",
+    "확인되지 않은 사실은 추정하지 말고, AI는 검토만 수행하며 복구 조치를 직접 실행하지 마세요.",
+  );
+  return lines.join("\n");
 }
 
 function RecommendedRecoveryChecks({ candidate }: { candidate: RecoveryActionCandidate }) {
@@ -1085,13 +1152,13 @@ function RecoveryConfirmation({
           <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
             <button type="button" className={selected ? undefined : "product-focusable product-action"} disabled={selected || pending} onClick={onConfirm}
               style={{ minWidth: 0, minHeight: 64, display: "grid", gap: 4, alignContent: "center", border: selected ? `1px solid ${TINT.ok.bd}` : "none", borderRadius: 8, background: selected ? TINT.ok.bg : pending ? UI.bg2 : BLUE, color: selected ? TINT.ok.fg : pending ? UI.ink3 : UI.card, padding: "9px 11px", textAlign: "left", cursor: selected || pending ? "not-allowed" : "pointer", boxShadow: selected || pending ? "none" : `0 2px 6px ${blueA(0.2)}` }}>
-              <strong style={{ fontSize: TYPE.label, fontWeight: 600 }}>{selected ? "선택됨" : pending ? "처리 중…" : "직접 확인 후 실행"}</strong>
+              <strong style={{ fontSize: TYPE.label, fontWeight: 600 }}>{selected ? "요청됨" : pending ? "요청 중…" : recoveryActionSubmitLabel(candidate.route)}</strong>
               <span style={{ fontSize: TYPE.caption, fontWeight: 400, lineHeight: 1.4, color: selected ? TINT.ok.fg : pending ? UI.ink3 : UI.card, opacity: selected || pending ? 1 : 0.78 }}>{recoveryActionModeSummary(candidate.route)}</span>
             </button>
             <button type="button" className="product-focusable product-control" onClick={onAskAi}
               style={{ minWidth: 0, minHeight: 64, display: "grid", gap: 4, alignContent: "center", border: `1px solid ${blueA(0.35)}`, borderRadius: 8, background: UI.card, color: BLUE, padding: "9px 11px", textAlign: "left", cursor: "pointer" }}>
-              <strong style={{ display: "flex", alignItems: "center", gap: 5, fontSize: TYPE.label, fontWeight: 600 }}><Sparkles size={14} />AI와 진행</strong>
-              <span style={{ fontSize: TYPE.caption, fontWeight: 400, lineHeight: 1.4, color: UI.ink3 }}>AI가 복구 플랜을 먼저 검토합니다.</span>
+              <strong style={{ display: "flex", alignItems: "center", gap: 5, fontSize: TYPE.label, fontWeight: 600 }}><Sparkles size={14} />AI와 추가 검토</strong>
+              <span style={{ fontSize: TYPE.caption, fontWeight: 400, lineHeight: 1.4, color: UI.ink3 }}>AI 검토 후 같은 복구 요청 흐름으로 이어집니다.</span>
             </button>
           </div>
         </div>
@@ -1434,7 +1501,7 @@ function RcaAlternativeCandidate({
   );
 }
 export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resourceKind, incidentId, currentSubject, updatedAt, onClose, onOpenRef, onAskAi, onRecoverySelected, correlationId, status, severity, rootCause, confidence, supportingEvidence, missingEvidence, situationSummary, recommendedActionSummary, evidenceSummary, evidenceBundleSummary, topInset = 0, leftInset = 0, rightInset = 0 }: {
-  name: string; symptom: string; cluster: string; svc: string; ns: string; onClose: () => void; onOpenRef: (kind: string, n: string) => void; onAskAi: () => void; onRecoverySelected?: (correlationId: string) => void;
+  name: string; symptom: string; cluster: string; svc: string; ns: string; onClose: () => void; onOpenRef: (kind: string, n: string) => void; onAskAi: (request?: AiRecoveryHandoff) => void; onRecoverySelected?: (correlationId: string, route: string) => void;
   rawSymptom?: string | null; resourceKind?: string | null; incidentId?: string | null; currentSubject?: string | null; updatedAt?: string | null;
   correlationId?: string; status?: string; severity?: "critical" | "warning" | null;
   rootCause?: string | null; confidence?: number | null; supportingEvidence?: string[]; missingEvidence?: string[];
@@ -1475,7 +1542,10 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
   // id가 없으면(예: 지도 파생 진입) idle로 두고 관측 안 됨을 정직하게 표시한다.
   const recovery = useRecoveryPlan(correlationId ?? null);
   const remediationBundle = useRemediationBundle(correlationId ?? null);
-  const recoveryAudit = useRecoveryAudit(correlationId ?? null);
+  const recoveryAudit = useRecoveryAudit(
+    correlationId ?? null,
+    recoverySelectionAccepted || recovery.plan?.selected_action_id ? 4000 : 0,
+  );
   const recentChanges = useIncidentRecentChanges(incidentId ?? null);
   const latestReport = useLatestRcaReport(correlationId ?? null);
   const report = latestReport.report;
@@ -1503,11 +1573,15 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
   const recoveryTargetName = typeof recoveryTarget?.resource_name === "string" && recoveryTarget.resource_name.trim()
     ? recoveryTarget.resource_name
     : svc;
+  const selectedRecoveryCandidate = recovery.plan?.candidates.find(
+    (candidate) => candidate.action_id === (selectedRecoveryActionId ?? recovery.plan?.selected_action_id),
+  ) ?? recovery.plan?.selected_action ?? null;
   const recoveryProgress = recoveryProgressState({
     status,
     currentSubject,
     plan: recovery.plan,
     audit: recoveryAudit.items,
+    actionRoute: selectedRecoveryCandidate?.route ?? recovery.plan?.execution_route ?? null,
     selectionPending: recoverySelectionPendingId !== null,
     selectionAccepted: recoverySelectionAccepted,
     selectionFailed: recoverySelectionError !== null,
@@ -1526,25 +1600,22 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
     setRecoveryReviewActionId(null);
     requestAnimationFrame(() => detailScrollRef.current?.scrollTo({ top: recoveryListScrollTopRef.current }));
   };
-  const handleRecoverySelection = async (actionId: string) => {
-    if (!correlationId || !recovery.plan || recoverySelectionPendingId !== null) return;
+  const handleRecoverySelection = async (actionId: string): Promise<boolean> => {
+    if (!correlationId || !recovery.plan || recoverySelectionPendingId !== null) return false;
+    const selectedCandidate = recovery.plan.candidates.find((candidate) => candidate.action_id === actionId);
+    const selectedRoute = selectedCandidate?.route ?? recovery.plan.execution_route;
     setRecoverySelectionPendingId(actionId);
     setRecoverySelectionError(null);
-    if (import.meta.env.DEV && isRcaPreviewCorrelation(correlationId)) {
-      setSelectedRecoveryActionId(actionId);
-      setRecoverySelectionAccepted(true);
-      onRecoverySelected?.(correlationId);
-      setRecoverySelectionPendingId(null);
-      return;
-    }
     try {
       const receipt = await selectRecoveryAction(correlationId, recovery.plan.plan_id, actionId);
       if (!receipt.accepted) throw new Error("recovery selection was not accepted");
       setSelectedRecoveryActionId(actionId);
       setRecoverySelectionAccepted(true);
-      onRecoverySelected?.(correlationId);
+      onRecoverySelected?.(correlationId, selectedRoute);
+      return true;
     } catch {
       setRecoverySelectionError("복구 조치를 선택하지 못했습니다. 권한과 현재 플랜 상태를 확인해 주세요.");
+      return false;
     } finally {
       setRecoverySelectionPendingId(null);
     }
@@ -1742,7 +1813,27 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
                 selected={effectiveSelectedActionId === reviewedRecoveryCandidate.action_id}
                 onBack={closeRecoveryReview}
                 onConfirm={() => void handleRecoverySelection(reviewedRecoveryCandidate.action_id)}
-                onAskAi={onAskAi}
+                onAskAi={() => {
+                  if (!correlationId || !recovery.plan) return;
+                  const actionId = reviewedRecoveryCandidate.action_id;
+                  onAskAi({
+                    id: `recovery:${correlationId}:${actionId}:${Date.now()}`,
+                    prompt: recoveryAiPrompt({
+                      candidate: reviewedRecoveryCandidate,
+                      cluster,
+                      namespace: ns,
+                      resourceKind: resourceKind || "리소스",
+                      resourceName: svc,
+                      symptom: rawSymptom || symptom,
+                      rootCause,
+                    }),
+                    actionTitle: reviewedRecoveryCandidate.title,
+                    actionRoute: reviewedRecoveryCandidate.route,
+                    contextView: "복구 플랜",
+                    contextScope: cluster,
+                    execute: () => handleRecoverySelection(actionId),
+                  });
+                }}
                 onOpenTarget={recoveryTargetKind && recoveryTargetName ? () => onOpenRef(recoveryTargetKind, recoveryTargetName) : null}
               />
             ) : (
@@ -1852,13 +1943,14 @@ function RecoveryProgress({ progress }: { progress: RecoveryProgressState }) {
   );
 }
 
-function IssueCard({ issue, recoverySelectionAccepted, onOpen, onOpenTarget }: { issue: RcaIssueDetailView; recoverySelectionAccepted: boolean; onOpen: () => void; onOpenTarget: (() => void) | null }) {
+function IssueCard({ issue, recoverySelectionRoute, onOpen, onOpenTarget }: { issue: RcaIssueDetailView; recoverySelectionRoute: string | null; onOpen: () => void; onOpenTarget: (() => void) | null }) {
   const [targetActive, setTargetActive] = useState(false);
   const state = issueAnalysisState(issue);
   const recovery = recoveryProgressState({
     status: issue.status,
     currentSubject: issue.currentSubject,
-    selectionAccepted: recoverySelectionAccepted,
+    actionRoute: recoverySelectionRoute ?? issue.actionRoute,
+    selectionAccepted: recoverySelectionRoute !== null,
   });
   const title = issue.resourceName ?? "대상 미확인";
   const symptom = issue.symptom ?? "증상 미확인";
@@ -1940,14 +2032,14 @@ function IssueCard({ issue, recoverySelectionAccepted, onOpen, onOpenTarget }: {
   );
 }
 
-export function IssuesSurface({ incidentClusterIds, recoverySelectionCorrelations = new Set<string>(), sessionRules: _sessionRules = [], onOpenRef, onAskAi, onOpenRca }: {
-  incidentClusterIds: readonly string[]; recoverySelectionCorrelations?: ReadonlySet<string>; sessionRules?: string[]; onOpenRef: (kind: string, name: string) => void; onAskAi: () => void; onOpenRca?: (i: RcaIncident) => void;
+export function IssuesSurface({ incidentClusterIds, recoverySelectionRoutes = new Map<string, string>(), sessionRules: _sessionRules = [], onOpenRef, onAskAi, onOpenRca }: {
+  incidentClusterIds: readonly string[]; recoverySelectionRoutes?: ReadonlyMap<string, string>; sessionRules?: string[]; onOpenRef: (kind: string, name: string) => void; onAskAi: () => void; onOpenRca?: (i: RcaIncident) => void;
 }) {
   const [tab, setTab] = useState("진행 중");
   const [severityFilter, setSeverityFilter] = useState<IssueSeverityFilter>("all");
   // 이슈 탭 — 실 RCA 이슈 큐(GET /api/dashboard/rca/issues, 홈 W2와 동일 소스).
   // 큐 항목이 관측 RCA 필드(원인/확신도/증거/AI 요약)를 이미 실어주므로 상세 드로어로 그대로 전달한다.
-  const issues = useRcaIssueDetails(incidentClusterIds);
+  const issues = useRcaIssueDetails(incidentClusterIds, recoverySelectionRoutes.size > 0 ? 4000 : 0);
   const issueItems = issues.items;
   const activeIssues = issueItems.filter(isActiveRcaIssue);
   const resolvedIssues = issueItems.filter((issue) => !isActiveRcaIssue(issue));
@@ -2000,7 +2092,7 @@ export function IssuesSurface({ incidentClusterIds, recoverySelectionCorrelation
               <IssueCard
                 key={iss.correlationId}
                 issue={iss}
-                recoverySelectionAccepted={recoverySelectionCorrelations.has(iss.correlationId)}
+                recoverySelectionRoute={recoverySelectionRoutes.get(iss.correlationId) ?? null}
                 onOpen={() => setRca(iss)}
                 onOpenTarget={resourceKind && resourceName ? () => onOpenRef(resourceKind, resourceName) : null}
               />

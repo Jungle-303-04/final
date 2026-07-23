@@ -27,6 +27,18 @@ describe("recoveryProgressState", () => {
     });
   });
 
+  it("keeps an approval-required candidate in approval after selection", () => {
+    expect(recoveryProgressState({
+      status: "rca_completed",
+      actionRoute: "approval_required",
+      selectionAccepted: true,
+    })).toMatchObject({
+      phase: "approval",
+      label: "승인 대기",
+      step: 0,
+    });
+  });
+
   it("derives execution and verification from issue status", () => {
     expect(recoveryProgressState({ status: "command_dispatched" })).toMatchObject({
       phase: "executing",

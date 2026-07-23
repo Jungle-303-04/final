@@ -61,6 +61,7 @@ export function recoveryProgressState({
   currentSubject,
   plan,
   audit = [],
+  actionRoute,
   selectionPending = false,
   selectionAccepted = false,
   selectionFailed = false,
@@ -69,12 +70,14 @@ export function recoveryProgressState({
   currentSubject?: string | null;
   plan?: RecoveryPlan | null;
   audit?: readonly AuditTimelineItem[];
+  actionRoute?: string | null;
   selectionPending?: boolean;
   selectionAccepted?: boolean;
   selectionFailed?: boolean;
 }): RecoveryProgressState {
   const normalizedStatus = normalize(status);
   const normalizedSubject = normalize(currentSubject);
+  const normalizedRoute = normalize(actionRoute);
   const latestEvent = audit[0] ?? null;
   const subjects = audit.map((event) => normalize(event.subject));
 
@@ -115,6 +118,9 @@ export function recoveryProgressState({
     || SELECTED_SUBJECTS.has(normalizedSubject)
     || subjects.some((subject) => SELECTED_SUBJECTS.has(subject))
   ) {
+    if (normalizedRoute === "approval_required") {
+      return state("approval", "승인 대기", 0, "approval", latestEvent);
+    }
     return state("submitting", "복구 요청됨", 1, "active", latestEvent);
   }
   if (
