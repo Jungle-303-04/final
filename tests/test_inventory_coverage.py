@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from sqlalchemy.dialects import postgresql
+
 from domains.inventory.coverage import (
     InventoryDeleteScope,
     inventory_deletion_scopes,
@@ -365,6 +367,36 @@ def test_physical_topology_current_nodes_use_latest_resource_rows() -> None:
     assert "physical_topology_current_resources" in sql
     assert "physical_topology_current_resources.snapshot_id" in sql
     assert "source_snapshot_id = physical_topology_inventory.as_of_snapshot_id" not in sql
+
+
+def test_physical_topology_returns_all_active_pods_without_per_node_cap() -> None:
+    filters = ResourceFilters(
+        clusters=(),
+        namespaces=(),
+        applications=(),
+        resource_types=(),
+        health=(),
+        labels=(),
+        query=None,
+        include_deleted=False,
+    )
+    _, pod_statement, _ = _physical_topology_statements(
+        workspace_id="workspace-a",
+        cluster_ids=("cluster-a",),
+        allowed_application_ids=(),
+        filters=filters,
+        snapshot_revision=1,
+    )
+    sql = str(
+        pod_statement.compile(
+            dialect=postgresql.dialect(),
+            compile_kwargs={"literal_binds": True},
+        )
+    ).lower()
+
+    assert "placement_rank <=" not in sql
+    assert "succeeded" in sql
+    assert "failed" in sql
 
 
 def test_inventory_snapshot_partial_reasons_distinguish_truncation() -> None:
