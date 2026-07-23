@@ -24,6 +24,7 @@ import {
   type InvNode,
   type InvPod,
 } from "./devpreview/inventoryTopologyFeed";
+import { OpsiaServicePanel } from "./devpreview/OpsiaServicePanel";
 import { RepositoryConnections } from "./devpreview/RepositoryConnections";
 import type { RepositoryGroup } from "./devpreview/repositoryRegistry";
 import "./styles/tokens.css";
@@ -734,7 +735,7 @@ function PodRow({ pod, onClick, onTip }: {
 
 // ── 앱 ─────────────────────────────
 // embedded: 셸(통합 리소스)에 내장될 때 자체 헤더·내비를 숨기고 스코프 변화를 알림
-export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOpenRca, lensTab, onAddCluster, onAddRepo, onOpenRepository, stickyTop, initialCluster, pendingClusters, pendingRepos, connectedRepos, repositoryGroups, onRepositoryDisconnected }: {
+export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOpenRca, lensTab, onAddCluster, onAddRepo, onOpenRepository, stickyTop, initialCluster, selectedNamespace = null, pendingClusters, pendingRepos, connectedRepos, repositoryGroups, onRepositoryDisconnected }: {
   embedded?: boolean;
   onScopeChange?: (v: View) => void;
   /** 임베드 모드: 파드 클릭 시 셸의 통합 상세 오버레이를 연다 (내부 패널 대신) */
@@ -752,6 +753,8 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
   stickyTop?: number;
   /** 홈 카드 클릭 등 외부 진입 시 해당 클러스터 노드 뷰로 시작 (스코프 전달 — D21) */
   initialCluster?: string;
+  /** 셸 네임스페이스 선택값. null이면 클러스터의 모든 네임스페이스를 본다. */
+  selectedNamespace?: string | null;
   /** 세션 중 등록된 연결 대기 항목 — 목록에 실반영(등록의 결과가 보여야 한다) */
   pendingClusters?: string[];
   pendingRepos?: string[];
@@ -1015,6 +1018,7 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
 
           <SidePanel key={lensTab ?? "default"} forcedTab={lensTab ?? null} scaled={embedded}
             onAddRepo={onAddRepo} onOpenRepository={onOpenRepository} stickyTop={stickyTop}
+            activeCluster={activeCluster} selectedNamespace={selectedNamespace}
             pendingRepos={pendingRepos} connectedRepos={connectedRepos}
             repositoryGroups={repositoryGroups} onRepositoryDisconnected={onRepositoryDisconnected} />
         </div>
@@ -1159,14 +1163,16 @@ function PodSkeleton() {
 }
 
 // ── 우측 패널 ─────────────────────────────
-// 서비스·구성 관계는 인벤토리 계약(resources/summary)에서 관측되지 않는다 →
-// 정직한 "관측 안 됨". 저장소 탭은 실 세션 값(pendingRepos)과 연결 어포던스만 유지한다.
-function SidePanel({ forcedTab, scaled, onAddRepo, onOpenRepository, stickyTop, pendingRepos, connectedRepos, repositoryGroups, onRepositoryDisconnected }: {
+// 서비스 탭은 현재 드릴된 클러스터/네임스페이스 범위의 실제 Service 리소스를 보여준다.
+// 구성 탭은 아직 ConfigMap/Secret 일반 인벤토리 계약이 없어 정직한 빈 상태로 둔다.
+function SidePanel({ forcedTab, scaled, onAddRepo, onOpenRepository, stickyTop, activeCluster, selectedNamespace, pendingRepos, connectedRepos, repositoryGroups, onRepositoryDisconnected }: {
   forcedTab?: "svc" | "cfg" | "git" | null;
   scaled?: boolean;
   onAddRepo?: () => void;
   onOpenRepository?: (repositoryRef: string) => void;
   stickyTop?: number;
+  activeCluster?: string | null;
+  selectedNamespace?: string | null;
   pendingRepos?: string[];
   connectedRepos?: string[];
   repositoryGroups?: RepositoryGroup[];
@@ -1191,11 +1197,7 @@ function SidePanel({ forcedTab, scaled, onAddRepo, onOpenRepository, stickyTop, 
       </div>
 
       {tab === "svc" && (
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "26px 14px", textAlign: "center" }}>
-          <Network size={20} style={{ color: INK4 }} />
-          <span style={{ fontSize: TYPE.label2, fontWeight: 600, color: UI.ink2 }}>서비스 관계 관측 안 됨</span>
-          <span style={{ fontSize: TYPE.caption, color: UI.ink3 }}>서비스 호출 관계는 트래픽 관점에서 관측됩니다.</span>
-        </div>
+        <OpsiaServicePanel activeCluster={activeCluster ?? null} selectedNamespace={selectedNamespace ?? null} />
       )}
 
       {tab === "cfg" && (
