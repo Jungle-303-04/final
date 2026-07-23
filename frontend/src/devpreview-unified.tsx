@@ -1259,18 +1259,18 @@ function HomeSurface({ clusterMeta, incidentClusterIds, onDrillCluster, onCluste
             ))}
           </span>
           <button className="product-focusable product-control" aria-label={editing ? "레이아웃 편집 완료" : "레이아웃 편집"} title={editing ? "편집 완료" : "레이아웃 편집"} aria-pressed={editing} onClick={() => setEditing(!editing)}
-            style={{ width: 31, height: 31, display: "grid", placeItems: "center", border: `1px solid ${editing ? blueA(0.45) : UI.line}`, background: editing ? blueA(0.07) : UI.card, color: editing ? BLUE : UI.ink2, borderRadius: 9, padding: 0 }}>
+            style={{ width: 34, height: 34, display: "grid", placeItems: "center", border: `1px solid ${editing ? blueA(0.45) : UI.line}`, background: editing ? blueA(0.07) : UI.card, color: editing ? BLUE : UI.ink2, borderRadius: 9, padding: 0 }}>
             {editing ? <Check size={14} /> : <Pencil size={13} />}
           </button>
           <button className="product-focusable product-control" onClick={onAddRepo}
-            style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${UI.line}`, background: UI.card, color: UI.ink2, borderRadius: 9, padding: "5px 12px", fontSize: TYPE.label, fontWeight: 600 }}>
-            <span aria-hidden="true" style={{ width: 15, height: 15, flexShrink: 0, display: "grid", placeItems: "center", lineHeight: 0 }}>
-              <GithubIcon size={13} />
+            style={{ height: 34, display: "flex", alignItems: "center", gap: 6, border: `1px solid ${UI.line}`, background: UI.card, color: UI.ink2, borderRadius: 9, padding: "0 13px", fontSize: TYPE.label, fontWeight: 600 }}>
+            <span aria-hidden="true" style={{ width: 16, height: 16, flexShrink: 0, display: "grid", placeItems: "center", lineHeight: 0 }}>
+              <GithubIcon size={15} />
             </span>
-            <span style={{ lineHeight: 1 }}>저장소 연결</span>
+            <span>저장소 연결</span>
           </button>
           <button className="product-focusable product-action" onClick={onConnect}
-            style={{ display: "flex", alignItems: "center", gap: 6, border: "none", background: BLUE, color: UI.card, borderRadius: 9, padding: "6px 13px", fontSize: TYPE.label, fontWeight: 600 }}>+ 클러스터 연결</button>
+            style={{ height: 34, display: "flex", alignItems: "center", gap: 6, border: "none", background: BLUE, color: UI.card, borderRadius: 9, padding: "0 13px", fontSize: TYPE.label, fontWeight: 600 }}>+ 클러스터 연결</button>
         </span>
       </div>
 
