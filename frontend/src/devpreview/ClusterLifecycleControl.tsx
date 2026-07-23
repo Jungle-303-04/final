@@ -49,7 +49,9 @@ export function ClusterLifecycleControl({
   return (
     <>
       <button
+        className="product-focusable product-control"
         aria-label={`${cluster.displayName} 연결 해제`}
+        aria-pressed={open}
         onClick={() => setOpen(true)}
         title="클러스터 연결 해제"
         type="button"
@@ -63,7 +65,7 @@ export function ClusterLifecycleControl({
           display: "inline-flex",
           flexShrink: 0,
           fontSize: TYPE.label,
-          fontWeight: 700,
+          fontWeight: 600,
           gap: 6,
           padding: "6px 9px",
         }}

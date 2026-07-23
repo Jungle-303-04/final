@@ -215,8 +215,8 @@ export function ClusterDisconnectDialog({
               <Unplug className="size-[22px]" />
             </span>
             <div className="min-w-0 flex-1">
-              <DialogTitle className="text-[19px] font-semibold tracking-[-0.02em]">{phaseTitle(phase, t)}</DialogTitle>
-              <DialogDescription className="mt-1 text-[13px]">
+              <DialogTitle className="text-section font-semibold tracking-[-0.02em]">{phaseTitle(phase, t)}</DialogTitle>
+              <DialogDescription className="mt-1 text-body">
                 {phase === "confirm"
                   ? t("clusters.disconnect.description", { name: cluster.name })
                   : t("clusters.disconnect.progress.description", { name: cluster.name })}
@@ -244,7 +244,7 @@ export function ClusterDisconnectDialog({
               <Input
                 autoComplete="off"
                 autoFocus
-                className="h-auto rounded-[14px] px-4 py-3.5 font-mono text-[14px]"
+                className="h-auto rounded-[14px] px-4 py-3.5 font-mono text-body"
                 disabled={pending}
                 id="cluster-disconnect-confirmation"
                 onChange={(event) => setConfirmation(event.currentTarget.value)}
@@ -316,7 +316,7 @@ export function ClusterDisconnectDialog({
                  취소는 위저드의 '뒤로'와 같은 회색 채움, 주행동은 파괴적이라 빨강. */
               <div className="flex w-full items-stretch gap-3">
                 <Button
-                  className="h-auto flex-1 rounded-[14px] bg-secondary py-3.5 text-[14.5px] font-semibold text-secondary-foreground shadow-none hover:bg-muted"
+                  className="h-auto flex-1 rounded-[14px] bg-secondary py-3.5 text-body font-semibold text-secondary-foreground shadow-none hover:bg-muted"
                   onClick={() => changeOpen(false)}
                   type="button"
                   variant="ghost"
@@ -324,7 +324,7 @@ export function ClusterDisconnectDialog({
                   {t("common.action.cancel")}
                 </Button>
                 <Button
-                  className="h-auto flex-[2] rounded-[14px] py-3.5 text-[15px] font-semibold"
+                  className="h-auto flex-[2] rounded-[14px] py-3.5 text-section font-semibold"
                   disabled={!confirmed}
                   type="submit"
                   variant="destructive"

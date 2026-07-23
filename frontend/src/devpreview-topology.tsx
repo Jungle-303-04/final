@@ -252,7 +252,7 @@ export function TopologyView({ embedded = false, onOpenService, focusId, onFocus
     <div className="tp" style={{ minHeight: embedded ? undefined : "100vh", padding: embedded ? 0 : "44px 24px", display: "flex", justifyContent: "center" }}>
       <div style={{ width: embedded ? "100%" : 992, maxWidth: "100%" }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginBottom: 18 }}>
-          {!embedded && <div style={{ fontSize: TYPE.title1, fontWeight: 700, letterSpacing: "-0.03em", color: UI.ink }}>서비스 토폴로지</div>}
+          {!embedded && <div style={{ fontSize: TYPE.page, fontWeight: 700, letterSpacing: "-0.03em", color: UI.ink }}>서비스 토폴로지</div>}
           {!embedded && <div style={{ fontSize: TYPE.body, color: UI.ink3 }}>관계 그래프 — {scopeLabel}</div>}
         </div>
 
@@ -267,23 +267,23 @@ export function TopologyView({ embedded = false, onOpenService, focusId, onFocus
               <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ type: "spring", bounce: 0.12, visualDuration: 0.3 }}
                 style={{ position: "absolute", top: 14, right: 14, width: 276, background: cardA(0.97), backdropFilter: "blur(10px)", border: `1px solid ${bad ? TINT.crit.bd : UI.line}`, borderRadius: 13, padding: 14, boxShadow: `0 16px 40px -18px ${inkA(0.25)}`, zIndex: 5 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <span style={{ fontSize: TYPE.body, fontWeight: 700, fontFamily: MONO, color: UI.ink, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  <span style={{ fontSize: TYPE.body, fontWeight: 600, fontFamily: MONO, color: UI.ink, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {from?.name ?? pinEdge.from} <span style={{ color: UI.ink3, fontWeight: 600 }}>→</span> {to?.name ?? pinEdge.to}
                   </span>
                   <button onClick={() => setPinEdge(null)} aria-label="엣지 상세 닫기" style={{ width: 20, height: 20, borderRadius: 999, border: "none", background: inkA(0.06), color: UI.ink3, cursor: "pointer", fontSize: TYPE.caption, lineHeight: 1 }}>✕</button>
                 </div>
                 <div style={{ marginTop: 8, display: "flex", gap: 6, flexWrap: "wrap" }}>
-                  <span style={{ fontSize: TYPE.micro, fontWeight: 700, color: TINT.blue.fg, background: TINT.blue.bg, border: `1px solid ${TINT.blue.bd}`, borderRadius: 6, padding: "1px 7px" }}>관계 · {KIND_LABEL[pinEdge.kind]}</span>
-                  {to && <span style={{ fontSize: TYPE.micro, color: UI.ink2, background: inkA(0.04), borderRadius: 6, padding: "1px 7px" }}>{to.kind}{to.namespace ? ` · ${to.namespace}` : ""}</span>}
+                  <span style={{ fontSize: TYPE.caption, fontWeight: 600, color: TINT.blue.fg, background: TINT.blue.bg, border: `1px solid ${TINT.blue.bd}`, borderRadius: 6, padding: "1px 7px" }}>관계 · {KIND_LABEL[pinEdge.kind]}</span>
+                  {to && <span style={{ fontSize: TYPE.caption, color: UI.ink2, background: inkA(0.04), borderRadius: 6, padding: "1px 7px" }}>{to.kind}{to.namespace ? ` · ${to.namespace}` : ""}</span>}
                 </div>
                 {tel ? (
                   <div style={{ marginTop: 11, borderTop: `1px solid ${UI.line}`, paddingTop: 10 }}>
-                    <div style={{ display: "flex", gap: 12, fontSize: TYPE.caption2, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>
+                    <div style={{ display: "flex", gap: 12, fontSize: TYPE.caption, fontVariantNumeric: "tabular-nums" }}>
                       <span style={{ color: UI.ink2 }}>연결 <b style={{ color: UI.ink }}>{tel.connections.toLocaleString()}</b></span>
                       <span style={{ color: UI.ink2 }}>판정 <b style={{ color: bad ? ST.crit : UI.ink }}>{VERDICT_LABEL[tel.verdict]}</b></span>
                       <span style={{ color: UI.ink2 }}>{tel.protocol}</span>
                     </div>
-                    <div style={{ marginTop: 8, fontSize: TYPE.micro, color: UI.ink3 }}>rps · p99 · 5xx 관측 안 됨 (traffic/flows 계약 미제공)</div>
+                    <div style={{ marginTop: 8, fontSize: TYPE.caption, color: UI.ink3 }}>rps · p99 · 5xx 관측 안 됨 (traffic/flows 계약 미제공)</div>
                   </div>
                 ) : (
                   <div style={{ marginTop: 11, borderTop: `1px solid ${UI.line}`, paddingTop: 10, fontSize: TYPE.caption, color: UI.ink3 }}>
@@ -384,12 +384,12 @@ export function TopologyView({ embedded = false, onOpenService, focusId, onFocus
               background: cardA(0.96), backdropFilter: "blur(10px)", border: `1px solid ${bad ? TINT.crit.bd : UI.line}`, borderRadius: 11, padding: "10px 12px",
               boxShadow: `0 10px 30px -12px ${inkA(0.22)}`, minWidth: 184,
             }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: TYPE.label2, fontWeight: 700, fontFamily: MONO, color: UI.ink }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: TYPE.label, fontWeight: 600, fontFamily: MONO, color: UI.ink }}>
               {from?.name ?? etip.e.from}<span style={{ color: UI.ink3, fontWeight: 600 }}>→</span>{to?.name ?? etip.e.to}
             </div>
-            <div style={{ marginTop: 6, fontSize: TYPE.micro, color: UI.ink3 }}>관계 · {KIND_LABEL[etip.e.kind]}</div>
+            <div style={{ marginTop: 6, fontSize: TYPE.caption, color: UI.ink3 }}>관계 · {KIND_LABEL[etip.e.kind]}</div>
             {tel ? (
-              <div style={{ display: "flex", gap: 12, marginTop: 7, fontSize: TYPE.caption2, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>
+              <div style={{ display: "flex", gap: 12, marginTop: 7, fontSize: TYPE.caption, fontVariantNumeric: "tabular-nums" }}>
                 <span style={{ color: UI.ink2 }}>연결 <b style={{ color: UI.ink }}>{tel.connections.toLocaleString()}</b></span>
                 <span style={{ color: UI.ink2 }}>판정 <b style={{ color: bad ? ST.crit : UI.ink }}>{VERDICT_LABEL[tel.verdict]}</b></span>
               </div>

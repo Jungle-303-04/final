@@ -12,13 +12,13 @@ export const BRAND = {
 
 export const BRAND_COLOR = { aws: "#FF9900", eks: "#FF9900", redis: "#DC382C", github: "#24292F", postgres: "#336791" } as const;
 
-const make = (d: string) => ({ size = 14, style }: { size?: number; style?: React.CSSProperties }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" style={style} aria-hidden>
+const make = (d: string, viewBox = "0 0 24 24") => ({ size = 14, style }: { size?: number; style?: React.CSSProperties }) => (
+  <svg width={size} height={size} viewBox={viewBox} fill="currentColor" style={style} aria-hidden>
     <path d={d} />
   </svg>
 );
 export const EksIcon = make(BRAND.eks);
 export const AwsIcon = make(BRAND.aws);
 export const RedisIcon = make(BRAND.redis);
-export const GithubIcon = make(BRAND.github);
+export const GithubIcon = make(BRAND.github, "0 0 16 16");
 export const PostgresIcon = make(BRAND.postgres);

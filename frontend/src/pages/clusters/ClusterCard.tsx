@@ -96,7 +96,7 @@ export function ClusterCard({
     >
       <Link
         aria-label={t("clusters.card.openResources", { name: cluster.name })}
-        className="flex flex-1 flex-col gap-(--card-spacing) rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+        className="flex flex-1 flex-col gap-(--card-spacing) rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-focus-ring"
         onClick={() => captureRouteMorph(document)}
         to={href}
       >
@@ -206,7 +206,7 @@ export function ClusterCard({
 
       {disconnectStep !== null && onDisconnect ? (
         <button
-          className="mx-3 mb-3 flex min-w-0 items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/8 px-3 py-2 text-left text-xs font-medium text-amber-800 transition-colors hover:bg-amber-500/12 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 dark:text-amber-200 motion-reduce:transition-none"
+          className="mx-3 mb-3 flex min-w-0 items-center gap-2 rounded-lg border border-status-warning/30 bg-status-warning/8 px-3 py-2 text-left text-xs font-medium text-warning-foreground transition-colors hover:bg-status-warning/12 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-focus-ring motion-reduce:transition-none"
           onClick={onDisconnect}
           type="button"
         >

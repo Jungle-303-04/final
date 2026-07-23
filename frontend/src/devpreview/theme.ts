@@ -4,12 +4,13 @@
 
 // 표면·잉크 (Geist: background / surface / border, 3단 잉크)
 export const UI = {
-  bg: "#F2F3F6",     // 페이지 배경 — 흰 카드와 층위가 보이는 중성 회색
+  bg: "#E9EBF0",     // 페이지 배경 — 밝은 환경에서도 흰 카드와 구분되는 중성 회색
   bg2: "#F7F8FA",    // 표면 안 보조 배경 (표 헤더·인셋)
   card: "#FFFFFF",   // 표면
   line: "#E0E3E8",   // 헤어라인 (구분 1순위 — 그림자보다 먼저)
   line2: "#EBEDF1",  // 보조 헤어라인
   ink: "#111318",    // 본문·제목
+  heading: "#2B2F36",// 카드·섹션 제목
   ink2: "#5F6570",   // 보조 텍스트
   ink3: "#9AA0AA",   // 라벨·자리표시
 } as const;
@@ -26,6 +27,18 @@ export const warnA = (a: number) => `rgba(255,179,64,${a})`;
 // 액센트 — 선택·포커스·링크 전용 (상태 표현에 쓰지 않는다)
 export const BLUE = "#0A84FF";
 export const BLUE2 = "#5AC8FA"; // 브랜드 그라디언트 종점 전용
+
+// 상호작용 — 액션과 중립 컨트롤의 상태를 컴포넌트별로 재정의하지 않는다.
+export const INTERACTION = {
+  action: BLUE,
+  actionHover: "#0973E6",
+  actionPressed: "#0068D9",
+  focusRing: blueA(0.32),
+  controlHover: "#F4F5F7",
+  controlSelected: "#EDF4FF",
+  disabledBg: "#F3F4F6",
+  disabledText: "#9AA0AA",
+} as const;
 
 // 보조 중립 — 호버 헤어라인·어포던스·인셋 (회색 리터럴 난립 금지)
 export const LINE3 = "#DADDE3";  // 호버·점선 보더
@@ -64,13 +77,17 @@ export const TINT = {
 // 외부 브랜드 표식 (로고 옆 고정색)
 export const BRAND = { github: "#24292F", awsA: "#FF9900", awsB: "#F76F00" } as const;
 
-// 타이포 — 한 단계 큰 애플 스케일 (500 웨이트 금지 → 600)
-export const SANS = `-apple-system, BlinkMacSystemFont, "SF Pro Text", "Pretendard", "Apple SD Gothic Neo", "Helvetica Neue", sans-serif`;
+// 타이포 — 의미 기반 5단계 + 기능성 예외(KPI·code)
+export const SANS = `"Pretendard Variable", "Pretendard", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
 export const MONO = "ui-monospace, 'SF Mono', SFMono-Regular, Menlo, monospace";
 export const TYPE = {
-  micro: 10.5, caption: 11, caption2: 11.5, label: 12, label2: 12.5,
-  body: 13, bodyStrong: 14,
-  title3: 15.5, title2: 17, heading: 18, title1: 21, kpi: 25,
+  caption: 12,
+  label: 14,
+  body: 15,
+  section: 17,
+  page: 24,
+  kpi: 28,
+  code: 12,
 } as const;
 
 // 모션 — 용도별 스프링 3종 (임의 duration 금지)
@@ -96,6 +113,9 @@ export const ELEV = {
 
 // 라운드 스케일 (4px 그리드)
 export const RADIUS = { tile: 3, chip: 6, control: 9, card: 14, panel: 16, sheet: 18 } as const;
+
+// 여백 스케일 — 조밀한 목록부터 페이지 구획까지 4px 그리드로 제한한다.
+export const SPACE = { compact: 8, stack: 12, card: 16, section: 20, page: 24 } as const;
 
 // 시연 스케일 — 데모는 멀리서도 읽혀야 한다 (기본 1.25 = 별도 확대 없이 발표 가독)
 export const PRESENT_SCALE = 1.25;

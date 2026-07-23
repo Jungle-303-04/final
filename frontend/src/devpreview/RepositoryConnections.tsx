@@ -3,6 +3,7 @@ import { useState } from "react";
 import { disconnectRepository } from "../api/repository-connection";
 import { GithubIcon } from "./brandIcons";
 import type { RepositoryGroup } from "./repositoryRegistry";
+import { BLUE, HP, TINT, TYPE, UI, blueA, critA } from "./theme";
 
 /**
  * Repository-level summary backed by observed application bindings.
@@ -79,6 +80,7 @@ function RepositoryRow({
     <div>
       <button
         type="button"
+        className="product-focusable product-control"
         aria-expanded={selected}
         aria-controls={applicationsId}
         aria-label={`${group.repositoryRef} GitOps ${selected ? "닫기" : "열기"}`}
@@ -91,11 +93,11 @@ function RepositoryRow({
           minWidth: 0,
           minHeight: 54,
           padding: "6px 7px",
-          border: selected ? "1px solid rgba(37,99,235,.45)" : "1px solid transparent",
+          border: selected ? `1px solid ${blueA(0.45)}` : "1px solid transparent",
           borderRadius: 9,
-          background: selected ? "rgba(37,99,235,.09)" : "rgba(34,197,94,.08)",
-          boxShadow: selected ? "0 0 0 2px rgba(37,99,235,.08)" : "none",
-          color: "#0f172a",
+          background: selected ? blueA(0.09) : TINT.ok.bg,
+          boxShadow: selected ? `0 0 0 2px ${blueA(0.08)}` : "none",
+          color: UI.ink,
           textAlign: "left",
           cursor: onOpenRepository ? "pointer" : "default",
         }}
@@ -109,17 +111,17 @@ function RepositoryRow({
               overflow: "hidden",
               textOverflow: "ellipsis",
               whiteSpace: "nowrap",
-              color: "#0f172a",
-              fontSize: 12,
+              color: UI.ink,
+              fontSize: TYPE.label,
             }}
           >
             {group.repositoryRef}
           </strong>
-          <span style={{ display: "block", marginTop: 2, color: "#16803b", fontSize: 11, lineHeight: 1.35 }}>
+          <span style={{ display: "block", marginTop: 2, color: TINT.ok.fg, fontSize: TYPE.caption, lineHeight: 1.35 }}>
             연결됨 · 앱 {group.applications.length}개
           </span>
         </span>
-        <span aria-hidden="true" style={{ color: "#64748b", fontSize: 13, transform: selected ? "rotate(180deg)" : "none", transition: "transform 150ms ease" }}>
+        <span aria-hidden="true" style={{ color: selected ? BLUE : UI.ink2, fontSize: TYPE.body, transform: selected ? "rotate(180deg)" : "none", transition: "transform 150ms ease" }}>
           ▾
         </span>
       </button>
@@ -132,17 +134,17 @@ function RepositoryRow({
           {group.applications.map((application) => (
             <li
               key={application.id}
-              style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, minWidth: 0, padding: "9px 10px", border: "1px solid #e5e7eb", borderRadius: 8, background: "#fff" }}
+              style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, minWidth: 0, padding: "9px 10px", border: `1px solid ${UI.line}`, borderRadius: 8, background: UI.card }}
             >
               <span style={{ minWidth: 0 }}>
-                <strong style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "#111827", fontSize: 12 }}>
+                <strong style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: UI.ink, fontSize: TYPE.label }}>
                   {application.name}
                 </strong>
-                <span style={{ display: "block", marginTop: 2, overflow: "hidden", color: "#9aa0aa", fontSize: 11, textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                <span style={{ display: "block", marginTop: 2, overflow: "hidden", color: UI.ink3, fontSize: TYPE.caption, textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {application.manifestPath ?? "매니페스트 경로 관측 안 됨"}
                 </span>
               </span>
-              <span style={{ flex: "0 0 auto", color: "#9aa0aa", fontSize: 11 }}>
+              <span style={{ flex: "0 0 auto", color: UI.ink3, fontSize: TYPE.caption }}>
                 {application.branch ?? "브랜치 관측 안 됨"}
               </span>
             </li>
@@ -151,22 +153,23 @@ function RepositoryRow({
           {/* 연결 해제 — 인라인 2단계 확인(브라우저 다이얼로그 미사용). */}
           <li style={{ listStyle: "none", marginTop: 2 }}>
             {error && (
-              <div role="alert" style={{ marginBottom: 6, color: "#b91c1c", fontSize: 11 }}>
+              <div role="alert" style={{ marginBottom: 6, color: TINT.crit.fg, fontSize: TYPE.caption }}>
                 {error}
               </div>
             )}
             {!confirming ? (
               <button
                 type="button"
+                className="product-focusable product-destructive"
                 onClick={() => setConfirming(true)}
                 style={{
                   width: "100%",
                   padding: "8px 10px",
-                  border: "1px solid #fca5a5",
+                  border: `1px solid ${TINT.crit.bd}`,
                   borderRadius: 8,
-                  background: "#fff",
-                  color: "#b91c1c",
-                  fontSize: 11.5,
+                  background: UI.card,
+                  color: TINT.crit.fg,
+                  fontSize: TYPE.label,
                   fontWeight: 600,
                   cursor: "pointer",
                 }}
@@ -175,13 +178,14 @@ function RepositoryRow({
               </button>
             ) : (
               <div style={{ display: "grid", gap: 6 }}>
-                <span style={{ color: "#7f1d1d", fontSize: 11, lineHeight: 1.45 }}>
+                <span style={{ color: TINT.crit.fg, fontSize: TYPE.caption, lineHeight: 1.45 }}>
                   해제하면 이 저장소의 폴링·동기화가 멈추고 앱 {group.applications.length}개가
                   목록에서 내려갑니다. 저장된 자격증명도 삭제됩니다.
                 </span>
                 <div style={{ display: "flex", gap: 6 }}>
                   <button
                     type="button"
+                    className="product-focusable product-destructive"
                     disabled={busy}
                     onClick={() => void runDisconnect()}
                     style={{
@@ -189,29 +193,28 @@ function RepositoryRow({
                       padding: "8px 10px",
                       border: 0,
                       borderRadius: 8,
-                      background: busy ? "#f0a3a3" : "#dc2626",
-                      color: "#fff",
-                      fontSize: 11.5,
-                      fontWeight: 700,
-                      cursor: busy ? "default" : "pointer",
+                      background: busy ? critA(0.55) : HP.crit,
+                      color: UI.card,
+                      fontSize: TYPE.label,
+                      fontWeight: 600,
                     }}
                   >
                     {busy ? "해제 중…" : "해제 확정"}
                   </button>
                   <button
                     type="button"
+                    className="product-focusable product-control"
                     disabled={busy}
                     onClick={() => setConfirming(false)}
                     style={{
                       flex: 1,
                       padding: "8px 10px",
-                      border: "1px solid #d1d5db",
+                      border: `1px solid ${UI.line}`,
                       borderRadius: 8,
-                      background: "#fff",
-                      color: "#374151",
-                      fontSize: 11.5,
+                      background: UI.card,
+                      color: UI.ink2,
+                      fontSize: TYPE.label,
                       fontWeight: 600,
-                      cursor: busy ? "default" : "pointer",
                     }}
                   >
                     취소
