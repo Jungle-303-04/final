@@ -179,28 +179,29 @@ function ReasonNotes({ codes }: { codes: string[] }) {
   );
 }
 
-// ── 공통 프레임: 제목 + 주 액션 1개(P-43) + 탭 ──
-function Page({ title, icon: I, action, tabs, tab, onTab, ensureVerticalScroll = false, children }: {
+// ── 공통 프레임: 전역 내비게이션이 화면 이름을 이미 소유하므로 본문 제목은 반복하지 않는다.
+// 탭과 주 액션만 하나의 상단 도구막대에 두고, 제목은 main의 접근 가능한 이름으로 유지한다. ──
+function Page({ title, icon: _icon, action, tabs, tab, onTab, ensureVerticalScroll = false, children }: {
   title: string; icon: React.ComponentType<{ size?: number; style?: React.CSSProperties }>;
   action?: React.ReactNode; tabs?: string[]; tab?: string; onTab?: (t: string) => void;
   ensureVerticalScroll?: boolean; children: React.ReactNode;
 }) {
   return (
-    <main style={{ minWidth: 0, minHeight: ensureVerticalScroll ? `calc(100vh / ${PRESENT_SCALE})` : undefined, boxSizing: "border-box", display: "flex", flexDirection: "column", gap: SPACE.card, padding: "14px 18px 40px" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <I size={17} style={{ color: BLUE }} />
-        <span style={{ fontSize: TYPE.page, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink }}>{title}</span>
-        <span style={{ marginLeft: "auto" }}>{action}</span>
-      </div>
-      {tabs && (
-        <div style={{ display: "flex", gap: 2, background: inkA(0.05), borderRadius: 9, padding: 2, width: "fit-content" }}>
-          {tabs.map((t) => (
-            <button key={t} className="product-focusable product-control" aria-selected={tab === t} onClick={() => onTab?.(t)}
-              style={{ position: "relative", border: "none", background: "transparent", borderRadius: 7, padding: "5px 16px", fontSize: TYPE.label, fontWeight: 600, color: tab === t ? UI.ink : UI.ink3, cursor: "pointer" }}>
-              {tab === t && <motion.span layoutId={`ptab-${title}`} transition={SOFT} style={{ position: "absolute", inset: 0, background: UI.card, borderRadius: 7, boxShadow: `0 1px 4px ${inkA(0.14)}` }} />}
-              <span style={{ position: "relative" }}>{t}</span>
-            </button>
-          ))}
+    <main aria-label={title} style={{ minWidth: 0, minHeight: ensureVerticalScroll ? `calc(100vh / ${PRESENT_SCALE})` : undefined, boxSizing: "border-box", display: "flex", flexDirection: "column", gap: SPACE.card, padding: "12px 18px 40px" }}>
+      {(tabs || action) && (
+        <div data-surface-toolbar="true" style={{ minHeight: 34, display: "flex", alignItems: "center", gap: 10 }}>
+          {tabs && (
+            <div role="tablist" aria-label={`${title} 보기`} style={{ display: "flex", gap: 2, background: inkA(0.05), borderRadius: 9, padding: 2, width: "fit-content" }}>
+              {tabs.map((t) => (
+                <button type="button" role="tab" key={t} className="product-focusable product-control" aria-selected={tab === t} onClick={() => onTab?.(t)}
+                  style={{ position: "relative", border: "none", background: "transparent", borderRadius: 7, padding: "5px 16px", fontSize: TYPE.label, fontWeight: 600, color: tab === t ? UI.ink : UI.ink3, cursor: "pointer" }}>
+                  {tab === t && <motion.span layoutId={`ptab-${title}`} transition={SOFT} style={{ position: "absolute", inset: 0, background: UI.card, borderRadius: 7, boxShadow: `0 1px 4px ${inkA(0.14)}` }} />}
+                  <span style={{ position: "relative" }}>{t}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          {action && <span style={{ marginLeft: "auto" }}>{action}</span>}
         </div>
       )}
       {children}
@@ -2136,13 +2137,22 @@ function IssueCard({ issue, recoverySelectionRoute, recoveryCompleted, onOpen, o
       whileHover={{ y: -1 }}
       transition={{ duration: DUR.micro }}
       style={{
-        width: "100%", minWidth: 0, display: "block",
+        position: "relative", width: "100%", minWidth: 0, display: "block",
         padding: 0, overflow: "hidden", textAlign: "left",
         border: `1px solid ${UI.line}`, borderRadius: RADIUS.card, background: UI.card,
         boxShadow: `0 1px 2px ${inkA(0.04)}`, color: UI.ink,
       }}
     >
-      <span style={{ minWidth: 0, display: "grid", gap: SPACE.stack, padding: `${SPACE.stack}px ${SPACE.card}px` }}>
+      {/* 카드의 목적지는 이슈 상세 하나다. 전체 카드 오버레이 버튼으로 마우스·키보드
+          진입을 통일하고, 별도 목적지인 대상 리소스/PR 링크만 위 레이어에서 유지한다. */}
+      <button
+        type="button"
+        aria-label={`${title} 이슈 상세 열기`}
+        className="product-focusable product-control"
+        onClick={onOpen}
+        style={{ position: "absolute", inset: 0, zIndex: 1, width: "100%", border: "none", borderRadius: RADIUS.card, background: "transparent", cursor: "pointer" }}
+      />
+      <span style={{ position: "relative", zIndex: 2, pointerEvents: "none", minWidth: 0, display: "grid", gap: SPACE.stack, padding: `${SPACE.stack}px ${SPACE.card}px` }}>
         <span style={{ minWidth: 0, display: "flex", alignItems: "center", gap: 10 }}>
           <span style={{ minWidth: 0, flex: 1, display: "flex", alignItems: "center", gap: 8 }}>
             <span role="img" aria-label={`상태: ${indicatorLabel}`} title={`상태: ${indicatorLabel}`} style={{ width: 12, height: 12, flexShrink: 0, alignSelf: "center", cursor: "help", borderRadius: 999, background: indicatorColor }} />
@@ -2171,7 +2181,7 @@ function IssueCard({ issue, recoverySelectionRoute, recoveryCompleted, onOpen, o
                 onMouseLeave={() => setTargetActive(false)}
                 onFocus={() => setTargetActive(true)}
                 onBlur={() => setTargetActive(false)}
-                style={{ maxWidth: "100%", border: "none", borderRadius: 7, background: targetActive ? TINT.gray.bd : TINT.gray.bg, color: targetActive ? UI.ink : UI.ink2, padding: "2px 7px", fontSize: TYPE.caption, fontWeight: 400, lineHeight: 1.35, cursor: "pointer", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", verticalAlign: "middle", transition: `background ${DUR.micro}s ease, color ${DUR.micro}s ease` }}
+                style={{ position: "relative", zIndex: 3, pointerEvents: "auto", maxWidth: "100%", border: "none", borderRadius: 7, background: targetActive ? TINT.gray.bd : TINT.gray.bg, color: targetActive ? UI.ink : UI.ink2, padding: "2px 7px", fontSize: TYPE.caption, fontWeight: 400, lineHeight: 1.35, cursor: "pointer", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", verticalAlign: "middle", transition: `background ${DUR.micro}s ease, color ${DUR.micro}s ease` }}
                 title={`${target} 리소스 상세 열기`}
               >
                 {target}
@@ -2188,7 +2198,7 @@ function IssueCard({ issue, recoverySelectionRoute, recoveryCompleted, onOpen, o
                 onClick={(event) => event.stopPropagation()}
                 rel="noopener noreferrer"
                 target="_blank"
-                style={{ display: "inline-flex", alignItems: "center", gap: 4, color: BLUE, fontSize: TYPE.label, fontWeight: 600, textDecoration: "none" }}
+                style={{ position: "relative", zIndex: 3, pointerEvents: "auto", display: "inline-flex", alignItems: "center", gap: 4, color: BLUE, fontSize: TYPE.label, fontWeight: 600, textDecoration: "none" }}
               >
                 {prReference.label} <ExternalLink size={12} />
               </a>
@@ -2201,17 +2211,16 @@ function IssueCard({ issue, recoverySelectionRoute, recoveryCompleted, onOpen, o
           <span>판단 근거 {evidenceCount}개</span>
         </span>
 
-        <span style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+        <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <Pill tone={state.tone} label={state.label} />
-          <button type="button" className="product-focusable product-control" onClick={(event) => { event.stopPropagation(); onOpen(); }} style={{ display: "inline-flex", alignItems: "center", gap: 3, border: "none", background: "transparent", padding: "3px 5px", color: BLUE, borderRadius: 6, fontSize: TYPE.label, fontWeight: 600, cursor: "pointer" }}>열기 <ChevronRight size={14} /></button>
         </span>
       </span>
     </motion.article>
   );
 }
 
-export function IssuesSurface({ incidentClusterIds, recoverySelectionRoutes = new Map<string, string>(), sessionRules: _sessionRules = [], onOpenRef, onAskAi, onOpenRca }: {
-  incidentClusterIds: readonly string[]; recoverySelectionRoutes?: ReadonlyMap<string, string>; sessionRules?: string[]; onOpenRef: (kind: string, name: string) => void; onAskAi: () => void; onOpenRca?: (i: RcaIncident) => void;
+export function IssuesSurface({ incidentClusterIds, recoverySelectionRoutes = new Map<string, string>(), sessionRules: _sessionRules = [], onOpenRef, onOpenRca }: {
+  incidentClusterIds: readonly string[]; recoverySelectionRoutes?: ReadonlyMap<string, string>; sessionRules?: string[]; onOpenRef: (kind: string, name: string) => void; onOpenRca?: (i: RcaIncident) => void;
 }) {
   const [tab, setTab] = useState("진행 중");
   const [severityFilter, setSeverityFilter] = useState<IssueSeverityFilter>("all");
@@ -2251,8 +2260,7 @@ export function IssuesSurface({ incidentClusterIds, recoverySelectionRoutes = ne
     prUrl: iss.prUrl,
   });
   return (
-    <Page title="이슈" icon={AlertTriangle} tabs={["진행 중", "해결됨", "예방 점검"]} tab={tab} onTab={setTab}
-      action={tab === "진행 중" ? <button className="product-focusable product-control" onClick={onAskAi} style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${blueA(0.4)}`, background: blueA(0.07), color: BLUE, borderRadius: 9, padding: "6px 13px", fontSize: TYPE.label, fontWeight: 600, cursor: "pointer" }}>AI로 원인 분석</button> : null}>
+    <Page title="이슈" icon={AlertTriangle} tabs={["진행 중", "해결됨", "예방 점검"]} tab={tab} onTab={setTab}>
       {tab === "진행 중" && (
         <IssueSeverityFilters active={severityFilter} criticalCount={critCount} warningCount={warnCount} onChange={setSeverityFilter} totalCount={activeIssues.length} />
       )}

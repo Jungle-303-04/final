@@ -8,7 +8,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Activity, AlertTriangle, Box, Check, ChevronLeft, ChevronRight, Clock3, Cpu, EllipsisVertical, ExternalLink, FileCog, Monitor, Plug, RotateCcw, Server, Settings, Unplug } from "lucide-react";
-import { UI, BLUE, HP, TINT, MONO, TYPE, SOFT, SPRING, PAGE, PRESENT_SCALE, DUR, inkA, blueA, LINE3, INK4, BRAND, cardA } from "./devpreview/theme";
+import { UI, BLUE, HP, TINT, MONO, TYPE, SOFT, SPRING, PAGE, PRESENT_SCALE, DUR, RESOURCE_LAYOUT, inkA, blueA, LINE3, INK4, BRAND, cardA } from "./devpreview/theme";
 import { AwsIcon, GithubIcon } from "./devpreview/brandIcons";
 import { statusLabel, reasonLabel } from "./devpreview/statusLabel";
 import { useNarrowViewport } from "./devpreview/useNarrowViewport";
@@ -1046,6 +1046,10 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
         </header>
         )}
 
+        {/* 세 관점 공통 2열 프레임: 요약·경로는 좌측 본문에 포함하고,
+            우측 보조 패널은 다른 관점과 같은 상단선에서 시작한다. */}
+        <div className="opsia-content-layout" style={{ display: "flex", gap: RESOURCE_LAYOUT.columnGap, alignItems: "flex-start", flexWrap: "wrap" }}>
+          <div className="opsia-main-pane" style={{ flex: "1 1 440px", minWidth: 0, position: "relative" }}>
         {/* 상태 요약 줄 — 클러스터 수(실). 드릴 시 관측된 노드·파드 수를 정직하게 표기. */}
         {(() => {
           const seg: React.CSSProperties = { display: "flex", alignItems: "center", gap: 5, fontSize: TYPE.label, fontWeight: 600, color: UI.ink2, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 999, padding: "5px 11px", whiteSpace: "nowrap" };
@@ -1106,9 +1110,7 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
           ))}
         </div>
 
-        {/* 좁아지면(AI 도킹 등) 어사이드가 아래로 내려간다 — 겹침 방지 */}
-        <div className="opsia-content-layout" style={{ display: "flex", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
-          <div className="opsia-main-pane" style={{ flex: "1 1 440px", minWidth: 0, position: "relative" }}>
+            {/* 좁아지면(AI 도킹 등) 어사이드가 아래로 내려간다 — 겹침 방지 */}
             <AnimatePresence mode="popLayout" custom={{ dir, mode }} initial={false}>
               <motion.div key={viewKey} custom={{ dir, mode }}
                 variants={{
@@ -1311,7 +1313,7 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
         .op .podrow:hover { background: ${inkA(0.035)} !important; }
         @container opsia-content (max-width: 1000px) {
           .op .opsia-main-pane { flex-basis: 100% !important; }
-          .op .opsia-side-panel { position: static !important; top: auto !important; width: 100% !important; max-height: none !important; }
+          .op .opsia-side-panel { position: static !important; top: auto !important; width: 100% !important; height: auto !important; max-height: none !important; }
         }
         @container opsia-main (max-width: 720px) {
           .op .node-grid { grid-template-columns: minmax(0, 1fr) !important; }
@@ -1438,7 +1440,7 @@ function SidePanel({ forcedTab, scaled, onAddRepo, onOpenRepository, stickyTop, 
 }) {
   const [tab, setTab] = useState<"svc" | "cfg" | "git">(forcedTab ?? "svc");
   return (
-    <aside className="opsia-side-panel" style={{ width: 270, flexShrink: 0, alignSelf: "flex-start", background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 16, position: "sticky", top: stickyTop ?? 24, height: scaled ? `calc(100vh / ${PRESENT_SCALE} - ${viewportTopInset + (stickyTop ?? 24) + 16}px)` : "calc(100vh - 60px)", maxHeight: scaled ? `calc(100vh / ${PRESENT_SCALE} - ${viewportTopInset + (stickyTop ?? 24) + 16}px)` : "calc(100vh - 60px)", overflow: "hidden", display: "flex" }}>
+    <aside data-resource-aux-panel="true" className="opsia-side-panel" style={{ width: RESOURCE_LAYOUT.auxiliaryWidth, boxSizing: "border-box", flexShrink: 0, alignSelf: "flex-start", background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 16, position: "sticky", top: stickyTop ?? 24, height: scaled ? `calc(100vh / ${PRESENT_SCALE} - ${viewportTopInset + (stickyTop ?? 24) + RESOURCE_LAYOUT.viewportBottomGap}px)` : "calc(100vh - 60px)", maxHeight: scaled ? `calc(100vh / ${PRESENT_SCALE} - ${viewportTopInset + (stickyTop ?? 24) + RESOURCE_LAYOUT.viewportBottomGap}px)` : "calc(100vh - 60px)", overflow: "hidden", display: "flex" }}>
     <div style={{ flex: 1, minWidth: 0, minHeight: 0, padding: "14px 6px 14px 14px", display: "flex", flexDirection: "column", gap: 12, overflow: "hidden" }}>
       {/* 탭이 이미 콘텐츠 종류를 설명하므로 내부에 제목을 반복하지 않는다. */}
       <div role="tablist" aria-label="인프라 보조 정보" style={{ display: "flex", gap: 3, flexShrink: 0, background: UI.bg2, borderRadius: 10, padding: 3, zIndex: 2, boxShadow: `0 6px 12px -12px ${inkA(0.3)}` }}>

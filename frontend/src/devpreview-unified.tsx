@@ -90,7 +90,7 @@ import { operationalMessageLabel, reasonLabel, statusLabel, isCriticalStatus } f
 import { LiveResourceManifestEditor } from "./devpreview/resourceManifestEditor";
 import { groupApplicationsByRepository } from "./devpreview/repositoryRegistry";
 import { podsForNode, useClusterTopology } from "./devpreview/inventoryTopologyFeed";
-import { UI, BLUE, BLUE2, HP, INTERACTION, TINT, MONO, TYPE, SOFT, SPRING, PRESENT_SCALE, DUR, RADIUS, SPACE, inkA, blueA, MARK, cardA, GLASS, critA } from "./devpreview/theme";
+import { UI, BLUE, BLUE2, HP, INTERACTION, TINT, MONO, TYPE, SOFT, SPRING, PRESENT_SCALE, DUR, RADIUS, SPACE, RESOURCE_LAYOUT, inkA, blueA, MARK, cardA, GLASS, critA } from "./devpreview/theme";
 import "./styles/tokens.css";
 import "./styles/foundation.css";
 
@@ -109,7 +109,8 @@ type Row = Record<string, unknown>;
 type TableDensity = "default" | "compact";
 // 리소스 본문의 유일한 sticky 기준선. 관점 전환 바가 이 높이를 차지하고,
 // 표 헤더와 보조 패널은 정확히 그 아래에서 고정된다.
-const RESOURCE_VIEW_STICKY_TOP = 56;
+const RESOURCE_VIEW_STICKY_TOP = RESOURCE_LAYOUT.viewSwitcherHeight;
+const RESOURCE_AUX_STICKY_TOP = RESOURCE_LAYOUT.viewSwitcherHeight + RESOURCE_LAYOUT.stickyGap;
 
 const COLUMN_LABEL_KO: Record<string, string> = {
   "ACCESS MODES": "접근 모드",
@@ -1265,8 +1266,9 @@ function TrafficPanel({ clusterIds, focus, onFocus, onOpen, stickyTop, viewportT
     : [], [topo]);
   const visibleRows = rows.slice(0, 40);
   const hiddenCount = Math.max(0, rows.length - visibleRows.length);
+  const panelHeight = `calc(100vh / ${PRESENT_SCALE} - ${viewportTopInset + stickyTop + RESOURCE_LAYOUT.viewportBottomGap}px)`;
   return (
-    <aside style={{ width: stacked ? "100%" : 248, boxSizing: "border-box", flexShrink: 0, alignSelf: "flex-start", position: stacked ? "relative" : "sticky", top: stacked ? undefined : stickyTop, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: RADIUS.card, padding: 10, maxHeight: stacked ? 300 : `calc(100vh / ${PRESENT_SCALE} - ${viewportTopInset + stickyTop + 16}px)`, overflowY: "auto", overscrollBehavior: "contain", scrollbarGutter: "stable", display: "flex", flexDirection: "column", gap: 2 }}>
+    <aside data-resource-aux-panel="true" data-resource-traffic-panel="true" style={{ width: stacked ? "100%" : RESOURCE_LAYOUT.auxiliaryWidth, height: stacked ? 300 : panelHeight, maxHeight: stacked ? 300 : panelHeight, boxSizing: "border-box", flexShrink: 0, alignSelf: "flex-start", position: stacked ? "relative" : "sticky", top: stacked ? undefined : stickyTop, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: RADIUS.panel, padding: 10, overflowY: "auto", overscrollBehavior: "contain", scrollbarGutter: "stable", display: "flex", flexDirection: "column", gap: 2 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "2px 2px 7px" }}>
         <span style={{ fontSize: TYPE.body, fontWeight: 600, letterSpacing: "-0.02em", color: UI.heading }}>관계 노드</span>
         <span style={{ fontSize: TYPE.caption, color: UI.ink3 }}>{rows.length}개{topo.omittedNodeCount > 0 ? ` · ${topo.omittedNodeCount}개 생략` : ""}</span>
@@ -2577,7 +2579,7 @@ function App() {
           onOpenIssues={() => setSurface("issues")} onAskAi={showAi} onAddRepo={() => setConnectModal("repo")}
           topInset={topH} leftInset={navCollapsed ? 60 : 208} rightInset={aiOpen ? aiW : 0} />
       ) : surface === "issues" ? (
-        <IssuesSurface incidentClusterIds={incidentClusterIds} recoverySelectionRoutes={recoverySelectionRoutes} sessionRules={notes.filter((n) => n.icon === "rule").map((n) => n.body.split(" · ")[0])} onOpenRef={openRef} onAskAi={() => openAi()} onOpenRca={setRcaIncident} />
+        <IssuesSurface incidentClusterIds={incidentClusterIds} recoverySelectionRoutes={recoverySelectionRoutes} sessionRules={notes.filter((n) => n.icon === "rule").map((n) => n.body.split(" · ")[0])} onOpenRef={openRef} onOpenRca={setRcaIncident} />
       ) : surface === "timeline" ? (
         <TimelineSurface onOpenRef={openRef} />
       ) : surface === "checks" ? (
@@ -2672,7 +2674,7 @@ function App() {
 
           {resView === "list" && (
             /* 목록 — 종류 패널 + 표 전체 높이. 맵 없음. 좁은 화면은 세로 스택 + 종류 select */
-            <div style={{ display: "flex", flexDirection: narrowList ? "column" : "row", gap: narrowList ? 12 : 16, alignItems: narrowList ? "stretch" : "flex-start" }}>
+            <div style={{ display: "flex", flexDirection: narrowList ? "column" : "row", gap: narrowList ? 12 : RESOURCE_LAYOUT.columnGap, alignItems: narrowList ? "stretch" : "flex-start" }}>
               {narrowList && (
                 <label style={{ display: "flex", alignItems: "center", gap: 8, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 12, padding: "8px 12px" }}>
                   <span style={{ fontSize: TYPE.label, fontWeight: 600, color: UI.ink3, flexShrink: 0 }}>종류</span>
@@ -2733,7 +2735,7 @@ function App() {
               {/* 종류 선택 패널 — 지도 관점의 탐색 패널과 같은 KindIndex 하나를 공유(두 번째 구현 금지).
                   좁은 화면에서는 위 종류 select로 대체하고 사이드바를 렌더하지 않아 표를 가리지 않는다. */}
               {!narrowList && (
-              <aside data-resource-kind-index="true" style={{ width: 248, flexShrink: 0, alignSelf: "flex-start", position: "sticky", top: RESOURCE_VIEW_STICKY_TOP + 12, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: RADIUS.card, padding: 10, maxHeight: `calc(100vh / ${PRESENT_SCALE} - ${topH + RESOURCE_VIEW_STICKY_TOP + 28}px)`, overflowY: "auto", overscrollBehavior: "contain", scrollbarGutter: "stable" }}>
+              <aside data-resource-aux-panel="true" data-resource-kind-index="true" style={{ width: RESOURCE_LAYOUT.auxiliaryWidth, height: `calc(100vh / ${PRESENT_SCALE} - ${topH + RESOURCE_AUX_STICKY_TOP + RESOURCE_LAYOUT.viewportBottomGap}px)`, maxHeight: `calc(100vh / ${PRESENT_SCALE} - ${topH + RESOURCE_AUX_STICKY_TOP + RESOURCE_LAYOUT.viewportBottomGap}px)`, boxSizing: "border-box", flexShrink: 0, alignSelf: "flex-start", position: "sticky", top: RESOURCE_AUX_STICKY_TOP, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: RADIUS.panel, padding: 10, overflowY: "auto", overscrollBehavior: "contain", scrollbarGutter: "stable" }}>
                 <KindIndex sel={kindId} onPick={(k) => setKindId(k.id)} showEmpty={showEmpty} setShowEmpty={setShowEmpty} pinned={pinned} togglePin={togglePin} filter={q} counts={kindCounts} />
               </aside>
               )}
@@ -2742,11 +2744,11 @@ function App() {
 
           {resView === "flow" && (
             /* 트래픽 — 호출 그래프 + 보조 패널(서비스 상태·포커스, 세 관점 동일 문법). 서비스 클릭 = 상세 시트 */
-            <div style={{ display: "flex", flexDirection: narrowFlow ? "column" : "row", gap: 14, alignItems: "flex-start" }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: "flex", flexDirection: narrowFlow ? "column" : "row", gap: narrowFlow ? 12 : RESOURCE_LAYOUT.columnGap, alignItems: "flex-start" }}>
+              <div data-resource-traffic-main="true" style={{ flex: 1, minWidth: 0 }}>
                 <TopologyView embedded clusterIds={scope.cluster ? [scope.cluster] : clusterIds} focusId={trafficFocus} onFocusService={setTrafficFocus} onOpenService={openTrafficService} />
               </div>
-              <TrafficPanel clusterIds={scope.cluster ? [scope.cluster] : clusterIds} focus={trafficFocus} onFocus={setTrafficFocus} onOpen={openTrafficService} stickyTop={RESOURCE_VIEW_STICKY_TOP + 12} viewportTopInset={topH} stacked={narrowFlow} />
+              <TrafficPanel clusterIds={scope.cluster ? [scope.cluster] : clusterIds} focus={trafficFocus} onFocus={setTrafficFocus} onOpen={openTrafficService} stickyTop={RESOURCE_AUX_STICKY_TOP} viewportTopInset={topH} stacked={narrowFlow} />
             </div>
           )}
         </main>
@@ -2757,10 +2759,10 @@ function App() {
       {/* AI 어시스턴트 — 상세 페이지 위까지 덮는 우측 오버레이 + 폭 조절 핸들 */}
       <AnimatePresence>
         {aiMounted && (
-          <motion.div ref={aiPanelRef} key="ai" initial={{ x: aiW + 30 }} animate={{ x: aiOpen ? 0 : (aiFull ? window.innerWidth : aiW) + 30 }} transition={{ type: "spring", bounce: 0.06, visualDuration: 0.34 }}
+          <motion.div ref={aiPanelRef} data-ai-panel="true" key="ai" initial={{ x: aiW + 30 }} animate={{ x: aiOpen ? 0 : (aiFull ? window.innerWidth / PRESENT_SCALE : aiW) + 30 }} transition={{ type: "spring", bounce: 0.06, visualDuration: 0.34 }}
             aria-hidden={!aiOpen}
             inert={!aiOpen}
-            style={{ position: "fixed", top: topH, right: 0, bottom: 0, width: aiFull ? `calc(100vw - ${navCollapsed ? 60 : 208}px)` : aiW, zIndex: 72, display: "flex", pointerEvents: aiOpen ? "auto" : "none", boxShadow: aiOpen ? `-28px 0 70px -32px ${inkA(0.3)}` : "none", transition: "width .28s cubic-bezier(0.32,0.72,0,1)" }}>
+            style={{ position: "fixed", top: topH, right: 0, bottom: 0, width: aiFull ? `calc(100vw / ${PRESENT_SCALE} - ${navCollapsed ? 60 : 208}px)` : aiW, zIndex: 72, display: "flex", pointerEvents: aiOpen ? "auto" : "none", boxShadow: aiOpen ? `-28px 0 70px -32px ${inkA(0.3)}` : "none", transition: "width .28s cubic-bezier(0.32,0.72,0,1)" }}>
             {/* 전체 화면 중에는 폭 조절 핸들 비활성 — 핸들 규약은 상세·RCA와 동일한
                 투명 6px 엣지(경계선 1px은 시각 유지, 히트 영역만 넓힘) */}
             {!aiFull && (
