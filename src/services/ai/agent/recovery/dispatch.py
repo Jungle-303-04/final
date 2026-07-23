@@ -735,7 +735,14 @@ def scalar_replacements_for(
         replicas = nested_value(manifest, "spec", "replicas")
         if type(replicas) is not int or not 1 <= replicas < 10:
             return []
-        return [ScalarFieldReplacement("spec.replicas", replicas, replicas + 1)]
+        # 원복 우선: 권위 스냅샷 변경 이력에서 "축소 이전 승인 값"을 찾으면 그 값으로
+        # 되돌린다(설명 계약과 일치). 이력이 특정되지 않으면 +1 증설로 폴백 —
+        # 값은 전부 관측 이력에서만 나오며 합성하지 않는다.
+        previous = previous_replicas_from_changes(authority, replicas)
+        desired = previous if previous is not None else replicas + 1
+        if desired == replicas or not 1 <= desired < 10:
+            return []
+        return [ScalarFieldReplacement("spec.replicas", replicas, desired)]
     if action_type == "oom_memory":
         return oom_memory_replacements(authority, container)
     if action_type == "probe_fix":
@@ -743,6 +750,36 @@ def scalar_replacements_for(
     if action_type == "selector_fix":
         return selector_replacements(manifest)
     return []
+
+
+def previous_replicas_from_changes(
+    authority: GitOpsAuthorityContext,
+    current_replicas: int,
+) -> int | None:
+    """권위 스냅샷 변경 이력에서 replicas 축소 직전의 승인 값을 찾는다.
+
+    조건: field_path 가 spec.replicas 로 끝나고, 새 값(new_desired)이 현재 관측값과
+    일치하며, 이전 값(old_desired)이 현재보다 큰 단 하나의 변경일 때만 신뢰한다.
+    (여러 이력이 겹치면 특정 불가 → None → 호출부가 +1 증설로 폴백)
+    """
+    def as_int(value: object) -> int | None:
+        if type(value) is int:
+            return value
+        if isinstance(value, str) and value.strip().isdigit():
+            return int(value.strip())
+        return None
+
+    matches = [
+        change
+        for change in authority.changes
+        if str(change.get("field_path") or "").endswith("spec.replicas")
+        and as_int(change.get("new_desired", change.get("after"))) == current_replicas
+        and (previous := as_int(change.get("old_desired"))) is not None
+        and previous > current_replicas
+    ]
+    if len(matches) != 1:
+        return None
+    return as_int(matches[0].get("old_desired"))
 
 
 def target_container(manifest: JsonObject, resource_name: str) -> dict[str, Any] | None:

@@ -2127,15 +2127,19 @@ function App() {
         if (bellOpen || nsOpen || meOpen) { setBellOpen(false); setNsOpen(false); setMeOpen(false); }
         else if (connectModal) setConnectModal(null);
         else if (detail) setDetail(null);
+        else if (rcaIncident) setRcaIncident(null);
         else if (aiOpen) { setAiOpen(false); setAiFull(false); }
       }
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); searchRef.current?.focus(); }
     };
     window.addEventListener("keydown", h); return () => window.removeEventListener("keydown", h);
-  }, [bellOpen, nsOpen, meOpen, connectModal, detail, aiOpen]);
+  }, [bellOpen, nsOpen, meOpen, connectModal, detail, rcaIncident, aiOpen]);
 
   return (
-    <div className="uni" style={{ minHeight: "100vh", background: UI.bg, display: "flex", alignItems: "stretch", zoom: PRESENT_SCALE }}>
+    // 앱 셸 스크롤 규약 — 문서 스크롤 금지. 상단 크롬·내비는 고정하고 스크롤은
+    // 콘텐츠 영역 안에서만 생긴다: 스크롤바가 상단바를 관통하지 않고,
+    // 콘텐츠 높이 변동(폴링 갱신)으로 창 폭이 열닫히는 점프도 사라진다.
+    <div className="uni" style={{ height: `calc(100vh / ${PRESENT_SCALE})`, overflow: "hidden", background: UI.bg, display: "flex", alignItems: "stretch", zoom: PRESENT_SCALE }}>
       {/* 전역 내비게이션 — 제품 셸의 바깥 틀 */}
       <GlobalNav collapsed={navCollapsed} setCollapsed={setNavCollapsed}
         surface={surface} onSurface={(sf) => {
@@ -2152,9 +2156,10 @@ function App() {
         }} />
 
       <div aria-label="현재 화면 콘텐츠" role="region"
-        style={{ flex: 1, minWidth: 0, minHeight: `calc(100vh / ${PRESENT_SCALE})`, overflowX: "clip" }}>
-      {/* 상단 크롬 — 워크스페이스·스코프·네임스페이스·검색 (내부 표기 배지 제거) */}
-      <header ref={headerRef} style={{ position: "sticky", top: 0, zIndex: 74, display: "flex", alignItems: "center", flexWrap: "wrap", gap: 10, padding: "12px 18px", borderBottom: `1px solid ${UI.line}`, background: UI.card }}>
+        style={{ flex: 1, minWidth: 0, height: "100%", display: "flex", flexDirection: "column", overflowX: "clip" }}>
+      {/* 상단 크롬 — 워크스페이스·스코프·네임스페이스·검색. 셸이 문서 스크롤을 막으므로
+          sticky 없이도 항상 고정된다. */}
+      <header ref={headerRef} style={{ zIndex: 74, flexShrink: 0, display: "flex", alignItems: "center", flexWrap: "wrap", gap: 10, padding: "12px 18px", borderBottom: `1px solid ${UI.line}`, background: UI.card }}>
         {/* 워크스페이스 — 정체성은 항상 맨 왼쪽(D20). 데모 세계는 워크스페이스 1개라 사실 표시만 */}
         <span
           data-slot={workspaceIdentityId ? "workspace-identity" : "workspace-identity-loading"}
@@ -2368,6 +2373,9 @@ function App() {
         </span>
       </header>
 
+      {/* 콘텐츠 스크롤 영역 — 스크롤은 여기서만. gutter 고정으로 스크롤바 유무에 따른
+          가로 점프(창 열닫힘 체감)를 없앤다. */}
+      <div style={{ flex: 1, minHeight: 0, overflowY: "auto", overflowX: "clip", scrollbarGutter: "stable" }}>
       {surface === "connect" ? (
         /* 연결 설정 — 셸 안에서 위저드 서피스로 전환 (별도 페이지 아님) */
         <div style={{ position: "relative", minHeight: `calc(100vh / ${PRESENT_SCALE} - 57px)`, background: UI.bg }}>
@@ -2449,7 +2457,7 @@ function App() {
                 onAddCluster={() => setConnectModal("cluster")}
                 onAddRepo={() => setConnectModal("repo")}
                 onOpenRepository={(repositoryRef) => { setDeployRepositoryFilter(repositoryRef); setSurface("deploy"); }}
-                stickyTop={topH + 12}
+                stickyTop={12}
               />
               {/* 종류(kind) 탐색은 쿠버네티스 관점의 본문이 오너 — 인프라 뷰 패널에 같은 목록을 두 번 두지 않는다 */}
             </>
@@ -2494,7 +2502,7 @@ function App() {
               {/* 종류 선택 패널 — 지도 관점의 탐색 패널과 같은 KindIndex 하나를 공유(두 번째 구현 금지).
                   좁은 화면에서는 위 종류 select로 대체하고 사이드바를 렌더하지 않아 표를 가리지 않는다. */}
               {!narrowList && (
-              <aside style={{ width: 248, flexShrink: 0, alignSelf: "flex-start", position: "sticky", top: topH + 12, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: RADIUS.card, padding: 10, maxHeight: `calc(100vh / ${PRESENT_SCALE} - ${topH + 60}px)`, overflowY: "auto", scrollbarGutter: "stable" }}>
+              <aside style={{ width: 248, flexShrink: 0, alignSelf: "flex-start", position: "sticky", top: 12, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: RADIUS.card, padding: 10, maxHeight: `calc(100vh / ${PRESENT_SCALE} - ${topH + 60}px)`, overflowY: "auto", scrollbarGutter: "stable" }}>
                 <KindIndex sel={kindId} onPick={(k) => setKindId(k.id)} showEmpty={showEmpty} setShowEmpty={setShowEmpty} pinned={pinned} togglePin={togglePin} filter={q} counts={kindCounts} />
               </aside>
               )}
@@ -2507,11 +2515,12 @@ function App() {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <TopologyView embedded clusterIds={scope.cluster ? [scope.cluster] : clusterIds} focusId={trafficFocus} onFocusService={setTrafficFocus} onOpenService={openTrafficService} />
               </div>
-              <TrafficPanel clusterIds={scope.cluster ? [scope.cluster] : clusterIds} focus={trafficFocus} onFocus={setTrafficFocus} onOpen={openTrafficService} stickyTop={topH + 12} stacked={narrowFlow} />
+              <TrafficPanel clusterIds={scope.cluster ? [scope.cluster] : clusterIds} focus={trafficFocus} onFocus={setTrafficFocus} onOpen={openTrafficService} stickyTop={12} stacked={narrowFlow} />
             </div>
           )}
         </main>
       )}
+      </div>
       </div>
 
       {/* AI 어시스턴트 — 상세 페이지 위까지 덮는 우측 오버레이 + 폭 조절 핸들 */}
@@ -2519,11 +2528,14 @@ function App() {
         {aiMounted && (
           <motion.div key="ai" initial={{ x: aiW + 30 }} animate={{ x: aiOpen ? 0 : (aiFull ? window.innerWidth : aiW) + 30 }} transition={{ type: "spring", bounce: 0.06, visualDuration: 0.34 }}
             aria-hidden={!aiOpen}
-            style={{ position: "fixed", top: topH, right: 0, bottom: 0, width: aiFull ? "100vw" : aiW, zIndex: 72, display: "flex", pointerEvents: aiOpen ? "auto" : "none", boxShadow: aiOpen ? `-28px 0 70px -32px ${inkA(0.3)}` : "none", transition: "width .28s cubic-bezier(0.32,0.72,0,1)" }}>
-            {/* 전체 화면 중에는 폭 조절 핸들 비활성 */}
+            style={{ position: "fixed", top: topH, right: 0, bottom: 0, width: aiFull ? `calc(100vw - ${navCollapsed ? 60 : 208}px)` : aiW, zIndex: 72, display: "flex", pointerEvents: aiOpen ? "auto" : "none", boxShadow: aiOpen ? `-28px 0 70px -32px ${inkA(0.3)}` : "none", transition: "width .28s cubic-bezier(0.32,0.72,0,1)" }}>
+            {/* 전체 화면 중에는 폭 조절 핸들 비활성 — 핸들 규약은 상세·RCA와 동일한
+                투명 6px 엣지(경계선 1px은 시각 유지, 히트 영역만 넓힘) */}
             {!aiFull && (
               <div role="separator" aria-label="AI 패널 폭 조절" aria-orientation="vertical" onPointerDown={onAiHandleDown} title="드래그해서 폭 조절"
-                style={{ width: 1, flexShrink: 0, cursor: "col-resize", background: aiDragging ? blueA(0.35) : UI.line, transition: "background .15s" }} />
+                style={{ position: "relative", width: 1, flexShrink: 0, background: aiDragging ? blueA(0.35) : UI.line, transition: "background .15s" }}>
+                <span aria-hidden="true" style={{ position: "absolute", left: -3, top: 0, bottom: 0, width: 7, cursor: "col-resize", background: "transparent" }} />
+              </div>
             )}
             <div style={{ flex: 1, minWidth: 0 }}>
               <AiPanel embedded full={aiFull} recoveryRequest={aiRecoveryRequest}

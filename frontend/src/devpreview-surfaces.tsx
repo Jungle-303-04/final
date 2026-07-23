@@ -7,7 +7,7 @@ import {
   Rocket, Package, AlertTriangle, Bell, Clock, ShieldCheck, Coins,
   Building2, Globe, Check, Sparkle, Sparkles, X, Palette, RefreshCw, Lock, Pin,
   ChevronRight, MapPin, ShieldAlert, ArrowLeft, ArrowRight, ExternalLink, CircleAlert, CircleCheck,
-  Lightbulb,
+  Lightbulb, Maximize2, Minimize2,
 } from "lucide-react";
 import { UI, BLUE, HP, TINT, INSET, MONO, TYPE, SOFT, DUR, PRESENT_SCALE, RADIUS, SPACE, inkA, blueA, critA } from "./devpreview/theme";
 import { GithubIcon } from "./devpreview/brandIcons";
@@ -1632,6 +1632,26 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
 }) {
   const [activeTab, setActiveTab] = useState<"detail" | "recovery">("detail");
   const [evidenceChipActive, setEvidenceChipActive] = useState(false);
+  // 셸 우측 패널 공통 규약(DetailOverlay·AI 패널과 동일) — 전체 화면 토글 + 좌측 엣지 리사이즈.
+  // 전체 화면은 상단바·좌측 내비를 침범하지 않는 콘텐츠 영역 최대치다.
+  const [drawerFull, setDrawerFull] = useState(false);
+  const [drawerW, setDrawerW] = useState(560);
+  const [drawerDragging, setDrawerDragging] = useState(false);
+  const onDrawerEdgeDown = (e: React.PointerEvent) => {
+    if (drawerFull) return;
+    e.preventDefault();
+    setDrawerDragging(true);
+    const startX = e.clientX;
+    const startW = drawerW;
+    const move = (ev: PointerEvent) => setDrawerW(Math.min(Math.max(startW + (startX - ev.clientX), 440), 920));
+    const up = () => {
+      setDrawerDragging(false);
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
   const [deploymentLinkActive, setDeploymentLinkActive] = useState<string | null>(null);
   const [highlightedEvidenceIndex, setHighlightedEvidenceIndex] = useState<number | null>(null);
   const [selectedRecoveryActionId, setSelectedRecoveryActionId] = useState<string | null>(null);
@@ -1769,10 +1789,14 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
     <>
       {/* 스크림 — 사이드바 밖 클릭 시 닫기 */}
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: DUR.fade }}
-        onClick={onClose} style={{ position: "fixed", top: topInset, left: leftInset, right: rightInset, bottom: 0, background: inkA(0.22), zIndex: 70 }} />
+        onClick={onClose} style={{ position: "fixed", top: topInset, left: leftInset, right: rightInset, bottom: 0, background: inkA(0.07), zIndex: 70 }} />
       {/* RCA 보고서 — 우측 사이드바(드로어). 리소스 상세 시트(DetailOverlay)와 폭·레이아웃 통일(560px) */}
       <motion.div initial={{ x: 580 }} animate={{ x: 0 }} exit={{ x: 580, transition: { duration: 0.14, ease: [0.4, 0, 1, 1] } }} transition={{ type: "spring", bounce: 0.06, visualDuration: 0.28 }}
-        style={{ position: "fixed", top: topInset, right: rightInset, bottom: 0, width: 560, maxWidth: `calc(100vw / ${PRESENT_SCALE} - ${leftInset + rightInset}px)`, background: UI.card, borderLeft: `1px solid ${UI.line}`, boxShadow: `-24px 0 60px -30px ${inkA(0.3)}`, zIndex: 71, display: "flex", flexDirection: "column", overflow: "hidden", transition: "right .28s cubic-bezier(.32,.72,0,1), max-width .28s cubic-bezier(.32,.72,0,1)" }}>
+        style={{ position: "fixed", top: topInset, right: rightInset, bottom: 0, width: drawerFull ? `calc(100vw / ${PRESENT_SCALE} - ${leftInset + rightInset}px)` : drawerW, maxWidth: `calc(100vw / ${PRESENT_SCALE} - ${leftInset + rightInset}px)`, background: UI.card, borderLeft: `1px solid ${UI.line}`, boxShadow: `-24px 0 60px -30px ${inkA(0.3)}`, zIndex: 71, display: "flex", flexDirection: "column", overflow: "hidden", transition: drawerDragging ? "right .28s cubic-bezier(.32,.72,0,1)" : "right .28s cubic-bezier(.32,.72,0,1), width .24s cubic-bezier(.32,.72,0,1), max-width .28s cubic-bezier(.32,.72,0,1)" }}>
+          {/* 좌측 엣지 리사이즈 핸들 — DetailOverlay와 동일 규약 */}
+          <div role="separator" aria-orientation="vertical" aria-label="상세 패널 폭 조절" title={drawerFull ? undefined : "드래그해서 폭 조절"}
+            onPointerDown={onDrawerEdgeDown}
+            style={{ position: "absolute", left: -2, top: 0, bottom: 0, width: 6, cursor: drawerFull ? "default" : "col-resize", zIndex: 2, background: drawerDragging ? blueA(0.3) : "transparent" }} />
           {/* 헤더 */}
           <div style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "18px 20px 14px" }}>
             <span style={{ width: 38, height: 38, borderRadius: 11, background: headerTone.bg, display: "grid", placeItems: "center", flexShrink: 0 }}>
@@ -1799,7 +1823,13 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
                 ))}
               </div>
             </div>
-            <button type="button" className="product-focusable product-control" aria-label="상세 닫기" onClick={onClose} style={{ width: 30, height: 30, padding: 0, borderRadius: 999, border: "none", background: inkA(0.06), color: UI.ink2, cursor: "pointer", flexShrink: 0, display: "grid", placeItems: "center", lineHeight: 1 }}><X size={15} /></button>
+            <span style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+              <button type="button" className="product-focusable product-control" aria-label={drawerFull ? "상세 패널 축소" : "상세 패널 전체 화면"} title={drawerFull ? "패널로 축소" : "전체 화면"} onClick={() => setDrawerFull((v) => !v)}
+                style={{ width: 30, height: 30, padding: 0, borderRadius: 999, border: "none", background: inkA(0.06), color: UI.ink2, cursor: "pointer", display: "grid", placeItems: "center", lineHeight: 1 }}>
+                {drawerFull ? <Minimize2 size={14} strokeWidth={2.2} /> : <Maximize2 size={14} strokeWidth={2.2} />}
+              </button>
+              <button type="button" className="product-focusable product-control" aria-label="상세 닫기" onClick={onClose} style={{ width: 30, height: 30, padding: 0, borderRadius: 999, border: "none", background: inkA(0.06), color: UI.ink2, cursor: "pointer", display: "grid", placeItems: "center", lineHeight: 1 }}><X size={15} /></button>
+            </span>
           </div>
           <div role="tablist" aria-label="이슈 상세 보기" style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", padding: "0 20px", borderBottom: `1px solid ${UI.line}` }}>
             {([
