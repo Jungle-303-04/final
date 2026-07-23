@@ -1064,10 +1064,10 @@ const readBoard = (): BoardState => {
   return defaultBoard();
 };
 
-function HomeSurface({ clusterMeta, incidentClusterIds, onDrillCluster, onClusterSettings, onClusterDisconnect, onConnect, onOpenPod: _onOpenPod, onPickNs, onWidgetDeepLink, onOpenIssues, pendingCl = [], pendingRepo = [] }: {
+function HomeSurface({ clusterMeta, incidentClusterIds, onDrillCluster, onClusterSettings, onClusterDisconnect, onConnect, onAddRepo, onOpenPod: _onOpenPod, onPickNs, onWidgetDeepLink, onOpenIssues, pendingCl = [], pendingRepo = [] }: {
   clusterMeta: Record<string, Record<string, number>>;
   incidentClusterIds: readonly string[];
-  onDrillCluster: (clId: string) => void; onConnect: () => void;
+  onDrillCluster: (clId: string) => void; onConnect: () => void; onAddRepo: () => void;
   onClusterSettings?: (clId: string) => void; onClusterDisconnect?: (clId: string) => void;
   onOpenPod: (name: string) => void; onPickNs: (ns: string) => void;
   pendingCl?: string[]; pendingRepo?: string[]; onWidgetDeepLink?: (id: string) => void; onOpenIssues?: () => void;
@@ -1254,12 +1254,16 @@ function HomeSurface({ clusterMeta, incidentClusterIds, onDrillCluster, onCluste
                 style={{ border: "none", borderRadius: 6, padding: "3px 10px", fontSize: TYPE.caption, fontWeight: 600, cursor: "pointer", background: period === p ? UI.card : "transparent", color: period === p ? UI.ink : UI.ink3, boxShadow: period === p ? `0 1px 3px ${inkA(0.12)}` : "none" }}>{p}</button>
             ))}
           </span>
-          <button className="product-focusable product-control" aria-pressed={editing} onClick={() => setEditing(!editing)}
-            style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${editing ? blueA(0.45) : UI.line}`, background: editing ? blueA(0.07) : UI.card, color: editing ? BLUE : UI.ink2, borderRadius: 9, padding: "5px 12px", fontSize: TYPE.label, fontWeight: 600, cursor: "pointer" }}>
-            <Pencil size={12} />{editing ? "편집 완료" : "레이아웃 편집"}
+          <button className="product-focusable product-control" aria-label={editing ? "레이아웃 편집 완료" : "레이아웃 편집"} title={editing ? "편집 완료" : "레이아웃 편집"} aria-pressed={editing} onClick={() => setEditing(!editing)}
+            style={{ width: 31, height: 31, display: "grid", placeItems: "center", border: `1px solid ${editing ? blueA(0.45) : UI.line}`, background: editing ? blueA(0.07) : UI.card, color: editing ? BLUE : UI.ink2, borderRadius: 9, padding: 0 }}>
+            {editing ? <Check size={14} /> : <Pencil size={13} />}
+          </button>
+          <button className="product-focusable product-control" onClick={onAddRepo}
+            style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${UI.line}`, background: UI.card, color: UI.ink2, borderRadius: 9, padding: "5px 12px", fontSize: TYPE.label, fontWeight: 600 }}>
+            <GithubIcon size={13} />저장소 연결
           </button>
           <button className="product-focusable product-action" onClick={onConnect}
-            style={{ display: "flex", alignItems: "center", gap: 6, border: "none", background: BLUE, color: UI.card, borderRadius: 9, padding: "6px 13px", fontSize: TYPE.label, fontWeight: 600, cursor: "pointer" }}>+ 클러스터 연결</button>
+            style={{ display: "flex", alignItems: "center", gap: 6, border: "none", background: BLUE, color: UI.card, borderRadius: 9, padding: "6px 13px", fontSize: TYPE.label, fontWeight: 600 }}>+ 클러스터 연결</button>
         </span>
       </div>
 
@@ -2006,6 +2010,7 @@ function App() {
           }}
           onOpenIssues={() => setSurface("issues")}
           onConnect={() => setConnectModal("cluster")}
+          onAddRepo={() => setConnectModal("repo")}
           onOpenPod={(name) => openRef("Pod", name)}
           onPickNs={(n) => { if (nsOptions.includes(n)) setNs(n); setKindId("Pod"); setSurface("resources"); setResView("list"); }} />
       ) : (
