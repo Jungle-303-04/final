@@ -1,4 +1,4 @@
-/* eslint-disable react-hooks/exhaustive-deps */
+/* eslint-disable react-hooks/exhaustive-deps, react-hooks/set-state-in-effect */
 // ⚠ 데모 · 환경 연결 마법사. 런처 → (A)Git 저장소 등록 / (B)클러스터 연결(에이전트 설치).
 // UI-PHASE2-001 wiring: 클러스터 연결은 라이브 백엔드(providers 카탈로그/디스커버리,
 // preflight/register, connection 상태)에 연결됨. 저장소 흐름은 주소 형식 사전검사 뒤
@@ -71,6 +71,7 @@ import {
   verifyGithubAppInstallation,
   type GithubAppConfig,
 } from "./api/github-app";
+import { listApplications } from "./api/applications";
 import { useSession } from "./devpreview/sessionFeed";
 import "./styles/tokens.css";
 import "./styles/foundation.css";
@@ -401,6 +402,33 @@ function RepoStep({ providers, onNext }: { providers: ClusterProvidersView; onNe
     { kind: "verifying" | "ready" | "mismatch" | "error"; text: string } | null
   >(null);
   const appAvailable = appConfig?.install_available === true;
+  // 설치 확인이 끝났으면 "GitHub App으로 연결" CTA 를 다시 보여주지 않는다(중복 유도 방지).
+  const installationVerified = appReturn?.kind === "ready";
+  // 이미 이 워크스페이스에 연결된 저장소면 처음부터 그렇게 알려준다(재연결 혼란 방지).
+  // key 로 저장해 저장소가 바뀌면 파생값이 자연히 null 이 된다(effect 내 동기 setState 금지).
+  const [connectedApp, setConnectedApp] = useState<{ key: string; name: string } | null>(null);
+  const resolvedRepoFull = repo?.full ?? "";
+  const connectedAppName =
+    connectedApp && connectedApp.key === resolvedRepoFull.toLowerCase() ? connectedApp.name : null;
+  useEffect(() => {
+    if (!resolvedRepoFull) return;
+    const key = resolvedRepoFull.toLowerCase();
+    let cancelled = false;
+    listApplications()
+      .then((list) => {
+        if (cancelled) return;
+        const match = (list.applications ?? []).find((app) => {
+          const ref = String((app as Record<string, unknown>).repository_ref ?? "");
+          return ref.toLowerCase() === key;
+        });
+        if (match) {
+          const name = String((match as Record<string, unknown>).name ?? "") || "연결된 앱";
+          setConnectedApp({ key, name });
+        }
+      })
+      .catch(() => { /* 조회 실패는 안내 생략(연결 흐름 무영향) */ });
+    return () => { cancelled = true; };
+  }, [resolvedRepoFull]);
 
   useEffect(() => {
     let cancelled = false;
@@ -422,8 +450,8 @@ function RepoStep({ providers, onNext }: { providers: ClusterProvidersView; onNe
     const installationId = params.get("github_app_installation_id");
     const returnedState = params.get("github_app_state");
     if (installationId) {
-      let saved: { state?: string; repoRef?: string } = {};
-      try { saved = JSON.parse(sessionStorage.getItem("kyro_gh_app") || "{}"); } catch { saved = {}; }
+      let saved: { state?: string; repoRef?: string };
+      try { saved = JSON.parse(sessionStorage.getItem("kyro_gh_app") || "{}") ?? {}; } catch { saved = {}; }
       sessionStorage.removeItem("kyro_gh_app");
       const stateOk = Boolean(saved.state) && saved.state === returnedState; // CSRF 대조
       const repoRef = String(saved.repoRef || "");
@@ -644,13 +672,27 @@ function RepoStep({ providers, onNext }: { providers: ClusterProvidersView; onNe
               </div>
             </div>
 
+            {/* 이미 연결된 저장소 — 재연결을 유도하지 않고 사실을 먼저 알려준다. */}
+            {connectedAppName && (
+              <motion.div key="already" layout {...REVEAL} className="flex items-start gap-2.5"
+                style={{ borderRadius: 14, padding: "13px 16px", background: okA(0.10) }}>
+                <Check className="mt-0.5 size-4 c-green" strokeWidth={3} />
+                <span className="text-label leading-[1.5] c-2">
+                  이미 연결된 저장소입니다 — <b>{connectedAppName}</b> 앱이 이 저장소를 사용 중입니다.
+                  다른 클러스터·네임스페이스에 추가 배포 대상을 등록할 때만 계속 진행하세요.
+                </span>
+              </motion.div>
+            )}
             {/* 비공개/접근불가일 때만 토큰창을 띄우고 필수로 강제한다.
                 probing→public/auth 전환이 툭 튀지 않게 같은 스프링으로 등장/퇴장. */}
             <AnimatePresence mode="popLayout" initial={false}>
             {needsToken && (
               <motion.div key="auth" layout {...REVEAL} className="grid gap-3 pt-1">
-                {/* 권장: GitHub App(원클릭) — 미설정이면 어드민 자동등록 / 비어드민 안내 */}
-                <GithubAppConnect repoRef={repo.full} config={appConfig} registerNote={appRegisterNote} />
+                {/* 권장: GitHub App(원클릭) — 미설정이면 어드민 자동등록 / 비어드민 안내.
+                    설치 확인이 이미 끝났으면 다시 유도하지 않는다. */}
+                {!installationVerified && (
+                  <GithubAppConnect repoRef={repo.full} config={appConfig} registerNote={appRegisterNote} />
+                )}
                 {/* App이 구성되면 토큰 칸을 숨긴다(App 기본). 미구성 시에만 토큰 폴백 노출. */}
                 {access === "auth" && (
                   <>
@@ -670,7 +712,7 @@ function RepoStep({ providers, onNext }: { providers: ClusterProvidersView; onNe
               </motion.div>
             )}
             {/* 공개는 토큰 없이 진행하되, 쓰기(PR)엔 이후 자격증명이 필요함을 정직하게 안내한다. */}
-            {access === "public" && (
+            {access === "public" && !installationVerified && (
               <motion.div key="pub" layout {...REVEAL} className="grid gap-3">
                 <div className="flex items-start gap-2 px-0.5 text-label leading-[1.5] c-2">
                   <Globe className="mt-0.5 size-3.5 shrink-0 c-green" />

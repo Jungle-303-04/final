@@ -20,7 +20,7 @@ import {
 import { grantApproval, rejectApproval } from "../api/approvals";
 import { reasonLabel } from "./statusLabel";
 import { BLUE, HP, MONO, TINT, TYPE, UI, inkA } from "./theme";
-import { YamlCodeView } from "./YamlCodeView";
+import { DiffCodeView, YamlCodeView } from "./YamlCodeView";
 
 type Phase = "loading" | "ready" | "previewing" | "submitting" | "failed";
 
@@ -350,7 +350,7 @@ export function LiveResourceManifestEditor({
           {preview.apply_availability === "available" ? "즉시 적용 가능" : "Safe PR만 가능"}
         </Pill>}
       </div>
-      {preview?.diff && <pre style={{ margin: 0, maxHeight: 280, overflow: "auto", whiteSpace: "pre-wrap", overflowWrap: "anywhere", border: `1px solid ${UI.line}`, borderRadius: 12, padding: 14, background: UI.bg2, color: UI.ink, fontFamily: MONO, fontSize: TYPE.code, lineHeight: 1.55 }}>{preview.diff}</pre>}
+      {preview?.diff && <DiffCodeView value={preview.diff} ariaLabel="변경 diff 미리보기" maxHeight={280} />}
       {preview?.errors.map((item) => <ManifestNotice key={item} tone="error" title="검증 오류">{item}</ManifestNotice>)}
       {preview?.warnings.map((item) => <ManifestNotice key={item} tone="warn" title="검토 필요">{item}</ManifestNotice>)}
       {preview?.apply_reason_codes.map((item) => <ManifestNotice key={item} tone="warn" title="즉시 적용 제한">{reasonLabel(item)}</ManifestNotice>)}

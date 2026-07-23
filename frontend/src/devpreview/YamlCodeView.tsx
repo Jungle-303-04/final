@@ -64,6 +64,39 @@ function renderLine(line: string, key: number): React.ReactNode {
   );
 }
 
+const DIFF_ADD_FG = "#7ee787";
+const DIFF_ADD_BG = "rgba(46,160,67,0.15)";
+const DIFF_DEL_FG = "#ffa198";
+const DIFF_DEL_BG = "rgba(248,81,73,0.15)";
+const DIFF_HUNK_FG = "#c792ea";
+
+function diffLineStyle(line: string): React.CSSProperties {
+  if (line.startsWith("@@")) return { color: DIFF_HUNK_FG, fontWeight: 600 };
+  if (line.startsWith("+++") || line.startsWith("---")) return { color: COLOR_PUNCT, fontWeight: 600 };
+  if (line.startsWith("+")) return { color: DIFF_ADD_FG, background: DIFF_ADD_BG };
+  if (line.startsWith("-")) return { color: DIFF_DEL_FG, background: DIFF_DEL_BG };
+  return { color: CODE_FG };
+}
+
+/** unified diff 를 IDE 스타일(+초록·−빨강·@@ 헌크)로 렌더한다. 편집 미리보기 전용. */
+export function DiffCodeView({ value, ariaLabel, maxHeight = 280 }: {
+  value: string;
+  ariaLabel: string;
+  maxHeight?: number;
+}) {
+  const lines = value.replace(/\n$/, "").split("\n");
+  return (
+    <div role="figure" aria-label={ariaLabel}
+      style={{ border: "1px solid #1c2330", borderRadius: 12, background: CODE_BG, maxHeight, overflow: "auto", fontFamily: MONO, fontSize: TYPE.code, lineHeight: 1.65 }}>
+      <pre style={{ margin: 0, padding: "12px 16px", whiteSpace: "pre", minWidth: 0 }}>
+        {lines.map((line, index) => (
+          <div key={index} style={diffLineStyle(line)}>{line || " "}</div>
+        ))}
+      </pre>
+    </div>
+  );
+}
+
 /** 읽기 전용 YAML 을 IDE 스타일(다크·구문 색·줄번호)로 렌더한다. */
 export function YamlCodeView({ value, ariaLabel, maxHeight = 320 }: {
   value: string;
