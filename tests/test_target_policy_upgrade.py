@@ -1,5 +1,9 @@
 from domains.target.evidence_policy import default_agent_policy
 from domains.target.policy_upgrade import build_target_upgrade_plan
+from packages.contracts.evidence_policy import (
+    TEMPO_RECENT_TRACE_QUERY_NAME,
+    TEMPO_RECENT_TRACE_RANGE_SECONDS,
+)
 from packages.contracts.gateway.requests import AgentPolicy
 from packages.contracts.target import (
     NODE_COLLECTOR_IMAGE_KEY,
@@ -28,6 +32,17 @@ def desired_runtime_config(policy: AgentPolicy) -> dict[str, object]:
         ):
             return resource.state
     raise AssertionError("target runtime ConfigMap was not planned")
+
+
+def desired_agent_deployment(policy: AgentPolicy) -> dict[str, object]:
+    for resource in (*policy.bootstrap.resources, *policy.desired_state.resources):
+        if (
+            resource.kind == "Deployment"
+            and resource.namespace == TARGET_NAMESPACE
+            and resource.name == "cluster-agent"
+        ):
+            return resource.state
+    raise AssertionError("target Agent Deployment was not planned")
 
 
 def test_policy_upgrade_enables_traces_and_keeps_self_upgrade_image_only() -> None:
@@ -60,3 +75,98 @@ def test_policy_upgrade_enables_traces_and_keeps_self_upgrade_image_only() -> No
         TARGET_AGENT_IMAGE_KEY: NEW_IMAGE,
         NODE_COLLECTOR_IMAGE_KEY: NEW_IMAGE,
     }
+
+
+def test_policy_upgrade_keeps_tempo_query_executable_by_previous_agent() -> None:
+    """A previous Agent must accept the policy that upgrades its own Deployment."""
+
+    cluster_id = "legacy-target"
+    plan = build_target_upgrade_plan(
+        registration={
+            "id": 1,
+            "workspace_id": "default",
+            "cluster_id": cluster_id,
+            "settings": {
+                "name": "legacy-target",
+                "cluster_role": "target",
+                "image": OLD_IMAGE,
+            },
+        },
+        policy=legacy_policy(cluster_id),
+        desired_states=[],
+        target_image=NEW_IMAGE,
+        rbac_actual_version=None,
+    )
+
+    assert plan.policy is not None
+    trace_query = next(
+        query
+        for query in plan.policy.evidence.providers["traces"].queries
+        if query.get("name") == TEMPO_RECENT_TRACE_QUERY_NAME
+    )
+    assert "range_seconds" not in trace_query
+
+    deployment = desired_agent_deployment(plan.policy)
+    containers = deployment["spec"]["template"]["spec"]["containers"]
+    agent = next(container for container in containers if container["name"] == "cluster-agent")
+    assert agent["image"] == NEW_IMAGE
+
+
+def test_policy_upgrade_retries_a_persisted_incompatible_generation() -> None:
+    """A failed generation is rebased even when registration already names the new image."""
+
+    cluster_id = "legacy-target"
+    staged = build_target_upgrade_plan(
+        registration={
+            "id": 1,
+            "workspace_id": "default",
+            "cluster_id": cluster_id,
+            "settings": {
+                "name": "legacy-target",
+                "cluster_role": "target",
+                "image": OLD_IMAGE,
+            },
+        },
+        policy=legacy_policy(cluster_id),
+        desired_states=[],
+        target_image=NEW_IMAGE,
+        rbac_actual_version=None,
+    )
+    assert staged.policy is not None
+    failed_body = staged.policy.model_dump()
+    failed_body["generation"] = 13
+    failed_trace_query = next(
+        query
+        for query in failed_body["evidence"]["providers"]["traces"]["queries"]
+        if query.get("name") == TEMPO_RECENT_TRACE_QUERY_NAME
+    )
+    failed_trace_query["range_seconds"] = TEMPO_RECENT_TRACE_RANGE_SECONDS
+    failed_policy = AgentPolicy.model_validate(failed_body)
+
+    retry = build_target_upgrade_plan(
+        registration={
+            "id": 1,
+            "workspace_id": "default",
+            "cluster_id": cluster_id,
+            "settings": {
+                "name": "legacy-target",
+                "cluster_role": "target",
+                "image": NEW_IMAGE,
+            },
+        },
+        policy=failed_policy,
+        desired_states=[],
+        target_image=NEW_IMAGE,
+        rbac_actual_version=None,
+    )
+
+    assert retry.changed is True
+    assert retry.current_generation == 13
+    assert retry.next_generation == 14
+    assert retry.policy is not None
+    retried_trace_query = next(
+        query
+        for query in retry.policy.evidence.providers["traces"].queries
+        if query.get("name") == TEMPO_RECENT_TRACE_QUERY_NAME
+    )
+    assert "range_seconds" not in retried_trace_query

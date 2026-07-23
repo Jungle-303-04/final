@@ -12,6 +12,8 @@ EvidenceProfile = Literal["standard", "demo", "management"]
 EvidenceQuerySource = Literal["kubernetes", "prometheus", "loki", "tempo", "metadata"]
 EvidenceBackendScope = Literal["cluster_local", "shared"]
 EvidenceQueryScope = Literal["cluster", "namespace"]
+TEMPO_RECENT_TRACE_QUERY_NAME = "cluster_recent_traces"
+TEMPO_RECENT_TRACE_RANGE_SECONDS = 15 * 60
 
 
 class EvidenceQueryProvenance(StrictModel):

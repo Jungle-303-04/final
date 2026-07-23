@@ -31,7 +31,10 @@ from domains.target.management_guard import (
     cluster_role_from_registration,
 )
 from packages.contracts.event_bus.interfaces import JsonObject
-from packages.contracts.evidence_policy import EvidenceProfile
+from packages.contracts.evidence_policy import (
+    TEMPO_RECENT_TRACE_QUERY_NAME,
+    EvidenceProfile,
+)
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.requests import (
     AgentPolicy,
@@ -161,13 +164,8 @@ def _registration_payload(registration: JsonObject, target_image: str) -> Target
         }
     )
     payload = TargetRegisterRequest.model_validate(values)
-    if (
-        payload.cluster_role != MANAGEMENT_CLUSTER_ROLE
-        and not payload.otel_traces_endpoint.strip()
-    ):
-        payload = payload.model_copy(
-            update={"otel_traces_endpoint": TARGET_OTEL_TRACES_ENDPOINT}
-        )
+    if payload.cluster_role != MANAGEMENT_CLUSTER_ROLE and not payload.otel_traces_endpoint.strip():
+        payload = payload.model_copy(update={"otel_traces_endpoint": TARGET_OTEL_TRACES_ENDPOINT})
     return payload
 
 
@@ -190,15 +188,18 @@ def _rebase_provider_queries(
             evidence_profile=evidence_profile,
             control_namespaces=control_namespaces,
         )
+        default_queries = [_self_upgrade_compatible_query(query) for query in default_queries]
         existing_provider = providers.get(provider_key)
         if existing_provider is None:
-            providers[provider_key] = default_evidence_provider_policy(
+            default_provider = default_evidence_provider_policy(
                 provider_key,
                 interval_seconds,
                 cluster_id=cluster_id,
                 evidence_profile=evidence_profile,
                 control_namespaces=control_namespaces,
             ).model_dump()
+            default_provider["queries"] = default_queries
+            providers[provider_key] = default_provider
             continue
 
         defaults_by_name = {str(item["name"]): copy.deepcopy(item) for item in default_queries}
@@ -225,6 +226,25 @@ def _rebase_provider_queries(
         # which silently excluded the fourth RCA signal forever.
         existing_provider["enabled"] = bool(default_queries)
     return AgentPolicy.model_validate(payload)
+
+
+def _self_upgrade_compatible_query(query: JsonObject) -> JsonObject:
+    """Keep policy defaults executable by the Agent performing its own upgrade.
+
+    Tempo range-query support was added after the canonical trace query.  A
+    policy carrying the new Agent Deployment cannot require that support before
+    the Deployment is reconciled.  The upgraded runtime applies the canonical
+    recent-query bound locally.
+    """
+
+    compatible = copy.deepcopy(query)
+    if (
+        compatible.get("source") == "tempo"
+        and compatible.get("name") == TEMPO_RECENT_TRACE_QUERY_NAME
+    ):
+        compatible.pop("range_seconds", None)
+        compatible.pop("step_seconds", None)
+    return compatible
 
 
 def _deployment_resource(policy: AgentPolicy, payload: TargetRegisterRequest) -> AgentPolicy:

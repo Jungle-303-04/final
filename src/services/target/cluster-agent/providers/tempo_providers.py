@@ -13,6 +13,10 @@ from config import (
     TEMPO_TIMEOUT_SECONDS,
 )
 from packages.contracts.event_bus.interfaces import JsonObject
+from packages.contracts.evidence_policy import (
+    TEMPO_RECENT_TRACE_QUERY_NAME,
+    TEMPO_RECENT_TRACE_RANGE_SECONDS,
+)
 from providers.base import TRACER, ConfigReader
 from providers.collection_limits import (
     attach_collection_limits,
@@ -63,8 +67,9 @@ class TempoTracesProvider:
         """Run one Tempo search query and return the raw result."""
         with TRACER.start_as_current_span("tempo.search") as span:
             span.attr("tempo.traceql", telemetry_query.traceql)
-            if telemetry_query.range_seconds is not None:
-                span.attr("tempo.range_seconds", telemetry_query.range_seconds)
+            range_seconds = tempo_query_range_seconds(telemetry_query)
+            if range_seconds is not None:
+                span.attr("tempo.range_seconds", range_seconds)
             response = await client.get(
                 f"{self.base_url}/api/search",
                 params=tempo_search_params(telemetry_query),
@@ -130,17 +135,28 @@ def tempo_search_params(
         "q": telemetry_query.traceql,
         "limit": TEMPO_QUERY_LIMIT,
     }
-    if telemetry_query.range_seconds is None:
+    range_seconds = tempo_query_range_seconds(telemetry_query)
+    if range_seconds is None:
         return params
 
     end = int(time.time() if now_seconds is None else now_seconds)
     params.update(
         {
-            "start": end - telemetry_query.range_seconds,
+            "start": end - range_seconds,
             "end": end,
         }
     )
     return params
+
+
+def tempo_query_range_seconds(telemetry_query: OpenTelemetrySpanQuery) -> int | None:
+    """Resolve a policy range or the canonical self-upgrade compatibility bound."""
+
+    if telemetry_query.range_seconds is not None:
+        return telemetry_query.range_seconds
+    if telemetry_query.query_name == TEMPO_RECENT_TRACE_QUERY_NAME:
+        return TEMPO_RECENT_TRACE_RANGE_SECONDS
+    return None
 
 
 def limit_tempo_payload(payload: JsonObject) -> JsonObject:
