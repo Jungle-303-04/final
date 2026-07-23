@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 
 import { getRecoveryPlanByCorrelation } from "../api/recovery";
 import type { RecoveryPlan } from "../api/recovery-schemas";
+import { getAuditTimeline } from "../api/audit-timeline";
+import type { AuditTimelineItem } from "../api/audit-timeline-schemas";
 import { getIncidentRecentChanges } from "../api/recent-changes";
 import type { RecentChangeItem } from "../api/recent-changes-schemas";
 import { getEvidenceWindowPayload, listRcaReports } from "../api/evidence";
@@ -125,6 +127,13 @@ export interface RecoveryPlanFeed {
   plan: RecoveryPlan | null;
 }
 
+export type RecoveryAuditStatus = "idle" | "loading" | "ready" | "unavailable";
+
+export interface RecoveryAuditFeed {
+  status: RecoveryAuditStatus;
+  items: AuditTimelineItem[];
+}
+
 export type IncidentRecentChangesStatus = "idle" | "loading" | "ready" | "unavailable";
 
 export interface IncidentRecentChangesFeed {
@@ -242,7 +251,28 @@ export function useRecoveryPlan(correlationId?: string | null): RecoveryPlanFeed
       .catch((cause: unknown) => {
         if (controller.signal.aborted || isAbortError(cause)) return;
         setFeed({ status: "unavailable", plan: null });
-      });
+    });
+    return () => controller.abort();
+  }, [correlationId]);
+  return feed;
+}
+
+export function useRecoveryAudit(correlationId?: string | null): RecoveryAuditFeed {
+  const [feed, setFeed] = useState<RecoveryAuditFeed>(
+    () => ({ status: correlationId ? "loading" : "idle", items: [] }),
+  );
+  useEffect(() => {
+    if (!correlationId) return;
+    const controller = new AbortController();
+    void getAuditTimeline(correlationId, { limit: 50, signal: controller.signal })
+      .then((response) => {
+        if (controller.signal.aborted) return;
+        setFeed({ status: "ready", items: response.items });
+      })
+      .catch((cause: unknown) => {
+        if (controller.signal.aborted || isAbortError(cause)) return;
+        setFeed({ status: "unavailable", items: [] });
+    });
     return () => controller.abort();
   }, [correlationId]);
   return feed;
