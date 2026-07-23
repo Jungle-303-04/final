@@ -336,7 +336,14 @@ def _chat_response(
     evidence: list[AiEvidenceLink],
 ) -> AiChatResponse:
     if action_decision.clarification is not None:
-        return AiChatResponse(answer=action_decision.clarification, evidence=evidence)
+        # Mark follow-up questions explicitly: the chat endpoint is stateless,
+        # so the client accumulates the pending alert request across turns and
+        # resends it merged with the user's next answer.
+        return AiChatResponse(
+            answer=action_decision.clarification,
+            evidence=evidence,
+            answer_kind="clarification",
+        )
     if action_decision.action is not None:
         return AiChatResponse(
             answer="현재 화면 범위로 알림 규칙 초안을 제안합니다. 내용을 확인해 주세요.",

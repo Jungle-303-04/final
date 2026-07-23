@@ -2,7 +2,7 @@
 // ⚠ VP-021 사용성 프리뷰 (더미 · 자가 스트리밍 재생). 배선 완료 시 삭제.
 import {
   Activity, ArrowUpRight, BellPlus, Boxes, Check, ChevronDown, CircleAlert,
-  FileText, GitBranch, Play, Send, Server, Sparkles, SquarePen, X,
+  FileText, GitBranch, Maximize2, Minimize2, Play, Send, Server, Sparkles, SquarePen, X,
 } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import "./styles/tokens.css";
@@ -386,7 +386,7 @@ function CollapsedTurn({ turn, onShown }: { turn: AiTurn; onShown: () => void })
 const now = () => new Date().toISOString();
 const noop = () => {};
 
-export function AiPanel({ onClose, embedded = false, contextView = "resources", contextScope = "game-server" }: {
+export function AiPanel({ onClose, embedded = false, contextView = "resources", contextScope = "game-server", full = false, onToggleFull }: {
   /** 셸 임베드: 닫기 버튼 동작 */
   onClose?: () => void;
   /** 셸 임베드: 고정 460px 대신 컨테이너 폭을 따른다 (리사이즈 핸들 대응) */
@@ -394,6 +394,9 @@ export function AiPanel({ onClose, embedded = false, contextView = "resources", 
   /** 현재 화면 맥락 칩 — 셸이 실제 화면·범위를 알려준다 */
   contextView?: string;
   contextScope?: string;
+  /** 셸 임베드: 전체 화면 상태와 토글 (미전달 시 버튼 미노출) */
+  full?: boolean;
+  onToggleFull?: () => void;
 } = {}) {
   const [turns, setTurns] = useState<AiTurn[]>([]);
   const [thinking, setThinking] = useState(false);
@@ -408,6 +411,11 @@ export function AiPanel({ onClose, embedded = false, contextView = "resources", 
   const viewingHistory = selectedConversationId !== null;
   const idSeq = useRef(0);
   const chatAbort = useRef<AbortController | null>(null);
+  // 알림 액션 되묻기 누적 — /api/ai/chat 은 무상태라 "알람 만들어 줘" → "CPU" →
+  // "80%"처럼 나눠 답하면 매 턴이 따로 파싱된다. 서버가 clarification 을 표시한
+  // 동안 보류 문장을 여기 누적해, 다음 전송을 "누적 + 새 입력"으로 합쳐 보낸다
+  // (말풍선에는 새 입력만 표시). 액션/일반 답변이 오면 초기화.
+  const alertDraft = useRef<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     const el = scrollRef.current; if (!el) return;
@@ -435,9 +443,11 @@ export function AiPanel({ onClose, embedded = false, contextView = "resources", 
     chatAbort.current = controller;
     idSeq.current += 1;
     const replyId = `a${idSeq.current}`;
-    void sendAiChatTurn(buildAiContext(contextView, contextScope), trimmed, replyId, controller.signal)
+    const outgoing = alertDraft.current === null ? trimmed : `${alertDraft.current} ${trimmed}`;
+    void sendAiChatTurn(buildAiContext(contextView, contextScope), outgoing, replyId, controller.signal)
       .then((turn) => {
         if (controller.signal.aborted) return;
+        alertDraft.current = turn.clarification === true ? outgoing : null;
         setThinking(false); setTurns((prev) => [...prev, turn]);
       })
       .catch((cause: unknown) => {
@@ -450,10 +460,11 @@ export function AiPanel({ onClose, embedded = false, contextView = "resources", 
   // useConversationDetail(selectedConversationId)가 담당(서버 role/content만 투영).
   const openConversation = (id: string) => {
     chatAbort.current?.abort(); setThinking(false); setError(null);
+    alertDraft.current = null;
     setListOpen(false); setSelectedConversationId(id);
   };
 
-  const newChat = () => { chatAbort.current?.abort(); setSelectedConversationId(null); setTurns([]); setError(null); setInput(""); setThinking(false); };
+  const newChat = () => { chatAbort.current?.abort(); alertDraft.current = null; setSelectedConversationId(null); setTurns([]); setError(null); setInput(""); setThinking(false); };
 
   // 저장된 대화의 이력 턴과 라이브 대화 턴을 같은 표면으로 렌더한다
   const renderTurn = (turn: AiTurn) => {
@@ -467,6 +478,11 @@ export function AiPanel({ onClose, embedded = false, contextView = "resources", 
       <header className="flex items-center gap-2.5 border-b border-black/[0.05] bg-white/60 px-3.5 py-3 backdrop-blur-xl">
         <span className="grid size-9 shrink-0 place-items-center rounded-[13px] bg-gradient-to-br from-primary to-[color-mix(in_oklch,var(--primary)_75%,black)] text-primary-foreground shadow-[0_2px_8px_-2px_color-mix(in_oklch,var(--primary)_55%,transparent)]"><Sparkles className="size-4" /></span>
         <div className="min-w-0 flex-1"><h2 className="text-[14px] font-semibold leading-tight tracking-[-0.01em] text-black">Kyro AI</h2></div>
+        {onToggleFull && (
+          <button className="grid size-8 place-items-center rounded-full text-black/65 transition-colors hover:bg-black/[0.05] hover:text-black" onClick={onToggleFull} title={full ? "패널로 축소" : "전체 화면"} type="button" aria-label={full ? "AI 패널 축소" : "AI 패널 전체 화면"}>
+            {full ? <Minimize2 className="size-[17px]" /> : <Maximize2 className="size-[17px]" />}
+          </button>
+        )}
         <button className="grid size-8 place-items-center rounded-full text-black/65 transition-colors hover:bg-black/[0.05] hover:text-black" onClick={() => newChat()} title="새 대화" type="button"><Play className="size-[17px]" /></button>
         <button className="grid size-8 place-items-center rounded-full text-black/65 transition-colors hover:bg-black/[0.05] hover:text-black" onClick={() => setListOpen((v) => !v)} title="대화 목록" type="button"><SquarePen className="size-[17px]" /></button>
         <button className="grid size-8 place-items-center rounded-full text-black/65 transition-colors hover:bg-black/[0.05] hover:text-black" onClick={onClose} title="닫기" type="button"><X className="size-[17px]" /></button>

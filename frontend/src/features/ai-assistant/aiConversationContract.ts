@@ -76,6 +76,9 @@ export interface AiTurn {
   createdAt: string;
   collapsed: boolean;
   summary?: string;
+  /** 서버가 알림 액션을 완성하려고 되물은 턴 — 클라이언트가 보류 중인
+      요청 문장을 누적해 다음 전송에 합치는 신호로 쓴다. */
+  clarification?: boolean;
 }
 
 export interface AiConversationSummary {

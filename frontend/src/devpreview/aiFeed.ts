@@ -165,7 +165,15 @@ export function toAssistantTurn(response: AiChatResponseEndpoint, id: string): A
       },
     });
   }
-  return { id, role: "assistant", collapsed: false, createdAt: now(), parts };
+  return {
+    id,
+    role: "assistant",
+    collapsed: false,
+    createdAt: now(),
+    parts,
+    // 되묻기 표시 — 무상태 챗 엔드포인트에 대해 패널이 보류 문장을 누적한다.
+    ...(response.answer_kind === "clarification" ? { clarification: true } : {}),
+  };
 }
 
 /**

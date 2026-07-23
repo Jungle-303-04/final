@@ -3029,16 +3029,21 @@ class AiChatResponse(StrictModel):
     # the product capability contract, not from cluster evidence. Keeping this
     # explicit prevents an arbitrary evidence-free operational claim from
     # passing the response boundary.
-    answer_kind: Literal["capability"] | None = None
+    # "clarification" marks a follow-up question for the allowlisted alert
+    # action (e.g. missing metric/threshold) so the client can carry the
+    # pending request across turns against this stateless endpoint.
+    answer_kind: Literal["capability", "clarification"] | None = None
 
     @model_validator(mode="after")
     def require_evidence_or_canonical_no_data(self) -> Self:
         if self.answer_kind == "capability" and (self.evidence or self.action is not None):
             raise ValueError("AI capability answers cannot carry operational evidence or actions")
+        if self.answer_kind == "clarification" and self.action is not None:
+            raise ValueError("AI clarification answers cannot carry actions")
         if (
             not self.evidence
             and self.action is None
-            and self.answer_kind != "capability"
+            and self.answer_kind is None
             and self.answer != AI_NO_DATA_ANSWER
         ):
             raise ValueError("AI answer without evidence must use the canonical no-data answer")

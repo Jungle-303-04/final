@@ -1379,6 +1379,7 @@ function App() {
   const [recoverySelectionCorrelations, setRecoverySelectionCorrelations] = useState<ReadonlySet<string>>(() => new Set());
   const [navCollapsed, setNavCollapsed] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
+  const [aiFull, setAiFull] = useState(false);         // AI 패널 전체 화면 (헤더 ⤢ 토글)
   const [aiW, setAiW] = useState(440);                 // 실제 제품처럼 리사이즈 가능한 도킹 폭
   const [aiDragging, setAiDragging] = useState(false);
   const [drillCl, setDrillCl] = useState<string | null>(null); // 홈 카드 → 지도 드릴 스코프 전달(D21)
@@ -1745,7 +1746,7 @@ function App() {
         if (bellOpen || nsOpen || meOpen) { setBellOpen(false); setNsOpen(false); setMeOpen(false); }
         else if (connectModal) setConnectModal(null);
         else if (detail) setDetail(null);
-        else if (aiOpen) setAiOpen(false);
+        else if (aiOpen) { setAiOpen(false); setAiFull(false); }
       }
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); searchRef.current?.focus(); }
     };
@@ -2107,12 +2108,15 @@ function App() {
       {/* AI 어시스턴트 — 상세 페이지 위까지 덮는 우측 오버레이 + 폭 조절 핸들 */}
       <AnimatePresence>
         {aiOpen && (
-          <motion.div key="ai" initial={{ x: aiW + 30 }} animate={{ x: 0 }} exit={{ x: aiW + 30 }} transition={{ type: "spring", bounce: 0.06, visualDuration: 0.34 }}
-            style={{ position: "fixed", top: topH, right: 0, bottom: 0, width: aiW, zIndex: 72, display: "flex", boxShadow: `-28px 0 70px -32px ${inkA(0.3)}` }}>
-            <div role="separator" aria-label="AI 패널 폭 조절" aria-orientation="vertical" onPointerDown={onAiHandleDown} title="드래그해서 폭 조절"
-              style={{ width: 1, flexShrink: 0, cursor: "col-resize", background: aiDragging ? blueA(0.35) : UI.line, transition: "background .15s" }} />
+          <motion.div key="ai" initial={{ x: aiW + 30 }} animate={{ x: 0 }} exit={{ x: (aiFull ? window.innerWidth : aiW) + 30 }} transition={{ type: "spring", bounce: 0.06, visualDuration: 0.34 }}
+            style={{ position: "fixed", top: topH, right: 0, bottom: 0, width: aiFull ? "100vw" : aiW, zIndex: 72, display: "flex", boxShadow: `-28px 0 70px -32px ${inkA(0.3)}`, transition: "width .28s cubic-bezier(0.32,0.72,0,1)" }}>
+            {/* 전체 화면 중에는 폭 조절 핸들 비활성 */}
+            {!aiFull && (
+              <div role="separator" aria-label="AI 패널 폭 조절" aria-orientation="vertical" onPointerDown={onAiHandleDown} title="드래그해서 폭 조절"
+                style={{ width: 1, flexShrink: 0, cursor: "col-resize", background: aiDragging ? blueA(0.35) : UI.line, transition: "background .15s" }} />
+            )}
             <div style={{ flex: 1, minWidth: 0 }}>
-              <AiPanel embedded onClose={() => setAiOpen(false)} contextView={surface === "connect" ? "연결 설정" : surface === "home" ? "홈" : surface === "deploy" ? "배포" : surface === "issues" ? "이슈" : surface === "timeline" ? "타임라인" : surface === "checks" ? "점검" : surface === "cost" ? "비용" : surface === "alerts" ? "알림" : surface === "ai" ? "AI 대화" : surface === "settings" ? "설정" : resView === "flow" ? "트래픽" : resView === "list" ? "쿠버네티스 리소스" : "인프라 지도"} contextScope={scope.cluster ?? "전체 클러스터"} />
+              <AiPanel embedded full={aiFull} onToggleFull={() => setAiFull((v) => !v)} onClose={() => { setAiOpen(false); setAiFull(false); }} contextView={surface === "connect" ? "연결 설정" : surface === "home" ? "홈" : surface === "deploy" ? "배포" : surface === "issues" ? "이슈" : surface === "timeline" ? "타임라인" : surface === "checks" ? "점검" : surface === "cost" ? "비용" : surface === "alerts" ? "알림" : surface === "ai" ? "AI 대화" : surface === "settings" ? "설정" : resView === "flow" ? "트래픽" : resView === "list" ? "쿠버네티스 리소스" : "인프라 지도"} contextScope={scope.cluster ?? "전체 클러스터"} />
             </div>
           </motion.div>
         )}
