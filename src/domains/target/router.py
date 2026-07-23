@@ -49,6 +49,7 @@ from domains.target.evidence_jobs import (
     PENDING_EVIDENCE_EVENT_ID_PREFIX,
 )
 from domains.target.evidence_policy import (
+    control_namespace_tuple,
     default_agent_policy,
     enabled_provider_keys,
     evidence_profile_for_registration,
@@ -1313,6 +1314,8 @@ async def register_target(
                     environment=scoped_payload.environment,
                     install_sample_workload=scoped_payload.install_sample_workload,
                 ),
+                # control_namespaces 가 실제 수집 범위에 반영되게 정책 쿼리로 컴파일.
+                control_namespaces=control_namespace_tuple(scoped_payload.control_namespaces),
                 bootstrap_mode=(
                     "management"
                     if scoped_payload.cluster_role == MANAGEMENT_CLUSTER_ROLE

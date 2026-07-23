@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 from packages.config.constants import Target
 from packages.config.security import RCA_TEST_TARGET_ENVIRONMENTS
 from packages.contracts.cost.observations import (
@@ -190,11 +192,60 @@ def _cluster_kubernetes_queries(
     ]
 
 
+def control_namespace_tuple(raw: str | None) -> tuple[str, ...]:
+    """등록 settings 의 control_namespaces 문자열을 정규화된 튜플로 만든다."""
+    parts = [item.strip() for item in str(raw or "").replace(",", " ").split() if item.strip()]
+    deduped: list[str] = []
+    for part in parts:
+        if part not in deduped:
+            deduped.append(part)
+    return tuple(deduped)
+
+
+def _control_namespace_queries(
+    control_namespaces: tuple[str, ...],
+    covered: set[str],
+    *,
+    cluster_id: str,
+    evidence_profile: EvidenceProfile,
+) -> list[dict[str, object]]:
+    """control_namespaces 각각에 대한 네임스페이스 스냅샷 쿼리를 컴파일한다.
+
+    등록 설정의 관리 네임스페이스가 에이전트 수집 범위에 실제로 반영되게 한다 —
+    종전에는 standard 프로파일이 에이전트 자신의 네임스페이스(target)만 수집해,
+    control 네임스페이스에 배포된 워크로드가 화면(인벤토리)에 보이지 않았다.
+    """
+    queries: list[dict[str, object]] = []
+    used_names: set[str] = set()
+    for namespace in control_namespaces:
+        if namespace in covered:
+            continue
+        slug = re.sub(r"[^a-z0-9]+", "_", namespace.lower()).strip("_") or "namespace"
+        name = f"{slug}_namespace_snapshot"
+        if name in used_names:
+            continue
+        used_names.add(name)
+        covered.add(namespace)
+        queries.append(
+            _namespace_query(
+                source="kubernetes",
+                name=name,
+                description=f"Kubernetes snapshot in the {namespace} control namespace.",
+                query=namespace,
+                namespace=namespace,
+                cluster_id=cluster_id,
+                evidence_profile=evidence_profile,
+            )
+        )
+    return queries
+
+
 def evidence_provider_queries(
     provider_key: str,
     *,
     cluster_id: str,
     evidence_profile: EvidenceProfile = STANDARD_EVIDENCE_PROFILE,
+    control_namespaces: tuple[str, ...] = (),
 ) -> list[dict[str, object]]:
     """Compile one server-owned provider query set for an exact cluster profile."""
 
@@ -248,6 +299,18 @@ def evidence_provider_queries(
                     evidence_profile=evidence_profile,
                 ),
             ]
+        # 등록 설정의 control_namespaces 도 수집 범위에 포함(중복 네임스페이스는 생략).
+        covered = (
+            {"target", "sandbox", "color-turf"}
+            if evidence_profile == DEMO_EVIDENCE_PROFILE
+            else {"target"}
+        )
+        queries[1:1] = _control_namespace_queries(
+            control_namespaces,
+            covered,
+            cluster_id=cluster_id,
+            evidence_profile=evidence_profile,
+        )
         return queries
 
     if provider_key == "metrics":
@@ -535,6 +598,7 @@ def default_evidence_provider_policy(
     *,
     cluster_id: str = Target.DEFAULT_CLUSTER_ID,
     evidence_profile: EvidenceProfile = STANDARD_EVIDENCE_PROFILE,
+    control_namespaces: tuple[str, ...] = (),
     enabled: bool | None = None,
     queries: list[dict[str, object]] | None = None,
 ) -> EvidenceProviderPolicy:
@@ -544,6 +608,7 @@ def default_evidence_provider_policy(
             provider_key,
             cluster_id=cluster_id,
             evidence_profile=evidence_profile,
+            control_namespaces=control_namespaces,
         )
         if queries is None
         else list(queries)
@@ -563,6 +628,7 @@ def default_evidence_providers(
     cluster_id: str = Target.DEFAULT_CLUSTER_ID,
     cluster_role: str = DEFAULT_CLUSTER_ROLE,
     evidence_profile: EvidenceProfile | None = None,
+    control_namespaces: tuple[str, ...] = (),
 ) -> dict[str, EvidenceProviderPolicy]:
     """Build default provider policies for all known providers."""
     resolved_profile = evidence_profile or (
@@ -580,6 +646,7 @@ def default_evidence_providers(
             interval_seconds,
             cluster_id=cluster_id,
             evidence_profile=resolved_profile,
+            control_namespaces=control_namespaces,
         )
         for provider_key in EVIDENCE_PROVIDER_KEYS
     }
@@ -594,6 +661,7 @@ def default_agent_policy(
     bootstrap_mode: str = DEFAULT_BOOTSTRAP_MODE,
     generation: int = 1,
     evidence_profile: EvidenceProfile | None = None,
+    control_namespaces: tuple[str, ...] = (),
 ) -> AgentPolicy:
     """Build the default policy used by a target cluster agent."""
     resolved_profile = evidence_profile or (
@@ -613,6 +681,7 @@ def default_agent_policy(
                 cluster_id=cluster_id,
                 cluster_role=cluster_role,
                 evidence_profile=resolved_profile,
+                control_namespaces=control_namespaces,
             ),
         ),
         bootstrap=BootstrapPolicy(mode=bootstrap_mode),

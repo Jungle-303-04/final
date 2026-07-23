@@ -18,6 +18,7 @@ import yaml
 from domains.target.events import TargetDesiredComponent
 from domains.target.evidence_policy import (
     EVIDENCE_PROVIDER_KEYS,
+    control_namespace_tuple,
     default_agent_policy,
     default_evidence_provider_policy,
     evidence_profile_for_registration,
@@ -167,6 +168,7 @@ def _rebase_provider_queries(
     *,
     cluster_id: str,
     evidence_profile: EvidenceProfile,
+    control_namespaces: tuple[str, ...] = (),
 ) -> AgentPolicy:
     payload = policy.model_dump()
     providers = payload["evidence"]["providers"]
@@ -177,6 +179,7 @@ def _rebase_provider_queries(
             provider_key,
             cluster_id=cluster_id,
             evidence_profile=evidence_profile,
+            control_namespaces=control_namespaces,
         )
         existing_provider = providers.get(provider_key)
         if existing_provider is None:
@@ -185,6 +188,7 @@ def _rebase_provider_queries(
                 interval_seconds,
                 cluster_id=cluster_id,
                 evidence_profile=evidence_profile,
+                control_namespaces=control_namespaces,
             ).model_dump()
             continue
 
@@ -384,6 +388,8 @@ def build_target_upgrade_plan(
         payload.evidence_interval_seconds,
         cluster_id=cluster_id,
         evidence_profile=evidence_profile,
+        # 등록 설정의 control_namespaces 를 기존 클러스터 정책에도 리베이스로 반영한다.
+        control_namespaces=control_namespace_tuple(payload.control_namespaces),
     )
     rebased = _runtime_config_resource(rebased, payload)
     rebased = _deployment_resource(rebased, payload)
