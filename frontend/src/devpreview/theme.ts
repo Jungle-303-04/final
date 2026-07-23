@@ -114,5 +114,8 @@ export const ELEV = {
 // 라운드 스케일 (4px 그리드)
 export const RADIUS = { tile: 3, chip: 6, control: 9, card: 14, panel: 16, sheet: 18 } as const;
 
+// 여백 스케일 — 조밀한 목록부터 페이지 구획까지 4px 그리드로 제한한다.
+export const SPACE = { compact: 8, stack: 12, card: 16, section: 20, page: 24 } as const;
+
 // 시연 스케일 — 데모는 멀리서도 읽혀야 한다 (기본 1.25 = 별도 확대 없이 발표 가독)
 export const PRESENT_SCALE = 1.25;

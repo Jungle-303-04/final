@@ -9,7 +9,7 @@ import {
   ChevronRight, MapPin, ShieldAlert, ArrowLeft, ArrowRight, ExternalLink, CircleAlert, CircleCheck,
   Lightbulb,
 } from "lucide-react";
-import { UI, BLUE, HP, TINT, MONO, TYPE, SOFT, DUR, PRESENT_SCALE, inkA, blueA, critA } from "./devpreview/theme";
+import { UI, BLUE, HP, TINT, MONO, TYPE, SOFT, DUR, PRESENT_SCALE, RADIUS, SPACE, inkA, blueA, critA } from "./devpreview/theme";
 import { GithubIcon } from "./devpreview/brandIcons";
 import { useCostOverview } from "./devpreview/costFeed";
 import { useChecksOverview } from "./devpreview/checksFeed";
@@ -165,7 +165,7 @@ function Page({ title, icon: I, action, tabs, tab, onTab, ensureVerticalScroll =
   ensureVerticalScroll?: boolean; children: React.ReactNode;
 }) {
   return (
-    <main style={{ minWidth: 0, minHeight: ensureVerticalScroll ? `calc(100vh / ${PRESENT_SCALE})` : undefined, boxSizing: "border-box", display: "flex", flexDirection: "column", gap: 16, padding: "14px 18px 40px" }}>
+    <main style={{ minWidth: 0, minHeight: ensureVerticalScroll ? `calc(100vh / ${PRESENT_SCALE})` : undefined, boxSizing: "border-box", display: "flex", flexDirection: "column", gap: SPACE.card, padding: "14px 18px 40px" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
         <I size={17} style={{ color: BLUE }} />
         <span style={{ fontSize: TYPE.page, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink }}>{title}</span>
@@ -187,8 +187,8 @@ function Page({ title, icon: I, action, tabs, tab, onTab, ensureVerticalScroll =
   );
 }
 
-const Card = ({ children, pad = 15 }: { children: React.ReactNode; pad?: number }) => (
-  <div style={{ background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 14, padding: pad, minWidth: 0 }}>{children}</div>
+const Card = ({ children, pad = SPACE.card }: { children: React.ReactNode; pad?: number }) => (
+  <div style={{ background: UI.card, border: `1px solid ${UI.line}`, borderRadius: RADIUS.card, padding: pad, minWidth: 0 }}>{children}</div>
 );
 const SettingsRow = ({ icon: I, title, sub, right }: { icon: React.ComponentType<{ size?: number; style?: React.CSSProperties }>; title: string; sub: string; right: React.ReactNode }) => (
   <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 15px", borderBottom: `1px solid ${UI.line2}` }}>
@@ -610,7 +610,7 @@ function RecoveryPlanProgress({ progress }: { progress: RecoveryProgressState })
         : BLUE;
   const progressPercent = progress.phase === "completed" ? 100 : Math.min(80, progress.step * 20);
   return (
-    <section aria-live="polite" style={{ display: "grid", gap: 13, border: `1px solid ${UI.line}`, borderRadius: 10, background: UI.card, padding: 14, boxShadow: `0 6px 16px -10px ${inkA(0.26)}, 0 1px 3px ${inkA(0.06)}` }}>
+    <section aria-live="polite" style={{ display: "grid", gap: SPACE.stack, border: `1px solid ${UI.line}`, borderRadius: RADIUS.card, background: UI.card, padding: SPACE.card, boxShadow: `0 6px 16px -10px ${inkA(0.26)}, 0 1px 3px ${inkA(0.06)}` }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
         <div style={{ minWidth: 0, flex: 1, display: "grid", gap: 3 }}>
           <strong style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: ISSUE_DETAIL_TYPE.itemTitle, color: UI.ink }}>{progress.label}</strong>
@@ -883,7 +883,7 @@ function RcaSection({ title, children }: { title: string; children: React.ReactN
 
 function RcaCardSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section style={{ flexShrink: 0, overflow: "hidden", border: `1px solid ${UI.line}`, borderRadius: 10, background: UI.card }}>
+    <section style={{ flexShrink: 0, overflow: "hidden", border: `1px solid ${UI.line}`, borderRadius: RADIUS.card, background: UI.card }}>
       <h2 style={{ margin: 0, padding: "12px 15px", borderBottom: `1px solid ${UI.line}`, background: inkA(0.018), fontSize: ISSUE_DETAIL_TYPE.sectionTitle, fontWeight: 700, color: UI.heading }}>{title}</h2>
       {children}
     </section>
@@ -1333,9 +1333,9 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
               );
             })}
           </div>
-          <div style={{ flex: 1, minHeight: 0, overflowY: "auto", overscrollBehavior: "contain", scrollbarGutter: "stable", display: "flex", flexDirection: "column", gap: 20, padding: "18px 20px" }}>
+          <div style={{ flex: 1, minHeight: 0, overflowY: "auto", overscrollBehavior: "contain", scrollbarGutter: "stable", display: "flex", flexDirection: "column", gap: SPACE.section, padding: SPACE.section }}>
             {activeTab === "detail" ? <>
-            <section aria-labelledby="issue-summary-heading" style={{ flexShrink: 0, display: "grid", gap: 14, border: `1px solid ${UI.line}`, borderRadius: 10, background: UI.card, padding: 16, boxShadow: `0 6px 16px -10px ${inkA(0.26)}, 0 1px 3px ${inkA(0.06)}` }}>
+            <section aria-labelledby="issue-summary-heading" style={{ flexShrink: 0, display: "grid", gap: SPACE.stack, border: `1px solid ${UI.line}`, borderRadius: RADIUS.card, background: UI.card, padding: SPACE.card, boxShadow: `0 6px 16px -10px ${inkA(0.26)}, 0 1px 3px ${inkA(0.06)}` }}>
               <h2 id="issue-summary-heading" style={{ margin: 0, fontSize: ISSUE_DETAIL_TYPE.itemTitle, fontWeight: 700, color: UI.heading }}>상황 요약</h2>
               <p style={{ margin: 0, fontSize: TYPE.body, fontWeight: 600, color: situationSummary?.trim() ? UI.ink : UI.ink3, lineHeight: 1.65 }}>{situationSummary?.trim() || "상황 요약 정보가 아직 없습니다."}</p>
               {(reportFirstSeenAt || reportElapsed || reportImpact) && <dl style={{ display: "grid", gridTemplateColumns: "86px minmax(0, 1fr)", gap: "7px 10px", margin: 0, paddingTop: 12, borderTop: `1px solid ${UI.line2}`, fontSize: TYPE.caption, lineHeight: 1.5 }}>
@@ -1585,11 +1585,11 @@ function IssueCard({ issue, recoverySelectionAccepted, onOpen, onOpenTarget }: {
       style={{
         width: "100%", minWidth: 0, display: "block",
         padding: 0, overflow: "hidden", textAlign: "left", cursor: "pointer",
-        border: `1px solid ${UI.line}`, borderRadius: 10, background: UI.card,
+        border: `1px solid ${UI.line}`, borderRadius: RADIUS.card, background: UI.card,
         boxShadow: `0 1px 2px ${inkA(0.04)}`, color: UI.ink,
       }}
     >
-      <span style={{ minWidth: 0, display: "grid", gap: 10, padding: "13px 14px 12px" }}>
+      <span style={{ minWidth: 0, display: "grid", gap: SPACE.stack, padding: `${SPACE.stack}px ${SPACE.card}px` }}>
         <span style={{ minWidth: 0, display: "flex", alignItems: "center", gap: 10 }}>
           <span style={{ minWidth: 0, flex: 1, display: "flex", alignItems: "center", gap: 8 }}>
             <span role="img" aria-label={`상태: ${indicatorLabel}`} title={`상태: ${indicatorLabel}`} style={{ width: 12, height: 12, flexShrink: 0, alignSelf: "center", cursor: "help", borderRadius: 999, background: indicatorColor }} />

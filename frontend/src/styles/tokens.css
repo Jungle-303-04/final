@@ -85,6 +85,10 @@
   --font-weight-label: 600;
   --font-weight-numeric: 600;
   --font-weight-title: 700;
+  --space-card-sm: 0.75rem;
+  --space-card: 1rem;
+  --space-section: 1.25rem;
+  --space-page: 1.5rem;
   --product-sidebar-width: 12.5rem;
   --product-sidebar-width-collapsed: 3.5rem;
   --product-sidebar-width-mobile: 17rem;

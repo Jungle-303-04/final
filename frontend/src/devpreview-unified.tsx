@@ -56,7 +56,7 @@ import { operationalMessageLabel, reasonLabel, statusLabel, isCriticalStatus } f
 import { LiveResourceManifestEditor } from "./devpreview/resourceManifestEditor";
 import { groupApplicationsByRepository } from "./devpreview/repositoryRegistry";
 import { podsForNode, useClusterTopology } from "./devpreview/inventoryTopologyFeed";
-import { UI, BLUE, BLUE2, HP, TINT, MONO, TYPE, SOFT, SPRING, PRESENT_SCALE, DUR, inkA, blueA, MARK, cardA, GLASS, critA } from "./devpreview/theme";
+import { UI, BLUE, BLUE2, HP, TINT, MONO, TYPE, SOFT, SPRING, PRESENT_SCALE, DUR, RADIUS, SPACE, inkA, blueA, MARK, cardA, GLASS, critA } from "./devpreview/theme";
 import "./styles/tokens.css";
 import "./styles/foundation.css";
 
@@ -329,7 +329,7 @@ function ResourceTable({ kind, rows, q, filterDesc = "", onClearFilter, onOpen }
   const rowPad = "7px 16px";
   return (
     /* 긴 표는 카드 안에서 세로 스크롤(헤더 고정) */
-    <div style={{ background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 14, overflowY: "auto", overflowX: "hidden", maxHeight: `min(calc(64vh / ${PRESENT_SCALE}), 680px)`, scrollbarGutter: "stable" }}>
+    <div style={{ background: UI.card, border: `1px solid ${UI.line}`, borderRadius: RADIUS.card, overflowY: "auto", overflowX: "hidden", maxHeight: `min(calc(64vh / ${PRESENT_SCALE}), 680px)`, scrollbarGutter: "stable" }}>
     <div>
       <div style={{ display: "grid", gridTemplateColumns: grid, gap: 14, padding: "10px 16px", borderBottom: `1px solid ${UI.line}`, background: UI.bg2, position: "sticky", top: 0, zIndex: 2 }}>
         {/* 정렬 미구현 — 동작 없는 정렬 셰브론을 그리지 않는다(가짜 컨트롤 금지) */}
@@ -861,7 +861,7 @@ function TrafficPanel({ clusterIds, focus, onFocus, onOpen, stickyTop, stacked =
   const visibleRows = rows.slice(0, 40);
   const hiddenCount = Math.max(0, rows.length - visibleRows.length);
   return (
-    <aside style={{ width: stacked ? "100%" : 248, boxSizing: "border-box", flexShrink: 0, alignSelf: "flex-start", position: stacked ? "relative" : "sticky", top: stacked ? undefined : stickyTop, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 14, padding: 10, maxHeight: stacked ? 300 : `calc(100vh / ${PRESENT_SCALE} - ${stickyTop + 48}px)`, overflowY: "auto", scrollbarGutter: "stable", display: "flex", flexDirection: "column", gap: 2 }}>
+    <aside style={{ width: stacked ? "100%" : 248, boxSizing: "border-box", flexShrink: 0, alignSelf: "flex-start", position: stacked ? "relative" : "sticky", top: stacked ? undefined : stickyTop, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: RADIUS.card, padding: 10, maxHeight: stacked ? 300 : `calc(100vh / ${PRESENT_SCALE} - ${stickyTop + 48}px)`, overflowY: "auto", scrollbarGutter: "stable", display: "flex", flexDirection: "column", gap: 2 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "2px 2px 7px" }}>
         <span style={{ fontSize: TYPE.body, fontWeight: 600, letterSpacing: "-0.02em", color: UI.heading }}>관계 노드</span>
         <span style={{ fontSize: TYPE.caption, color: UI.ink3 }}>{rows.length}개{topo.omittedNodeCount > 0 ? ` · ${topo.omittedNodeCount}개 생략` : ""}</span>
@@ -1217,7 +1217,7 @@ function HomeSurface({ clusterMeta, incidentClusterIds, onDrillCluster, onCluste
   const visible = board.order.filter((id) => !board.hidden.includes(id));
   const hiddenSlots = board.order.filter((id) => board.hidden.includes(id));
   return (
-    <main style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 16, padding: "14px 18px 40px" }}>
+    <main style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: SPACE.card, padding: "14px 18px 40px" }}>
       {/* ── 고정 헤더: 상태 요약 줄(지도 요약 줄과 같은 칩 문법·같은 표기 — 두 화면이 다른 형식으로 말하지 않는다) ── */}
       <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
         {(() => {
@@ -1297,7 +1297,7 @@ function HomeSurface({ clusterMeta, incidentClusterIds, onDrillCluster, onCluste
           );
         })}
         {editing && hiddenSlots.length > 0 && (
-          <div style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", border: `1.5px dashed ${UI.line}`, borderRadius: 14, padding: "11px 14px" }}>
+          <div style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", border: `1.5px dashed ${UI.line}`, borderRadius: RADIUS.card, padding: "11px 14px" }}>
             <span style={{ fontSize: TYPE.label, fontWeight: 600, color: UI.ink3, whiteSpace: "nowrap" }}>위젯 추가</span>
             {hiddenSlots.map((id) => {
               const def = W_DEFS.find((w) => w.id === (board.types[id] ?? id)) ?? W_DEFS.find((w) => w.id === id)!;
@@ -1865,7 +1865,7 @@ function App() {
             {bellOpen && (
               <motion.div key="bell" initial={{ opacity: 0, y: -8, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -5, scale: 0.98 }} transition={SOFT}
                 style={{ position: "absolute", top: 38, right: 0, width: 344, zIndex: 65, background: GLASS, backdropFilter: "blur(26px)", WebkitBackdropFilter: "blur(26px)",
-                  border: `1px solid ${inkA(0.08)}`, borderRadius: 18, boxShadow: `0 28px 70px -24px ${inkA(0.38)}`, padding: 10, maxHeight: `min(calc(70vh / ${PRESENT_SCALE}), 560px)`, overflowY: "auto", scrollbarGutter: "stable" }}>
+                  border: `1px solid ${inkA(0.08)}`, borderRadius: RADIUS.sheet, boxShadow: `0 28px 70px -24px ${inkA(0.38)}`, padding: 10, maxHeight: `min(calc(70vh / ${PRESENT_SCALE}), 560px)`, overflowY: "auto", scrollbarGutter: "stable" }}>
                 <div style={{ display: "flex", alignItems: "baseline", gap: 7, padding: "2px 8px 8px" }}>
                   <span style={{ fontSize: TYPE.section, fontWeight: 700, letterSpacing: "-0.02em", color: UI.heading }}>알림</span>
                   <span style={{ fontSize: TYPE.caption, fontWeight: 600, color: UI.ink3 }}>{alertTotal}</span>
@@ -1874,7 +1874,7 @@ function App() {
                   <div style={{ padding: "0 8px 8px" }}>
                     <div style={{ fontSize: TYPE.caption, fontWeight: 600, letterSpacing: "0.05em", color: UI.ink3, padding: "0 2px 6px" }}>진행 중</div>
                     {[...pendingCl.map((n) => ({ id: `pc-${n}`, t: n, b: "에이전트 부트스트랩 · 첫 인벤토리 수집 대기" })), ...pendingRepo.map((n) => ({ id: `pr-${n}`, t: n, b: "초기 동기화 대기" }))].map((x) => (
-                      <div key={x.id} style={{ display: "flex", alignItems: "center", gap: 10, background: cardA(0.85), border: `1px solid ${inkA(0.05)}`, borderRadius: 14, padding: "10px 12px", marginBottom: 6 }}>
+                      <div key={x.id} style={{ display: "flex", alignItems: "center", gap: 10, background: cardA(0.85), border: `1px solid ${inkA(0.05)}`, borderRadius: RADIUS.card, padding: "10px 12px", marginBottom: 6 }}>
                         <span className="pulsedot" style={{ width: 8, height: 8, borderRadius: 999, background: BLUE, flexShrink: 0 }} />
                         <span style={{ minWidth: 0, flex: 1 }}>
                           <span style={{ display: "block", fontSize: TYPE.label, fontWeight: 600, fontFamily: MONO, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{x.t}</span>
@@ -1892,7 +1892,7 @@ function App() {
                   const Card = ({ icon: I, tint, title, body, time, right, onClick }: { icon: typeof Bell; tint: string; title: string; body: string; time: string; right?: string; onClick?: () => void }) => (
                     <button type="button" className="acard" aria-label={`${title} 알림 상세 열기`} onClick={onClick} disabled={!onClick}
                       style={{ display: "flex", alignItems: "flex-start", gap: 10, width: "100%", textAlign: "left", background: cardA(0.85),
-                        border: `1px solid ${inkA(0.05)}`, borderRadius: 14, padding: "10px 12px", marginBottom: 6,
+                        border: `1px solid ${inkA(0.05)}`, borderRadius: RADIUS.card, padding: "10px 12px", marginBottom: 6,
                         boxShadow: `0 1px 2px ${inkA(0.05)}` }}>
                       <span style={{ width: 28, height: 28, borderRadius: 8, background: tint, display: "grid", placeItems: "center", flexShrink: 0, marginTop: 1 }}>
                         <I size={14} color={UI.card} strokeWidth={2.2} />
@@ -2009,7 +2009,7 @@ function App() {
           onOpenPod={(name) => openRef("Pod", name)}
           onPickNs={(n) => { if (nsOptions.includes(n)) setNs(n); setKindId("Pod"); setSurface("resources"); setResView("list"); }} />
       ) : (
-        <main style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 14, padding: "12px 18px 40px" }}>
+        <main style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: SPACE.card, padding: "12px 18px 40px" }}>
           {/* ── D18 관점 세그먼트 — 한 서피스, 세 관점(지도·목록·흐름). "지도 밑 표" 구조 폐지.
                 스코프(클러스터·노드·ns·검색어)는 관점을 넘어 보존된다 ── */}
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -2067,9 +2067,9 @@ function App() {
                 <motion.div key={kindId} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={SOFT}>
                   {/* 라이브 인벤토리 상태를 정직하게 표시 — 데이터 없으면 관측 안 됨 */}
                   {resourcesView.status === "loading" ? (
-                    <div style={{ background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 14, padding: "40px 18px", textAlign: "center", fontSize: TYPE.body, color: UI.ink3 }}>불러오는 중…</div>
+                    <div style={{ background: UI.card, border: `1px solid ${UI.line}`, borderRadius: RADIUS.card, padding: "40px 18px", textAlign: "center", fontSize: TYPE.body, color: UI.ink3 }}>불러오는 중…</div>
                   ) : resourcesView.status === "unavailable" ? (
-                    <div style={{ background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 14, padding: "40px 18px", textAlign: "center", fontSize: TYPE.body, color: UI.ink3 }}>인벤토리 관측 안 됨</div>
+                    <div style={{ background: UI.card, border: `1px solid ${UI.line}`, borderRadius: RADIUS.card, padding: "40px 18px", textAlign: "center", fontSize: TYPE.body, color: UI.ink3 }}>인벤토리 관측 안 됨</div>
                   ) : (
                     <ResourceTable kind={kind} rows={shownRows} q={q}
                       filterDesc={[inScope ? `${scopeLabel}` : "", ns !== "모든 네임스페이스" ? `${ns} 네임스페이스` : ""].filter(Boolean).join(" · ")}
@@ -2081,7 +2081,7 @@ function App() {
               {/* 종류 선택 패널 — 지도 관점의 탐색 패널과 같은 KindIndex 하나를 공유(두 번째 구현 금지).
                   좁은 화면에서는 위 종류 select로 대체하고 사이드바를 렌더하지 않아 표를 가리지 않는다. */}
               {!narrowList && (
-              <aside style={{ width: 248, flexShrink: 0, alignSelf: "flex-start", position: "sticky", top: topH + 12, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 14, padding: 10, maxHeight: `calc(100vh / ${PRESENT_SCALE} - ${topH + 60}px)`, overflowY: "auto", scrollbarGutter: "stable" }}>
+              <aside style={{ width: 248, flexShrink: 0, alignSelf: "flex-start", position: "sticky", top: topH + 12, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: RADIUS.card, padding: 10, maxHeight: `calc(100vh / ${PRESENT_SCALE} - ${topH + 60}px)`, overflowY: "auto", scrollbarGutter: "stable" }}>
                 <KindIndex sel={kindId} onPick={(k) => setKindId(k.id)} showEmpty={showEmpty} setShowEmpty={setShowEmpty} pinned={pinned} togglePin={togglePin} filter={q} counts={kindCounts} />
               </aside>
               )}
