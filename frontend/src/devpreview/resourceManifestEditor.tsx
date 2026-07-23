@@ -28,6 +28,10 @@ interface LiveResourceManifestEditorProps {
   resourceId: string;
   resolving?: boolean;
   refreshKey?: number;
+  /** 확장(전체 화면) 모드 — 에디터|관측·diff 2열 레이아웃으로 전환. */
+  wide?: boolean;
+  /** 편집 가능한 Git 원본이 열렸는지 통지 — 부모가 패널 자동 확장에 사용. */
+  onEditableChange?: (editable: boolean) => void;
   onConnectRepository?: () => void;
   onOpenDeploySurface?: () => void;
   onReauthenticate?: () => void;
@@ -38,6 +42,8 @@ export function LiveResourceManifestEditor({
   resourceId,
   resolving = false,
   refreshKey = 0,
+  wide = false,
+  onEditableChange,
   onConnectRepository,
   onOpenDeploySurface,
   onReauthenticate,
@@ -153,6 +159,14 @@ export function LiveResourceManifestEditor({
       }
     : null;
   const busy = phase === "loading" || phase === "previewing" || phase === "submitting";
+  // 편집 가능한 Git 원본이 열렸는지 부모에게 통지(패널 자동 확장 트리거).
+  const editable = Boolean(
+    source && source.status === "available" && source.selected && source.content,
+  );
+  useEffect(() => {
+    onEditableChange?.(editable);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 콜백 아이덴티티가 아니라 editable 변화에만 반응
+  }, [editable]);
 
   const runPreview = async () => {
     if (!editInput) return;
@@ -321,9 +335,22 @@ export function LiveResourceManifestEditor({
     );
   }
 
-  return (
-    <div style={{ padding: "16px 0 24px", display: "grid", gap: 12 }}>
+  // 확장(wide) 모드: 좌 = 편집 열, 우 = 관측·diff 열(sticky). 좁은 모드: 기존 세로 흐름 유지.
+  const diffView = preview?.diff ? (
+    <DiffCodeView value={preview.diff} ariaLabel="변경 diff 미리보기" maxHeight={wide ? 460 : 280} />
+  ) : null;
+  const observeColumn = (
+    <div style={{ display: "grid", gap: 12, minWidth: 0, ...(wide ? { position: "sticky", top: 12 } : {}) }}>
       <LiveManifestPanel source={source} />
+      {wide && (diffView ?? (
+        <div style={{ border: `1px dashed ${UI.line}`, borderRadius: 12, padding: "18px 16px", color: UI.ink3, fontSize: TYPE.label, textAlign: "center" }}>
+          왼쪽에서 수정 후 "변경 검증·미리보기"를 누르면 여기 diff가 표시됩니다.
+        </div>
+      ))}
+    </div>
+  );
+  const editColumn = (
+    <div style={{ display: "grid", gap: 12, minWidth: 0 }}>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
         <b style={{ color: UI.ink, fontSize: TYPE.body }}>Git 원본 · IDE 편집</b>
         {source.edit_target && (
@@ -340,7 +367,7 @@ export function LiveResourceManifestEditor({
       </div>
       <textarea aria-label="Git YAML 원본 편집기" value={yaml} disabled={busy || !!approval || !!emergencyApproval || !!applyReceipt}
         onChange={(event) => { setYaml(event.currentTarget.value); setPreview(null); setConfirmed(false); }} spellCheck={false}
-        style={{ width: "100%", minHeight: 360, resize: "vertical", boxSizing: "border-box", border: `1px solid ${UI.line}`, borderRadius: 12, padding: 14, background: "#0d1117", color: "#e6edf3", fontFamily: MONO, fontSize: TYPE.code, lineHeight: 1.6, outline: "none" }} />
+        style={{ width: "100%", minHeight: wide ? 480 : 360, resize: "vertical", boxSizing: "border-box", border: `1px solid ${UI.line}`, borderRadius: 12, padding: 14, background: "#0d1117", color: "#e6edf3", fontFamily: MONO, fontSize: TYPE.code, lineHeight: 1.6, outline: "none" }} />
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
         <ActionButton disabled={busy} onClick={() => void runPreview()}>
           {phase === "previewing" ? "검증 중…" : "변경 검증·미리보기"}
@@ -350,7 +377,7 @@ export function LiveResourceManifestEditor({
           {preview.apply_availability === "available" ? "즉시 적용 가능" : "Safe PR만 가능"}
         </Pill>}
       </div>
-      {preview?.diff && <DiffCodeView value={preview.diff} ariaLabel="변경 diff 미리보기" maxHeight={280} />}
+      {!wide && diffView}
       {preview?.errors.map((item) => <ManifestNotice key={item} tone="error" title="검증 오류">{item}</ManifestNotice>)}
       {preview?.warnings.map((item) => <ManifestNotice key={item} tone="warn" title="검토 필요">{item}</ManifestNotice>)}
       {preview?.apply_reason_codes.map((item) => <ManifestNotice key={item} tone="warn" title="즉시 적용 제한">{reasonLabel(item)}</ManifestNotice>)}
@@ -415,6 +442,31 @@ export function LiveResourceManifestEditor({
         >
           {commandResultSummary(applyStatus)}
         </ManifestNotice>
+      )}
+    </div>
+  );
+
+  return (
+    <div
+      style={{
+        padding: "16px 0 24px",
+        display: "grid",
+        gap: 12,
+        ...(wide
+          ? { gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", columnGap: 20, alignItems: "start" }
+          : {}),
+      }}
+    >
+      {wide ? (
+        <>
+          {editColumn}
+          {observeColumn}
+        </>
+      ) : (
+        <>
+          {observeColumn}
+          {editColumn}
+        </>
       )}
     </div>
   );

@@ -775,6 +775,22 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
   const [tab, setTab] = useState<DetailTab>(tabs[0]);
   const [fullSelf, setFull] = useState(false);   // 전체 화면 (원본 레퍼런스의 ⤢)
   const full = forceFull || fullSelf;            // AI 대화창이 열리면 자연스럽게 전체 화면으로
+  // YAML 편집 자동 확장 — 편집 가능한 Git 원본이 열리면 패널을 넓혀 IDE 2열(에디터|diff)로.
+  // 사용자가 직접 확장한 경우와 구분해, 자동 확장분만 탭 이탈 시 원복한다.
+  const yamlAutoExpanded = useRef(false);
+  const handleYamlEditableChange = (editable: boolean) => {
+    if (editable && !fullSelf && !forceFull) {
+      yamlAutoExpanded.current = true;
+      setFull(true);
+    }
+  };
+  const switchTab = (next: DetailTab) => {
+    if (next !== "yaml" && yamlAutoExpanded.current) {
+      yamlAutoExpanded.current = false;
+      setFull(false);
+    }
+    setTab(next);
+  };
   const name = String(row.name ?? "");
   const ns = String(row.ns ?? "–");
   const bad = !!row.bad;
@@ -882,7 +898,7 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
               const on = tab === t;
               const label = DETAIL_TABS.find((d) => d.id === t)!.label;
               return (
-                <button type="button" className="product-focusable product-control" role="tab" aria-selected={on} key={t} onClick={() => setTab(t)} style={{ position: "relative", border: "none", background: "transparent", cursor: "pointer", padding: "8px 12px 10px", fontSize: TYPE.body, fontWeight: on ? 600 : 500, color: on ? UI.ink : UI.ink3 }}>
+                <button type="button" className="product-focusable product-control" role="tab" aria-selected={on} key={t} onClick={() => switchTab(t)} style={{ position: "relative", border: "none", background: "transparent", cursor: "pointer", padding: "8px 12px 10px", fontSize: TYPE.body, fontWeight: on ? 600 : 500, color: on ? UI.ink : UI.ink3 }}>
                   {label}
                   {on && <motion.span layoutId="dtab" transition={SOFT} style={{ position: "absolute", left: 8, right: 8, bottom: 0, height: 2, borderRadius: 2, background: BLUE }} />}
                 </button>
@@ -1083,6 +1099,8 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
               resourceId={resourceId}
               resolving={observedResourceId === "" && resolvedIdentity.status === "loading"}
               refreshKey={manifestRefreshKey}
+              wide={full}
+              onEditableChange={handleYamlEditableChange}
               onConnectRepository={() => onConnectRepository?.({
                 clusterId: row.cluster != null && String(row.cluster) ? String(row.cluster) : undefined,
                 namespace: row.ns != null && String(row.ns) ? String(row.ns) : undefined,
