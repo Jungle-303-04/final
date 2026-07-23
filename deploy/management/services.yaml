@@ -69,6 +69,12 @@ spec:
             # (statement_timeout 30초 이내).
             - name: DB_LOCK_TIMEOUT_MS
               value: "20000"
+            # 라이브 릴리스 게이트 — 승인 후 실제 GitOps dispatch/apply 허용.
+            # allowlist 는 default 워크스페이스만(그 외 워크스페이스는 여전히 차단).
+            - name: RELEASE_FLOW_LIVE_ENABLED
+              value: "1"
+            - name: RELEASE_FLOW_LIVE_WORKSPACES
+              value: "default"
             # dev도 실제 세션 인증을 사용한다. 배포 검증기가 누락·비정상 값을 차단한다.
             - name: DEV_AUTH_BYPASS
               value: "0"
@@ -1365,6 +1371,11 @@ spec:
           env:
             - name: NATS_DELIVER_POLICY
               value: "new"
+            # 라이브 릴리스 게이트 — gateway 와 동일 값(불일치 시 dispatch 판정이 갈라진다).
+            - name: RELEASE_FLOW_LIVE_ENABLED
+              value: "1"
+            - name: RELEASE_FLOW_LIVE_WORKSPACES
+              value: "default"
           livenessProbe:
             exec:
               command:
