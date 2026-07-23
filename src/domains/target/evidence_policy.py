@@ -48,6 +48,7 @@ STANDARD_EVIDENCE_PROFILE: EvidenceProfile = "standard"
 DEMO_EVIDENCE_PROFILE: EvidenceProfile = "demo"
 MANAGEMENT_EVIDENCE_PROFILE: EvidenceProfile = "management"
 EVIDENCE_PROVIDER_KEYS = ("kubernetes", "metrics", "logs", "traces", "metadata")
+TEMPO_RECENT_TRACE_RANGE_SECONDS = 15 * 60
 
 COST_NAMESPACE_HOURLY_QUERY = """sum by (namespace) (
   label_replace(avg_over_time(container_cpu_allocation{namespace!=""}[1h]), "namespace", "$1", "exported_namespace", "(.+)")
@@ -117,6 +118,8 @@ def _query(
     query: str,
     provenance: EvidenceQueryProvenance,
     collection_scope: str | None = None,
+    range_seconds: int | None = None,
+    step_seconds: int | None = None,
 ) -> dict[str, object]:
     return EvidencePolicyQuery(
         source=source,
@@ -125,6 +128,8 @@ def _query(
         query=query,
         provenance=provenance,
         collection_scope=collection_scope,
+        range_seconds=range_seconds,
+        step_seconds=step_seconds,
     ).model_dump(mode="json", exclude_none=True)
 
 
@@ -598,6 +603,7 @@ def evidence_provider_queries(
                 name="cluster_recent_traces",
                 description="Recent traces from the target cluster-local Tempo backend.",
                 query="{}",
+                range_seconds=TEMPO_RECENT_TRACE_RANGE_SECONDS,
                 provenance=_provenance(
                     cluster_id=cluster_id,
                     evidence_profile=evidence_profile,

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import time
+
 import httpx
 from queries import OpenTelemetrySpanQuery
 from telemetry_registry import telemetry
@@ -30,6 +32,7 @@ TRUNCATED_TEMPO_VALUE_SUFFIX = " [TRUNCATED]"
     source="tempo",
     evidence_key="traces",
     query_type=OpenTelemetrySpanQuery,
+    range_query_type=OpenTelemetrySpanQuery,
 )
 class TempoTracesProvider:
     """Collect trace data from Tempo.
@@ -60,9 +63,11 @@ class TempoTracesProvider:
         """Run one Tempo search query and return the raw result."""
         with TRACER.start_as_current_span("tempo.search") as span:
             span.attr("tempo.traceql", telemetry_query.traceql)
+            if telemetry_query.range_seconds is not None:
+                span.attr("tempo.range_seconds", telemetry_query.range_seconds)
             response = await client.get(
                 f"{self.base_url}/api/search",
-                params={"q": telemetry_query.traceql, "limit": TEMPO_QUERY_LIMIT},
+                params=tempo_search_params(telemetry_query),
             )
             span.http_status(response.status_code)
             response.raise_for_status()
@@ -107,6 +112,34 @@ class TempoTracesProvider:
             "trace_count": len(traces),
         }
         return normalized
+
+
+def tempo_search_params(
+    telemetry_query: OpenTelemetrySpanQuery,
+    *,
+    now_seconds: float | None = None,
+) -> dict[str, str | int]:
+    """Build a bounded Tempo search request.
+
+    Tempo treats a search without ``start``/``end`` as a search across all
+    retained blocks. The Agent runs this every evidence interval, so an omitted
+    range turns retention growth into repeated query-memory growth.
+    """
+    params: dict[str, str | int] = {
+        "q": telemetry_query.traceql,
+        "limit": TEMPO_QUERY_LIMIT,
+    }
+    if telemetry_query.range_seconds is None:
+        return params
+
+    end = int(time.time() if now_seconds is None else now_seconds)
+    params.update(
+        {
+            "start": end - telemetry_query.range_seconds,
+            "end": end,
+        }
+    )
+    return params
 
 
 def limit_tempo_payload(payload: JsonObject) -> JsonObject:
