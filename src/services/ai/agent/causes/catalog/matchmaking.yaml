@@ -1,0 +1,65 @@
+# RCA 원인 룰 카탈로그 — 매치메이킹/로비 입장 실패 계열.
+# 트리거: 대상 클러스터 Alertmanager 의 매치메이킹 실패율 알림
+# (예: demo-game DemoGameJoinStorm, expr find_game_fail_ratio > 0.2).
+# 판별: 알림 fact(alert_name)와 로비 로그의 거절 사유(find_game_rejected reason)로
+# "로비 처리 용량 포화 / 게임 룸 부족 / 룸 디렉터리 장애"를 구별한다.
+rules:
+  - id: "matchmaking_join_failure"
+    symptoms: ["Matchmaking join failure", "DemoGameJoinStorm"]
+    required_sources: ["metrics"]
+    candidates:
+      - candidate_id: "lobby_capacity_saturation"
+        title: "로비(매치메이킹) 처리 용량 포화"
+        description: >-
+          입장 요청이 로비 인스턴스의 초당 처리 한도를 넘어 거절되고 있을
+          가능성이 있습니다. 게임 룸과 게임 서버는 정상이지만 신규 입장만
+          실패하는 형태로 나타나며, 로비 replicas 축소 변경 또는 트래픽
+          급증과 겹칠 때 발생합니다.
+        expected_evidence:
+          - "metrics:telemetry_metrics"
+        checks:
+          - "로비(api-server) 로그의 find_game_rejected reason=rate_limited 비율 확인"
+          - "매치메이킹 실패율 지표(find_game_fail_ratio)의 급등 시점 확인"
+          - "최근 배포에서 로비 Deployment replicas 축소 변경 여부 확인"
+          - "게임 룸 파드 상태·리소스가 정상(원인 아님)인지 교차 확인"
+        signals:
+          - id: "join_rejection_observed"
+            any_of:
+              - fact: "alert_name=DemoGameJoinStorm"
+              - log_pattern: "find_game_rejected"
+              - log_pattern: "rate_limited"
+      - candidate_id: "no_room_capacity"
+        title: "입장 가능한 게임 룸 부족"
+        description: >-
+          실행 중이면서 입장 잠금이 아닌 게임 룸이 없어 매치메이킹이
+          거절됐을 가능성이 있습니다. 룸 정원이 가득 찼거나 joinLocked
+          상태일 때 발생합니다.
+        expected_evidence:
+          - "metrics:telemetry_metrics"
+          - "logs:related_logs"
+        checks:
+          - "로비 로그의 find_game_rejected reason=no_room 확인"
+          - "룸별 players/maxPlayers 와 joinLocked 상태 확인"
+          - "게임 룸 replicas 수와 실행 상태 확인"
+        signals:
+          - id: "no_room_signal"
+            any_of:
+              - log_pattern: "no_room"
+              - log_pattern: "joinLocked"
+      - candidate_id: "room_directory_unavailable"
+        title: "룸 디렉터리(오케스트레이터) 응답 실패"
+        description: >-
+          로비가 룸 목록을 조회하는 room-orchestrator 가 응답하지 않아
+          매치메이킹이 거절됐을 가능성이 있습니다.
+        expected_evidence:
+          - "metrics:telemetry_metrics"
+          - "logs:related_logs"
+        checks:
+          - "로비 로그의 directory_unavailable / room_registry_unavailable 확인"
+          - "room-orchestrator 파드 Ready 상태와 재시작 확인"
+          - "로비 → 오케스트레이터 네트워크 경로 확인"
+        signals:
+          - id: "directory_unavailable_signal"
+            any_of:
+              - log_pattern: "directory_unavailable"
+              - log_pattern: "room_registry_unavailable"

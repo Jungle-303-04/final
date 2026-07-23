@@ -105,7 +105,6 @@ export const physicalTopologySchema = z.strictObject({
   });
 
   const podIds = new Set<string>();
-  const podsByServer = new Map<string, number>();
   topology.pods.forEach((pod, index) => {
     if (podIds.has(pod.id)) {
       context.addIssue({
@@ -123,15 +122,6 @@ export const physicalTopologySchema = z.strictObject({
         path: ["pods", index, "server_id"],
       });
       return;
-    }
-    const count = (podsByServer.get(pod.server_id) ?? 0) + 1;
-    podsByServer.set(pod.server_id, count);
-    if (count > 12) {
-      context.addIssue({
-        code: "custom",
-        message: "physical topology returns at most 12 pods per server",
-        path: ["pods", index],
-      });
     }
   });
 

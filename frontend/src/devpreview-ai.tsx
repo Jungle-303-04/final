@@ -948,9 +948,9 @@ export function AiPanel({ onClose, onCancelRecovery, onRecoveryReviewStateChange
         {suggestions.status === "ready" && suggestions.items.length > 0 ? (
           <div className="mb-2.5 flex flex-wrap gap-1.5">{suggestions.items.map((s) => <button className="rounded-full border border-border bg-card/80 px-3 py-1.5 text-caption font-medium text-muted-foreground shadow-[0_1px_2px_rgba(0,0,0,0.03)] transition-all hover:-translate-y-px hover:border-ring hover:text-foreground hover:shadow-[0_2px_6px_-2px_rgba(0,0,0,0.12)]" key={s.id} onClick={() => send(s.prompt)} type="button">{s.label}</button>)}</div>
         ) : null}
-        <div className="relative rounded-[20px] border border-border bg-card/90 shadow-[0_1px_2px_rgba(0,0,0,0.04),inset_0_1px_0_rgba(255,255,255,0.6)] transition-all focus-within:border-primary/40 focus-within:shadow-[0_0_0_4px_color-mix(in_oklch,var(--primary)_12%,transparent)]">
+        <div className="relative rounded-[20px] border border-black/[0.12] bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),inset_0_1px_0_rgba(255,255,255,0.8)] transition-all focus-within:border-primary/40 focus-within:shadow-[0_0_0_4px_color-mix(in_oklch,var(--primary)_12%,transparent)]">
           <textarea
-            className="min-h-[60px] w-full resize-none rounded-[20px] bg-transparent px-3.5 py-3 pr-12 text-body leading-relaxed tracking-[-0.006em] text-black outline-none placeholder:text-muted-foreground/60"
+            className="min-h-[60px] w-full resize-none rounded-[20px] bg-white px-3.5 py-3 pr-12 text-body leading-relaxed tracking-[-0.006em] text-black caret-black outline-none placeholder:text-black/40"
             onChange={(e) => setInput(e.currentTarget.value)}
             onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(input); } }}
             placeholder="질문 입력"

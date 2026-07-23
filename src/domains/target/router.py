@@ -175,6 +175,9 @@ NOT_FOUND_CODE = 404
 EVIDENCE_JOB_NOT_FOUND = "evidence job not found"
 RELEASE_WORKFLOW_FAILURE_SOURCE_ID = "release-workflow-failure"
 TARGET_AGENT_IMAGE_ENV = "TARGET_AGENT_IMAGE"
+# 비공개 레지스트리 에이전트 이미지를 아무 클러스터에서나 pull 하기 위한 옵트인
+# dockerconfigjson 자격증명. 미설정이면 매니페스트에 pull secret 을 넣지 않는다(회귀 0).
+TARGET_AGENT_IMAGE_PULL_SECRET_ENV = "TARGET_AGENT_IMAGE_PULL_SECRET"
 TARGET_DEFAULT_CONTROL_NAMESPACES_ENV = "TARGET_DEFAULT_CONTROL_NAMESPACES"
 GITOPS_WEBHOOK_IMAGE_ENV = "GITOPS_WEBHOOK_IMAGE"
 PUBLIC_MANAGEMENT_BASE_URL_ENV = "PUBLIC_MANAGEMENT_BASE_URL"
@@ -248,6 +251,11 @@ def public_management_base_url() -> str:
         if base:
             return base
     return ""
+
+
+def agent_image_pull_secret() -> str:
+    """옵트인 dockerconfigjson 자격증명(server env). 없으면 빈 문자열(=매니페스트 불변)."""
+    return env(TARGET_AGENT_IMAGE_PULL_SECRET_ENV, "").strip()
 
 
 def management_access_response() -> ManagementAccessResponse:
@@ -1032,9 +1040,12 @@ def cluster_observation_metadata(
         next(iter(versions)) if len(versions) == 1 else None
     )
     namespaces = source.get("namespaces")
+    # namespace 스코프 수집(control_namespaces)은 resources_complete=False 로 보고되므로
+    # "완전 수집"을 요구하면 실제 관측값이 영원히 null 로 남는다. 관측된 namespace 목록이
+    # 있으면 그 수를 그대로 제공한다(관측 범위 내 실측 — last-known-good).
     namespace_count = (
         len({value for value in namespaces if isinstance(value, str) and value})
-        if complete_inventory_snapshot(latest_snapshot) and isinstance(namespaces, list)
+        if isinstance(namespaces, list)
         else None
     )
     discovery = source.get("api_resource_discovery")
@@ -1060,7 +1071,11 @@ def enrich_cluster_inventory_counts(
     latest_snapshot: dict[str, Any] | None,
     resource_counts: list[dict[str, Any]] | None = None,
 ) -> None:
-    if not complete_inventory_snapshot(latest_snapshot):
+    # 과거에는 "완전 수집" snapshot 만 카운트를 채웠지만, namespace 스코프 에이전트는
+    # resources_complete=False 를 보고하므로 실측 카운트가 영원히 null 로 남아 화면이
+    # 비었다. snapshot 이 하나라도 있으면 그 안의 실측 행 수를 그대로 제공한다
+    # (관측 범위 내 사실 — 지어내는 값 아님, last-known-good).
+    if not isinstance(latest_snapshot, dict) or not latest_snapshot:
         return
     count_reader = getattr(db, "inventory_resource_counts", None)
     if not callable(count_reader):
@@ -1234,6 +1249,7 @@ async def register_target(
         scoped_payload,
         agent_token,
         agent_envelope_private_key,
+        image_pull_secret=agent_image_pull_secret(),
     )
     status_updater = getattr(db, "update_cluster_registration_status", None)
     if scoped_payload.apply and not callable(status_updater):
@@ -1509,7 +1525,12 @@ async def install_manifest_by_token(
     except CredentialEncryptionError as exc:
         raise HTTPException(status_code=NOT_FOUND_CODE, detail="install link not found") from exc
     payload = target_register_payload_from_settings(registration.get("settings") or {})
-    manifest = target_install_manifest(payload, agent_token, agent_envelope_private_key)
+    manifest = target_install_manifest(
+        payload,
+        agent_token,
+        agent_envelope_private_key,
+        image_pull_secret=agent_image_pull_secret(),
+    )
     return PlainTextResponse(
         manifest,
         media_type="text/yaml",
@@ -1587,7 +1608,8 @@ async def list_clusters(
     count_cluster_ids = {
         summary.cluster_id
         for summary in summaries
-        if complete_inventory_snapshot(latest_snapshots.get(summary.cluster_id))
+        if isinstance(latest_snapshots.get(summary.cluster_id), dict)
+        and latest_snapshots.get(summary.cluster_id)
     }
     resource_counts = (
         await asyncio.to_thread(bulk_count_reader, workspace_id, count_cluster_ids)

@@ -39,6 +39,8 @@ import {
   type ApplicationRunView,
   type WorkflowStepView,
 } from "./devpreview/deployFeed";
+import { DeployDetailHost, type DeployDetailTarget } from "./devpreview/DeployDetailPanel";
+import { isActiveRunStatus, runEffectiveStatus, useReleaseActions, useReleaseFlow } from "./devpreview/releaseFlowFeed";
 import { useChangeTimeline } from "./devpreview/changeTimelineFeed";
 import { useTimelineBoard } from "./devpreview/timelineFeed";
 import { useUiPreferences, useRefreshPolicies, useSettingsAccess } from "./devpreview/settingsFeed";
@@ -418,10 +420,14 @@ function ScenarioGate({ runs, repositoryRef, status, onRefresh, onOpenRef, onOpe
     </Card>
   );
 }
-export function DeploySurface({ pendingRepos = [], repositoryFilter = null, onOpenRef, onOpenIssues, onAskAi, onAddRepo }: {
+export function DeploySurface({ pendingRepos = [], repositoryFilter = null, onOpenRef, onOpenIssues, onAskAi, onAddRepo, topInset = 57, leftInset = 208, rightInset = 0 }: {
   pendingRepos?: string[]; repositoryFilter?: string | null; onOpenRef: (kind: string, name: string) => void; onOpenIssues: () => void; onAskAi: () => void; onAddRepo: () => void;
+  /** 상세 패널 겹침 방지용 크롬 인셋 — unified DetailOverlay와 같은 계약. */
+  topInset?: number; leftInset?: number; rightInset?: number;
 }) {
   const [tab, setTab] = useState(repositoryFilter ? "GitOps" : "워크플로우");
+  // 행 클릭 → 상세 패널(읽기 전용). 한 번에 하나만 연다 — 전역 레이어 계약(70/71).
+  const [detail, setDetail] = useState<DeployDetailTarget | null>(null);
   const [selectedRepository, setSelectedRepository] = useState<string | null>(repositoryFilter);
   const [expandedRepositories, setExpandedRepositories] = useState<string[]>(repositoryFilter ? [repositoryFilter] : []);
   useEffect(() => {
@@ -439,6 +445,9 @@ export function DeploySurface({ pendingRepos = [], repositoryFilter = null, onOp
   const appsFeed = useApplications(repositoryRefreshKey);
   const workflowFeed = useApplicationRuns(appsFeed.items, repositoryRefreshKey);
   const helm = useHelmReleases();
+  // 릴리스 탭 — 탭이 열려 있을 때만 조회한다(진행 중 런 관측 시 5초 폴링).
+  const releaseFlow = useReleaseFlow(tab === "릴리스");
+  const releaseActions = useReleaseActions(releaseFlow.refresh);
   const apps = appsFeed.items;
   const repositoryGroups = useMemo(() => groupApplicationsByRepository(apps), [apps]);
   const connectedRepositoryKeys = useMemo(
@@ -452,9 +461,12 @@ export function DeploySurface({ pendingRepos = [], repositoryFilter = null, onOp
   const appCols: [string, string][] = [["앱", "minmax(140px,1.4fr)"], ["환경", "minmax(80px,0.8fr)"], ["저장소", "minmax(150px,1.4fr)"], ["헬스", "minmax(110px,0.9fr)"], ["배포", "minmax(90px,0.8fr)"], ["브랜치", "minmax(70px,0.6fr)"]];
   const wfCols: [string, string][] = [["앱", "minmax(140px,1.2fr)"], ["워크플로우 실행", "minmax(200px,1.8fr)"], ["상태", "minmax(90px,0.8fr)"], ["관측 시각", "minmax(80px,0.7fr)"]];
   const helmCols: [string, string][] = [["릴리스", "minmax(120px,1.1fr)"], ["차트", "minmax(150px,1.4fr)"], ["차트 버전", "minmax(80px,0.8fr)"], ["네임스페이스", "minmax(90px,0.9fr)"], ["리비전", "56px"], ["상태", "minmax(90px,0.8fr)"]];
+  const releaseRunCols: [string, string][] = [["런 / 플랜", "minmax(180px,1.5fr)"], ["웨이브", "minmax(70px,0.6fr)"], ["상태", "minmax(100px,0.8fr)"], ["시작", "minmax(80px,0.7fr)"], ["시작자", "minmax(90px,0.7fr)"]];
+  const releasePlanCols: [string, string][] = [["플랜", "minmax(180px,1.5fr)"], ["단계", "minmax(60px,0.5fr)"], ["상태", "minmax(100px,0.8fr)"], ["최근 런", "minmax(110px,0.9fr)"], ["수정", "minmax(80px,0.7fr)"]];
   const loading = appsFeed.status === "loading";
   return (
-    <Page title="배포" icon={Rocket} tabs={["애플리케이션", "GitOps", "워크플로우", "Helm 릴리스"]} tab={tab} onTab={setTab} ensureVerticalScroll
+    <>
+    <Page title="배포" icon={Rocket} tabs={["애플리케이션", "GitOps", "워크플로우", "Helm 릴리스", "릴리스"]} tab={tab} onTab={setTab} ensureVerticalScroll
       action={tab === "GitOps"
         ? <button className="product-focusable product-action" onClick={onAddRepo} style={{ display: "flex", alignItems: "center", gap: 6, border: "none", background: BLUE, color: UI.card, borderRadius: 9, padding: "6px 13px", fontSize: TYPE.label, fontWeight: 600, cursor: "pointer" }}>+ 저장소 연결</button>
         : null}>
@@ -471,7 +483,8 @@ export function DeploySurface({ pendingRepos = [], repositoryFilter = null, onOp
             : appsFeed.status === "unavailable" ? emptyRow("애플리케이션을 불러오지 못했습니다.")
             : apps.length === 0 ? emptyRow("관측된 애플리케이션 없음")
             : apps.map((a, i) => (
-              <TRow key={a.id} cols={appCols} i={i} cells={[
+              <TRow key={a.id} cols={appCols} i={i}
+                onClick={() => setDetail({ kind: "application", applicationId: a.id, name: a.name })} cells={[
                 <span key="n" style={{ display: "flex", alignItems: "center", gap: 8 }}><Package size={13} style={{ color: BLUE, flexShrink: 0 }} /><Mono>{a.name}</Mono></span>,
                 <span key="e" style={{ fontSize: TYPE.label, color: UI.ink2 }}>{a.environments.length ? a.environments.join(", ") : "—"}</span>,
                 <Mono key="r" dim>{a.repositoryRef ?? "—"}</Mono>,
@@ -530,14 +543,18 @@ export function DeploySurface({ pendingRepos = [], repositoryFilter = null, onOp
             {loading ? emptyRow("불러오는 중…")
               : appsFeed.status === "unavailable" ? emptyRow("워크플로우 실행을 불러오지 못했습니다.")
               : visibleWorkflowApps.length === 0 ? emptyRow("관측된 배포 실행 없음")
-              : visibleWorkflowApps.map((a, i) => (
-                <TRow key={a.id} cols={wfCols} i={i} cells={[
+              : visibleWorkflowApps.map((a, i) => {
+                const runId = a.workflowRunId;
+                return (
+                <TRow key={a.id} cols={wfCols} i={i}
+                  onClick={runId === null ? undefined : () => setDetail({ kind: "run", workflowRunId: runId })} cells={[
                   <span key="n" style={{ display: "flex", alignItems: "center", gap: 8 }}><Rocket size={13} style={{ color: BLUE, flexShrink: 0 }} /><Mono>{a.name}</Mono></span>,
                   <Mono key="w" dim>{a.workflowRunId}</Mono>,
                   deliveryPill(a.deliveryStatus),
                   <Mono key="t" dim>{fromNow(a.deliveryObservedAt)}</Mono>,
                 ]} />
-              ))}
+                );
+              })}
           </Card>
         </div>
       )}
@@ -554,7 +571,8 @@ export function DeploySurface({ pendingRepos = [], repositoryFilter = null, onOp
               </div>
             )
             : helm.items.map((h, i) => (
-              <TRow key={`${h.namespace}/${h.name}`} cols={helmCols} i={i} cells={[
+              <TRow key={`${h.clusterId}/${h.storageNamespace}/${h.name}`} cols={helmCols} i={i}
+                onClick={() => setDetail({ kind: "helm", identity: { clusterId: h.clusterId, storageNamespace: h.storageNamespace, name: h.name }, displayNamespace: h.namespace })} cells={[
                 <span key="n" style={{ display: "flex", alignItems: "center", gap: 8 }}><Package size={13} style={{ color: BLUE, flexShrink: 0 }} /><Mono>{h.name}</Mono></span>,
                 <Mono key="c" dim>{h.chart ?? "—"}</Mono>, <Mono key="v">{h.chartVersion ?? "—"}</Mono>,
                 <Mono key="ns" dim>{h.namespace}</Mono>, <Mono key="rv">{h.revision ?? "—"}</Mono>,
@@ -563,7 +581,70 @@ export function DeploySurface({ pendingRepos = [], repositoryFilter = null, onOp
             ))}
         </Card>
       )}
+      {tab === "릴리스" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {releaseFlow.activeRuns.length > 0 && (
+            <Card pad={0}>
+              <div style={{ padding: "10px 14px", borderBottom: `1px solid ${UI.line2}`, background: UI.bg2, fontSize: TYPE.caption, fontWeight: 700, color: UI.ink2 }}>진행 중 릴리스 런</div>
+              <THead cols={releaseRunCols} />
+              {releaseFlow.activeRuns.map((run, i) => (
+                <TRow key={run.run_id} cols={releaseRunCols} i={i}
+                  onClick={() => setDetail({ kind: "releaseRun", runId: run.run_id })} cells={[
+                  <span key="r"><Mono>{run.run_id}</Mono> <Mono dim>· {run.plan_name}</Mono></span>,
+                  <Mono key="w">{run.current_wave}/{run.total_waves}</Mono>,
+                  deliveryPill(runEffectiveStatus(run)),
+                  <Mono key="t" dim>{fromNow(run.created_at ?? null)}</Mono>,
+                  <Mono key="a" dim>{typeof run.started_by === "string" && run.started_by !== "" ? run.started_by : "—"}</Mono>,
+                ]} />
+              ))}
+            </Card>
+          )}
+          <Card pad={0}>
+            <THead cols={releasePlanCols} />
+            {releaseFlow.status === "loading" ? emptyRow("불러오는 중…")
+              : releaseFlow.status === "unavailable" ? emptyRow("릴리스 플랜을 불러오지 못했습니다.")
+              : releaseFlow.plans.length === 0 ? emptyRow("관측된 릴리스 플랜 없음")
+              : releaseFlow.plans.map((plan, i) => {
+                const planKey = plan.plan_id ?? plan.name;
+                const latestRun = releaseFlow.runs.find((run) => run.plan_id === (plan.plan_id ?? "")) ?? null;
+                return (
+                  <TRow key={planKey} cols={releasePlanCols} i={i}
+                    onClick={() => setDetail({ kind: "releasePlan", planKey })} cells={[
+                    <Mono key="n">{plan.name}</Mono>,
+                    <Mono key="s" dim>{plan.steps.length}</Mono>,
+                    deliveryPill(plan.status),
+                    latestRun === null ? <Mono key="lr" dim>—</Mono> : deliveryPill(runEffectiveStatus(latestRun)),
+                    <Mono key="u" dim>{fromNow(plan.updated_at ?? null)}</Mono>,
+                  ]} />
+                );
+              })}
+          </Card>
+          {releaseFlow.runs.filter((run) => !isActiveRunStatus(runEffectiveStatus(run))).length > 0 && (
+            <Card pad={0}>
+              <div style={{ padding: "10px 14px", borderBottom: `1px solid ${UI.line2}`, background: UI.bg2, fontSize: TYPE.caption, fontWeight: 700, color: UI.ink2 }}>런 이력</div>
+              <THead cols={releaseRunCols} />
+              {releaseFlow.runs.filter((run) => !isActiveRunStatus(runEffectiveStatus(run))).slice(0, 10).map((run, i) => (
+                <TRow key={run.run_id} cols={releaseRunCols} i={i}
+                  onClick={() => setDetail({ kind: "releaseRun", runId: run.run_id })} cells={[
+                  <span key="r"><Mono>{run.run_id}</Mono> <Mono dim>· {run.plan_name}</Mono></span>,
+                  <Mono key="w">{run.current_wave}/{run.total_waves}</Mono>,
+                  deliveryPill(runEffectiveStatus(run)),
+                  <Mono key="t" dim>{fromNow(run.created_at ?? null)}</Mono>,
+                  <Mono key="a" dim>{typeof run.started_by === "string" && run.started_by !== "" ? run.started_by : "—"}</Mono>,
+                ]} />
+              ))}
+            </Card>
+          )}
+        </div>
+      )}
     </Page>
+    {detail !== null && (
+      <DeployDetailHost target={detail} runs={workflowFeed.items}
+        releasePlans={releaseFlow.plans} releaseRuns={releaseFlow.runs} releaseActions={releaseActions}
+        onClose={() => setDetail(null)}
+        topInset={topInset} leftInset={leftInset} rightInset={rightInset} />
+    )}
+    </>
   );
 }
 
@@ -1754,10 +1835,10 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
     <>
       {/* 스크림 — 사이드바 밖 클릭 시 닫기 */}
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: DUR.fade }}
-        onClick={onClose} style={{ position: "fixed", top: topInset, left: leftInset, right: rightInset, bottom: 0, background: inkA(0.22), zIndex: 55 }} />
+        onClick={onClose} style={{ position: "fixed", top: topInset, left: leftInset, right: rightInset, bottom: 0, background: inkA(0.22), zIndex: 70 }} />
       {/* RCA 보고서 — 우측 사이드바(드로어). 리소스 상세 시트(DetailOverlay)와 폭·레이아웃 통일(560px) */}
       <motion.div initial={{ x: 580 }} animate={{ x: 0 }} exit={{ x: 580, transition: { duration: 0.14, ease: [0.4, 0, 1, 1] } }} transition={{ type: "spring", bounce: 0.06, visualDuration: 0.28 }}
-        style={{ position: "fixed", top: topInset, right: rightInset, bottom: 0, width: 560, maxWidth: `calc(100vw / ${PRESENT_SCALE} - ${leftInset + rightInset}px)`, background: UI.card, borderLeft: `1px solid ${UI.line}`, boxShadow: `-24px 0 60px -30px ${inkA(0.3)}`, zIndex: 56, display: "flex", flexDirection: "column", overflow: "hidden", transition: "right .28s cubic-bezier(.32,.72,0,1), max-width .28s cubic-bezier(.32,.72,0,1)" }}>
+        style={{ position: "fixed", top: topInset, right: rightInset, bottom: 0, width: 560, maxWidth: `calc(100vw / ${PRESENT_SCALE} - ${leftInset + rightInset}px)`, background: UI.card, borderLeft: `1px solid ${UI.line}`, boxShadow: `-24px 0 60px -30px ${inkA(0.3)}`, zIndex: 71, display: "flex", flexDirection: "column", overflow: "hidden", transition: "right .28s cubic-bezier(.32,.72,0,1), max-width .28s cubic-bezier(.32,.72,0,1)" }}>
           {/* 헤더 */}
           <div style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "18px 20px 14px" }}>
             <span style={{ width: 38, height: 38, borderRadius: 11, background: headerTone.bg, display: "grid", placeItems: "center", flexShrink: 0 }}>

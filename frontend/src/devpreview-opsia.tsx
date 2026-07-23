@@ -16,6 +16,8 @@ import { useDevpreviewContracts, type DevpreviewCluster } from "./devpreview/con
 import { isActiveIncidentCluster } from "./devpreview/rcaIssuesFeed";
 import { useFleetSummaries } from "./devpreview/fleetSummaryFeed";
 import { useClusterSummaries, type ClusterSummaryView } from "./devpreview/clusterSummaryFeed";
+import { NodeAliasTitle } from "./devpreview/NodeAliasTitle";
+import { useNodeAliases, type NodeAliasView } from "./devpreview/nodeAliasesFeed";
 import { HOME_CARD_GRID_CLASS, HOME_CARD_GRID_ITEM_CLASS, homeCardGridItemStyle, homeCardGridStyle } from "./devpreview/widgets";
 import {
   podsForNode,
@@ -412,12 +414,15 @@ function CompactClusterRow({ cl, summary, onOpen, onSettings, onDisconnect }: {
         {/* 카드 스택/오버플로 컨텍스트 안에서는 다음 카드가 메뉴 위에 그려져 클릭을
             가로챈다(가림+미동작의 공통 원인). body portal + fixed 좌표로 최상위에 띄운다. */}
         {menuOpen && menuPos && createPortal(
+          // body portal 은 셸(.uni) 스코프 밖이라 폰트·hover 스타일이 빠져 엉성해 보였다.
+          // uni 클래스로 셸 타이포·토큰을 상속하고, rrow 로 항목 hover 피드백을 붙인다.
           <span ref={portalMenuRef} role="menu" aria-label={`${cl.displayName} 클러스터 작업`}
+            className="uni"
             onClick={(event) => event.stopPropagation()}
-            style={{ position: "fixed", top: menuPos.top, right: menuPos.right, zIndex: 1200, width: 156, display: "flex", flexDirection: "column", gap: 2, padding: 5, border: `1px solid ${UI.line}`, borderRadius: 10, background: UI.card, boxShadow: `0 16px 40px -18px ${inkA(0.35)}` }}>
-            <button role="menuitem" type="button" onClick={activate} style={compactMenuStyle}><ExternalLink size={13} />상세 보기</button>
-            {onSettings && <button role="menuitem" type="button" onClick={() => { setMenuOpen(false); onSettings(); }} style={compactMenuStyle}><Settings size={13} />설정</button>}
-            {onDisconnect && <button role="menuitem" type="button" onClick={() => { setMenuOpen(false); onDisconnect(); }} style={{ ...compactMenuStyle, color: HP.crit }}><Unplug size={13} />연결 해제…</button>}
+            style={{ position: "fixed", top: menuPos.top, right: menuPos.right, zIndex: 1200, width: 184, display: "flex", flexDirection: "column", gap: 2, padding: 6, border: `1px solid ${UI.line}`, borderRadius: 12, background: UI.card, boxShadow: `0 16px 40px -18px ${inkA(0.35)}` }}>
+            <button role="menuitem" type="button" className="rrow" onClick={activate} style={compactMenuStyle}><ExternalLink size={15} style={{ flexShrink: 0, color: UI.ink3 }} />상세 보기</button>
+            {onSettings && <button role="menuitem" type="button" className="rrow" onClick={() => { setMenuOpen(false); onSettings(); }} style={compactMenuStyle}><Settings size={15} style={{ flexShrink: 0, color: UI.ink3 }} />설정</button>}
+            {onDisconnect && <button role="menuitem" type="button" className="rrow" onClick={() => { setMenuOpen(false); onDisconnect(); }} style={{ ...compactMenuStyle, color: HP.crit }}><Unplug size={15} style={{ flexShrink: 0 }} />연결 해제…</button>}
           </span>,
           document.body,
         )}
@@ -427,8 +432,8 @@ function CompactClusterRow({ cl, summary, onOpen, onSettings, onDisconnect }: {
 }
 
 const compactMenuStyle: React.CSSProperties = {
-  display: "flex", alignItems: "center", gap: 7, width: "100%", border: "none", borderRadius: 7,
-  background: "transparent", color: UI.ink2, padding: "7px 8px", textAlign: "left", fontSize: TYPE.caption,
+  display: "flex", alignItems: "center", gap: 9, width: "100%", border: "none", borderRadius: 8,
+  background: "transparent", color: UI.ink, padding: "9px 10px", textAlign: "left", fontSize: TYPE.label,
   fontWeight: 600, cursor: "pointer",
 };
 
@@ -532,17 +537,42 @@ export function HomeClusterSection({ meta: _meta, onOpen, pending = [] }: {
 }
 
 // ── 노드 카드 — 정본 physical topology 계약의 서버·측정값·pod count만 렌더한다.
-export function NodeCard({ node, pods, problemPodCount, onOpen, onTip }: {
-  node: InvNode; pods: readonly InvPod[]; problemPodCount: number | null; onOpen: () => void; onTip: (t: TipData) => void;
+export function NodeCard({
+  node,
+  pods,
+  problemPodCount,
+  nodeAlias,
+  onOpen,
+  onTip,
+  onSaveNodeAlias,
+  onDeleteNodeAlias,
+}: {
+  node: InvNode;
+  pods: readonly InvPod[];
+  problemPodCount: number | null;
+  nodeAlias?: NodeAliasView | null;
+  onOpen: () => void;
+  onTip: (t: TipData) => void;
+  onSaveNodeAlias?: (nodeName: string, alias: string) => Promise<NodeAliasView | null>;
+  onDeleteNodeAlias?: (nodeName: string) => Promise<void>;
 }) {
   const sev = healthSev(node.health);
-  const statusText = node.status ? statusLabel(node.status) : "상태 관측 안 됨";
-  const healthText = statusLabel(node.health);
-  const showStatus = statusText !== healthText;
+  // "준비됨" 상태 서브라인은 제거 — 정상 상태는 표시하지 않고, 이상 신호만
+  // 헤더 점·HealthChip 으로 드러낸다(레퍼런스 톤).
   const problemConditionCount = (node.conditions ?? []).filter((condition) => !/^ready$/i.test(condition)).length;
   const restartsRecent = node.restartsRecent ?? 0;
+  const nodeDisplayName = nodeAlias?.alias || node.name;
   return (
-    <motion.button transition={SPRING} onClick={onOpen}
+    <motion.div transition={SPRING} onClick={onOpen}
+      aria-label={`${nodeDisplayName} 노드 파드 보기`}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(event) => {
+        if (event.target !== event.currentTarget) return;
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        onOpen();
+      }}
       whileHover={{ boxShadow: `0 10px 26px -20px ${inkA(0.16)}`, borderColor: LINE3 }}
       onMouseMove={(event) => {
         if (event.target instanceof Element && event.target.closest("[data-slot-state]")) return;
@@ -558,24 +588,28 @@ export function NodeCard({ node, pods, problemPodCount, onOpen, onTip }: {
           <Monitor size={24} strokeWidth={2} style={{ color: UI.ink2 }} />
         </span>
         <div style={{ minWidth: 0, flex: 1 }}>
-          <div title={node.name} style={{ fontSize: TYPE.section, fontWeight: 600, letterSpacing: "-0.02em", color: UI.ink, fontFamily: MONO, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", lineHeight: 1.35 }}>{node.name}</div>
-          {showStatus && <div style={{ fontSize: TYPE.label, color: UI.ink3, marginTop: 1 }}>{statusText}</div>}
+          <NodeAliasTitle
+            alias={nodeAlias ?? null}
+            nodeName={node.name}
+            onDelete={onDeleteNodeAlias}
+            onSave={onSaveNodeAlias}
+          />
         </div>
-        {sev !== "ok" && <span style={{ width: 8, height: 8, borderRadius: 999, background: sevColor(sev), flexShrink: 0, alignSelf: "flex-start", marginTop: 4 }} />}
+        {/* 레퍼런스 톤: 문제 배지·슬롯 카운트를 헤더 우측 상단에 — 별도 "파드 슬롯" 라벨 행 제거 */}
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 7, flexShrink: 0, marginTop: 2 }}>
+          {problemPodCount !== null && problemPodCount > 0 && (
+            <span aria-label={`문제 파드 ${problemPodCount}`} style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: TYPE.caption, fontWeight: 700, color: TINT.crit.fg, background: TINT.crit.bg, border: `1px solid ${TINT.crit.bd}`, borderRadius: 7, padding: "1px 6px" }}>
+              <b style={{ fontVariantNumeric: "tabular-nums" }}>{problemPodCount}</b><AlertTriangle size={11} aria-hidden="true" />
+            </span>
+          )}
+          <span aria-label={`파드 슬롯 ${node.matchedPodCount ?? "미관측"}/${node.totalPodCount ?? "미관측"}`} style={{ fontSize: TYPE.label, fontFamily: MONO, fontWeight: 700, color: UI.ink2, fontVariantNumeric: "tabular-nums" }}>
+            {node.matchedPodCount ?? "—"}/{node.totalPodCount ?? "—"}
+          </span>
+          {sev !== "ok" && <span style={{ width: 8, height: 8, borderRadius: 999, background: sevColor(sev), flexShrink: 0 }} />}
+        </span>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
         {sev !== "ok" && <HealthChip health={node.health} />}
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: TYPE.caption, color: UI.ink3 }}>
-          <Box size={12} aria-hidden="true" />파드 슬롯
-          <b style={{ color: UI.ink, fontVariantNumeric: "tabular-nums" }}>{node.matchedPodCount ?? "—"}</b>
-          <span>/</span>
-          <b style={{ color: UI.ink, fontVariantNumeric: "tabular-nums" }}>{node.totalPodCount ?? "—"}</b>
-        </span>
-        {problemPodCount !== null && problemPodCount > 0 && (
-          <span aria-label={`문제 파드 ${problemPodCount}`} style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: TYPE.caption, fontWeight: 600, color: TINT.crit.fg }}>
-            <AlertTriangle size={12} aria-hidden="true" /><b style={{ fontVariantNumeric: "tabular-nums" }}>{problemPodCount}</b>문제 파드
-          </span>
-        )}
         {restartsRecent > 0 && (
           <span aria-label={`최근 재시작 ${restartsRecent}`} style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: TYPE.caption, fontWeight: 600, color: TINT.warn.fg }}>
             <RotateCcw size={12} aria-hidden="true" /><b style={{ fontVariantNumeric: "tabular-nums" }}>{restartsRecent}</b>최근 재시작
@@ -592,7 +626,7 @@ export function NodeCard({ node, pods, problemPodCount, onOpen, onTip }: {
         <ClusterMiniUsage label="MEM" value={node.memoryPercent} />
       </div>
       <NodePodSlotGrid node={node} pods={pods} onTip={onTip} />
-    </motion.button>
+    </motion.div>
   );
 }
 
@@ -744,28 +778,8 @@ const NODE_SLOT_COUNT_PER_COLUMN = 10;
 const NODE_SLOT_COLUMNS_PER_UNIT = 5;
 const NODE_SLOT_RENDER_LIMIT = 40;
 
-function PodSlotLegend() {
-  const states = [
-    ["정상", HP.ok],
-    ["주의", HP.warn],
-    ["장애", HP.crit],
-    ["대기", HP.pending],
-  ] as const;
-  return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 12, minHeight: 20, flexWrap: "wrap", fontSize: TYPE.caption, color: UI.ink3 }}>
-      {states.map(([label, color]) => (
-        <span key={label} style={{ display: "inline-flex", alignItems: "center", gap: 5, whiteSpace: "nowrap" }}>
-          <span style={{ width: 8, height: 8, borderRadius: 2, background: color }} />
-          {label}
-        </span>
-      ))}
-      <span style={{ display: "inline-flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}>
-        <span style={{ width: 28, height: 6, borderRadius: 2, background: `linear-gradient(90deg, color-mix(in srgb, ${HP.ok} 36%, ${UI.card}), color-mix(in srgb, ${HP.ok} 82%, ${UI.card}))` }} />
-        농도 · 제한 대비 사용률
-      </span>
-    </div>
-  );
-}
+// PodSlotLegend(정상/주의/장애/대기 범례)는 제거 — 슬롯 색·호버 툴팁이 자체 설명적이라
+// 상단 설명 줄 없이 노드 그리드를 바로 보여준다.
 
 /**
  * Node cards share the same four-column geometry as dashboard widgets. One
@@ -899,6 +913,9 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
   );
   const clusterSummaries = useClusterSummaries(summaryClusterIds);
   const topology = useClusterTopology(activeCluster);
+  const nodeAliasCluster = view.level === "clusters" ? null : activeCluster;
+  const nodeAliases = useNodeAliases(nodeAliasCluster);
+  const nodeAliasEditingAvailable = nodeAliasCluster !== null;
   const { nodes: topologyNodes, pods } = topology;
   const activeSummary = activeCluster ? clusterSummaries[activeCluster] : undefined;
   const nodes = useMemo(
@@ -946,7 +963,7 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
   const crumbs: { label: string; onClick?: () => void }[] = [{ label: "클러스터", onClick: view.level !== "clusters" ? () => go({ level: "clusters" }, -1) : undefined }];
   if (view.level !== "clusters") crumbs.push({ label: view.cluster, onClick: view.level === "pods" ? () => go({ level: "nodes", cluster: view.cluster }, -1) : undefined });
   if (view.level === "pods") crumbs.push({ label: view.node });
-  const tipWidth = tip?.metrics ? 420 : 280;
+  const tipWidth = tip?.metrics ? 468 : 280;
   const tipHeight = tip?.metrics ? 176 : 88;
   const tipViewportWidth = typeof window === "undefined" ? tipWidth : Math.min(tipWidth, window.innerWidth - 16);
   const tipLeft = tip && typeof window !== "undefined"
@@ -1075,7 +1092,6 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
                   ) : (
                     /* 노드: 대시보드와 같은 4단위 격자. 슬롯 10개마다 카드가 한 칸씩 확장된다. */
                     <div style={{ display: "grid", gap: 8 }}>
-                      <PodSlotLegend />
                       <div className="node-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gridAutoFlow: "row dense", gap: 12 }}>
                         {nodes.map((node, i) => {
                           const observedPods = observedPodsForNode(node, topologyNodes, pods);
@@ -1092,8 +1108,12 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
                               transition={reducedMotion ? { duration: 0 } : { ...SOFT, delay: Math.min(i, 4) * 0.015 }}
                             >
                               <NodeCard node={node} pods={observedPods ?? []}
+                                nodeAlias={nodeAliases.aliasesByNodeName.get(node.name) ?? null}
                                 problemPodCount={observedPods === null ? null : observedPods.filter((pod) => isBadHealth(pod.health)).length}
-                                onOpen={() => go({ level: "pods", cluster: view.cluster, node: node.name }, 1)} onTip={onTip} />
+                                onOpen={() => go({ level: "pods", cluster: view.cluster, node: node.name }, 1)}
+                                onTip={onTip}
+                                onSaveNodeAlias={nodeAliasEditingAvailable ? nodeAliases.saveAlias : undefined}
+                                onDeleteNodeAlias={nodeAliasEditingAvailable ? nodeAliases.deleteAlias : undefined} />
                             </motion.div>
                           );
                         })}
@@ -1106,9 +1126,16 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
                   <div style={{ background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 16, padding: 20 }}>
                     {/* 노드 귀속 판정(physical topology server_id)은 유지하되,
                         설명 카드는 UI에서 제거 — 파드 목록만 바로 보여준다. */}
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+                    <div style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 14, minWidth: 0 }}>
                       <Server size={14} style={{ color: UI.ink3 }} />
-                      <span style={{ fontSize: TYPE.body, fontWeight: 600, fontFamily: MONO, color: UI.ink }}>{view.node}</span>
+                      <span style={{ minWidth: 0, flex: 1 }}>
+                        <NodeAliasTitle
+                          alias={nodeAliases.aliasesByNodeName.get(view.node) ?? null}
+                          nodeName={view.node}
+                          onDelete={nodeAliasEditingAvailable ? nodeAliases.deleteAlias : undefined}
+                          onSave={nodeAliasEditingAvailable ? nodeAliases.saveAlias : undefined}
+                        />
+                      </span>
                     </div>
                     {topology.status === "loading" ? (
                       <PodSkeleton />
@@ -1146,45 +1173,42 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
           <motion.div key="tip" initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.98 }} transition={{ duration: DUR.micro }}
             style={{
               position: "fixed", left: tipLeft, top: tipTop, zIndex: 60, pointerEvents: "none",
-              background: cardA(0.96), backdropFilter: "blur(10px)", border: `1px solid ${UI.line}`, borderRadius: 11, padding: "9px 11px",
-              boxShadow: `0 10px 30px -12px ${inkA(0.22)}`, width: tipViewportWidth, maxWidth: "calc(100vw - 16px)", boxSizing: "border-box",
+              // 카드 폭은 내용(max-content)에 맞춰 늘어난다 — 고정 368px + 고정 컬럼 트랙에서
+              // "제한 1000m"/"사용량 관측 안 됨" 같은 값이 카드 밖으로 넘치던 문제의 교정.
+              background: cardA(0.96), backdropFilter: "blur(10px)", border: `1px solid ${UI.line}`, borderRadius: 11, padding: "9px 12px",
+              boxShadow: `0 10px 30px -12px ${inkA(0.22)}`, width: "max-content", minWidth: tip.metrics ? 420 : 260,
+              maxWidth: "min(468px, calc(100vw - 16px))", boxSizing: "border-box",
             }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
               <span style={{ width: 7, height: 7, borderRadius: 999, background: sevColor(healthSev(tip.health)), flexShrink: 0 }} />
-              <span style={{ fontSize: TYPE.label, fontWeight: 600, fontFamily: MONO, color: UI.ink, letterSpacing: "-0.01em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tip.label}</span>
+              <span style={{ flex: 1, minWidth: 0, fontSize: TYPE.label, fontWeight: 600, fontFamily: MONO, color: UI.ink, letterSpacing: "-0.01em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tip.label}</span>
             </div>
             <div style={{ fontSize: TYPE.caption, color: UI.ink3, marginTop: 3, marginLeft: 13 }}>
               <span style={{ color: sevColor(healthSev(tip.health)), fontWeight: 600 }}>{tip.health ? statusLabel(tip.health) : "헬스 관측 안 됨"}</span>
               <span> · {tip.status ? statusLabel(tip.status) : "상태 관측 안 됨"}</span>
             </div>
+            {/* 모든 행이 같은 그리드 트랙(max-content)을 공유 — 열은 내용만큼 넓어지고
+                행 간 정렬은 유지된다. 셀은 nowrap, 카드가 내용에 맞춰 커진다. */}
             {tip.metrics && (
-              <div style={{ display: "grid", gridTemplateColumns: "52px minmax(0, 1fr)", columnGap: 10, rowGap: 3, alignItems: "baseline", fontSize: TYPE.caption, marginTop: 7, marginLeft: 13, fontVariantNumeric: "tabular-nums" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "52px max-content 8px max-content 8px max-content", columnGap: 4, rowGap: 3, alignItems: "baseline", fontSize: TYPE.caption, marginTop: 7, marginLeft: 13, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
                 {tip.metrics.map((metric) => (
                   <div key={metric.label} style={{ display: "contents" }}>
                     <span style={{ color: UI.ink3 }}>{metric.label}</span>
-                    <span style={{
-                      display: "grid",
-                      gridTemplateColumns: "minmax(108px, 1fr) 8px 78px 8px 62px",
-                      columnGap: 4,
-                      alignItems: "baseline",
-                      whiteSpace: "nowrap",
-                    }}>
-                      <span style={{ color: metric.limitSeverity === "crit" ? HP.crit : metric.limitSeverity === "warn" ? TINT.warn.fg : UI.ink, fontWeight: 600 }}>
-                        {metric.usage}
-                      </span>
-                      {metric.request ? (
-                        <>
-                          <span style={{ color: UI.ink3, textAlign: "center" }}>·</span>
-                          <span style={{ color: UI.ink3 }}>{metric.request}</span>
-                        </>
-                      ) : <><span /><span /></>}
-                      {metric.limit ? (
-                        <>
-                          <span style={{ color: UI.ink3, textAlign: "center" }}>·</span>
-                          <span style={{ color: UI.ink2 }}>{metric.limit}</span>
-                        </>
-                      ) : <><span /><span /></>}
+                    <span style={{ color: metric.limitSeverity === "crit" ? HP.crit : metric.limitSeverity === "warn" ? TINT.warn.fg : UI.ink, fontWeight: 600 }}>
+                      {metric.usage}
                     </span>
+                    {metric.request ? (
+                      <>
+                        <span style={{ color: UI.ink3, textAlign: "center" }}>·</span>
+                        <span style={{ color: UI.ink3 }}>{metric.request}</span>
+                      </>
+                    ) : <><span /><span /></>}
+                    {metric.limit ? (
+                      <>
+                        <span style={{ color: UI.ink3, textAlign: "center" }}>·</span>
+                        <span style={{ color: UI.ink2 }}>{metric.limit}</span>
+                      </>
+                    ) : <><span /><span /></>}
                   </div>
                 ))}
               </div>

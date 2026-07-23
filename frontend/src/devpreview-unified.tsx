@@ -76,7 +76,7 @@ import { operationalMessageLabel, reasonLabel, statusLabel, isCriticalStatus } f
 import { LiveResourceManifestEditor } from "./devpreview/resourceManifestEditor";
 import { groupApplicationsByRepository } from "./devpreview/repositoryRegistry";
 import { podsForNode, useClusterTopology } from "./devpreview/inventoryTopologyFeed";
-import { UI, BLUE, BLUE2, HP, TINT, MONO, TYPE, SOFT, SPRING, PRESENT_SCALE, DUR, RADIUS, SPACE, inkA, blueA, MARK, cardA, GLASS, critA } from "./devpreview/theme";
+import { UI, BLUE, BLUE2, HP, INTERACTION, TINT, MONO, TYPE, SOFT, SPRING, PRESENT_SCALE, DUR, RADIUS, SPACE, inkA, blueA, MARK, cardA, GLASS, critA } from "./devpreview/theme";
 import "./styles/tokens.css";
 import "./styles/foundation.css";
 
@@ -1781,47 +1781,6 @@ function App() {
   const kind = KINDS.find((k) => k.id === kindId)!;
   const togglePin = (id: string) => setPinned((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
   const searchRef = useRef<HTMLInputElement>(null);
-  const pageScrollRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const pageScroller = pageScrollRef.current;
-    if (!pageScroller) return;
-
-    const canScrollInDirection = (element: HTMLElement, deltaY: number) => {
-      const maxScrollTop = element.scrollHeight - element.clientHeight;
-      if (maxScrollTop <= 1) return false;
-      return deltaY < 0 ? element.scrollTop > 0 : element.scrollTop < maxScrollTop;
-    };
-
-    const onWheel = (event: WheelEvent) => {
-      if (event.ctrlKey || event.deltaY === 0) return;
-      const deltaY = event.deltaMode === WheelEvent.DOM_DELTA_LINE
-        ? event.deltaY * 16
-        : event.deltaMode === WheelEvent.DOM_DELTA_PAGE
-          ? event.deltaY * pageScroller.clientHeight
-          : event.deltaY;
-
-      let candidate = event.target instanceof Element ? event.target : null;
-      while (candidate && candidate !== pageScroller) {
-        if (candidate instanceof HTMLElement) {
-          const overflowY = window.getComputedStyle(candidate).overflowY;
-          if ((overflowY === "auto" || overflowY === "scroll") && canScrollInDirection(candidate, deltaY)) {
-            event.preventDefault();
-            candidate.scrollTop += deltaY;
-            return;
-          }
-        }
-        candidate = candidate.parentElement;
-      }
-
-      if (canScrollInDirection(pageScroller, deltaY)) {
-        event.preventDefault();
-        pageScroller.scrollTop += deltaY;
-      }
-    };
-
-    pageScroller.addEventListener("wheel", onWheel, { passive: false });
-    return () => pageScroller.removeEventListener("wheel", onWheel);
-  }, []);
   // 상단 크롬 높이 — 폰트·확대에 따라 변하므로 실측해서 오버레이 기준으로 쓴다
   const headerRef = useRef<HTMLElement>(null);
   useEffect(() => {
@@ -1844,11 +1803,10 @@ function App() {
     const ro = new ResizeObserver(() => setTopH(el.offsetHeight));
     ro.observe(el); return () => ro.disconnect();
   }, []);
-  // 서피스·관점·물리 드릴·종류 전환 = 새 화면. 문서와 앱 내부 스크롤을 함께
-  // 초기화해 긴 이슈/타임라인/노드 목록의 위치를 다음 화면으로 승계하지 않는다.
+  // 서피스·관점·물리 드릴·종류 전환 = 새 화면. 문서 스크롤을 초기화해
+  // 긴 이슈/타임라인/노드 목록의 위치를 다음 화면으로 승계하지 않는다.
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0 });
-    pageScrollRef.current?.scrollTo({ top: 0, left: 0 });
   }, [surface, resView, scope.level, scope.cluster, scope.node, kindId]);
   // zoom 좌표계: fixed 오버레이 계산은 전부 CSS 픽셀(뷰포트/스케일)로
   const [vwCss, setVwCss] = useState(() => document.documentElement.clientWidth / PRESENT_SCALE);
@@ -2155,8 +2113,8 @@ function App() {
           if (sf === "connect") setConnectView(null);
         }} />
 
-      <div ref={pageScrollRef} aria-label="현재 화면 콘텐츠" role="region"
-        style={{ flex: 1, minWidth: 0, height: `calc(100vh / ${PRESENT_SCALE})`, overflowY: "auto", overflowX: "hidden", overscrollBehavior: "contain", scrollbarGutter: "stable" }}>
+      <div aria-label="현재 화면 콘텐츠" role="region"
+        style={{ flex: 1, minWidth: 0, minHeight: `calc(100vh / ${PRESENT_SCALE})`, overflowX: "clip" }}>
       {/* 상단 크롬 — 워크스페이스·스코프·네임스페이스·검색 (내부 표기 배지 제거) */}
       <header ref={headerRef} style={{ position: "sticky", top: 0, zIndex: 74, display: "flex", alignItems: "center", flexWrap: "wrap", gap: 10, padding: "12px 18px", borderBottom: `1px solid ${UI.line}`, background: UI.card }}>
         {/* 워크스페이스 — 정체성은 항상 맨 왼쪽(D20). 데모 세계는 워크스페이스 1개라 사실 표시만 */}
@@ -2376,7 +2334,8 @@ function App() {
         </div>
       ) : surface === "deploy" ? (
         <DeploySurface pendingRepos={pendingRepo} repositoryFilter={deployRepositoryFilter} onOpenRef={openRef}
-          onOpenIssues={() => setSurface("issues")} onAskAi={showAi} onAddRepo={() => setConnectModal("repo")} />
+          onOpenIssues={() => setSurface("issues")} onAskAi={showAi} onAddRepo={() => setConnectModal("repo")}
+          topInset={topH} leftInset={navCollapsed ? 60 : 208} rightInset={aiOpen ? aiW : 0} />
       ) : surface === "issues" ? (
         <IssuesSurface incidentClusterIds={incidentClusterIds} recoverySelectionRoutes={recoverySelectionRoutes} previewCompletedRecoveryIds={previewCompletedRecoveryIds} sessionRules={notes.filter((n) => n.icon === "rule").map((n) => n.body.split(" · ")[0])} onOpenRef={openRef} onAskAi={() => openAi()} onOpenRca={setRcaIncident} />
       ) : surface === "timeline" ? (
@@ -2707,6 +2666,19 @@ function App() {
 
       <style>{`
         .uni { font-family: var(--font-sans); font-weight: var(--font-weight-body); -webkit-font-smoothing: antialiased; }
+        /* 이 셸은 라이트 전용 디자인이다. OS 다크 모드가 <html>에 .dark 를 켜면 product-*
+           유틸(.product-control 등)의 상호작용 토큰이 다크 값으로 바뀌어, 라이트 화면 위에
+           검은 hover 알약이 뜨는 오류가 났다. 셸 스코프 안에서 라이트 값을 고정한다. */
+        .uni { color-scheme: light;
+          --control-hover: ${INTERACTION.controlHover};
+          --control-selected: ${INTERACTION.controlSelected};
+          --disabled-background: ${INTERACTION.disabledBg};
+          --disabled-foreground: ${INTERACTION.disabledText};
+          --focus-ring: ${INTERACTION.focusRing};
+          --action: ${INTERACTION.action};
+          --action-hover: ${INTERACTION.actionHover};
+          --action-pressed: ${INTERACTION.actionPressed};
+        }
         .uni .krow { transition: background .14s ease; }
         .uni .krow:hover { background: ${inkA(0.045)}; }
         .uni .krow:hover .kpin { opacity: .5 !important; }

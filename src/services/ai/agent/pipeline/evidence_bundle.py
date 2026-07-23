@@ -850,10 +850,40 @@ def same_namespace(item: dict, namespace: str | None) -> bool:
     return value in (None, namespace)
 
 
+MAX_ALERTMANAGER_ALERTS = 8
+
+
 def compact_metrics_value(metrics: dict) -> dict:
-    return compact_mapping_results(
+    value = compact_mapping_results(
         metrics, max_results=MAX_METRIC_RESULTS, max_series=MAX_METRIC_SERIES
     )
+    # Alertmanager webhook evidence(도메인 계약: metrics["alertmanager"])는
+    # results 형태가 아니라 일반 압축에서 통째로 탈락한다. firing 알림의
+    # 라벨/주석은 원인 판별 신호(signals)의 매칭 대상이므로 압축본에 보존한다.
+    alertmanager = metrics.get("alertmanager")
+    if isinstance(alertmanager, dict):
+        value["alertmanager"] = compact_alertmanager_value(alertmanager)
+    return value
+
+
+def compact_alertmanager_value(alertmanager: dict) -> dict:
+    compacted: dict = {}
+    for key in ("group_key", "receiver"):
+        item = alertmanager.get(key)
+        if item not in (None, ""):
+            compacted[key] = item
+    alerts = alertmanager.get("alerts")
+    if isinstance(alerts, list):
+        compacted["alerts"] = [
+            {
+                key: alert[key]
+                for key in ("status", "labels", "annotations", "startsAt")
+                if isinstance(alert.get(key), (str, dict)) and alert.get(key)
+            }
+            for alert in alerts[:MAX_ALERTMANAGER_ALERTS]
+            if isinstance(alert, dict)
+        ]
+    return compacted
 
 
 def compact_traces_value(traces: dict) -> dict:

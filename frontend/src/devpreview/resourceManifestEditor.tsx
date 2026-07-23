@@ -20,6 +20,7 @@ import {
 import { grantApproval, rejectApproval } from "../api/approvals";
 import { reasonLabel } from "./statusLabel";
 import { BLUE, HP, MONO, TINT, TYPE, UI, inkA } from "./theme";
+import { YamlCodeView } from "./YamlCodeView";
 
 type Phase = "loading" | "ready" | "previewing" | "submitting" | "failed";
 
@@ -295,15 +296,18 @@ export function LiveResourceManifestEditor({
     return (
       <div style={{ padding: "18px 0", display: "grid", gap: 10 }}>
         {source && <LiveManifestPanel source={source} />}
-        <ManifestNotice tone="warn" title={remediation === "request-access" ? "YAML 접근 권한이 없습니다" : "편집 가능한 Git YAML 없음"}>
+        <ManifestNotice tone={remediation === "connect-repository" ? "neutral" : "warn"}
+          title={remediation === "request-access" ? "YAML 접근 권한이 없습니다" : "Git에서 배포된 리소스가 아닙니다"}>
           {remediation === "connect-repository"
-            ? "Git 원본이 연결되지 않아 수정할 수 없습니다. 저장소를 연결해 권한과 원본 경로를 확인하세요."
+            ? "이 리소스는 연결된 저장소의 매니페스트와 매칭되지 않아 편집할 수 없습니다. " +
+              "에이전트·시스템 구성 요소처럼 Git 밖에서 배포된 리소스는 읽기 전용입니다. " +
+              "저장소에서 배포된 리소스는 이 탭에서 바로 수정하고 승인하면 실제 PR이 생성됩니다."
             : remediation === "request-access"
               ? "연결된 Git 원본이 있지만 현재 계정에는 애플리케이션 매니페스트 조회 권한이 없습니다."
               : source?.reason ? reasonLabel(source.reason) : error ?? "이 리소스에 연결된 현재 YAML 원본을 찾지 못했습니다."}
         </ManifestNotice>
         {remediation === "connect-repository" && onConnectRepository && (
-          <ActionButton primary disabled={false} onClick={onConnectRepository}>저장소 연결</ActionButton>
+          <ActionButton disabled={false} onClick={onConnectRepository}>다른 저장소 연결…</ActionButton>
         )}
         {remediation === "request-access" && onRequestAccess && (
           <ActionButton disabled={false} onClick={onRequestAccess}>권한 요청</ActionButton>
@@ -447,8 +451,7 @@ function LiveManifestPanel({ source }: { source: ResourceManifestSourceEndpoint 
         {source.live_observed_at && <span style={{ color: UI.ink3, fontVariantNumeric: "tabular-nums", fontSize: TYPE.caption }}>관측 {source.live_observed_at}</span>}
       </div>
       {source.live_yaml ? (
-        <textarea aria-label="Live YAML" value={source.live_yaml} readOnly spellCheck={false}
-          style={{ width: "100%", minHeight: 190, resize: "vertical", boxSizing: "border-box", border: `1px solid ${UI.line}`, borderRadius: 12, padding: 14, background: UI.bg2, color: UI.ink2, fontFamily: MONO, fontSize: TYPE.code, lineHeight: 1.6, outline: "none" }} />
+        <YamlCodeView value={source.live_yaml} ariaLabel="Live YAML" maxHeight={320} />
       ) : (
         <ManifestNotice tone="warn" title="Live YAML 관측 불가">{source.live_reason ?? "현재 inventory snapshot에 원문이 없습니다."}</ManifestNotice>
       )}

@@ -15,6 +15,7 @@ from domains.resource_access.projection import (
     agent_execution_access_projection,
 )
 from domains.shell_state.events import NamespaceScopeUpdatedBody, UiPreferencesUpdatedBody
+from domains.shell_state.node_alias_router import router as node_alias_router
 from packages.config.refresh_policies import browser_refresh_policies
 from packages.contracts.auth import Actor
 from packages.contracts.freshness import BrowserRefreshPoliciesResponse
@@ -42,6 +43,7 @@ from packages.contracts.shell_state import (
 from packages.runtime.dependencies import get_db, get_events
 
 router = APIRouter()
+router.include_router(node_alias_router)
 NAMESPACE_CATALOG_LIMIT = 1000
 CONFLICT_DETAIL = "shell state revision conflict"
 INVALID_NAMESPACE_DETAIL = "namespace scope contains inaccessible namespaces"
