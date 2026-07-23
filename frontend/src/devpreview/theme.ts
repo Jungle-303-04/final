@@ -125,6 +125,15 @@ export const RESOURCE_LAYOUT = {
   columnGap: 16,
   stickyGap: 12,
   viewportBottomGap: 16,
+  auxiliaryHeaderHeight: 52,
+  auxiliaryHeaderPadding: "8px",
+  auxiliaryBodyPadding: "8px",
+  auxiliarySectionHeight: 28,
+  auxiliaryRowHeight: 52,
+  auxiliaryRowPadding: "7px 8px",
+  auxiliaryRowGap: 2,
+  auxiliaryIconColumn: 20,
+  auxiliaryTrailingColumn: 30,
 } as const;
 
 // 시연 스케일 — 데모는 멀리서도 읽혀야 한다 (기본 1.25 = 별도 확대 없이 발표 가독)

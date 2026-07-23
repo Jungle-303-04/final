@@ -11,6 +11,7 @@ import type {
 import type { InventoryResource } from "../api/inventory-schemas";
 import type { PodHighlightTarget } from "./podHighlight";
 import { podsOwnedByWorkloads } from "./podInventoryHighlight";
+import { ResourceAuxiliaryRow } from "./ResourceAuxiliaryPanel";
 import { HP, MONO, TINT, TYPE, UI } from "./theme";
 
 type ConfigPanelStatus = "loading" | "ready" | "unavailable";
@@ -162,18 +163,6 @@ function referencedWorkloadCount(item: ConfigReferenceItem): number {
   ).size;
 }
 
-function PodCount({ count }: { count: number }) {
-  return (
-    <span
-      title={`연결된 파드 ${count}개`}
-      aria-label={`연결된 파드 ${count}개`}
-      style={{ minWidth: 22, flexShrink: 0, textAlign: "right", fontFamily: MONO, fontSize: TYPE.label, fontWeight: 700, color: UI.ink3 }}
-    >
-      {count}
-    </span>
-  );
-}
-
 function ConfigReferenceRow({
   item,
   clusterId,
@@ -215,23 +204,21 @@ function ConfigReferenceRow({
       };
 
   return (
-    <div className="rrow"
+    <ResourceAuxiliaryRow
+      className="rrow"
       data-pod-highlight-source="config"
       tabIndex={0}
       onMouseEnter={() => onHighlightTarget?.(highlightTarget)}
       onMouseLeave={() => onHighlightTarget?.(null)}
       onFocus={() => onHighlightTarget?.(highlightTarget)}
       onBlur={() => onHighlightTarget?.(null)}
-      style={{ display: "flex", flexDirection: "column", gap: 6, width: "100%", minHeight: 54, textAlign: "left", border: "1px solid transparent", background: "transparent", borderRadius: 9, padding: "7px 9px" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-        <Icon size={15} style={{ color: iconColor, flexShrink: 0 }} />
-        <span style={{ minWidth: 0, flex: 1 }}>
-          <span data-pod-highlight-primary title={item.name} style={{ display: "block", fontSize: TYPE.label, fontWeight: 700, fontFamily: MONO, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.name}</span>
-          <span style={{ display: "block", fontSize: TYPE.caption, color: UI.ink3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.namespace} · Deployment {workloadCount}개 참조</span>
-        </span>
-        <PodCount count={matchedPods.length} />
-      </div>
-    </div>
+      icon={<Icon size={15} style={{ color: iconColor }} />}
+      title={item.name}
+      tooltip={item.name}
+      titleFontFamily={MONO}
+      meta={`${item.namespace} · Deployment ${workloadCount}개 참조`}
+      trailing={<span title={`연결된 파드 ${matchedPods.length}개`}>{matchedPods.length}</span>}
+    />
   );
 }
 
@@ -263,36 +250,34 @@ export function OpsiaConfigPanel({
   const coverageUnavailable = coverage?.availability === "unavailable";
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 8, height: "100%", minHeight: 0 }}>
-      <div style={{ flex: 1, minHeight: 0, overflowY: "auto", scrollbarGutter: "stable", overscrollBehavior: "contain", paddingRight: 8 }}>
-        {!activeCluster ? (
-          <PanelEmptyState label="클러스터를 선택하세요" hint="구성 참조는 클러스터 범위에서 표시됩니다." />
-        ) : configView.status === "loading" ? (
-          <ConfigSkeletonList />
-        ) : configView.status === "unavailable" ? (
-          <PanelEmptyState label="구성 참조를 불러오지 못했습니다" hint="인벤토리 응답을 다시 확인하세요." />
-        ) : coverageUnavailable ? (
-          <PanelEmptyState label="구성 참조를 확인할 수 없습니다" hint={coverageReasonText(coverage)} />
-        ) : items.length === 0 ? (
-          <PanelEmptyState label="참조된 ConfigMap·Secret이 없습니다" hint={emptyHint(namespaceFilter, coverage)} />
-        ) : (
-          <>
-            {coverage && <CoverageNote coverage={coverage} />}
-            <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-              {items.map((item) => (
-                <ConfigReferenceRow
-                  key={`${item.kind}:${item.namespace}/${item.name}`}
-                  item={item}
-                  clusterId={activeCluster}
-                  pods={configView.pods}
-                  replicaSets={configView.replicaSets}
-                  onHighlightTarget={onHighlightTarget}
-                />
-              ))}
-            </div>
-          </>
-        )}
-      </div>
-    </div>
+    <>
+      {!activeCluster ? (
+        <PanelEmptyState label="클러스터를 선택하세요" hint="구성 참조는 클러스터 범위에서 표시됩니다." />
+      ) : configView.status === "loading" ? (
+        <ConfigSkeletonList />
+      ) : configView.status === "unavailable" ? (
+        <PanelEmptyState label="구성 참조를 불러오지 못했습니다" hint="인벤토리 응답을 다시 확인하세요." />
+      ) : coverageUnavailable ? (
+        <PanelEmptyState label="구성 참조를 확인할 수 없습니다" hint={coverageReasonText(coverage)} />
+      ) : items.length === 0 ? (
+        <PanelEmptyState label="참조된 ConfigMap·Secret이 없습니다" hint={emptyHint(namespaceFilter, coverage)} />
+      ) : (
+        <>
+          {coverage && <CoverageNote coverage={coverage} />}
+          <div style={{ display: "grid", gap: 2, marginTop: coverage ? 8 : 0 }}>
+            {items.map((item) => (
+              <ConfigReferenceRow
+                key={`${item.kind}:${item.namespace}/${item.name}`}
+                item={item}
+                clusterId={activeCluster}
+                pods={configView.pods}
+                replicaSets={configView.replicaSets}
+                onHighlightTarget={onHighlightTarget}
+              />
+            ))}
+          </div>
+        </>
+      )}
+    </>
   );
 }

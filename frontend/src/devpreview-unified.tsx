@@ -80,6 +80,14 @@ import { useWorkloadDetail } from "./devpreview/workloadDetailFeed";
 import { useResourceUsageSeries, type ResourceUsagePoint } from "./devpreview/resourceUsageFeed";
 import { useResourceAccess } from "./devpreview/resourceAccessFeed";
 import { ResourceAccessPanel } from "./devpreview/resourceAccessPanel";
+import {
+  ResourceAuxiliaryHeader,
+  ResourceAuxiliaryPanel,
+  ResourceAuxiliaryRow,
+  ResourceAuxiliarySection,
+  resourceAuxiliaryFooterButtonStyle,
+  resourceAuxiliaryViewportHeight,
+} from "./devpreview/ResourceAuxiliaryPanel";
 import { EventMessageText } from "./devpreview/EventMessageText";
 import { usePodResourceDetail } from "./devpreview/podResourceDetailFeed";
 import { useResourceEvents } from "./devpreview/resourceEventsFeed";
@@ -1266,37 +1274,54 @@ function TrafficPanel({ clusterIds, focus, onFocus, onOpen, stickyTop, viewportT
     : [], [topo]);
   const visibleRows = rows.slice(0, 40);
   const hiddenCount = Math.max(0, rows.length - visibleRows.length);
-  const panelHeight = `calc(100vh / ${PRESENT_SCALE} - ${viewportTopInset + stickyTop + RESOURCE_LAYOUT.viewportBottomGap}px)`;
+  const panelHeight = resourceAuxiliaryViewportHeight(viewportTopInset, stickyTop);
+  const clearAction = focus ? (
+    <button
+      type="button"
+      className="product-focusable product-control"
+      aria-label="서비스 포커스 해제"
+      onClick={() => onFocus(null)}
+      style={{ border: "none", background: inkA(0.05), color: UI.ink3, borderRadius: 999, padding: "3px 9px", fontSize: TYPE.caption, fontWeight: 600, cursor: "pointer" }}
+    >
+      해제
+    </button>
+  ) : undefined;
   return (
-    <aside data-resource-aux-panel="true" data-resource-traffic-panel="true" style={{ width: stacked ? "100%" : RESOURCE_LAYOUT.auxiliaryWidth, height: stacked ? 300 : panelHeight, maxHeight: stacked ? 300 : panelHeight, boxSizing: "border-box", flexShrink: 0, alignSelf: "flex-start", position: stacked ? "relative" : "sticky", top: stacked ? undefined : stickyTop, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: RADIUS.panel, padding: 10, overflowY: "auto", overscrollBehavior: "contain", scrollbarGutter: "stable", display: "flex", flexDirection: "column", gap: 2 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "2px 2px 7px" }}>
-        <span style={{ fontSize: TYPE.body, fontWeight: 600, letterSpacing: "-0.02em", color: UI.heading }}>관계 노드</span>
-        <span style={{ fontSize: TYPE.caption, color: UI.ink3 }}>{rows.length}개{topo.omittedNodeCount > 0 ? ` · ${topo.omittedNodeCount}개 생략` : ""}</span>
-        {focus && <button type="button" className="product-focusable product-control" aria-label="서비스 포커스 해제" onClick={() => onFocus(null)} style={{ marginLeft: "auto", border: "none", background: inkA(0.05), color: UI.ink3, borderRadius: 999, padding: "2px 9px", fontSize: TYPE.caption, fontWeight: 600, cursor: "pointer" }}>해제</button>}
-      </div>
+    <ResourceAuxiliaryPanel
+      data-resource-traffic-panel="true"
+      aria-label="트래픽 관계 노드"
+      style={{ width: stacked ? "100%" : RESOURCE_LAYOUT.auxiliaryWidth, height: stacked ? 300 : panelHeight, maxHeight: stacked ? 300 : panelHeight, position: stacked ? "relative" : "sticky", top: stacked ? undefined : stickyTop }}
+      header={<ResourceAuxiliaryHeader title="관계 노드" value={`${rows.length}개`} detail={topo.omittedNodeCount > 0 ? `${topo.omittedNodeCount}개 생략` : undefined} action={clearAction} />}
+    >
       {topo.status === "loading" && <span style={{ fontSize: TYPE.caption, color: UI.ink3, padding: "6px 2px" }}>불러오는 중…</span>}
       {topo.status === "unavailable" && <span style={{ fontSize: TYPE.caption, color: UI.ink3, padding: "6px 2px" }}>관계 토폴로지 관측 안 됨</span>}
       {topo.status === "ready" && rows.length === 0 && <span style={{ fontSize: TYPE.caption, color: UI.ink3, padding: "6px 2px" }}>관측된 서비스가 없습니다</span>}
-      {visibleRows.map((r) => (
-        <button type="button" aria-label={`${r.name} 서비스 그래프 포커스`} aria-selected={focus === r.id} key={r.id} onClick={() => onFocus(focus === r.id ? null : r.id)} onDoubleClick={() => onOpen(r.node)} className="rrow product-focusable product-control"
-          title={`${r.name} · ${r.kind} · ${r.ns ?? "클러스터 범위"} · ${r.cluster}`}
-          style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", minHeight: 46, textAlign: "left", border: `1px solid ${focus === r.id ? TINT.blue.bd : "transparent"}`, background: focus === r.id ? TINT.blue.bg : "transparent", borderRadius: 8, padding: "5px 8px", cursor: "pointer" }}>
-          <span style={{ width: 8, height: 8, borderRadius: 3, background: r.bad ? HP.crit : HP.ok, flexShrink: 0 }} />
-          <span style={{ minWidth: 0, flex: 1 }}>
-            <span style={{ display: "block", fontSize: TYPE.label, fontWeight: 600, fontFamily: MONO, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name}</span>
-            <span style={{ display: "block", fontSize: TYPE.caption, color: UI.ink3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.kind} · {r.ns ?? "클러스터 범위"}</span>
-          </span>
-          {r.bad
-            ? <span style={{ fontSize: TYPE.caption, fontWeight: 600, color: TINT.crit.fg, background: critA(0.09), border: `1px solid ${critA(0.3)}`, borderRadius: 999, padding: "2px 8px", flexShrink: 0 }}>장애</span>
-            : <span style={{ width: 6, height: 6, borderRadius: 999, background: HP.ok, flexShrink: 0 }} />}
-        </button>
-      ))}
+      <div style={{ display: "grid", gap: RESOURCE_LAYOUT.auxiliaryRowGap }}>
+        {visibleRows.map((r) => (
+          <ResourceAuxiliaryRow
+            key={r.id}
+            className="rrow product-control"
+            ariaLabel={`${r.name} 서비스 그래프 포커스`}
+            selected={focus === r.id}
+            onActivate={() => onFocus(focus === r.id ? null : r.id)}
+            onDoubleActivate={() => onOpen(r.node)}
+            tooltip={`${r.name} · ${r.kind} · ${r.ns ?? "클러스터 범위"} · ${r.cluster}`}
+            icon={<span style={{ width: 8, height: 8, borderRadius: 3, background: r.bad ? HP.crit : HP.ok }} />}
+            title={r.name}
+            titleFontFamily={MONO}
+            meta={`${r.kind} · ${r.ns ?? "클러스터 범위"}`}
+            trailing={r.bad
+              ? <span style={{ fontFamily: "inherit", fontSize: TYPE.caption, fontWeight: 600, color: TINT.crit.fg, background: critA(0.09), border: `1px solid ${critA(0.3)}`, borderRadius: 999, padding: "2px 7px" }}>장애</span>
+              : <span aria-label="정상" style={{ width: 6, height: 6, borderRadius: 999, background: HP.ok }} />}
+          />
+        ))}
+      </div>
       {hiddenCount > 0 && (
         <span style={{ fontSize: TYPE.caption, color: UI.ink3, padding: "8px 9px", borderTop: `1px solid ${UI.line2}` }}>
           현재 범위의 나머지 서비스 {hiddenCount}개는 검색·범위 축소 후 표시됩니다.
         </span>
       )}
-    </aside>
+    </ResourceAuxiliaryPanel>
   );
 }
 
@@ -1311,55 +1336,48 @@ function KindIndex({ sel, onPick, showEmpty, setShowEmpty, pinned, togglePin, fi
   const Row = ({ k }: { k: Kind }) => {
     const on = sel === k.id;
     return (
-      <div className="krow"
-        style={{ display: "flex", alignItems: "center", width: "100%", background: on ? blueA(0.09) : "transparent", borderRadius: 8 }}>
-        <button
-          type="button"
-          onClick={() => onPick(k)}
-          className="product-focusable product-control"
-          aria-current={on ? "page" : undefined}
-          style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flex: 1, textAlign: "left", border: "none", cursor: "pointer", background: "transparent", borderRadius: 8, padding: "6px 4px 6px 9px" }}
-        >
-          <k.icon size={13} style={{ color: on ? BLUE : UI.ink3, flexShrink: 0 }} />
-          <span style={{ flex: 1, minWidth: 0, fontSize: TYPE.body, fontWeight: on ? 600 : 500, color: on ? BLUE : UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{k.label}</span>
-          <span style={{ fontSize: TYPE.caption, fontWeight: 600, fontVariantNumeric: "tabular-nums", color: cnt(k) ? (on ? BLUE : UI.ink2) : UI.ink3, background: on ? blueA(0.12) : inkA(0.05), borderRadius: 5, padding: "1px 6px", minWidth: 22, textAlign: "center", flexShrink: 0 }}>{cnt(k)}</span>
-        </button>
-        <button
+      <ResourceAuxiliaryRow
+        className="krow product-control"
+        selected={on}
+        ariaLabel={`${k.label} 리소스 보기`}
+        onActivate={() => onPick(k)}
+        icon={<k.icon size={14} style={{ color: on ? BLUE : UI.ink3 }} />}
+        title={k.label}
+        trailing={<span style={{ minWidth: 24, textAlign: "center", color: cnt(k) ? (on ? BLUE : UI.ink2) : UI.ink3, background: on ? blueA(0.12) : inkA(0.05), borderRadius: 5, padding: "2px 5px" }}>{cnt(k)}</span>}
+        secondaryAction={<button
           type="button"
           aria-label={`${k.label} 즐겨찾기 ${pinned.includes(k.id) ? "해제" : "추가"}`}
           aria-pressed={pinned.includes(k.id)}
           title="즐겨찾기"
-          onClick={() => togglePin(k.id)}
+          onClick={(event) => {
+            event.stopPropagation();
+            togglePin(k.id);
+          }}
           className="kpin product-focusable product-control"
-          style={{ width: 25, height: 28, marginRight: 3, border: "none", borderRadius: 6, background: "transparent", cursor: "pointer", display: "grid", placeItems: "center", opacity: pinned.includes(k.id) ? 1 : 0.45 }}
+          style={{ width: 24, height: 28, border: "none", borderRadius: 6, background: "transparent", cursor: "pointer", display: "grid", placeItems: "center", opacity: pinned.includes(k.id) ? 1 : 0.4 }}
         >
           <Pin size={10} style={{ color: pinned.includes(k.id) ? BLUE : UI.ink3 }} />
-        </button>
-      </div>
+        </button>}
+      />
     );
   };
   return (
-    <nav style={{ width: "100%", display: "flex", flexDirection: "column", gap: 12 }}>
+    <nav style={{ width: "100%", display: "flex", flexDirection: "column", gap: 10 }}>
       {pinned.length > 0 && (
-      <div>
-        <div style={{ fontSize: TYPE.caption, fontWeight: 600, letterSpacing: "0.07em", color: UI.ink3, padding: "0 9px 5px" }}>즐겨찾기</div>
+      <ResourceAuxiliarySection label="즐겨찾기">
         {KINDS.filter((k) => pinned.includes(k.id)).map((k) => <Row key={k.id} k={k} />)}
-      </div>
+      </ResourceAuxiliarySection>
       )}
       {GROUPS.map((g) => {
         const list = KINDS.filter((k) => k.group === g && (showEmpty || cnt(k) > 0) && match(k));
         if (!list.length) return null;
         return (
-          <div key={g}>
-            <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "0 9px 5px" }}>
-              <span style={{ fontSize: TYPE.caption, fontWeight: 600, letterSpacing: "0.07em", color: UI.ink3 }}>{g}</span>
-              <span style={{ marginLeft: "auto", fontSize: TYPE.caption, fontVariantNumeric: "tabular-nums", color: UI.ink3 }}>{GROUP_TOTAL(g, counts)}</span>
-            </div>
+          <ResourceAuxiliarySection key={g} label={g} value={GROUP_TOTAL(g, counts)}>
             {list.map((k) => <Row key={k.id} k={k} />)}
-          </div>
+          </ResourceAuxiliarySection>
         );
       })}
-      <button className="product-focusable product-control" aria-pressed={showEmpty} onClick={() => setShowEmpty(!showEmpty)} style={{ display: "flex", alignItems: "center", gap: 6, border: "none", background: "transparent", color: UI.ink3, fontSize: TYPE.label, cursor: "pointer", padding: "9px", borderTop: `1px solid ${UI.line2}` }}>
+      <button className="product-focusable product-control" aria-pressed={showEmpty} onClick={() => setShowEmpty(!showEmpty)} style={resourceAuxiliaryFooterButtonStyle}>
         <Eye size={12} />{showEmpty ? "비어 있는 종류 숨기기" : `비어 있는 종류 ${emptyCount}개 표시`}
       </button>
     </nav>
@@ -2735,9 +2753,24 @@ function App() {
               {/* 종류 선택 패널 — 지도 관점의 탐색 패널과 같은 KindIndex 하나를 공유(두 번째 구현 금지).
                   좁은 화면에서는 위 종류 select로 대체하고 사이드바를 렌더하지 않아 표를 가리지 않는다. */}
               {!narrowList && (
-              <aside data-resource-aux-panel="true" data-resource-kind-index="true" style={{ width: RESOURCE_LAYOUT.auxiliaryWidth, height: `calc(100vh / ${PRESENT_SCALE} - ${topH + RESOURCE_AUX_STICKY_TOP + RESOURCE_LAYOUT.viewportBottomGap}px)`, maxHeight: `calc(100vh / ${PRESENT_SCALE} - ${topH + RESOURCE_AUX_STICKY_TOP + RESOURCE_LAYOUT.viewportBottomGap}px)`, boxSizing: "border-box", flexShrink: 0, alignSelf: "flex-start", position: "sticky", top: RESOURCE_AUX_STICKY_TOP, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: RADIUS.panel, padding: 10, overflowY: "auto", overscrollBehavior: "contain", scrollbarGutter: "stable" }}>
+              <ResourceAuxiliaryPanel
+                data-resource-kind-index="true"
+                aria-label="쿠버네티스 리소스 종류"
+                style={{
+                  position: "sticky",
+                  top: RESOURCE_AUX_STICKY_TOP,
+                  height: resourceAuxiliaryViewportHeight(topH, RESOURCE_AUX_STICKY_TOP),
+                  maxHeight: resourceAuxiliaryViewportHeight(topH, RESOURCE_AUX_STICKY_TOP),
+                }}
+                header={(
+                  <ResourceAuxiliaryHeader
+                    title="리소스 종류"
+                    value={`${Object.values(kindCounts).reduce((sum, value) => sum + value, 0)}개`}
+                  />
+                )}
+              >
                 <KindIndex sel={kindId} onPick={(k) => setKindId(k.id)} showEmpty={showEmpty} setShowEmpty={setShowEmpty} pinned={pinned} togglePin={togglePin} filter={q} counts={kindCounts} />
-              </aside>
+              </ResourceAuxiliaryPanel>
               )}
             </div>
           )}
@@ -2802,7 +2835,9 @@ function App() {
             className="group"
             style={{
               position: "fixed",
-              right: surface === "resources" && resView === "flow" && !narrowFlow ? 284 : 22,
+              right: surface === "resources" && !narrowList
+                ? RESOURCE_LAYOUT.auxiliaryWidth + RESOURCE_LAYOUT.columnGap + 22
+                : 22,
               bottom: 22,
               zIndex: 75,
               width: 48,

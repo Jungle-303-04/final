@@ -2,8 +2,9 @@ import { useState } from "react";
 
 import { disconnectRepository } from "../api/repository-connection";
 import { GithubIcon } from "./brandIcons";
+import { ResourceAuxiliaryRow } from "./ResourceAuxiliaryPanel";
 import type { RepositoryGroup } from "./repositoryRegistry";
-import { BLUE, HP, TINT, TYPE, UI, blueA, critA } from "./theme";
+import { HP, TINT, TYPE, UI, critA } from "./theme";
 
 const UNHEALTHY_REPOSITORY_STATUSES = new Set([
   "outofsync", "out_of_sync", "failed", "error", "degraded", "unhealthy",
@@ -128,66 +129,31 @@ function RepositoryRow({
 
   return (
     <div>
-      <button
-        type="button"
-        className="product-focusable product-control"
+      <ResourceAuxiliaryRow
+        className="product-control"
         aria-expanded={accordion ? selected : undefined}
         aria-controls={accordion ? applicationsId : undefined}
-        aria-label={accordion
+        ariaLabel={accordion
           ? `${group.repositoryRef} GitOps ${selected ? "닫기" : "열기"}`
           : `${group.repositoryRef} 배포 화면에서 열기`}
-        onClick={() => onOpenRepository?.(group.repositoryRef)}
+        onActivate={onOpenRepository ? () => onOpenRepository(group.repositoryRef) : undefined}
         onMouseEnter={() => onHoverRepository?.(group)}
         onMouseLeave={() => onHoverRepository?.(null)}
         onFocus={() => onHoverRepository?.(group)}
         onBlur={() => onHoverRepository?.(null)}
         data-pod-highlight-source="repository"
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-          width: "100%",
-          minWidth: 0,
-          minHeight: 58,
-          padding: "8px 9px",
-          border: selected ? `1px solid ${blueA(0.45)}` : `1px solid ${UI.line2}`,
-          borderRadius: 9,
-          background: selected ? blueA(0.09) : UI.card,
-          boxShadow: selected ? `0 0 0 2px ${blueA(0.08)}` : "none",
-          color: UI.ink,
-          textAlign: "left",
-          cursor: onOpenRepository ? "pointer" : "default",
-        }}
-      >
-        <GithubIcon size={16} aria-hidden="true" style={{ flexShrink: 0 }} />
-        <span style={{ minWidth: 0, flex: 1 }}>
-          <strong
-            data-pod-highlight-primary
-            title={group.repositoryRef}
-            style={{
-              display: "block",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-              color: UI.ink,
-              fontSize: TYPE.label,
-            }}
-          >
-            {group.repositoryRef}
-          </strong>
-          <span style={{ display: "block", marginTop: 2, color: summary.statusColor, fontSize: TYPE.caption, lineHeight: 1.35, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {summary.branch} · {summary.status}
-          </span>
-        </span>
-        <span aria-label={`애플리케이션 ${group.applications.length}개`} style={{ flex: "0 0 auto", color: selected ? BLUE : UI.ink3, fontSize: TYPE.label, fontWeight: 700 }}>
-          {group.applications.length}
-        </span>
-        {accordion && (
-          <span aria-hidden="true" style={{ color: selected ? BLUE : UI.ink2, fontSize: TYPE.body, transform: selected ? "rotate(180deg)" : "none", transition: "transform 150ms ease" }}>
+        selected={selected}
+        icon={<GithubIcon size={16} aria-hidden="true" />}
+        title={group.repositoryRef}
+        tooltip={group.repositoryRef}
+        meta={<span style={{ color: summary.statusColor }}>{summary.branch} · {summary.status}</span>}
+        trailing={<>
+          <span aria-label={`애플리케이션 ${group.applications.length}개`}>{group.applications.length}</span>
+          {accordion && <span aria-hidden="true" style={{ color: selected ? "inherit" : UI.ink2, fontFamily: "inherit", fontSize: TYPE.body, transform: selected ? "rotate(180deg)" : "none", transition: "transform 150ms ease" }}>
             ▾
-          </span>
-        )}
-      </button>
+          </span>}
+        </>}
+      />
 
       {selected && (
         <ul

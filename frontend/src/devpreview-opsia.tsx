@@ -29,6 +29,12 @@ import {
 import { OpsiaConfigPanel } from "./devpreview/OpsiaConfigPanel";
 import { OpsiaServicePanel } from "./devpreview/OpsiaServicePanel";
 import { RepositoryConnections } from "./devpreview/RepositoryConnections";
+import {
+  ResourceAuxiliaryPanel,
+  ResourceAuxiliaryRow,
+  resourceAuxiliaryFooterButtonStyle,
+  resourceAuxiliaryViewportHeight,
+} from "./devpreview/ResourceAuxiliaryPanel";
 import type { RepositoryGroup } from "./devpreview/repositoryRegistry";
 import { useRelationTopology } from "./devpreview/relationTopologyFeed";
 import {
@@ -1439,11 +1445,16 @@ function SidePanel({ forcedTab, scaled, onAddRepo, onOpenRepository, stickyTop, 
   onRepositoryDisconnected?: (repositoryRef: string) => void;
 }) {
   const [tab, setTab] = useState<"svc" | "cfg" | "git">(forcedTab ?? "svc");
+  const panelHeight = scaled
+    ? resourceAuxiliaryViewportHeight(viewportTopInset, stickyTop ?? 24)
+    : "calc(100vh - 60px)";
   return (
-    <aside data-resource-aux-panel="true" className="opsia-side-panel" style={{ width: RESOURCE_LAYOUT.auxiliaryWidth, boxSizing: "border-box", flexShrink: 0, alignSelf: "flex-start", background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 16, position: "sticky", top: stickyTop ?? 24, height: scaled ? `calc(100vh / ${PRESENT_SCALE} - ${viewportTopInset + (stickyTop ?? 24) + RESOURCE_LAYOUT.viewportBottomGap}px)` : "calc(100vh - 60px)", maxHeight: scaled ? `calc(100vh / ${PRESENT_SCALE} - ${viewportTopInset + (stickyTop ?? 24) + RESOURCE_LAYOUT.viewportBottomGap}px)` : "calc(100vh - 60px)", overflow: "hidden", display: "flex" }}>
-    <div style={{ flex: 1, minWidth: 0, minHeight: 0, padding: "14px 6px 14px 14px", display: "flex", flexDirection: "column", gap: 12, overflow: "hidden" }}>
-      {/* 탭이 이미 콘텐츠 종류를 설명하므로 내부에 제목을 반복하지 않는다. */}
-      <div role="tablist" aria-label="인프라 보조 정보" style={{ display: "flex", gap: 3, flexShrink: 0, background: UI.bg2, borderRadius: 10, padding: 3, zIndex: 2, boxShadow: `0 6px 12px -12px ${inkA(0.3)}` }}>
+    <ResourceAuxiliaryPanel
+      className="opsia-side-panel"
+      aria-label="인프라 보조 정보"
+      style={{ position: "sticky", top: stickyTop ?? 24, height: panelHeight, maxHeight: panelHeight }}
+      header={(
+      <div role="tablist" aria-label="인프라 보조 정보" style={{ width: "100%", height: 36, display: "flex", gap: 3, flexShrink: 0, background: UI.bg2, borderRadius: 10, padding: 3 }}>
         {([["svc", "서비스", Plug], ["cfg", "구성", FileCog], ["git", "저장소", GithubIcon]] as const).map(([id, label, I]) => {
           const on = tab === id;
           return (
@@ -1454,8 +1465,8 @@ function SidePanel({ forcedTab, scaled, onAddRepo, onOpenRepository, stickyTop, 
           );
         })}
       </div>
-
-      <div style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
+      )}
+    >
         {tab === "svc" && (
           <OpsiaServicePanel
             activeCluster={activeCluster ?? null}
@@ -1473,7 +1484,7 @@ function SidePanel({ forcedTab, scaled, onAddRepo, onOpenRepository, stickyTop, 
         )}
 
         {tab === "git" && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 1, height: "100%", minHeight: 0, overflowY: "auto", scrollbarGutter: "stable", overscrollBehavior: "contain", paddingRight: 8 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
           {repositoryGroups ? <RepositoryConnections
             groups={repositoryGroups}
             onOpenRepository={onOpenRepository}
@@ -1488,24 +1499,27 @@ function SidePanel({ forcedTab, scaled, onAddRepo, onOpenRepository, stickyTop, 
                 : null,
             )}
           /> : (connectedRepos ?? []).map((r) => (
-            <div key={`connected-${r}`} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", borderRadius: 9, padding: "7px 10px", background: TINT.ok.bg }}>
-              <GithubIcon size={14} style={{ color: UI.ink3, flexShrink: 0 }} />
-              <span style={{ minWidth: 0, flex: 1 }}>
-                <span style={{ display: "block", fontSize: TYPE.label, fontWeight: 600, fontFamily: MONO, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r}</span>
-                <span style={{ display: "block", fontSize: TYPE.caption, color: TINT.ok.fg, marginTop: 1 }}>연결됨 · GitOps 관리</span>
-              </span>
-              <Check size={13} style={{ color: TINT.ok.fg, flexShrink: 0 }} />
-            </div>
+            <ResourceAuxiliaryRow
+              key={`connected-${r}`}
+              icon={<GithubIcon size={15} />}
+              title={r}
+              tooltip={r}
+              titleFontFamily={MONO}
+              meta={<span style={{ color: TINT.ok.fg }}>연결됨 · GitOps 관리</span>}
+              trailing={<Check size={13} style={{ color: TINT.ok.fg }} />}
+            />
           ))}
           {(pendingRepos ?? []).map((r) => (
-            <div key={r} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", borderRadius: 9, padding: "7px 10px", background: blueA(0.05) }}>
-              <GithubIcon size={14} style={{ color: UI.ink3, flexShrink: 0 }} />
-              <span style={{ minWidth: 0, flex: 1 }}>
-                <span style={{ display: "block", fontSize: TYPE.label, fontWeight: 600, fontFamily: MONO, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r}</span>
-                <span style={{ display: "block", fontSize: TYPE.caption, color: TINT.blue.fg, marginTop: 1 }}>연결 중 · 초기 동기화 대기</span>
-              </span>
-              <span className="pulsedot" style={{ width: 6, height: 6, borderRadius: 999, background: BLUE, flexShrink: 0 }} />
-            </div>
+            <ResourceAuxiliaryRow
+              key={r}
+              icon={<GithubIcon size={15} />}
+              title={r}
+              tooltip={r}
+              titleFontFamily={MONO}
+              meta={<span style={{ color: TINT.blue.fg }}>연결 중 · 초기 동기화 대기</span>}
+              trailing={<span className="pulsedot" style={{ width: 6, height: 6, borderRadius: 999, background: BLUE }} />}
+              style={{ background: blueA(0.05) }}
+            />
           ))}
           {(pendingRepos ?? []).length === 0
             && (repositoryGroups ? repositoryGroups.length === 0 : (connectedRepos ?? []).length === 0) && (
@@ -1513,15 +1527,12 @@ function SidePanel({ forcedTab, scaled, onAddRepo, onOpenRepository, stickyTop, 
           )}
           {onAddRepo && (
             <button onClick={onAddRepo}
-              style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 7, width: "100%", marginTop: 6, padding: "9px 0",
-                border: `1.5px dashed ${LINE3}`, borderRadius: 11, background: "transparent", cursor: "pointer", fontSize: TYPE.label, fontWeight: 600, color: BLUE }}>
+              style={{ ...resourceAuxiliaryFooterButtonStyle, border: `1.5px dashed ${LINE3}`, color: BLUE }}>
               + 저장소 연결
             </button>
           )}
           </div>
         )}
-      </div>
-    </div>
-    </aside>
+    </ResourceAuxiliaryPanel>
   );
 }

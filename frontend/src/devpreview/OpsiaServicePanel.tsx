@@ -21,6 +21,7 @@ import type {
   PodHighlightTarget,
 } from "./podHighlight";
 import { podsSelectedByService } from "./podInventoryHighlight";
+import { ResourceAuxiliaryRow } from "./ResourceAuxiliaryPanel";
 import { BLUE, HP, IDENT, MONO, TINT, TYPE, UI } from "./theme";
 import { statusLabel } from "./statusLabel";
 
@@ -49,18 +50,6 @@ interface OpsiaServicePanelView {
 
 function textValue(value: unknown, fallback = "-"): string {
   return typeof value === "string" && value.trim() !== "" ? value : fallback;
-}
-
-function PodCount({ count }: { count: number }) {
-  return (
-    <span
-      title={`연결된 파드 ${count}개`}
-      aria-label={`연결된 파드 ${count}개`}
-      style={{ minWidth: 22, flexShrink: 0, textAlign: "right", fontFamily: MONO, fontSize: TYPE.label, fontWeight: 700, color: UI.ink3 }}
-    >
-      {count}
-    </span>
-  );
 }
 
 function PanelEmptyState({ label, hint }: { label: string; hint: string }) {
@@ -204,61 +193,60 @@ export function OpsiaServicePanel({
   const serviceView = useOpsiaServices(activeCluster, namespaceFilter);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 8, height: "100%", minHeight: 0 }}>
-      <div style={{ flex: 1, minHeight: 0, overflowY: "auto", scrollbarGutter: "stable", overscrollBehavior: "contain", paddingRight: 8 }}>
-        {!activeCluster ? (
-          <PanelEmptyState label="클러스터를 선택하세요" hint="서비스 목록은 클러스터 범위에서 표시됩니다." />
-        ) : serviceView.status === "loading" ? (
-          <ServiceSkeletonList />
-        ) : serviceView.status === "unavailable" ? (
-          <PanelEmptyState label="서비스를 불러오지 못했습니다" hint="인벤토리 응답을 다시 확인하세요." />
-        ) : serviceView.rows.length === 0 ? (
-          <PanelEmptyState
-            label="관측된 서비스가 없습니다"
-            hint={namespaceFilter ? `${namespaceFilter} 네임스페이스에서 관측된 Service가 없습니다.` : "선택한 클러스터에서 관측된 Service가 없습니다."}
-          />
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-          {serviceView.rows.map((service) => {
-            const name = textValue(service.name, "이름 없음");
-            const { Icon, color } = serviceIconStyle(name);
-            const namespace = textValue(service.ns, "클러스터 범위");
-            const relationNamespace = typeof service.ns === "string" ? service.ns : "";
-            const status = textValue(service.status);
-            const highlightTarget: PodHighlightTarget | null = activeCluster
-              ? service.matchedPods.length > 0
-                ? {
-                    type: "pods",
-                    pods: service.matchedPods,
-                  }
-                : {
-                  type: "service",
-                  clusterId: activeCluster,
-                  namespace: relationNamespace,
-                  name,
+    <>
+      {!activeCluster ? (
+        <PanelEmptyState label="클러스터를 선택하세요" hint="서비스 목록은 클러스터 범위에서 표시됩니다." />
+      ) : serviceView.status === "loading" ? (
+        <ServiceSkeletonList />
+      ) : serviceView.status === "unavailable" ? (
+        <PanelEmptyState label="서비스를 불러오지 못했습니다" hint="인벤토리 응답을 다시 확인하세요." />
+      ) : serviceView.rows.length === 0 ? (
+        <PanelEmptyState
+          label="관측된 서비스가 없습니다"
+          hint={namespaceFilter ? `${namespaceFilter} 네임스페이스에서 관측된 Service가 없습니다.` : "선택한 클러스터에서 관측된 Service가 없습니다."}
+        />
+      ) : (
+        <div style={{ display: "grid", gap: 2 }}>
+        {serviceView.rows.map((service) => {
+          const name = textValue(service.name, "이름 없음");
+          const { Icon, color } = serviceIconStyle(name);
+          const namespace = textValue(service.ns, "클러스터 범위");
+          const relationNamespace = typeof service.ns === "string" ? service.ns : "";
+          const status = textValue(service.status);
+          const highlightTarget: PodHighlightTarget | null = activeCluster
+            ? service.matchedPods.length > 0
+              ? {
+                  type: "pods",
+                  pods: service.matchedPods,
                 }
-              : null;
-            return (
-              <div key={textValue(service._key, `${namespace}/${name}`)} className="rrow"
-                data-pod-highlight-source="service"
-                tabIndex={0}
-                onMouseEnter={() => onHighlightTarget?.(highlightTarget)}
-                onMouseLeave={() => onHighlightTarget?.(null)}
-                onFocus={() => onHighlightTarget?.(highlightTarget)}
-                onBlur={() => onHighlightTarget?.(null)}
-                style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", minHeight: 48, textAlign: "left", border: "1px solid transparent", background: "transparent", borderRadius: 9, padding: "7px 9px" }}>
-                <Icon size={15} style={{ color, flexShrink: 0 }} />
-                <span style={{ minWidth: 0, flex: 1 }}>
-                  <span data-pod-highlight-primary title={name} style={{ display: "block", fontSize: TYPE.label, fontWeight: 600, fontFamily: MONO, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
-                  <span style={{ display: "block", fontSize: TYPE.caption, color: UI.ink3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{namespace} · {statusLabel(status)}</span>
-                </span>
-                <PodCount count={service.matchedPods.length} />
-              </div>
-            );
-          })}
-          </div>
-        )}
-      </div>
-    </div>
+              : {
+                type: "service",
+                clusterId: activeCluster,
+                namespace: relationNamespace,
+                name,
+              }
+            : null;
+          return (
+            <ResourceAuxiliaryRow
+              key={textValue(service._key, `${namespace}/${name}`)}
+              className="rrow"
+              data-pod-highlight-source="service"
+              tabIndex={0}
+              onMouseEnter={() => onHighlightTarget?.(highlightTarget)}
+              onMouseLeave={() => onHighlightTarget?.(null)}
+              onFocus={() => onHighlightTarget?.(highlightTarget)}
+              onBlur={() => onHighlightTarget?.(null)}
+              icon={<Icon size={15} style={{ color }} />}
+              title={name}
+              tooltip={name}
+              titleFontFamily={MONO}
+              meta={`${namespace} · ${statusLabel(status)}`}
+              trailing={<span title={`연결된 파드 ${service.matchedPods.length}개`}>{service.matchedPods.length}</span>}
+            />
+          );
+        })}
+        </div>
+      )}
+    </>
   );
 }
