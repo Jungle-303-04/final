@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { recoveryProgressState } from "./recoveryProgress";
+import { recoveryDisplayedStep, recoveryProgressState } from "./recoveryProgress";
 
 describe("recoveryProgressState", () => {
   it("keeps recovery at zero while RCA is still running", () => {
@@ -11,10 +11,10 @@ describe("recoveryProgressState", () => {
     });
   });
 
-  it("shows approval after RCA completes", () => {
+  it("keeps recovery waiting until an action is selected", () => {
     expect(recoveryProgressState({ status: "rca_completed" })).toMatchObject({
-      phase: "approval",
-      label: "승인 대기",
+      phase: "waiting",
+      label: "복구 대기",
       step: 0,
     });
   });
@@ -27,16 +27,29 @@ describe("recoveryProgressState", () => {
     });
   });
 
-  it("keeps an approval-required candidate in approval after selection", () => {
-    expect(recoveryProgressState({
+  it("does not expose an internal approval state after selection", () => {
+    const progress = recoveryProgressState({
       status: "rca_completed",
       actionRoute: "approval_required",
       selectionAccepted: true,
-    })).toMatchObject({
-      phase: "approval",
-      label: "승인 대기",
-      step: 0,
     });
+    expect(progress).toMatchObject({
+      phase: "submitting",
+      label: "복구 요청됨",
+      step: 1,
+    });
+    expect(recoveryDisplayedStep(progress)).toBe(2);
+  });
+
+  it("names the submitted route instead of using one generic request label", () => {
+    expect(recoveryProgressState({
+      actionRoute: "auto",
+      selectionAccepted: true,
+    })).toMatchObject({ label: "자동 복구 요청됨", step: 1 });
+    expect(recoveryProgressState({
+      actionRoute: "draft_pr",
+      selectionAccepted: true,
+    })).toMatchObject({ label: "PR 생성 요청됨", step: 1 });
   });
 
   it("derives execution and verification from issue status", () => {
@@ -51,11 +64,13 @@ describe("recoveryProgressState", () => {
   });
 
   it("marks resolved incidents complete", () => {
-    expect(recoveryProgressState({ status: "incident_resolved" })).toMatchObject({
+    const progress = recoveryProgressState({ status: "incident_resolved" });
+    expect(progress).toMatchObject({
       phase: "completed",
       label: "복구 완료",
       step: 5,
     });
+    expect(recoveryDisplayedStep(progress)).toBe(5);
   });
 
   it("keeps the failed stage visible", () => {

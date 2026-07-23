@@ -946,6 +946,15 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
   const crumbs: { label: string; onClick?: () => void }[] = [{ label: "클러스터", onClick: view.level !== "clusters" ? () => go({ level: "clusters" }, -1) : undefined }];
   if (view.level !== "clusters") crumbs.push({ label: view.cluster, onClick: view.level === "pods" ? () => go({ level: "nodes", cluster: view.cluster }, -1) : undefined });
   if (view.level === "pods") crumbs.push({ label: view.node });
+  const tipWidth = tip?.metrics ? 420 : 280;
+  const tipHeight = tip?.metrics ? 176 : 88;
+  const tipViewportWidth = typeof window === "undefined" ? tipWidth : Math.min(tipWidth, window.innerWidth - 16);
+  const tipLeft = tip && typeof window !== "undefined"
+    ? Math.max(8, Math.min(tip.x + 14, window.innerWidth - tipViewportWidth - 8))
+    : 8;
+  const tipTop = tip && typeof window !== "undefined"
+    ? Math.max(8, Math.min(tip.y + 16, window.innerHeight - tipHeight - 8))
+    : 8;
 
   return (
     <div className="op">
@@ -1136,9 +1145,9 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
         {tip && (
           <motion.div key="tip" initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.98 }} transition={{ duration: DUR.micro }}
             style={{
-              position: "fixed", left: Math.max(8, Math.min(tip.x + 14, window.innerWidth - 280)), top: Math.min(tip.y + 16, window.innerHeight - 110), zIndex: 60, pointerEvents: "none",
+              position: "fixed", left: tipLeft, top: tipTop, zIndex: 60, pointerEvents: "none",
               background: cardA(0.96), backdropFilter: "blur(10px)", border: `1px solid ${UI.line}`, borderRadius: 11, padding: "9px 11px",
-              boxShadow: `0 10px 30px -12px ${inkA(0.22)}`, width: 368, maxWidth: "calc(100vw - 16px)",
+              boxShadow: `0 10px 30px -12px ${inkA(0.22)}`, width: tipViewportWidth, maxWidth: "calc(100vw - 16px)", boxSizing: "border-box",
             }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <span style={{ width: 7, height: 7, borderRadius: 999, background: sevColor(healthSev(tip.health)), flexShrink: 0 }} />

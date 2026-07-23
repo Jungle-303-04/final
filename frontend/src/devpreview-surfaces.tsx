@@ -27,7 +27,7 @@ import type { RcaReport } from "./api/evidence-schemas";
 import type { RecoveryActionCandidate, RecoveryPlan } from "./api/recovery-schemas";
 import type { RemediationBundleActionDraft } from "./api/rca-bundle-schemas";
 import { selectRecoveryAction } from "./api/recovery";
-import type { AiRecoveryHandoff } from "./features/ai-assistant/aiRecoveryHandoff";
+import type { AiRecoveryHandoff, AiRecoveryPreview, AiRecoveryPreviewLine } from "./features/ai-assistant/aiRecoveryHandoff";
 import { isActiveRcaIssue } from "./devpreview/rcaIssuesFeed";
 import { useSession, sessionInitial } from "./devpreview/sessionFeed";
 import { useAiConversations, useConversationDetail } from "./devpreview/aiFeed";
@@ -48,7 +48,9 @@ import { RepositoryConnections } from "./devpreview/RepositoryConnections";
 import { RepositoryStatusList } from "./devpreview/RepositoryStatusList";
 import { groupApplicationsByRepository } from "./devpreview/repositoryRegistry";
 import { selectScenarioRuns } from "./devpreview/scenarioGateSelection";
-import { recoveryProgressState, type RecoveryProgressState } from "./devpreview/recoveryProgress";
+import { recoveryDisplayedStep, recoveryProgressState, type RecoveryProgressState } from "./devpreview/recoveryProgress";
+import { isRcaPreviewCorrelation } from "./devpreview/rcaPreviewFixtures";
+import { isSafePrRoute, recoveryRouteLabel } from "./devpreview/recoveryRoute";
 
 // ── 상대 시간 포맷 — 서버 타임스탬프(ISO 또는 epoch ms)를 사람이 읽는 근사치로 ──
 function fromNow(input: string | number | null): string {
@@ -614,12 +616,13 @@ const ISSUE_DETAIL_TYPE = {
   label: TYPE.label,
 } as const;
 
-function RecoveryPlanProgress({ progress }: { progress: RecoveryProgressState }) {
+function RecoveryPlanProgress({ progress, prUrl = null }: { progress: RecoveryProgressState; prUrl?: string | null }) {
   const activeColor = progress.tone === "failed" ? HP.crit
     : progress.tone === "completed" ? HP.ok
       : progress.tone === "approval" ? HP.warn
         : BLUE;
-  const progressPercent = progress.phase === "completed" ? 100 : Math.min(80, progress.step * 20);
+  const displayedStep = recoveryDisplayedStep(progress);
+  const progressPercent = displayedStep * 20;
   return (
     <section aria-live="polite" style={{ display: "grid", gap: SPACE.stack, border: `1px solid ${UI.line}`, borderRadius: RADIUS.card, background: UI.card, padding: SPACE.card, boxShadow: `0 6px 16px -10px ${inkA(0.26)}, 0 1px 3px ${inkA(0.06)}` }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -628,7 +631,7 @@ function RecoveryPlanProgress({ progress }: { progress: RecoveryProgressState })
           <span style={{ fontSize: ISSUE_DETAIL_TYPE.label, color: UI.ink3 }}>복구 진행 상태</span>
         </div>
         <span style={{ flexShrink: 0, fontSize: ISSUE_DETAIL_TYPE.itemTitle, fontVariantNumeric: "tabular-nums", color: progress.tone === "failed" ? HP.crit : UI.ink2 }}>
-          {progress.tone === "failed" ? "중단" : `${progress.step}/5`}
+          {progress.tone === "failed" ? "중단" : `${displayedStep}/5`}
         </span>
       </div>
       <div aria-label="복구 진행률" style={{ height: 5, overflow: "hidden", borderRadius: 999, background: HP.pending }}>
@@ -659,6 +662,17 @@ function RecoveryPlanProgress({ progress }: { progress: RecoveryProgressState })
         <span title={progress.latestEvent.subject} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: TYPE.caption, color: UI.ink3 }}>
           최근 기록 · {koLabel(progress.latestEvent.subject)} · {fromNow(progress.latestEvent.created_at)}
         </span>
+      )}
+      {prUrl && (
+        <a
+          className="product-focusable"
+          href={prUrl}
+          rel="noopener noreferrer"
+          target="_blank"
+          style={{ width: "fit-content", display: "inline-flex", alignItems: "center", gap: 5, color: BLUE, fontSize: TYPE.label, fontWeight: 600, textDecoration: "none" }}
+        >
+          <ExternalLink size={13} />Pull Request 열기
+        </a>
       )}
     </section>
   );
@@ -729,24 +743,19 @@ function RecoveryCandidateDetails({
 }
 
 function recoveryActionModeSummary(route: string): string {
-  if (route === "auto") return "검토한 조치를 자동 복구 경로로 요청합니다.";
-  if (route === "safe_pr") return "검토한 변경으로 복구 PR 생성을 요청합니다.";
-  if (route === "approval_required") return "운영자 승인 검토 단계로 이동합니다.";
-  return "현재 실행 경로로 복구를 요청합니다.";
-}
-
-function recoveryActionSubmitLabel(route: string): string {
-  if (route === "auto") return "자동 복구 요청";
-  if (route === "safe_pr") return "복구 PR 생성 요청";
-  if (route === "approval_required") return "승인 검토 요청";
-  return "복구 조치 요청";
+  if (route === "auto") return "자동 복구 요청을 바로 제출합니다.";
+  if (isSafePrRoute(route)) return "복구 PR 생성을 바로 요청합니다.";
+  return "선택한 복구 절차로 바로 진행합니다.";
 }
 
 function recoveryActionRouteLabel(route: string): string {
-  if (route === "auto") return "자동 복구";
-  if (route === "safe_pr") return "복구 PR";
-  if (route === "approval_required") return "운영자 승인";
-  return route || "미확인";
+  return recoveryRouteLabel(route);
+}
+
+function recoveryActionRouteSentence(route: string): string {
+  if (route === "auto") return "안전 조건을 충족하면 자동 복구로 실행됩니다.";
+  if (isSafePrRoute(route)) return "GitOps 변경 PR을 생성한 뒤 검토와 병합을 거쳐 적용됩니다.";
+  return "정해진 복구 절차에 따라 실행됩니다.";
 }
 
 function recoveryAiPrompt({
@@ -767,22 +776,23 @@ function recoveryAiPrompt({
   rootCause: string | null | undefined;
 }): string {
   const lines = [
-    "선택한 복구 플랜을 현재 운영 근거로 검토해 주세요.",
+    "🔎 다음 복구 플랜을 현재 운영 근거에 따라 검토해 주세요.",
     "",
-    "[장애 정보]",
+    "🚨 장애 정보",
     `- 대상: ${cluster} / ${namespace} / ${resourceKind} / ${resourceName}`,
     `- 증상: ${symptom}`,
     `- 판단된 원인: ${rootCause?.trim() || "미확인"}`,
     "",
-    "[선택한 복구 조치]",
+    "🛠️ 선택한 복구 조치",
     `- 조치: ${candidate.title}`,
     `- 처리 경로: ${recoveryActionRouteLabel(candidate.route)}`,
+    `- 처리 방식: ${recoveryActionRouteSentence(candidate.route)}`,
     `- 위험도: ${candidate.risk_level || "미확인"}`,
     `- 영향 범위: ${candidate.blast_radius || "미확인"}`,
     `- 조치 내용: ${candidate.description || "미확인"}`,
   ];
   if (candidate.recommendation_reason) lines.push(`- 추천 이유: ${candidate.recommendation_reason}`);
-  lines.push("", "[안전 조건]");
+  lines.push("", "✅ 안전 조건");
   if (candidate.validation_checks.length > 0) {
     candidate.validation_checks.slice(0, 4).forEach((check) => lines.push(`- 성공 조건: ${check}`));
   } else {
@@ -791,7 +801,7 @@ function recoveryAiPrompt({
   lines.push(
     `- 실패 시 복원: ${candidate.rollback_plan || "미확인"}`,
     "",
-    "[검토 요청]",
+    "📋 검토 요청",
     "1. 실행 전 추가로 확인할 사항",
     "2. 예상 영향과 중단 기준",
     "3. 성공 여부를 확인할 방법",
@@ -800,6 +810,67 @@ function recoveryAiPrompt({
     "확인되지 않은 사실은 추정하지 말고, AI는 검토만 수행하며 복구 조치를 직접 실행하지 마세요.",
   );
   return lines.join("\n");
+}
+
+function recoveryAiPreviewReview(candidate: RecoveryActionCandidate): string {
+  const nextAction = candidate.route === "approval_required"
+    ? "아래 **복구 요청** 버튼을 누르면 선택한 복구 조치를 제출합니다."
+    : isSafePrRoute(candidate.route)
+      ? "아래 **복구 PR 생성** 버튼을 누르면 변경 PR 생성을 요청합니다. PR이 준비되면 복구 플랜에 검토 링크가 표시됩니다."
+      : "아래 **자동 복구 요청** 버튼을 누르면 복구 실행과 성공 조건 검증을 시작합니다.";
+  return [
+    "✅ **복구 플랜 검토를 완료했습니다.**",
+    `선택한 조치는 위험도 **${candidate.risk_level || "미확인"}**이며, 현재 확인된 운영 근거와 안전 조건을 기준으로 진행할 수 있습니다.`,
+    "---",
+    nextAction,
+  ].join("\n");
+}
+
+function recoveryAiPreviewCompletion(candidate: RecoveryActionCandidate): string {
+  return [
+    "✅ **복구를 완료했습니다.**",
+    `${candidate.title} 조치를 적용하고 성공 조건을 확인했습니다.`,
+    "---",
+    "이슈를 **해결됨**으로 전환했습니다. 해결됨 탭에서 적용 결과를 다시 확인할 수 있습니다.",
+  ].join("\n");
+}
+
+function recoveryAiDisplayPrompt({
+  candidate,
+  resourceKind,
+  resourceName,
+  symptom,
+  rootCause,
+}: {
+  candidate: RecoveryActionCandidate;
+  resourceKind: string;
+  resourceName: string;
+  symptom: string;
+  rootCause: string | null | undefined;
+}): string {
+  const target = `${resourceKind} ${resourceName}`;
+  const cause = rootCause?.trim() || "아직 확정되지 않은 원인";
+  const actionDescription = candidate.description?.trim()
+    || `${candidate.title} 조치를 적용합니다.`;
+  const impact = candidate.blast_radius?.trim() || "확인되지 않은 범위";
+  const risk = candidate.risk_level?.trim() || "미확인";
+
+  return [
+    "🔎 복구 플랜 검토",
+    "",
+    `현재 ${target}에서 ${symptom} 증상이 발생했습니다. 수집된 운영 근거를 종합한 원인은 ${cause}입니다.`,
+    "",
+    "🛠️ 선택한 복구 조치",
+    `${candidate.title}을 선택했습니다. ${actionDescription}`,
+    `영향 범위는 ${impact}, 조치 위험도는 ${risk}입니다. ${recoveryActionRouteSentence(candidate.route)}`,
+    "",
+    "✅ 확인해 주세요",
+    "- 현재 상태에서 안전하게 실행할 수 있는지",
+    "- 성공 조건과 작업 중단 기준이 충분한지",
+    "- 실패 시 복원 계획에 빠진 내용은 없는지",
+    "",
+    "확인되지 않은 내용은 추정하지 말고, 추가 확인이 필요한 항목을 알려주세요.",
+  ].join("\n");
 }
 
 function RecommendedRecoveryChecks({ candidate }: { candidate: RecoveryActionCandidate }) {
@@ -990,6 +1061,32 @@ function recoveryDraftActionLabel(actionType: string): string {
   return actionType;
 }
 
+function recoveryAiPreview(
+  candidate: RecoveryActionCandidate,
+  draft: RemediationBundleActionDraft | null,
+): AiRecoveryPreview | undefined {
+  const patch = [draft?.params.patch, draft?.params.manifest, draft?.params.diff]
+    .find((value): value is string => typeof value === "string" && value.trim() !== "");
+  if (!draft || patch === undefined) return undefined;
+
+  const lines: AiRecoveryPreviewLine[] = patch.split(/\r?\n/u).map((content) => {
+    if (content.startsWith("+") && !content.startsWith("+++")) {
+      return { kind: "add", content: content.slice(1) };
+    }
+    if (content.startsWith("-") && !content.startsWith("---")) {
+      return { kind: "remove", content: content.slice(1) };
+    }
+    return { kind: "context", content };
+  });
+  const resourceKind = draft.resource_kind || "리소스";
+  const resourceName = draft.resource_name || candidate.blast_radius || "대상";
+  return {
+    title: recoveryDraftActionLabel(draft.action_type),
+    fileName: `${draft.namespace || "namespace"}/${resourceKind.toLowerCase()}/${resourceName}`,
+    lines,
+  };
+}
+
 function RecoveryDraftPreview({
   draft,
   status,
@@ -1072,6 +1169,7 @@ function RecoveryConfirmation({
   draft,
   bundleStatus,
   progress,
+  prUrl,
   pending,
   selected,
   onBack,
@@ -1083,6 +1181,7 @@ function RecoveryConfirmation({
   draft: RemediationBundleActionDraft | null;
   bundleStatus: "idle" | "loading" | "ready" | "unavailable";
   progress: RecoveryProgressState;
+  prUrl?: string | null;
   pending: boolean;
   selected: boolean;
   onBack: () => void;
@@ -1112,7 +1211,7 @@ function RecoveryConfirmation({
         </div>
       </div>
 
-      <RecoveryReveal index={0}><RecoveryPlanProgress progress={progress} /></RecoveryReveal>
+      <RecoveryReveal index={0}><RecoveryPlanProgress progress={progress} prUrl={prUrl} /></RecoveryReveal>
 
       <RecoveryReveal index={1}><RcaCardSection title="선택한 복구 조치">
         <div style={{ display: "grid", gap: 14, padding: 15 }}>
@@ -1150,15 +1249,15 @@ function RecoveryConfirmation({
       <RecoveryReveal index={4}><RcaCardSection title="처리 방식">
         <div style={{ display: "grid", gap: 12, padding: 15 }}>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
-            <button type="button" className={selected ? undefined : "product-focusable product-action"} disabled={selected || pending} onClick={onConfirm}
-              style={{ minWidth: 0, minHeight: 64, display: "grid", gap: 4, alignContent: "center", border: selected ? `1px solid ${TINT.ok.bd}` : "none", borderRadius: 8, background: selected ? TINT.ok.bg : pending ? UI.bg2 : BLUE, color: selected ? TINT.ok.fg : pending ? UI.ink3 : UI.card, padding: "9px 11px", textAlign: "left", cursor: selected || pending ? "not-allowed" : "pointer", boxShadow: selected || pending ? "none" : `0 2px 6px ${blueA(0.2)}` }}>
-              <strong style={{ fontSize: TYPE.label, fontWeight: 600 }}>{selected ? "요청됨" : pending ? "요청 중…" : recoveryActionSubmitLabel(candidate.route)}</strong>
-              <span style={{ fontSize: TYPE.caption, fontWeight: 400, lineHeight: 1.4, color: selected ? TINT.ok.fg : pending ? UI.ink3 : UI.card, opacity: selected || pending ? 1 : 0.78 }}>{recoveryActionModeSummary(candidate.route)}</span>
+            <button type="button" className={selected ? undefined : "product-focusable product-control"} disabled={selected || pending} onClick={onConfirm}
+              style={{ minWidth: 0, minHeight: 64, display: "grid", gap: 4, alignContent: "center", border: selected ? `1px solid ${TINT.ok.bd}` : `1px solid ${UI.line}`, borderRadius: 8, background: selected ? TINT.ok.bg : pending ? UI.bg2 : UI.card, color: selected ? TINT.ok.fg : pending ? UI.ink3 : UI.heading, padding: "9px 11px", textAlign: "left", cursor: selected || pending ? "not-allowed" : "pointer", boxShadow: "none" }}>
+              <strong style={{ fontSize: TYPE.label, fontWeight: 600 }}>{selected ? "요청됨" : pending ? "요청 중…" : "직접 진행"}</strong>
+              <span style={{ fontSize: TYPE.caption, fontWeight: 400, lineHeight: 1.4, color: selected ? TINT.ok.fg : UI.ink3 }}>{recoveryActionModeSummary(candidate.route)}</span>
             </button>
-            <button type="button" className="product-focusable product-control" onClick={onAskAi}
-              style={{ minWidth: 0, minHeight: 64, display: "grid", gap: 4, alignContent: "center", border: `1px solid ${blueA(0.35)}`, borderRadius: 8, background: UI.card, color: BLUE, padding: "9px 11px", textAlign: "left", cursor: "pointer" }}>
-              <strong style={{ display: "flex", alignItems: "center", gap: 5, fontSize: TYPE.label, fontWeight: 600 }}><Sparkles size={14} />AI와 추가 검토</strong>
-              <span style={{ fontSize: TYPE.caption, fontWeight: 400, lineHeight: 1.4, color: UI.ink3 }}>AI 검토 후 같은 복구 요청 흐름으로 이어집니다.</span>
+            <button type="button" className="product-focusable product-action" onClick={onAskAi}
+              style={{ minWidth: 0, minHeight: 64, display: "grid", gap: 4, alignContent: "center", border: "none", borderRadius: 8, background: BLUE, color: UI.card, padding: "9px 11px", textAlign: "left", cursor: "pointer", boxShadow: `0 2px 6px ${blueA(0.2)}` }}>
+              <strong style={{ display: "flex", alignItems: "center", gap: 5, fontSize: TYPE.label, fontWeight: 600 }}><Sparkles size={14} />AI와 진행하기</strong>
+              <span style={{ fontSize: TYPE.caption, fontWeight: 400, lineHeight: 1.4, color: UI.card, opacity: 0.82 }}>AI가 안전 조건을 검토한 뒤 같은 복구 절차로 이어집니다.</span>
             </button>
           </div>
         </div>
@@ -1500,9 +1599,10 @@ function RcaAlternativeCandidate({
     </details>
   );
 }
-export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resourceKind, incidentId, currentSubject, updatedAt, onClose, onOpenRef, onAskAi, onRecoverySelected, correlationId, status, severity, rootCause, confidence, supportingEvidence, missingEvidence, situationSummary, recommendedActionSummary, evidenceSummary, evidenceBundleSummary, topInset = 0, leftInset = 0, rightInset = 0 }: {
-  name: string; symptom: string; cluster: string; svc: string; ns: string; onClose: () => void; onOpenRef: (kind: string, n: string) => void; onAskAi: (request?: AiRecoveryHandoff) => void; onRecoverySelected?: (correlationId: string, route: string) => void;
-  rawSymptom?: string | null; resourceKind?: string | null; incidentId?: string | null; currentSubject?: string | null; updatedAt?: string | null;
+export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resourceKind, incidentId, currentSubject, updatedAt, prUrl, onClose, onOpenRef, onAskAi, onRecoverySelected, onRecoveryCompleted, previewRecoveryCompleted = false, correlationId, status, severity, rootCause, confidence, supportingEvidence, missingEvidence, situationSummary, recommendedActionSummary, evidenceSummary, evidenceBundleSummary, topInset = 0, leftInset = 0, rightInset = 0 }: {
+  name: string; symptom: string; cluster: string; svc: string; ns: string; onClose: () => void; onOpenRef: (kind: string, n: string) => void; onAskAi: (request?: AiRecoveryHandoff) => void; onRecoverySelected?: (correlationId: string, route: string, source: "direct" | "ai") => void;
+  onRecoveryCompleted?: (correlationId: string) => void; previewRecoveryCompleted?: boolean;
+  rawSymptom?: string | null; resourceKind?: string | null; incidentId?: string | null; currentSubject?: string | null; updatedAt?: string | null; prUrl?: string | null;
   correlationId?: string; status?: string; severity?: "critical" | "warning" | null;
   rootCause?: string | null; confidence?: number | null; supportingEvidence?: string[]; missingEvidence?: string[];
   situationSummary?: string | null; recommendedActionSummary?: string | null; evidenceSummary?: string | null; evidenceBundleSummary?: string | null;
@@ -1577,7 +1677,7 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
     (candidate) => candidate.action_id === (selectedRecoveryActionId ?? recovery.plan?.selected_action_id),
   ) ?? recovery.plan?.selected_action ?? null;
   const recoveryProgress = recoveryProgressState({
-    status,
+    status: previewRecoveryCompleted ? "resolved" : status,
     currentSubject,
     plan: recovery.plan,
     audit: recoveryAudit.items,
@@ -1586,6 +1686,20 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
     selectionAccepted: recoverySelectionAccepted,
     selectionFailed: recoverySelectionError !== null,
   });
+  const auditPrUrl = recoveryAudit.items.find((event) => event.subject === "safe_pr.created")
+    ?.payload_summary.pr_url;
+  const effectiveRecoveryPrUrl = typeof auditPrUrl === "string" && auditPrUrl.trim()
+    ? auditPrUrl
+    : prUrl?.trim() || null;
+  const displayedRecoveryProgress: RecoveryProgressState = effectiveRecoveryPrUrl
+    ? {
+        ...recoveryProgress,
+        phase: "verifying",
+        label: "PR 생성됨",
+        step: Math.max(recoveryProgress.step, 3),
+        tone: "approval",
+      }
+    : recoveryProgress;
   const effectiveSelectedActionId = selectedRecoveryActionId ?? recovery.plan?.selected_action_id ?? null;
   const reviewedRecoveryCandidate = recovery.plan?.candidates.find((candidate) => candidate.action_id === recoveryReviewActionId) ?? null;
   const reviewedRecoveryDraft = remediationBundle.bundle?.remediation?.candidates.find(
@@ -1600,18 +1714,25 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
     setRecoveryReviewActionId(null);
     requestAnimationFrame(() => detailScrollRef.current?.scrollTo({ top: recoveryListScrollTopRef.current }));
   };
-  const handleRecoverySelection = async (actionId: string): Promise<boolean> => {
+  const handleRecoverySelection = async (actionId: string, source: "direct" | "ai" = "direct"): Promise<boolean> => {
     if (!correlationId || !recovery.plan || recoverySelectionPendingId !== null) return false;
     const selectedCandidate = recovery.plan.candidates.find((candidate) => candidate.action_id === actionId);
     const selectedRoute = selectedCandidate?.route ?? recovery.plan.execution_route;
     setRecoverySelectionPendingId(actionId);
     setRecoverySelectionError(null);
+    if (import.meta.env.DEV && isRcaPreviewCorrelation(correlationId)) {
+      setSelectedRecoveryActionId(actionId);
+      setRecoverySelectionAccepted(true);
+      onRecoverySelected?.(correlationId, selectedRoute, source);
+      setRecoverySelectionPendingId(null);
+      return true;
+    }
     try {
       const receipt = await selectRecoveryAction(correlationId, recovery.plan.plan_id, actionId);
       if (!receipt.accepted) throw new Error("recovery selection was not accepted");
       setSelectedRecoveryActionId(actionId);
       setRecoverySelectionAccepted(true);
-      onRecoverySelected?.(correlationId, selectedRoute);
+      onRecoverySelected?.(correlationId, selectedRoute, source);
       return true;
     } catch {
       setRecoverySelectionError("복구 조치를 선택하지 못했습니다. 권한과 현재 플랜 상태를 확인해 주세요.");
@@ -1680,7 +1801,7 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
               );
             })}
           </div>
-          <div ref={detailScrollRef} style={{ flex: 1, minHeight: 0, overflowY: "auto", overscrollBehavior: "contain", scrollbarGutter: "stable", display: "flex", flexDirection: "column", gap: SPACE.section, padding: SPACE.section, background: activeTab === "recovery" && reviewedRecoveryCandidate ? INSET : UI.card, transition: `background ${DUR.fade}s ease` }}>
+          <div ref={detailScrollRef} style={{ flex: 1, minHeight: 0, overflowY: "auto", overscrollBehavior: "contain", scrollbarGutter: "stable", display: "flex", flexDirection: "column", gap: SPACE.section, padding: `${SPACE.section}px ${SPACE.section}px 104px`, background: activeTab === "recovery" && reviewedRecoveryCandidate ? INSET : UI.card, transition: `background ${DUR.fade}s ease` }}>
             {activeTab === "detail" ? <>
             <section aria-labelledby="issue-summary-heading" style={{ flexShrink: 0, display: "grid", gap: SPACE.stack, border: `1px solid ${UI.line}`, borderRadius: RADIUS.card, background: UI.card, padding: SPACE.card, boxShadow: `0 6px 16px -10px ${inkA(0.26)}, 0 1px 3px ${inkA(0.06)}` }}>
               <h2 id="issue-summary-heading" style={{ margin: 0, fontSize: ISSUE_DETAIL_TYPE.sectionTitle, fontWeight: 700, color: UI.heading }}>상황 요약</h2>
@@ -1808,7 +1929,8 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
                 candidate={reviewedRecoveryCandidate}
                 draft={reviewedRecoveryDraft}
                 bundleStatus={remediationBundle.status}
-                progress={recoveryProgress}
+                progress={displayedRecoveryProgress}
+                prUrl={effectiveRecoveryPrUrl}
                 pending={recoverySelectionPendingId === reviewedRecoveryCandidate.action_id}
                 selected={effectiveSelectedActionId === reviewedRecoveryCandidate.action_id}
                 onBack={closeRecoveryReview}
@@ -1827,11 +1949,28 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
                       symptom: rawSymptom || symptom,
                       rootCause,
                     }),
+                    displayPrompt: recoveryAiDisplayPrompt({
+                      candidate: reviewedRecoveryCandidate,
+                      resourceKind: resourceKind || "리소스",
+                      resourceName: svc,
+                      symptom: rawSymptom || symptom,
+                      rootCause,
+                    }),
                     actionTitle: reviewedRecoveryCandidate.title,
                     actionRoute: reviewedRecoveryCandidate.route,
                     contextView: "복구 플랜",
                     contextScope: cluster,
-                    execute: () => handleRecoverySelection(actionId),
+                    previewReviewResponse: import.meta.env.DEV && isRcaPreviewCorrelation(correlationId)
+                      ? recoveryAiPreviewReview(reviewedRecoveryCandidate)
+                      : undefined,
+                    previewCompletionResponse: import.meta.env.DEV && isRcaPreviewCorrelation(correlationId)
+                      ? recoveryAiPreviewCompletion(reviewedRecoveryCandidate)
+                      : undefined,
+                    previewComplete: import.meta.env.DEV && isRcaPreviewCorrelation(correlationId)
+                      ? () => onRecoveryCompleted?.(correlationId)
+                      : undefined,
+                    preview: recoveryAiPreview(reviewedRecoveryCandidate, reviewedRecoveryDraft),
+                    execute: () => handleRecoverySelection(actionId, "ai"),
                   });
                 }}
                 onOpenTarget={recoveryTargetKind && recoveryTargetName ? () => onOpenRef(recoveryTargetKind, recoveryTargetName) : null}
@@ -1887,6 +2026,7 @@ export type RcaIncident = {
   recommendedActionSummary?: string | null;
   evidenceSummary?: string | null;
   evidenceBundleSummary?: string | null;
+  prUrl?: string | null;
 };
 
 type IssueSeverityFilter = "all" | "critical" | "warning";
@@ -1930,28 +2070,38 @@ function RecoveryProgress({ progress }: { progress: RecoveryProgressState }) {
     : progress.tone === "completed" ? HP.ok
       : progress.tone === "approval" ? HP.warn
         : BLUE;
+  const displayedStep = recoveryDisplayedStep(progress);
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap: 7, color: UI.ink2 }}>
       <span>{progress.label}</span>
       <span aria-hidden="true" style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
         {Array.from({ length: 5 }, (_, index) => (
-          <span key={index} style={{ width: 11, height: 5, borderRadius: 3, background: index < progress.step ? activeColor : HP.pending, opacity: index < progress.step ? 1 : 0.7 }} />
+          <span key={index} style={{ width: 11, height: 5, borderRadius: 3, background: index < displayedStep ? activeColor : HP.pending, opacity: index < displayedStep ? 1 : 0.7 }} />
         ))}
       </span>
-      <span style={{ fontVariantNumeric: "tabular-nums" }}>{progress.step}/5</span>
+      <span style={{ fontVariantNumeric: "tabular-nums" }}>{displayedStep}/5</span>
     </span>
   );
 }
 
-function IssueCard({ issue, recoverySelectionRoute, onOpen, onOpenTarget }: { issue: RcaIssueDetailView; recoverySelectionRoute: string | null; onOpen: () => void; onOpenTarget: (() => void) | null }) {
+function IssueCard({ issue, recoverySelectionRoute, recoveryCompleted, onOpen, onOpenTarget }: { issue: RcaIssueDetailView; recoverySelectionRoute: string | null; recoveryCompleted: boolean; onOpen: () => void; onOpenTarget: (() => void) | null }) {
   const [targetActive, setTargetActive] = useState(false);
-  const state = issueAnalysisState(issue);
+  const state = issueAnalysisState({ ...issue, status: recoveryCompleted ? "resolved" : issue.status });
   const recovery = recoveryProgressState({
-    status: issue.status,
+    status: recoveryCompleted ? "resolved" : issue.status,
     currentSubject: issue.currentSubject,
     actionRoute: recoverySelectionRoute ?? issue.actionRoute,
     selectionAccepted: recoverySelectionRoute !== null,
   });
+  const displayedRecovery: RecoveryProgressState = issue.prUrl
+    ? {
+        ...recovery,
+        phase: "verifying",
+        label: "PR 검토 필요",
+        step: Math.max(recovery.step, 3),
+        tone: "approval",
+      }
+    : recovery;
   const title = issue.resourceName ?? "대상 미확인";
   const symptom = issue.symptom ?? "증상 미확인";
   const rootCause = issue.rootCause ?? "원인 미확인";
@@ -2015,7 +2165,22 @@ function IssueCard({ issue, recoverySelectionRoute, onOpen, onOpenTarget }: { is
               </button>
             ) : target}
           </span>
-          <span style={{ color: UI.ink2 }}><strong style={{ color: UI.ink, fontWeight: 600 }}>복구</strong><span style={{ margin: "0 7px", color: UI.line }}>|</span><RecoveryProgress progress={recovery} /></span>
+          <span style={{ color: UI.ink2 }}><strong style={{ color: UI.ink, fontWeight: 600 }}>복구</strong><span style={{ margin: "0 7px", color: UI.line }}>|</span><RecoveryProgress progress={displayedRecovery} /></span>
+          {issue.prUrl && (
+            <span style={{ color: UI.ink2 }}>
+              <strong style={{ color: UI.ink, fontWeight: 600 }}>PR</strong><span style={{ margin: "0 7px", color: UI.line }}>|</span>
+              <a
+                className="product-focusable"
+                href={issue.prUrl}
+                onClick={(event) => event.stopPropagation()}
+                rel="noopener noreferrer"
+                target="_blank"
+                style={{ display: "inline-flex", alignItems: "center", gap: 4, color: BLUE, fontSize: TYPE.label, fontWeight: 600, textDecoration: "none" }}
+              >
+                Pull Request 열기 <ExternalLink size={12} />
+              </a>
+            </span>
+          )}
         </span>
 
         <span style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", paddingTop: 9, borderTop: `1px dashed ${UI.line}`, fontSize: TYPE.caption, color: UI.ink3 }}>
@@ -2032,8 +2197,8 @@ function IssueCard({ issue, recoverySelectionRoute, onOpen, onOpenTarget }: { is
   );
 }
 
-export function IssuesSurface({ incidentClusterIds, recoverySelectionRoutes = new Map<string, string>(), sessionRules: _sessionRules = [], onOpenRef, onAskAi, onOpenRca }: {
-  incidentClusterIds: readonly string[]; recoverySelectionRoutes?: ReadonlyMap<string, string>; sessionRules?: string[]; onOpenRef: (kind: string, name: string) => void; onAskAi: () => void; onOpenRca?: (i: RcaIncident) => void;
+export function IssuesSurface({ incidentClusterIds, recoverySelectionRoutes = new Map<string, string>(), previewCompletedRecoveryIds = new Set<string>(), sessionRules: _sessionRules = [], onOpenRef, onAskAi, onOpenRca }: {
+  incidentClusterIds: readonly string[]; recoverySelectionRoutes?: ReadonlyMap<string, string>; previewCompletedRecoveryIds?: ReadonlySet<string>; sessionRules?: string[]; onOpenRef: (kind: string, name: string) => void; onAskAi: () => void; onOpenRca?: (i: RcaIncident) => void;
 }) {
   const [tab, setTab] = useState("진행 중");
   const [severityFilter, setSeverityFilter] = useState<IssueSeverityFilter>("all");
@@ -2041,8 +2206,8 @@ export function IssuesSurface({ incidentClusterIds, recoverySelectionRoutes = ne
   // 큐 항목이 관측 RCA 필드(원인/확신도/증거/AI 요약)를 이미 실어주므로 상세 드로어로 그대로 전달한다.
   const issues = useRcaIssueDetails(incidentClusterIds, recoverySelectionRoutes.size > 0 ? 4000 : 0);
   const issueItems = issues.items;
-  const activeIssues = issueItems.filter(isActiveRcaIssue);
-  const resolvedIssues = issueItems.filter((issue) => !isActiveRcaIssue(issue));
+  const activeIssues = issueItems.filter((issue) => !previewCompletedRecoveryIds.has(issue.correlationId) && isActiveRcaIssue(issue));
+  const resolvedIssues = issueItems.filter((issue) => previewCompletedRecoveryIds.has(issue.correlationId) || !isActiveRcaIssue(issue));
   const critCount = activeIssues.filter((issue) => issue.severity === "critical").length;
   const warnCount = activeIssues.filter((issue) => issue.severity === "warning").length;
   const visibleIssues = tab === "해결됨"
@@ -2070,6 +2235,7 @@ export function IssuesSurface({ incidentClusterIds, recoverySelectionRoutes = ne
     recommendedActionSummary: iss.recommendedActionSummary,
     evidenceSummary: iss.evidenceSummary,
     evidenceBundleSummary: iss.evidenceBundleSummary,
+    prUrl: iss.prUrl,
   });
   return (
     <Page title="이슈" icon={AlertTriangle} tabs={["진행 중", "해결됨", "예방 점검"]} tab={tab} onTab={setTab}
@@ -2093,6 +2259,7 @@ export function IssuesSurface({ incidentClusterIds, recoverySelectionRoutes = ne
                 key={iss.correlationId}
                 issue={iss}
                 recoverySelectionRoute={recoverySelectionRoutes.get(iss.correlationId) ?? null}
+                recoveryCompleted={previewCompletedRecoveryIds.has(iss.correlationId)}
                 onOpen={() => setRca(iss)}
                 onOpenTarget={resourceKind && resourceName ? () => onOpenRef(resourceKind, resourceName) : null}
               />

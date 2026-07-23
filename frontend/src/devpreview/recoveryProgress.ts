@@ -12,10 +12,16 @@ export type RecoveryProgressPhase =
 
 export interface RecoveryProgressState {
   phase: RecoveryProgressPhase;
-  label: "복구 대기" | "승인 대기" | "복구 요청됨" | "복구 실행 중" | "검증 중" | "복구 완료" | "복구 실패";
+  label: "복구 대기" | "자동 복구 요청됨" | "PR 생성 요청됨" | "복구 요청됨" | "복구 실행 중" | "검증 중" | "PR 생성됨" | "PR 검토 필요" | "복구 완료" | "복구 실패";
   step: number;
   tone: "waiting" | "approval" | "active" | "completed" | "failed";
   latestEvent: AuditTimelineItem | null;
+}
+
+export function recoveryDisplayedStep(progress: RecoveryProgressState): number {
+  if (progress.phase === "waiting") return 0;
+  if (progress.phase === "completed") return 5;
+  return Math.min(5, progress.step + 1);
 }
 
 const ANALYSIS_COMPLETED_STATUSES = new Set([
@@ -119,7 +125,13 @@ export function recoveryProgressState({
     || subjects.some((subject) => SELECTED_SUBJECTS.has(subject))
   ) {
     if (normalizedRoute === "approval_required") {
-      return state("approval", "승인 대기", 0, "approval", latestEvent);
+      return state("submitting", "복구 요청됨", 1, "active", latestEvent);
+    }
+    if (normalizedRoute === "draft_pr" || normalizedRoute === "safe_pr") {
+      return state("submitting", "PR 생성 요청됨", 1, "active", latestEvent);
+    }
+    if (normalizedRoute === "auto") {
+      return state("submitting", "자동 복구 요청됨", 1, "active", latestEvent);
     }
     return state("submitting", "복구 요청됨", 1, "active", latestEvent);
   }
@@ -128,7 +140,7 @@ export function recoveryProgressState({
     || ANALYSIS_COMPLETED_STATUSES.has(normalizedStatus)
     || normalizedSubject === "recovery_review_required"
   ) {
-    return state("approval", "승인 대기", 0, "approval", latestEvent);
+    return state("waiting", "복구 대기", 0, "waiting", latestEvent);
   }
   return state("waiting", "복구 대기", 0, "waiting", latestEvent);
 }

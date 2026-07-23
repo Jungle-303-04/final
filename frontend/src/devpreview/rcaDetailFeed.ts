@@ -13,6 +13,17 @@ import type { EvidenceWindowPayload, RcaReport } from "../api/evidence-schemas";
 import type { RcaIssueList } from "../api/schemas";
 import { loadRcaIssueItems } from "./rcaIssuesFeed";
 import { operationalMessageLabel } from "./statusLabel";
+import {
+  RCA_PREVIEW_AUDIT,
+  RCA_PREVIEW_CORRELATION_ID,
+  RCA_PREVIEW_INCIDENT_ID,
+  RCA_PREVIEW_ISSUE,
+  RCA_PREVIEW_RECENT_CHANGES,
+  RCA_PREVIEW_RECOVERY_PLAN,
+  RCA_PREVIEW_REMEDIATION_BUNDLE,
+  RCA_PREVIEW_REPORT,
+  rcaPreviewEvidence,
+} from "./rcaPreviewFixtures";
 
 // UI-PHASE2-001: typed live adapters for the RCA Issue *detail* drawer. Unlike
 // the reduced `rcaIssuesFeed` view (list/bell), this exposes the full observed
@@ -56,6 +67,7 @@ export interface RcaIssueDetailsFeed {
 }
 
 type RcaIssueItem = RcaIssueList["items"][number];
+const previewEnabled = import.meta.env.DEV;
 
 export function toRcaIssueDetailView(item: RcaIssueItem): RcaIssueDetailView {
   return {
@@ -111,11 +123,22 @@ export function useRcaIssueDetails(clusterIds?: readonly string[], pollMs = 0): 
       void loadRcaIssueItems(scopedClusterIds, controller.signal)
         .then((items) => {
           if (controller.signal.aborted) return;
-          setSnapshot({ scopeKey, feed: { status: "ready", items: items.map(toRcaIssueDetailView) } });
+          const visibleItems = previewEnabled
+            ? [
+                RCA_PREVIEW_ISSUE,
+                ...items.filter((item) => item.correlation_id !== RCA_PREVIEW_CORRELATION_ID),
+              ]
+            : items;
+          setSnapshot({ scopeKey, feed: { status: "ready", items: visibleItems.map(toRcaIssueDetailView) } });
         })
         .catch((cause: unknown) => {
           if (controller.signal.aborted || isAbortError(cause)) return;
-          setSnapshot({ scopeKey, feed: { status: "unavailable", items: [] } });
+          setSnapshot({
+            scopeKey,
+            feed: previewEnabled
+              ? { status: "ready", items: [toRcaIssueDetailView(RCA_PREVIEW_ISSUE)] }
+              : { status: "unavailable", items: [] },
+          });
         })
         .finally(() => {
           if (!controller.signal.aborted && pollMs > 0) timer = window.setTimeout(load, pollMs);
@@ -174,12 +197,13 @@ export function useEvidenceWindowPayload(
   enabled: boolean,
 ): EvidenceWindowFeed {
   const requestKey = enabled && evidenceKey ? `${evidenceKey}\u0000${source ?? ""}` : null;
+  const preview = previewEnabled && evidenceKey ? rcaPreviewEvidence(evidenceKey, source) : null;
   const [snapshot, setSnapshot] = useState<{ requestKey: string | null; feed: EvidenceWindowFeed }>({
     requestKey: null,
     feed: { status: "idle", evidence: null },
   });
   useEffect(() => {
-    if (!requestKey || !evidenceKey) return;
+    if (!requestKey || !evidenceKey || preview) return;
     const controller = new AbortController();
     void getEvidenceWindowPayload(evidenceKey, { source: source ?? undefined, signal: controller.signal })
       .then((evidence) => {
@@ -191,20 +215,22 @@ export function useEvidenceWindowPayload(
         setSnapshot({ requestKey, feed: { status: "unavailable", evidence: null } });
       });
     return () => controller.abort();
-  }, [requestKey, evidenceKey, source]);
+  }, [requestKey, evidenceKey, source, preview]);
   if (requestKey === null) return { status: "idle", evidence: null };
+  if (preview) return { status: "ready", evidence: preview };
   return snapshot.requestKey === requestKey
     ? snapshot.feed
     : { status: "loading", evidence: null };
 }
 
 export function useLatestRcaReport(correlationId: string | null): RcaReportFeed {
+  const isPreview = previewEnabled && correlationId === RCA_PREVIEW_CORRELATION_ID;
   const [snapshot, setSnapshot] = useState<{ correlationId: string | null; feed: RcaReportFeed }>({
     correlationId: null,
     feed: { status: "idle", report: null },
   });
   useEffect(() => {
-    if (!correlationId) return;
+    if (!correlationId || isPreview) return;
     const controller = new AbortController();
     void listRcaReports({ correlationId, limit: 1, signal: controller.signal })
       .then((response) => {
@@ -216,20 +242,22 @@ export function useLatestRcaReport(correlationId: string | null): RcaReportFeed 
         setSnapshot({ correlationId, feed: { status: "unavailable", report: null } });
       });
     return () => controller.abort();
-  }, [correlationId]);
+  }, [correlationId, isPreview]);
   if (!correlationId) return { status: "idle", report: null };
+  if (isPreview) return { status: "ready", report: RCA_PREVIEW_REPORT };
   return snapshot.correlationId === correlationId
     ? snapshot.feed
     : { status: "loading", report: null };
 }
 
 export function useIncidentRecentChanges(incidentId: string | null): IncidentRecentChangesFeed {
+  const isPreview = previewEnabled && incidentId === RCA_PREVIEW_INCIDENT_ID;
   const [snapshot, setSnapshot] = useState<{ incidentId: string | null; feed: IncidentRecentChangesFeed }>({
     incidentId: null,
     feed: { status: "idle", items: [] },
   });
   useEffect(() => {
-    if (!incidentId) return;
+    if (!incidentId || isPreview) return;
     const controller = new AbortController();
     void getIncidentRecentChanges(incidentId, { signal: controller.signal })
       .then((response) => {
@@ -241,8 +269,9 @@ export function useIncidentRecentChanges(incidentId: string | null): IncidentRec
         setSnapshot({ incidentId, feed: { status: "unavailable", items: [] } });
       });
     return () => controller.abort();
-  }, [incidentId]);
+  }, [incidentId, isPreview]);
   if (!incidentId) return { status: "idle", items: [] };
+  if (isPreview) return { status: "ready", items: RCA_PREVIEW_RECENT_CHANGES };
   return snapshot.incidentId === incidentId
     ? snapshot.feed
     : { status: "loading", items: [] };
@@ -254,11 +283,12 @@ export function useIncidentRecentChanges(incidentId: string | null): IncidentRec
  * recovery. Without a correlation id the feed stays `idle` (nothing to observe).
  */
 export function useRecoveryPlan(correlationId?: string | null): RecoveryPlanFeed {
+  const isPreview = previewEnabled && correlationId === RCA_PREVIEW_CORRELATION_ID;
   const [feed, setFeed] = useState<RecoveryPlanFeed>(
     () => ({ status: correlationId ? "loading" : "idle", plan: null }),
   );
   useEffect(() => {
-    if (!correlationId) return;
+    if (!correlationId || isPreview) return;
     const controller = new AbortController();
     void getRecoveryPlanByCorrelation(correlationId, { signal: controller.signal })
       .then((plan) => {
@@ -270,11 +300,13 @@ export function useRecoveryPlan(correlationId?: string | null): RecoveryPlanFeed
         setFeed({ status: "unavailable", plan: null });
     });
     return () => controller.abort();
-  }, [correlationId]);
+  }, [correlationId, isPreview]);
+  if (isPreview) return { status: "ready", plan: RCA_PREVIEW_RECOVERY_PLAN };
   return feed;
 }
 
 export function useRemediationBundle(correlationId?: string | null): RemediationBundleFeed {
+  const isPreview = previewEnabled && correlationId === RCA_PREVIEW_CORRELATION_ID;
   const [snapshot, setSnapshot] = useState<{
     correlationId: string | null;
     feed: RemediationBundleFeed;
@@ -283,7 +315,7 @@ export function useRemediationBundle(correlationId?: string | null): Remediation
     feed: { status: "idle", bundle: null },
   });
   useEffect(() => {
-    if (!correlationId) return;
+    if (!correlationId || isPreview) return;
     const controller = new AbortController();
     void getRemediationBundle(correlationId, { signal: controller.signal })
       .then((bundle) => {
@@ -295,19 +327,21 @@ export function useRemediationBundle(correlationId?: string | null): Remediation
         setSnapshot({ correlationId, feed: { status: "unavailable", bundle: null } });
       });
     return () => controller.abort();
-  }, [correlationId]);
+  }, [correlationId, isPreview]);
   if (!correlationId) return { status: "idle", bundle: null };
+  if (isPreview) return { status: "ready", bundle: RCA_PREVIEW_REMEDIATION_BUNDLE };
   return snapshot.correlationId === correlationId
     ? snapshot.feed
     : { status: "loading", bundle: null };
 }
 
 export function useRecoveryAudit(correlationId?: string | null, pollMs = 0): RecoveryAuditFeed {
+  const isPreview = previewEnabled && correlationId === RCA_PREVIEW_CORRELATION_ID;
   const [feed, setFeed] = useState<RecoveryAuditFeed>(
     () => ({ status: correlationId ? "loading" : "idle", items: [] }),
   );
   useEffect(() => {
-    if (!correlationId) return;
+    if (!correlationId || isPreview) return;
     const controller = new AbortController();
     let timer: number | undefined;
     const load = () => {
@@ -329,6 +363,7 @@ export function useRecoveryAudit(correlationId?: string | null, pollMs = 0): Rec
       controller.abort();
       if (timer !== undefined) window.clearTimeout(timer);
     };
-  }, [correlationId, pollMs]);
+  }, [correlationId, isPreview, pollMs]);
+  if (isPreview) return { status: "ready", items: RCA_PREVIEW_AUDIT };
   return feed;
 }

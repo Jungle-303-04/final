@@ -2,7 +2,7 @@
 // ⚠ VP-021 사용성 프리뷰 (더미 · 자가 스트리밍 재생). 배선 완료 시 삭제.
 import {
   Activity, ArrowUpRight, BellPlus, Boxes, Check, ChevronDown, CircleAlert,
-  FileText, GitBranch, Maximize2, Minimize2, Play, Send, Server, Sparkles, SquarePen, X,
+  CircleStop, FileText, GitBranch, Maximize2, Minimize2, Play, Send, Server, Sparkles, SquarePen, X,
 } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import "./styles/tokens.css";
@@ -10,20 +10,21 @@ import "./styles/foundation.css";
 import { Spinner } from "./shared/ui/primitives/spinner";
 import { emitAction } from "./devpreview/bus";
 import {
-  buildAiContext, createAiAlertRule, sendAiChatTurn,
+  appendRecoveryConversationMessage, buildAiContext, createAiAlertRule,
+  createRecoveryConversation, isAiProviderFailureTurn, sendAiChatTurn,
   useAiConversations, useConversationDetail, useAiSuggestions,
 } from "./devpreview/aiFeed";
 import type {
   AiMessagePart, AiPageLink, AiResultPart, AiStepsPart, AiTextPart, AiTone, AiTurn,
 } from "./features/ai-assistant/aiConversationContract";
 import type { AiRecoveryHandoff } from "./features/ai-assistant/aiRecoveryHandoff";
+import { isSafePrRoute, recoveryRouteLabel } from "./devpreview/recoveryRoute";
 
 const SPRING = "cubic-bezier(0.22, 1, 0.36, 1)"; // 진입 등장 이징
 
 // ── 타이밍 상수 (한 곳에서 관리) ─────────────────────────────
 // collapse* 는 CSS 트랜지션과 공유(스타일 블록에 주입). 재생/타이핑 계열은 프리뷰 전용(배선 시 제거).
 const TIMING = {
-  autoCollapseMs: 2800,    // 답변 완료 후 자동 접힘까지
   collapseSlideMs: 300,    // 접힘/펼침 높이 트랜지션
   collapseFadeMs: 150,     // 내용↔요약 크로스페이드
   typewriterStepMs: 11,    // 타이핑 간격
@@ -48,9 +49,36 @@ const ICON = 1.75; // SF Symbols 느낌의 일관된 스트로크
 const linkIcon = (i?: AiPageLink["icon"]) => i === "resources" ? Boxes : i === "incident" ? CircleAlert : i === "gitops" ? GitBranch : i === "cluster" ? Server : i === "alert" ? BellPlus : ArrowUpRight;
 const evIcon = (t: string) => t === "event" ? CircleAlert : t === "metric" ? Activity : FileText;
 const LINK = "ap-link"; // 스타일은 .ap-link (스타일 블록)
-const md = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+const inlineMd = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
   .replace(/`([^`]+)`/g, "<code>$1</code>").replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
-  .replace(/\[([^\]]+)\]\(([^)]+)\)/g, `<a href="$2" class="${LINK}">$1</a>`).replace(/\n/g, "<br/>");
+  .replace(/\[([^\]]+)\]\(([^)]+)\)/g, `<a href="$2" class="${LINK}">$1</a>`);
+
+function RichText({ markdown }: { markdown: string }) {
+  return (
+    <span className="ai-rich-text">
+      {markdown.split("\n").map((rawLine, index) => {
+        const line = rawLine.trim();
+        if (/^#{1,3}$/.test(line) || line === "-" || line === "--") {
+          return <span aria-hidden="true" className="ai-rich-gap" key={`partial-${index}`} />;
+        }
+        if (/^-{3,}$/.test(line)) return <span aria-hidden="true" className="ai-rich-divider" key={`divider-${index}`} />;
+        if (/^#{1,3}\s+/.test(line)) {
+          return <span className="ai-rich-heading" dangerouslySetInnerHTML={{ __html: inlineMd(line.replace(/^#{1,3}\s+/, "")) }} key={`heading-${index}`} />;
+        }
+        if (line.startsWith("- ")) {
+          return (
+            <span className="ai-rich-list-item" key={`list-${index}`}>
+              <span aria-hidden="true" className="ai-rich-bullet">•</span>
+              <span dangerouslySetInnerHTML={{ __html: inlineMd(line.slice(2)) }} />
+            </span>
+          );
+        }
+        if (!line) return <span aria-hidden="true" className="ai-rich-gap" key={`gap-${index}`} />;
+        return <span className="ai-rich-line" dangerouslySetInnerHTML={{ __html: inlineMd(rawLine) }} key={`line-${index}`} />;
+      })}
+    </span>
+  );
+}
 
 // ── 파트 렌더러 (단일 표면 안에서 flat) ─────────────────────────────
 
@@ -69,10 +97,10 @@ function TextPart({ part, active, onReady }: { part: AiTextPart; active: boolean
   if (((safe.match(/`/g) || []).length) % 2) safe = safe.replace(/`([^`]*)$/, "$1");
   if (((safe.match(/\*\*/g) || []).length) % 2) safe = safe.replace(/\*\*([^*]*)$/, "$1");
   return (
-    <p className="text-body leading-[1.7] tracking-[-0.006em] text-foreground/90 [&_code]:rounded-md [&_code]:bg-muted/70 [&_code]:px-1.5 [&_code]:py-px [&_code]:font-mono [&_code]:text-[0.82em] [&_strong]:font-semibold [&_strong]:text-foreground">
-      <span dangerouslySetInnerHTML={{ __html: md(safe) }} />
+    <div className="text-body leading-[1.7] tracking-[-0.006em] text-foreground/90 [&_code]:rounded-md [&_code]:bg-muted/70 [&_code]:px-1.5 [&_code]:py-px [&_code]:font-mono [&_code]:text-[0.82em] [&_strong]:font-semibold [&_strong]:text-foreground">
+      <RichText markdown={safe} />
       {active && n < part.markdown.length ? <span className="ml-0.5 inline-block h-3.5 w-[2px] animate-pulse rounded-full bg-primary align-text-bottom" /> : null}
-    </p>
+    </div>
   );
 }
 
@@ -292,7 +320,17 @@ function deriveSummary(turn: AiTurn): { text: string; tone: AiTone } {
   const a = parts.find((p) => p.kind === "action") as Extract<AiMessagePart, { kind: "action" }> | undefined;
   if (a) return { text: `알림 규칙 · ${a.proposal.payload.name}`, tone: "warning" };
   const t = parts.find((p) => p.kind === "text" && (p as AiTextPart).markdown) as AiTextPart | undefined;
-  if (t) { const plain = t.markdown.replace(/[`*]/g, "").replace(/\[([^\]]+)\]\([^)]+\)/g, "$1"); return { text: plain.length > 44 ? plain.slice(0, 44) + "…" : plain, tone: "neutral" }; }
+  if (t) {
+    const plain = t.markdown
+      .replace(/^#{1,6}\s*/gm, "")
+      .replace(/^-{3,}\s*$/gm, "")
+      .replace(/^-\s+/gm, "")
+      .replace(/[`*]/g, "")
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+      .replace(/\s+/g, " ")
+      .trim();
+    return { text: plain.length > 44 ? plain.slice(0, 44) + "…" : plain, tone: "neutral" };
+  }
   return { text: turn.summary ?? "대화", tone: "neutral" };
 }
 
@@ -306,7 +344,6 @@ function AssistantTurn({ turn, onComplete }: { turn: AiTurn; onComplete: () => v
   const [collapsed, setCollapsed] = useState(false);
   const [actionIdle, setActionIdle] = useState(parts.some((p) => p.kind === "action"));
   const summary = deriveSummary(turn);
-  const didAuto = useRef(false);
 
   const advance = () => setShown((s) => {
     if (s >= parts.length) { setPhase("review"); onComplete(); return s; }
@@ -323,13 +360,6 @@ function AssistantTurn({ turn, onComplete }: { turn: AiTurn; onComplete: () => v
     if (collapsed) setCollapsed(false);
     else if (canCollapse) setCollapsed(true);
   };
-
-  // 자동 접힘: 완료 후 1회
-  useEffect(() => {
-    if (didAuto.current || !canCollapse || collapsed) return;
-    const id = window.setTimeout(() => { didAuto.current = true; setCollapsed(true); }, TIMING.autoCollapseMs);
-    return () => window.clearTimeout(id);
-  }, [canCollapse, collapsed]);
 
   return (
     <div onClick={onSurfaceClick}
@@ -371,12 +401,32 @@ function Thinking() {
 function UserTurn({ turn, onShown }: { turn: AiTurn; onShown: () => void }) {
   useEffect(() => { const id = window.setTimeout(onShown, TIMING.userShownMs); return () => window.clearTimeout(id); }, []);
   const question = turn.question ?? "";
-  const recoveryPrompt = question.startsWith("선택한 복구 플랜을 현재 운영 근거로 검토해 주세요.");
+  const recoveryPrompt = question.startsWith("🔎 복구 플랜 검토");
+  if (recoveryPrompt) {
+    const [heading, ...body] = question.split("\n");
+    const bodyLines = body.join("\n").trimStart().split("\n");
+    return (
+      <div
+        className="ml-auto w-full max-w-[94%] rounded-[18px] rounded-br-md border border-primary/20 bg-primary/[0.07] px-4 py-3 text-body font-normal leading-relaxed text-foreground shadow-[0_2px_8px_-4px_color-mix(in_oklch,var(--primary)_35%,transparent)]"
+        style={{ animation: `userIn 0.42s ${SPRING}` }}
+      >
+        <div className="font-semibold text-heading">{heading}</div>
+        <div className="my-3 border-t border-primary/15" />
+        <div>
+          {bodyLines.map((line, index) => {
+            if (!line) return <div className="h-3" key={`gap-${index}`} />;
+            if (line.startsWith("🛠️") || line.startsWith("✅")) {
+              return <div className="font-semibold text-heading" key={`${line}-${index}`}>{line}</div>;
+            }
+            return <div className="whitespace-pre-wrap" key={`${line}-${index}`}>{line}</div>;
+          })}
+        </div>
+      </div>
+    );
+  }
   return (
     <p
-      className={recoveryPrompt
-        ? "ml-auto w-full max-w-[94%] whitespace-pre-wrap rounded-[18px] rounded-br-md border border-primary/20 bg-primary/[0.07] px-4 py-3 text-body font-normal leading-relaxed text-foreground shadow-[0_2px_8px_-4px_color-mix(in_oklch,var(--primary)_35%,transparent)]"
-        : "ml-auto w-fit max-w-[80%] whitespace-pre-wrap rounded-[18px] rounded-br-md bg-primary px-3.5 py-2 text-body font-medium leading-relaxed text-primary-foreground shadow-[0_2px_8px_-2px_color-mix(in_oklch,var(--primary)_50%,transparent)]"}
+      className="ml-auto w-fit max-w-[80%] whitespace-pre-wrap rounded-[18px] rounded-br-md bg-primary px-3.5 py-2 text-body font-medium leading-relaxed text-primary-foreground shadow-[0_2px_8px_-2px_color-mix(in_oklch,var(--primary)_50%,transparent)]"
       style={{ animation: `userIn 0.42s ${SPRING}` }}
     >
       {question}
@@ -386,21 +436,132 @@ function UserTurn({ turn, onShown }: { turn: AiTurn; onShown: () => void }) {
 
 function CollapsedTurn({ turn, onShown }: { turn: AiTurn; onShown: () => void }) {
   useEffect(() => { const id = window.setTimeout(onShown, TIMING.collapsedShownMs); return () => window.clearTimeout(id); }, []);
+  const summary = deriveSummary(turn);
   return (
     <div className="group mr-auto flex w-full items-center gap-2.5 rounded-full border border-border bg-card/85 px-3.5 py-2 shadow-[0_1px_2px_rgba(0,0,0,0.05),0_10px_24px_-16px_rgba(0,0,0,0.3)] backdrop-blur-xl transition-[transform,box-shadow] duration-300 hover:-translate-y-px" style={{ animation: `islandIn 0.5s ${SPRING}` }}>
-      <span className="size-2 shrink-0 rounded-full island-pulse" style={{ background: toneHex.critical }} />
-      <span className="min-w-0 flex-1 truncate text-label font-medium text-muted-foreground">{turn.summary}</span>
+      <span className="size-2 shrink-0 rounded-full" style={{ background: toneHex[summary.tone] }} />
+      <span className="min-w-0 flex-1 truncate text-label font-medium text-muted-foreground">{summary.text}</span>
       <ChevronDown className="size-3.5 shrink-0 -rotate-90 text-muted-foreground/40" />
+    </div>
+  );
+}
+
+function recoverySubmittedLabel(route: string): string {
+  if (route === "auto") return "자동 복구 요청됨";
+  if (isSafePrRoute(route)) return "PR 생성 요청됨";
+  return "복구 요청됨";
+}
+
+function recoveryAcceptedMessage(route: string): string {
+  if (route === "auto") {
+    return [
+      "✅ **자동 복구 요청을 접수했습니다.**",
+      "선택한 복구 조치를 실행 워커에 전달했습니다.",
+      "---",
+      "실행이 끝나면 성공 조건을 자동으로 검증하고, 이슈 카드와 복구 플랜에 완료 결과를 반영합니다.",
+    ].join("\n");
+  }
+  if (isSafePrRoute(route)) {
+    return [
+      "✅ **복구 PR 생성 요청을 접수했습니다.**",
+      "선택한 변경사항으로 복구 PR을 준비하고 있습니다.",
+      "---",
+      "PR이 생성되면 복구 플랜에 **Pull Request 열기** 링크가 표시됩니다. 링크에서 변경 내용을 검토하고 병합해 주세요.",
+    ].join("\n");
+  }
+  return [
+    "✅ **복구 요청을 접수했습니다.**",
+    "선택한 복구 조치를 처리할 준비가 완료되었습니다.",
+    "---",
+    "복구 플랜에서 처리 결과를 확인할 수 있습니다.",
+  ].join("\n");
+}
+
+function recoveryPreviewReviewTurn(request: AiRecoveryHandoff, id: string): AiTurn | null {
+  if (!import.meta.env.DEV || !request.previewReviewResponse) return null;
+  return {
+    id,
+    role: "assistant",
+    collapsed: false,
+    createdAt: now(),
+    parts: [{ kind: "text", markdown: request.previewReviewResponse }],
+  };
+}
+
+function RecoveryChangePreview({
+  request,
+  state,
+}: {
+  request: AiRecoveryHandoff;
+  state: RecoveryReviewState;
+}) {
+  if (!request.preview || state === "idle" || state === "reviewing" || state === "error") return null;
+  const submitted = state === "executed";
+  const submitting = state === "executing";
+  return (
+    <div className="mr-auto grid w-full max-w-[97%] gap-3 rounded-2xl border border-border bg-card p-3.5 shadow-[0_8px_22px_-18px_rgba(0,0,0,0.32)]" style={{ animation: `fadeUp 0.45s ${SPRING}` }}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-label font-semibold text-heading">변경사항 미리보기</p>
+          <p className="mt-0.5 truncate font-mono text-caption text-muted-foreground">{request.preview.fileName}</p>
+        </div>
+        <span className="shrink-0 rounded-full bg-primary/[0.08] px-2 py-1 text-caption font-semibold text-primary">
+          {request.preview.title}
+        </span>
+      </div>
+      <div className="overflow-hidden rounded-xl border border-white/10 bg-[#15171C] py-2 font-mono text-caption leading-relaxed text-[#D8DDE7]">
+        {request.preview.lines.map((line, index) => (
+          <div
+            className={line.kind === "add" ? "bg-emerald-400/[0.12]" : line.kind === "remove" ? "bg-red-400/[0.12]" : ""}
+            key={`${line.kind}-${index}`}
+            style={{ display: "grid", gridTemplateColumns: "18px minmax(0, 1fr)", gap: 6, padding: "2px 10px", animation: `fadeUp 0.28s ${SPRING} ${index * 55}ms both` }}
+          >
+            <span className={line.kind === "add" ? "text-emerald-400" : line.kind === "remove" ? "text-red-400" : "text-white/25"}>
+              {line.kind === "add" ? "+" : line.kind === "remove" ? "−" : ""}
+            </span>
+            <span className="whitespace-pre-wrap break-all">{line.content}</span>
+          </div>
+        ))}
+      </div>
+      {request.preview.note ? <p className="text-caption leading-relaxed text-muted-foreground">{request.preview.note}</p> : null}
+      {submitting || submitted ? (
+        <div className="grid gap-2 border-t border-border pt-3" role="status">
+          {[
+            ["검토 결과 확인", true],
+            [recoveryRouteLabel(request.actionRoute), submitted],
+            ["복구 요청 접수", submitted],
+          ].map(([label, complete], index) => (
+            <div className="flex items-center gap-2 text-label" key={String(label)} style={{ animation: `fadeUp 0.32s ${SPRING} ${index * 90}ms both` }}>
+              {complete ? (
+                <span className="grid size-4 place-items-center rounded-full bg-emerald-500/12 text-emerald-600"><Check className="size-2.5" strokeWidth={3} /></span>
+              ) : (
+                <Spinner className="size-4 text-primary" decorative />
+              )}
+              <span className={complete ? "font-medium text-foreground" : "text-muted-foreground"}>{label}</span>
+            </div>
+          ))}
+          {submitted ? (
+            <div className="mt-1 rounded-xl bg-primary/[0.06] px-3 py-2 text-label font-semibold text-primary">
+              {recoverySubmittedLabel(request.actionRoute)}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }
 
 const now = () => new Date().toISOString();
 const noop = () => {};
+export type RecoveryReviewState = "idle" | "reviewing" | "ready" | "executing" | "executed" | "error";
 
-export function AiPanel({ onClose, embedded = false, contextView = "resources", contextScope = "game-server", full = false, onToggleFull, recoveryRequest = null }: {
+export function AiPanel({ onClose, onCancelRecovery, onRecoveryReviewStateChange, embedded = false, contextView = "resources", contextScope = "game-server", full = false, onToggleFull, recoveryRequest = null }: {
   /** 셸 임베드: 닫기 버튼 동작 */
   onClose?: () => void;
+  /** 제출 전 복구 AI 검토를 명시적으로 중단한다. 패널 숨기기와 구분한다. */
+  onCancelRecovery?: () => void;
+  /** 패널을 숨겨도 셸에서 현재 복구 검토 상태를 표시한다. */
+  onRecoveryReviewStateChange?: (state: RecoveryReviewState) => void;
   /** 셸 임베드: 고정 460px 대신 컨테이너 폭을 따른다 (리사이즈 핸들 대응) */
   embedded?: boolean;
   /** 현재 화면 맥락 칩 — 셸이 실제 화면·범위를 알려준다 */
@@ -417,7 +578,8 @@ export function AiPanel({ onClose, embedded = false, contextView = "resources", 
   const [listOpen, setListOpen] = useState(false);
   const [input, setInput] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [recoveryReviewState, setRecoveryReviewState] = useState<"idle" | "reviewing" | "ready" | "executing" | "executed" | "error">("idle");
+  const [recoveryReviewState, setRecoveryReviewState] = useState<RecoveryReviewState>("idle");
+  const [completionPreviewed, setCompletionPreviewed] = useState(false);
   // AI history: 목록에서 고른 대화 id. null이면 라이브 대화 화면.
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const suggestions = useAiSuggestions(contextView, contextScope);
@@ -427,12 +589,20 @@ export function AiPanel({ onClose, embedded = false, contextView = "resources", 
   const idSeq = useRef(0);
   const chatAbort = useRef<AbortController | null>(null);
   const lastRecoveryRequestId = useRef<string | null>(null);
+  const recoveryConversationId = useRef<string | null>(null);
+  const recoveryConversationTurnCount = useRef(0);
   // 알림 액션 되묻기 누적 — /api/ai/chat 은 무상태라 "알람 만들어 줘" → "CPU" →
   // "80%"처럼 나눠 답하면 매 턴이 따로 파싱된다. 서버가 clarification 을 표시한
   // 동안 보류 문장을 여기 누적해, 다음 전송을 "누적 + 새 입력"으로 합쳐 보낸다
   // (말풍선에는 새 입력만 표시). 액션/일반 답변이 오면 초기화.
   const alertDraft = useRef<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const scrollToLatest = () => {
+    window.requestAnimationFrame(() => {
+      const element = scrollRef.current;
+      if (element) element.scrollTo({ top: element.scrollHeight, behavior: "smooth" });
+    });
+  };
   useLayoutEffect(() => {
     const el = scrollRef.current; if (!el) return;
     // 사용자가 이미 바닥 근처일 때만 따라감 (위로 스크롤해 읽는 중엔 끌어내리지 않음)
@@ -447,13 +617,17 @@ export function AiPanel({ onClose, embedded = false, contextView = "resources", 
   // AI-03: /api/ai/chat 은 뮤테이션 — 사용자가 명시적으로 보낼 때만 호출한다
   // (마운트·타이머 자동 호출 없음). 응답의 answer/evidence/action 필드만 렌더링하고,
   // 서버가 주지 않는 reasoning step·related link 는 만들지 않는다.
-  const send = (text: string, recoveryRequestId?: string) => {
+  const send = (text: string, recoveryRequestId?: string, displayText?: string) => {
     const trimmed = text.trim(); if (!trimmed || (thinking && recoveryRequestId === undefined)) return;
+    const isRecoveryTurn = recoveryRequest !== null;
     setInput(""); setError(null); setSelectedConversationId(null); // 질문 전송 시 라이브 화면으로
-    if (recoveryRequestId !== undefined) setRecoveryReviewState("reviewing");
+    if (isRecoveryTurn) setRecoveryReviewState("reviewing");
     idSeq.current += 1;
-    const userTurn: AiTurn = { id: `u${idSeq.current}`, role: "user", question: trimmed, collapsed: false, createdAt: now() };
-    setTurns((prev) => [...prev, userTurn]);
+    const userTurn: AiTurn = { id: `u${idSeq.current}`, role: "user", question: displayText?.trim() || trimmed, collapsed: false, createdAt: now() };
+    setTurns((prev) => [
+      ...prev.map((turn) => turn.role === "assistant" ? { ...turn, collapsed: true } : turn),
+      userTurn,
+    ]);
     setThinking(true);
     chatAbort.current?.abort();
     const controller = new AbortController();
@@ -461,25 +635,100 @@ export function AiPanel({ onClose, embedded = false, contextView = "resources", 
     idSeq.current += 1;
     const replyId = `a${idSeq.current}`;
     const outgoing = alertDraft.current === null ? trimmed : `${alertDraft.current} ${trimmed}`;
-    void sendAiChatTurn(buildAiContext(contextView, contextScope), outgoing, replyId, controller.signal)
+    const context = buildAiContext(contextView, contextScope);
+    const liveReply = isRecoveryTurn
+      ? (async () => {
+          const previousTurnCount = recoveryConversationTurnCount.current;
+          let conversationTurns: AiTurn[];
+          if (recoveryConversationId.current === null) {
+            const created = await createRecoveryConversation(
+              outgoing,
+              `복구 플랜 검토 · ${recoveryRequest.actionTitle}`,
+              {
+                ...context,
+                recovery: {
+                  request_id: recoveryRequest.id,
+                  action_title: recoveryRequest.actionTitle,
+                  action_route: recoveryRequest.actionRoute,
+                },
+              },
+              (conversationId) => {
+                recoveryConversationId.current = conversationId;
+                recoveryConversationTurnCount.current = 1;
+              },
+              controller.signal,
+            );
+            recoveryConversationId.current = created.conversationId;
+            conversationTurns = created.turns;
+          } else {
+            conversationTurns = await appendRecoveryConversationMessage(
+              recoveryConversationId.current,
+              previousTurnCount,
+              outgoing,
+              context,
+              controller.signal,
+            );
+          }
+          recoveryConversationTurnCount.current = conversationTurns.length;
+          const assistantTurns = conversationTurns
+            .slice(previousTurnCount === 0 ? 1 : previousTurnCount)
+            .filter((turn) => turn.role === "assistant");
+          return assistantTurns[assistantTurns.length - 1]
+            ?? sendAiChatTurn(context, outgoing, replyId, controller.signal);
+        })()
+      : sendAiChatTurn(context, outgoing, replyId, controller.signal);
+    void liveReply
       .then((turn) => {
         if (controller.signal.aborted) return;
-        alertDraft.current = turn.clarification === true ? outgoing : null;
-        setThinking(false); setTurns((prev) => [...prev, turn]);
-        if (recoveryRequestId !== undefined) setRecoveryReviewState("ready");
+        const previewTurn = isRecoveryTurn && isAiProviderFailureTurn(turn)
+          ? recoveryPreviewReviewTurn(recoveryRequest, `${turn.id}-preview`)
+          : null;
+        const displayedTurn = previewTurn ?? turn;
+        alertDraft.current = displayedTurn.clarification === true ? outgoing : null;
+        setThinking(false); setTurns((prev) => [...prev, displayedTurn]);
+        if (isRecoveryTurn) {
+          setRecoveryReviewState(previewTurn !== null || !isAiProviderFailureTurn(turn) ? "ready" : "error");
+        }
       })
       .catch((cause: unknown) => {
         if (controller.signal.aborted || isAbort(cause)) return;
+        if (isRecoveryTurn) {
+          void sendAiChatTurn(context, outgoing, replyId, controller.signal)
+            .then((turn) => {
+              if (controller.signal.aborted) return;
+              const previewTurn = isAiProviderFailureTurn(turn)
+                ? recoveryPreviewReviewTurn(recoveryRequest, `${turn.id}-preview`)
+                : null;
+              setThinking(false);
+              setTurns((prev) => [...prev, previewTurn ?? turn]);
+              setRecoveryReviewState(previewTurn !== null || !isAiProviderFailureTurn(turn) ? "ready" : "error");
+            })
+            .catch((fallbackCause: unknown) => {
+              if (controller.signal.aborted || isAbort(fallbackCause)) return;
+              setThinking(false); setError(trimmed); setRecoveryReviewState("error");
+            });
+          return;
+        }
         setThinking(false); setError(trimmed);
-        if (recoveryRequestId !== undefined) setRecoveryReviewState("error");
       });
   };
 
   useEffect(() => {
     if (recoveryRequest === null || lastRecoveryRequestId.current === recoveryRequest.id) return;
+    chatAbort.current?.abort();
     lastRecoveryRequestId.current = recoveryRequest.id;
-    send(recoveryRequest.prompt, recoveryRequest.id);
+    recoveryConversationId.current = null;
+    recoveryConversationTurnCount.current = 0;
+    setTurns([]);
+    setError(null);
+    setInput("");
+    setListOpen(false);
+    setCompletionPreviewed(false);
+    send(recoveryRequest.prompt, recoveryRequest.id, recoveryRequest.displayPrompt);
   }, [recoveryRequest?.id]);
+  useEffect(() => {
+    onRecoveryReviewStateChange?.(recoveryReviewState);
+  }, [onRecoveryReviewStateChange, recoveryReviewState]);
 
   // AI history: 목록에서 대화를 고르면 선택 id만 바꾼다. 실제 이력 조회는
   // useConversationDetail(selectedConversationId)가 담당(서버 role/content만 투영).
@@ -490,6 +739,20 @@ export function AiPanel({ onClose, embedded = false, contextView = "resources", 
   };
 
   const newChat = () => { chatAbort.current?.abort(); alertDraft.current = null; setSelectedConversationId(null); setTurns([]); setError(null); setInput(""); setThinking(false); };
+  const cancelRecoveryReview = () => {
+    chatAbort.current?.abort();
+    alertDraft.current = null;
+    lastRecoveryRequestId.current = null;
+    recoveryConversationId.current = null;
+    recoveryConversationTurnCount.current = 0;
+    setSelectedConversationId(null);
+    setTurns([]);
+    setError(null);
+    setInput("");
+    setThinking(false);
+    setRecoveryReviewState("idle");
+    onCancelRecovery?.();
+  };
 
   // 저장된 대화의 이력 턴과 라이브 대화 턴을 같은 표면으로 렌더한다
   const renderTurn = (turn: AiTurn) => {
@@ -508,9 +771,22 @@ export function AiPanel({ onClose, embedded = false, contextView = "resources", 
             {full ? <Minimize2 className="size-[17px]" /> : <Maximize2 className="size-[17px]" />}
           </button>
         )}
-        <button className="grid size-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" onClick={() => newChat()} title="새 대화" type="button"><Play className="size-[17px]" /></button>
+        {recoveryRequest === null ? (
+          <button className="grid size-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" onClick={() => newChat()} title="새 대화" type="button"><Play className="size-[17px]" /></button>
+        ) : null}
         <button className="grid size-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" onClick={() => setListOpen((v) => !v)} title="대화 목록" type="button"><SquarePen className="size-[17px]" /></button>
-        <button className="grid size-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" onClick={onClose} title="닫기" type="button"><X className="size-[17px]" /></button>
+        {recoveryRequest !== null && recoveryReviewState !== "executing" && recoveryReviewState !== "executed" ? (
+          <button
+            aria-label="복구 검토 중단"
+            className="grid size-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-600"
+            onClick={cancelRecoveryReview}
+            title="복구 검토 중단"
+            type="button"
+          >
+            <CircleStop className="size-[17px]" />
+          </button>
+        ) : null}
+        <button className="grid size-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" onClick={onClose} title="숨기기" type="button"><X className="size-[17px]" /></button>
       </header>
       <div className="flex items-center gap-1.5 border-b border-black/[0.04] bg-white/30 px-3.5 py-2 text-black backdrop-blur">
         <span className="text-caption font-medium text-black">맥락</span>
@@ -518,7 +794,7 @@ export function AiPanel({ onClose, embedded = false, contextView = "resources", 
         <span className="inline-flex items-center gap-1 rounded-full bg-black/[0.05] px-2 py-0.5 text-caption font-medium text-black"><Server className="size-3" />{contextScope}</span>
       </div>
       {listOpen ? (
-        <div className="absolute inset-x-0 top-[97px] z-10 border-b border-black/[0.06] bg-white/90 shadow-xl backdrop-blur-xl" style={{ animation: `fadeUp 0.2s ${SPRING}` }}>
+        <div className="max-h-64 shrink-0 overflow-y-auto border-b border-black/[0.06] bg-white/90 shadow-sm backdrop-blur-xl" style={{ animation: `fadeUp 0.2s ${SPRING}` }}>
           {conversations.status === "loading" ? (
             <p className="flex items-center gap-2 px-3.5 py-3 text-label text-muted-foreground"><Spinner className="size-3.5 ap-accent" decorative /> 대화 목록 불러오는 중…</p>
           ) : conversations.status === "unavailable" ? (
@@ -564,6 +840,7 @@ export function AiPanel({ onClose, embedded = false, contextView = "resources", 
             ) : null}
             {turns.map(renderTurn)}
             {thinking ? <Thinking /> : null}
+            {recoveryRequest !== null ? <RecoveryChangePreview request={recoveryRequest} state={recoveryReviewState} /> : null}
             {error !== null ? (
               <div className="mr-auto flex w-full max-w-[97%] items-center gap-2.5 rounded-2xl border border-black/[0.06] bg-card px-4 py-3 text-label" style={{ animation: `fadeUp 0.35s ${SPRING}` }}>
                 <CircleAlert className="size-4 shrink-0" style={{ color: "var(--ap-red)" }} />
@@ -592,27 +869,79 @@ export function AiPanel({ onClose, embedded = false, contextView = "resources", 
                 </p>
               </div>
               <span className="shrink-0 rounded-full bg-black/[0.05] px-2 py-1 text-caption font-medium text-muted-foreground">
-                {recoveryRequest.actionRoute === "auto" ? "자동 복구" : recoveryRequest.actionRoute === "safe_pr" ? "복구 PR" : "승인 검토"}
+                {recoveryRouteLabel(recoveryRequest.actionRoute)}
               </span>
             </div>
             <div className="mt-2.5 flex gap-2">
               {recoveryReviewState === "error" ? (
                 <button className="flex-1 rounded-xl border border-border bg-card px-3 py-2 text-label font-semibold text-foreground transition-colors hover:bg-muted"
-                  onClick={() => send(recoveryRequest.prompt, recoveryRequest.id)} type="button">
+                  onClick={() => send(recoveryRequest.prompt, recoveryRequest.id, recoveryRequest.displayPrompt)} type="button">
                   다시 검토
                 </button>
               ) : null}
-              <button className="flex-1 rounded-xl bg-primary px-3 py-2 text-label font-semibold text-primary-foreground transition-all hover:brightness-105 active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-primary/15 disabled:text-primary/45"
-                disabled={recoveryReviewState !== "ready"}
-                onClick={() => {
-                  setRecoveryReviewState("executing");
-                  void recoveryRequest.execute().then((ok) => setRecoveryReviewState(ok ? "executed" : "error"));
-                }}
-                type="button">
-                {recoveryReviewState === "executing" ? "요청 중"
-                  : recoveryReviewState === "executed" ? "요청 완료"
-                    : `AI 검토 후 ${recoveryRequest.actionRoute === "auto" ? "자동 복구 요청" : recoveryRequest.actionRoute === "safe_pr" ? "복구 PR 생성 요청" : "승인 검토 요청"}`}
-              </button>
+              {recoveryReviewState === "executed" ? (
+                <div className="grid flex-1 gap-2">
+                  <div className="flex items-center justify-center gap-2 rounded-xl bg-primary/[0.07] px-3 py-2 text-label font-semibold text-primary" role="status">
+                    <Check className="size-3.5" strokeWidth={3} />
+                    {completionPreviewed ? "복구 완료 · 5/5" : recoverySubmittedLabel(recoveryRequest.actionRoute)}
+                  </div>
+                  {!completionPreviewed && recoveryRequest.previewCompletionResponse && recoveryRequest.previewComplete ? (
+                    <button
+                      className="rounded-xl border border-dashed border-border bg-card px-3 py-2 text-caption font-semibold text-muted-foreground transition-colors hover:border-primary/30 hover:bg-primary/[0.03] hover:text-primary"
+                      onClick={() => {
+                        idSeq.current += 1;
+                        setTurns((prev) => [...prev, {
+                          id: `a${idSeq.current}`,
+                          role: "assistant",
+                          collapsed: false,
+                          createdAt: now(),
+                          parts: [{ kind: "text", markdown: recoveryRequest.previewCompletionResponse! }],
+                        }]);
+                        scrollToLatest();
+                        recoveryRequest.previewComplete?.();
+                        setCompletionPreviewed(true);
+                      }}
+                      type="button"
+                    >
+                      완료 상태 미리보기
+                    </button>
+                  ) : null}
+                </div>
+              ) : (
+                <button className="flex-1 rounded-xl bg-primary px-3 py-2 text-label font-semibold text-primary-foreground transition-all hover:brightness-105 active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-primary/15 disabled:text-primary/45"
+                  disabled={recoveryReviewState !== "ready" || thinking}
+                  onClick={() => {
+                    setRecoveryReviewState("executing");
+                    const minimumProgressTime = new Promise<void>((resolve) => window.setTimeout(resolve, 900));
+                    void Promise.all([recoveryRequest.execute(), minimumProgressTime])
+                      .then(([ok]) => {
+                        if (!ok) {
+                          setRecoveryReviewState("error");
+                          return;
+                        }
+                        idSeq.current += 1;
+                        setTurns((prev) => [...prev, {
+                          id: `a${idSeq.current}`,
+                          role: "assistant",
+                          collapsed: false,
+                          createdAt: now(),
+                          parts: [{
+                            kind: "text",
+                            markdown: recoveryAcceptedMessage(recoveryRequest.actionRoute),
+                          }],
+                        }]);
+                        scrollToLatest();
+                        setRecoveryReviewState("executed");
+                      });
+                  }}
+                  type="button">
+                  {thinking && recoveryReviewState === "ready" ? "답변 확인 중"
+                    : recoveryReviewState === "executing" ? "요청 중"
+                      : recoveryRequest.actionRoute === "auto" ? "자동 복구 요청"
+                        : isSafePrRoute(recoveryRequest.actionRoute) ? "복구 PR 생성"
+                          : "복구 요청"}
+                </button>
+              )}
             </div>
           </div>
         ) : null}
@@ -674,6 +1003,13 @@ export function AiPanel({ onClose, embedded = false, contextView = "resources", 
         .ap-ok-bg { background: color-mix(in srgb, var(--ap-green) 15%, transparent); }
         .ap-link { font-weight: 500; color: var(--ap-blue); text-decoration: underline; text-underline-offset: 3px; text-decoration-color: color-mix(in srgb, var(--ap-blue) 30%, transparent); transition: color .15s, text-decoration-color .15s; }
         .ap-link:hover { color: var(--action-hover); text-decoration-color: var(--action-hover); }
+        .ai-rich-text { display: grid; gap: 5px; }
+        .ai-rich-line { display: block; }
+        .ai-rich-heading { display: block; margin-top: 2px; color: var(--heading-foreground); font-weight: 650; }
+        .ai-rich-divider { display: block; height: 1px; margin: 8px 0; background: var(--border); }
+        .ai-rich-list-item { display: grid; grid-template-columns: 12px minmax(0,1fr); gap: 5px; color: var(--muted-foreground); }
+        .ai-rich-bullet { color: var(--ap-blue); font-weight: 700; }
+        .ai-rich-gap { display: block; height: 3px; }
         /* 접힘/펼침 아코디언 (grid-rows 0fr↔1fr, 타이밍은 TIMING 주입) */
         .ac-cap, .ac-full { display: grid; }
         .ac-cap { grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows ${TIMING.collapseSlideMs}ms cubic-bezier(0.4,0,0.2,1), opacity ${TIMING.collapseFadeMs}ms ease; }

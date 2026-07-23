@@ -13,8 +13,9 @@ import {
 import { HomeClustersWidget, OpsiaMap } from "./devpreview-opsia";
 import { DASHBOARD_WIDGET_GRID_CLASS, DASHBOARD_WIDGET_GRID_ITEM_CLASS, WidgetFrame, RatioBar, Donut, RankList, MultiLine, MiniTimeline, dashboardWidgetGridStyle, dashboardWidgetItemStyle, type DashboardWidgetSpan } from "./devpreview/widgets";
 import { DeploySurface, IssuesSurface, TimelineSurface, ChecksSurface, CostSurface, SettingsSurface, AlertsSurface, AiHistorySurface, IssueDetail, type RcaIncident } from "./devpreview-surfaces";
-import { AiPanel } from "./devpreview-ai";
+import { AiPanel, type RecoveryReviewState } from "./devpreview-ai";
 import type { AiRecoveryHandoff } from "./features/ai-assistant/aiRecoveryHandoff";
+import { isSafePrRoute } from "./devpreview/recoveryRoute";
 import { onAction, type DemoAction } from "./devpreview/bus";
 import { ConnectWizard, type RepositoryConnectionContext } from "./devpreview-connect";
 import { TopologyView } from "./devpreview-topology";
@@ -27,6 +28,19 @@ import { createClusterDisconnectPort } from "./app/composition/surfaces/clusters
 // 목록(⋮ 메뉴) 연결 해제도 상세 뷰와 같은 캐논 계약 port 를 공유한다 —
 // 두 번째 unregister 구현이 생기지 않게 하는 ClusterLifecycleControl 원칙 준수.
 const LIST_CLUSTER_DISCONNECT_PORT = createClusterDisconnectPort();
+
+function recoveryReviewStatusLabel(state: RecoveryReviewState, route?: string | null): string {
+  if (state === "reviewing") return "복구 플랜 검토 중";
+  if (state === "ready") return "복구 플랜 검토 완료";
+  if (state === "executing") return "복구 요청 중";
+  if (state === "executed") {
+    if (route === "auto") return "자동 복구 요청됨";
+    if (isSafePrRoute(route)) return "PR 생성 요청됨";
+    return "복구 요청됨";
+  }
+  if (state === "error") return "복구 플랜 검토 실패";
+  return "복구 플랜 검토";
+}
 import {
   PENDING_CLUSTER_STORAGE_KEY,
   reconcilePendingClusters,
@@ -1375,9 +1389,13 @@ function App() {
   const [detail, setDetail] = useState<{ kind: Kind; row: Row } | null>(null);
   const [rcaIncident, setRcaIncident] = useState<RcaIncident | null>(null); // 이슈 RCA 사이드바 — 셸 레벨 렌더(transform 조상 밖)
   const [recoverySelectionRoutes, setRecoverySelectionRoutes] = useState<ReadonlyMap<string, string>>(() => new Map());
+  const [previewCompletedRecoveryIds, setPreviewCompletedRecoveryIds] = useState<ReadonlySet<string>>(() => new Set());
+  const notifiedRecoveryCompletionIds = useRef(new Set<string>());
   const [navCollapsed, setNavCollapsed] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
+  const [aiMounted, setAiMounted] = useState(false);
   const [aiRecoveryRequest, setAiRecoveryRequest] = useState<AiRecoveryHandoff | null>(null);
+  const [aiRecoveryReviewState, setAiRecoveryReviewState] = useState<RecoveryReviewState>("idle");
   const [aiFull, setAiFull] = useState(false);         // AI 패널 전체 화면 (헤더 ⤢ 토글)
   const [aiW, setAiW] = useState(440);                 // 실제 제품처럼 리사이즈 가능한 도킹 폭
   const [aiDragging, setAiDragging] = useState(false);
@@ -1385,8 +1403,13 @@ function App() {
   const [connectView, setConnectView] = useState<null | "repo" | "cluster">(null); // 연결 위저드 딥오픈 대상 (설정 서피스)
   const [connectModal, setConnectModal] = useState<null | "repo" | "cluster">(null); // 문맥 진입 = 모달 팝업
   const [repositoryConnectContext, setRepositoryConnectContext] = useState<RepositoryConnectionContext | null>(null);
+  const showAi = useCallback(() => {
+    setAiMounted(true);
+    setAiOpen(true);
+  }, []);
   const openAi = useCallback((request?: AiRecoveryHandoff) => {
-    setAiRecoveryRequest(request ?? null);
+    if (request !== undefined) setAiRecoveryRequest(request);
+    setAiMounted(true);
     setAiOpen(true);
   }, []);
   // GitHub App 설치 복귀(?github_app_installation_id=...)가 홈으로 떨어져도
@@ -1935,7 +1958,7 @@ function App() {
           <span style={{ fontSize: TYPE.caption, fontFamily: MONO, color: UI.ink3, border: `1px solid ${UI.line}`, borderRadius: 4, padding: "1px 5px" }}>⌘K</span>
         </div>
         {narrowList && !aiOpen && (
-          <button type="button" className="product-focusable product-control" aria-label="AI 어시스턴트 열기" title="AI 어시스턴트" onClick={() => setAiOpen(true)}
+          <button type="button" className="product-focusable product-control" aria-label="AI 어시스턴트 열기" title="AI 어시스턴트" onClick={showAi}
             style={{ width: 30, height: 30, flexShrink: 0, borderRadius: 9, border: "none", cursor: "pointer", background: blueA(0.1), color: BLUE, display: "grid", placeItems: "center" }}>
             <Sparkles size={15} />
           </button>
@@ -2076,9 +2099,9 @@ function App() {
         </div>
       ) : surface === "deploy" ? (
         <DeploySurface pendingRepos={pendingRepo} repositoryFilter={deployRepositoryFilter} onOpenRef={openRef}
-          onOpenIssues={() => setSurface("issues")} onAskAi={() => setAiOpen(true)} onAddRepo={() => setConnectModal("repo")} />
+          onOpenIssues={() => setSurface("issues")} onAskAi={showAi} onAddRepo={() => setConnectModal("repo")} />
       ) : surface === "issues" ? (
-        <IssuesSurface incidentClusterIds={incidentClusterIds} recoverySelectionRoutes={recoverySelectionRoutes} sessionRules={notes.filter((n) => n.icon === "rule").map((n) => n.body.split(" · ")[0])} onOpenRef={openRef} onAskAi={() => openAi()} onOpenRca={setRcaIncident} />
+        <IssuesSurface incidentClusterIds={incidentClusterIds} recoverySelectionRoutes={recoverySelectionRoutes} previewCompletedRecoveryIds={previewCompletedRecoveryIds} sessionRules={notes.filter((n) => n.icon === "rule").map((n) => n.body.split(" · ")[0])} onOpenRef={openRef} onAskAi={() => openAi()} onOpenRca={setRcaIncident} />
       ) : surface === "timeline" ? (
         <TimelineSurface onOpenRef={openRef} />
       ) : surface === "checks" ? (
@@ -2088,7 +2111,7 @@ function App() {
       ) : surface === "alerts" ? (
         <AlertsSurface onOpenRef={openRef} />
       ) : surface === "ai" ? (
-        <AiHistorySurface onOpenPanel={() => setAiOpen(true)} />
+        <AiHistorySurface onOpenPanel={showAi} />
       ) : surface === "settings" ? (
         <SettingsSurface />
       ) : surface === "home" ? (
@@ -2216,9 +2239,10 @@ function App() {
 
       {/* AI 어시스턴트 — 상세 페이지 위까지 덮는 우측 오버레이 + 폭 조절 핸들 */}
       <AnimatePresence>
-        {aiOpen && (
-          <motion.div key="ai" initial={{ x: aiW + 30 }} animate={{ x: 0 }} exit={{ x: (aiFull ? window.innerWidth : aiW) + 30 }} transition={{ type: "spring", bounce: 0.06, visualDuration: 0.34 }}
-            style={{ position: "fixed", top: topH, right: 0, bottom: 0, width: aiFull ? "100vw" : aiW, zIndex: 72, display: "flex", boxShadow: `-28px 0 70px -32px ${inkA(0.3)}`, transition: "width .28s cubic-bezier(0.32,0.72,0,1)" }}>
+        {aiMounted && (
+          <motion.div key="ai" initial={{ x: aiW + 30 }} animate={{ x: aiOpen ? 0 : (aiFull ? window.innerWidth : aiW) + 30 }} transition={{ type: "spring", bounce: 0.06, visualDuration: 0.34 }}
+            aria-hidden={!aiOpen}
+            style={{ position: "fixed", top: topH, right: 0, bottom: 0, width: aiFull ? "100vw" : aiW, zIndex: 72, display: "flex", pointerEvents: aiOpen ? "auto" : "none", boxShadow: aiOpen ? `-28px 0 70px -32px ${inkA(0.3)}` : "none", transition: "width .28s cubic-bezier(0.32,0.72,0,1)" }}>
             {/* 전체 화면 중에는 폭 조절 핸들 비활성 */}
             {!aiFull && (
               <div role="separator" aria-label="AI 패널 폭 조절" aria-orientation="vertical" onPointerDown={onAiHandleDown} title="드래그해서 폭 조절"
@@ -2227,7 +2251,12 @@ function App() {
             <div style={{ flex: 1, minWidth: 0 }}>
               <AiPanel embedded full={aiFull} recoveryRequest={aiRecoveryRequest}
                 onToggleFull={() => setAiFull((v) => !v)}
-                onClose={() => { setAiOpen(false); setAiFull(false); setAiRecoveryRequest(null); }}
+                onClose={() => { setAiOpen(false); setAiFull(false); }}
+                onCancelRecovery={() => {
+                  setAiRecoveryRequest(null);
+                  setAiRecoveryReviewState("idle");
+                }}
+                onRecoveryReviewStateChange={setAiRecoveryReviewState}
                 contextView={aiRecoveryRequest?.contextView ?? (surface === "connect" ? "연결 설정" : surface === "home" ? "홈" : surface === "deploy" ? "배포" : surface === "issues" ? "이슈" : surface === "timeline" ? "타임라인" : surface === "checks" ? "점검" : surface === "cost" ? "비용" : surface === "alerts" ? "알림" : surface === "ai" ? "AI 대화" : surface === "settings" ? "설정" : resView === "flow" ? "트래픽" : resView === "list" ? "쿠버네티스 리소스" : "인프라 지도")}
                 contextScope={aiRecoveryRequest?.contextScope ?? scope.cluster ?? "전체 클러스터"} />
             </div>
@@ -2238,14 +2267,50 @@ function App() {
       {/* AI 플로팅 버튼 — 항상 최상위(상세 위 포함) · AI 창이 열리면 사라진다 */}
       <AnimatePresence>
         {!aiOpen && !narrowList && (
-          <motion.button type="button" aria-label="AI 어시스턴트 열기" key="fab" onClick={() => setAiOpen(true)} whileHover={{ scale: 1.06 }} whileTap={{ scale: 0.93 }}
-            initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.5, opacity: 0 }} transition={SOFT}
-            title="AI 어시스턴트"
-            style={{ position: "fixed", right: surface === "resources" && resView === "flow" && !narrowFlow ? 284 : 22, bottom: 22, zIndex: 75, width: 48, height: 48, borderRadius: 999, border: "none", cursor: "pointer",
-              background: `linear-gradient(135deg, ${BLUE}, ${BLUE2})`, color: UI.card, display: "grid", placeItems: "center",
-              boxShadow: `0 10px 26px -8px ${blueA(0.55)}, 0 2px 8px ${inkA(0.12)}` }}>
-            <Sparkles size={20} />
-          </motion.button>
+          <motion.div
+            key="fab"
+            initial={{ scale: 0.5, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.5, opacity: 0 }}
+            transition={SOFT}
+            className="group"
+            style={{
+              position: "fixed",
+              right: surface === "resources" && resView === "flow" && !narrowFlow ? 284 : 22,
+              bottom: 22,
+              zIndex: 75,
+              width: 48,
+              height: 48,
+            }}
+          >
+            <motion.button type="button" aria-label="AI 어시스턴트 열기" onClick={showAi} whileHover={{ scale: 1.06 }} whileTap={{ scale: 0.93 }}
+              title={aiRecoveryRequest !== null ? recoveryReviewStatusLabel(aiRecoveryReviewState, aiRecoveryRequest.actionRoute) : "AI 어시스턴트"}
+              style={{ position: "absolute", right: 0, bottom: 0, width: 48, height: 48, borderRadius: 999, border: "none", cursor: "pointer",
+                background: `linear-gradient(135deg, ${BLUE}, ${BLUE2})`, color: UI.card, display: "grid", placeItems: "center",
+                boxShadow: `0 10px 26px -8px ${blueA(0.55)}, 0 2px 8px ${inkA(0.12)}` }}>
+              {aiRecoveryRequest !== null && (aiRecoveryReviewState === "reviewing" || aiRecoveryReviewState === "executing") ? (
+                <motion.span
+                  aria-label="복구 AI 진행 중"
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 1.6, ease: "linear", repeat: Number.POSITIVE_INFINITY }}
+                  style={{ display: "grid", placeItems: "center" }}
+                >
+                  <Sparkles size={20} />
+                </motion.span>
+              ) : <Sparkles size={20} />}
+              {aiRecoveryRequest !== null && aiRecoveryReviewState !== "reviewing" && aiRecoveryReviewState !== "executing" ? (
+                <span
+                  aria-label="확인할 복구 AI 대화 1건"
+                  style={{
+                    position: "absolute", top: -4, right: -4, minWidth: 18, height: 18,
+                    borderRadius: 999, padding: "0 4px", display: "grid", placeItems: "center",
+                    border: `2px solid ${UI.card}`, background: HP.crit, color: UI.card,
+                    fontSize: 10, lineHeight: 1, fontWeight: 700,
+                  }}
+                >1</span>
+              ) : null}
+            </motion.button>
+          </motion.div>
         )}
       </AnimatePresence>
 
@@ -2311,11 +2376,36 @@ function App() {
           onClose={() => setRcaIncident(null)}
           onOpenRef={(k, n) => openRef(k, n)}
           onAskAi={openAi}
-          onRecoverySelected={(correlationId, route) => setRecoverySelectionRoutes((current) => {
-            const next = new Map(current);
-            next.set(correlationId, route);
-            return next;
-          })}
+          previewRecoveryCompleted={previewCompletedRecoveryIds.has(rcaIncident.correlationId ?? "")}
+          onRecoveryCompleted={(correlationId) => {
+            if (!notifiedRecoveryCompletionIds.current.has(correlationId)) {
+              notifiedRecoveryCompletionIds.current.add(correlationId);
+              pushToast({
+                title: "복구가 완료되었습니다",
+                sub: "성공 조건 검증을 마쳐 이슈 상태를 해결됨으로 변경했습니다.",
+                tone: "ok",
+              });
+            }
+            setPreviewCompletedRecoveryIds((current) => {
+              const next = new Set(current);
+              next.add(correlationId);
+              return next;
+            });
+          }}
+          onRecoverySelected={(correlationId, route, source) => {
+            setRecoverySelectionRoutes((current) => {
+              const next = new Map(current);
+              next.set(correlationId, route);
+              return next;
+            });
+            if (source === "direct") {
+              setAiOpen(false);
+              setAiMounted(false);
+              setAiFull(false);
+              setAiRecoveryRequest(null);
+              setAiRecoveryReviewState("idle");
+            }
+          }}
           rightInset={aiOpen ? aiW : 0} />}
       </AnimatePresence>
 
