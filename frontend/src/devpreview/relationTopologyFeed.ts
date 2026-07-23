@@ -35,6 +35,8 @@ export interface RelationNodeView {
   category: RelationNodeCategory;
   status: string;
   health: RelationNodeHealth;
+  /** Application bindings explicitly projected by the relation topology contract. */
+  applicationIds: string[];
   /** Stable cluster/namespace/name identity used to join traffic observations. */
   serviceKey: string;
 }
@@ -51,6 +53,9 @@ export interface RelationTopologyView {
   nodes: RelationNodeView[];
   edges: RelationEdgeView[];
   rootIds: string[];
+  /** Full evidence graph retained for exact resource-to-Pod interactions. */
+  evidenceNodes: RelationNodeView[];
+  evidenceEdges: RelationEdgeView[];
   truncated: boolean;
   omittedNodeCount: number;
   omittedEdgeCount: number;
@@ -63,6 +68,8 @@ const LOADING: RelationTopologyView = {
   nodes: [],
   edges: [],
   rootIds: [],
+  evidenceNodes: [],
+  evidenceEdges: [],
   truncated: false,
   omittedNodeCount: 0,
   omittedEdgeCount: 0,
@@ -96,7 +103,15 @@ export function toRelationTopologyView(
     clusterId: endpoint.cluster.cluster_id,
   };
   if (endpoint.availability === "unavailable") {
-    return { status: "unavailable", nodes: [], edges: [], rootIds: [], ...base };
+    return {
+      status: "unavailable",
+      nodes: [],
+      edges: [],
+      rootIds: [],
+      evidenceNodes: [],
+      evidenceEdges: [],
+      ...base,
+    };
   }
   // M20: backend node_id/edge_id는 단일 클러스터 스코프에서만 유일하다. 여러 클러스터를
   // union할 때 동일 id(예: 두 클러스터의 `default/kubernetes`)가 충돌해 노드가 하나로
@@ -114,6 +129,7 @@ export function toRelationTopologyView(
     category: node.category,
     status: node.status,
     health: healthOf(node.health),
+    applicationIds: [...node.application_ids],
     serviceKey: serviceKeyOf(
       node.identity.cluster_id,
       node.identity.namespace,
@@ -134,7 +150,15 @@ export function toRelationTopologyView(
   const keptIds = new Set(serviceNodes.map((node) => node.id));
   const serviceEdges = edges.filter((edge) => keptIds.has(edge.from) && keptIds.has(edge.to));
   const serviceRoots = endpoint.root_node_ids.map(qualify).filter((id) => keptIds.has(id));
-  return { status: "ready", nodes: serviceNodes, edges: serviceEdges, rootIds: serviceRoots, ...base };
+  return {
+    status: "ready",
+    nodes: serviceNodes,
+    edges: serviceEdges,
+    rootIds: serviceRoots,
+    evidenceNodes: nodes,
+    evidenceEdges: edges,
+    ...base,
+  };
 }
 
 function isAbortError(error: unknown): boolean {
@@ -149,11 +173,14 @@ function isAbortError(error: unknown): boolean {
  */
 export function useRelationTopology(
   clusterIds: readonly string[],
+  applicationIds: readonly string[] = [],
 ): RelationTopologyView {
   const [view, setView] = useState<RelationTopologyView>(LOADING);
-  const key = clusterIds.join(",");
+  const clusterKey = clusterIds.join(",");
+  const applicationKey = applicationIds.join(",");
   useEffect(() => {
-    const ids = key ? key.split(",") : [];
+    const ids = clusterKey ? clusterKey.split(",") : [];
+    const applications = applicationKey ? applicationKey.split(",") : [];
     const controller = new AbortController();
     // `GET /api/topology`는 그래프 클러스터가 정확히 1개일 때만 유효하다(len != 1 → 422).
     // 다중/전체 클러스터 스코프는 클러스터별로 개별 조회한 뒤 클라이언트에서 union한다.
@@ -164,7 +191,7 @@ export function useRelationTopology(
       return () => controller.abort();
     }
     if (ids.length === 1) {
-      void getRelationTopology({ clusters: ids }, controller.signal)
+      void getRelationTopology({ clusters: ids, applications }, controller.signal)
         .then((endpoint) => {
           if (controller.signal.aborted) return;
           setView(toRelationTopologyView(endpoint));
@@ -176,7 +203,7 @@ export function useRelationTopology(
       return () => controller.abort();
     }
     void Promise.all(ids.map((id) => (
-      getRelationTopology({ clusters: [id] }, controller.signal)
+      getRelationTopology({ clusters: [id], applications }, controller.signal)
         .then(toRelationTopologyView)
         .catch((cause: unknown): RelationTopologyView | null => {
           if (isAbortError(cause)) return null;
@@ -194,6 +221,8 @@ export function useRelationTopology(
         }
         const nodeMap = new Map<string, RelationNodeView>();
         const edgeMap = new Map<string, RelationEdgeView>();
+        const evidenceNodeMap = new Map<string, RelationNodeView>();
+        const evidenceEdgeMap = new Map<string, RelationEdgeView>();
         const rootIds: string[] = [];
         const reasons = new Set<string>();
         let truncated = false;
@@ -202,6 +231,8 @@ export function useRelationTopology(
         for (const snapshot of ready) {
           for (const node of snapshot.nodes) nodeMap.set(node.id, node);
           for (const edge of snapshot.edges) edgeMap.set(edge.id, edge);
+          for (const node of snapshot.evidenceNodes) evidenceNodeMap.set(node.id, node);
+          for (const edge of snapshot.evidenceEdges) evidenceEdgeMap.set(edge.id, edge);
           rootIds.push(...snapshot.rootIds);
           snapshot.partialReasonCodes.forEach((code) => reasons.add(code));
           truncated = truncated || snapshot.truncated;
@@ -213,6 +244,8 @@ export function useRelationTopology(
           nodes: [...nodeMap.values()],
           edges: [...edgeMap.values()],
           rootIds: [...new Set(rootIds)],
+          evidenceNodes: [...evidenceNodeMap.values()],
+          evidenceEdges: [...evidenceEdgeMap.values()],
           truncated,
           omittedNodeCount,
           omittedEdgeCount,
@@ -221,6 +254,6 @@ export function useRelationTopology(
         });
       });
     return () => controller.abort();
-  }, [key]);
+  }, [applicationKey, clusterKey]);
   return view;
 }

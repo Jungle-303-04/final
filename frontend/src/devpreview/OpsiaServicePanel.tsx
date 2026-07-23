@@ -3,6 +3,7 @@ import { Network, Plug } from "lucide-react";
 
 import { listInventoryResourcesByType } from "../api/inventory-query";
 import type { InventoryResource } from "../api/inventory-schemas";
+import type { PodHighlightTarget } from "./podHighlight";
 import { HP, MONO, TYPE, UI } from "./theme";
 import { statusLabel } from "./statusLabel";
 
@@ -13,6 +14,7 @@ const SERVICE_RESOURCE_TYPE = "service";
 interface OpsiaServicePanelProps {
   activeCluster: string | null;
   selectedNamespace: string | null;
+  onHighlightTarget?: (target: PodHighlightTarget | null) => void;
 }
 
 interface OpsiaServicePanelView {
@@ -138,7 +140,11 @@ function useOpsiaServices(
   return view.key === key ? view : { status: "loading", rows: [] };
 }
 
-export function OpsiaServicePanel({ activeCluster, selectedNamespace }: OpsiaServicePanelProps) {
+export function OpsiaServicePanel({
+  activeCluster,
+  selectedNamespace,
+  onHighlightTarget,
+}: OpsiaServicePanelProps) {
   const namespaceFilter = selectedNamespace?.trim() || null;
   const serviceView = useOpsiaServices(activeCluster, namespaceFilter);
   const scopeLabel = activeCluster
@@ -172,14 +178,29 @@ export function OpsiaServicePanel({ activeCluster, selectedNamespace }: OpsiaSer
           {serviceView.rows.map((service) => {
             const name = textValue(service.name, "이름 없음");
             const namespace = textValue(service.ns, "클러스터 범위");
+            const relationNamespace = typeof service.ns === "string" ? service.ns : "";
             const status = textValue(service.status);
             const health = textValue(service.health, "unknown");
+            const highlightTarget: PodHighlightTarget | null = activeCluster
+              ? {
+                  type: "service",
+                  clusterId: activeCluster,
+                  namespace: relationNamespace,
+                  name,
+                }
+              : null;
             return (
               <div key={textValue(service._key, `${namespace}/${name}`)} className="rrow"
+                data-pod-highlight-source="service"
+                tabIndex={0}
+                onMouseEnter={() => onHighlightTarget?.(highlightTarget)}
+                onMouseLeave={() => onHighlightTarget?.(null)}
+                onFocus={() => onHighlightTarget?.(highlightTarget)}
+                onBlur={() => onHighlightTarget?.(null)}
                 style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", minHeight: 48, textAlign: "left", border: "1px solid transparent", background: "transparent", borderRadius: 9, padding: "7px 9px" }}>
                 <Plug size={14} style={{ color: UI.ink3, flexShrink: 0 }} />
                 <span style={{ minWidth: 0, flex: 1 }}>
-                  <span title={name} style={{ display: "block", fontSize: TYPE.label, fontWeight: 600, fontFamily: MONO, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
+                  <span data-pod-highlight-primary title={name} style={{ display: "block", fontSize: TYPE.label, fontWeight: 600, fontFamily: MONO, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
                   <span style={{ display: "block", fontSize: TYPE.caption, color: UI.ink3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{namespace} · {statusLabel(status)}</span>
                 </span>
                 <ServiceHealthDot health={health} />

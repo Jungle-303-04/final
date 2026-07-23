@@ -8,6 +8,7 @@ import type {
   ConfigReferenceKind,
   ConfigReferenceList,
 } from "../api/config-references-schemas";
+import type { PodHighlightTarget } from "./podHighlight";
 import { BLUE, HP, MONO, TYPE, UI } from "./theme";
 
 type ConfigPanelStatus = "loading" | "ready" | "unavailable";
@@ -15,6 +16,7 @@ type ConfigPanelStatus = "loading" | "ready" | "unavailable";
 interface OpsiaConfigPanelProps {
   activeCluster: string | null;
   selectedNamespace: string | null;
+  onHighlightTarget?: (target: PodHighlightTarget | null) => void;
 }
 
 interface OpsiaConfigPanelView {
@@ -128,24 +130,67 @@ function CoverageNote({ coverage }: { coverage: ConfigReferenceCoverage }) {
   );
 }
 
-// 레퍼런스 목업 문법 — 아이콘 + 이름(모노, 최대 폭) + 종류 서브라벨 + 우측 참조 수 숫자.
-// 종류 칩과 참조 상세 줄은 제거해 이름이 잘리지 않게 한다(상세는 title 툴팁으로 유지).
-const SECRET_TINT = "#7c3aed";
-
-function ConfigReferenceRow({ item }: { item: ConfigReferenceItem }) {
-  const Icon = item.kind === "Secret" ? KeyRound : FileCog;
-  const iconColor = item.kind === "Secret" ? SECRET_TINT : BLUE;
-  const referenceCount = item.referenced_by.length;
+function ConfigKindChip({ kind }: { kind: ConfigReferenceKind }) {
+  const color = kind === "Secret" ? HP.warn : BLUE;
   return (
-    <div className="rrow" style={{ display: "flex", alignItems: "center", gap: 9, width: "100%", minHeight: 46, textAlign: "left", border: "1px solid transparent", background: "transparent", borderRadius: 9, padding: "7px 9px" }}>
-      <Icon size={15} style={{ color: iconColor, flexShrink: 0 }} />
-      <span style={{ minWidth: 0, flex: 1 }}>
-        <span title={`${item.namespace}/${item.name}`} style={{ display: "block", fontSize: TYPE.label, fontWeight: 700, fontFamily: MONO, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.name}</span>
-        <span style={{ display: "block", fontSize: TYPE.caption, color: UI.ink3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{KIND_LABELS[item.kind]} · {item.namespace}</span>
-      </span>
-      <span title={`참조 ${referenceCount}개`} style={{ fontSize: TYPE.label, fontWeight: 700, fontFamily: MONO, color: UI.ink3, fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>
-        {referenceCount}
-      </span>
+    <span style={{ fontSize: TYPE.caption, fontWeight: 700, color, background: `${color}14`, border: `1px solid ${color}33`, borderRadius: 5, padding: "1px 6px", whiteSpace: "nowrap" }}>
+      {KIND_LABELS[kind]}
+    </span>
+  );
+}
+
+function referencedWorkloadCount(item: ConfigReferenceItem): number {
+  return new Set(
+    item.referenced_by.map((usage) => (
+      usage.workload.uid ?? `${usage.workload.namespace}/${usage.workload.name}`
+    )),
+  ).size;
+}
+
+function ConfigReferenceRow({
+  item,
+  clusterId,
+  onHighlightTarget,
+}: {
+  item: ConfigReferenceItem;
+  clusterId: string;
+  onHighlightTarget?: (target: PodHighlightTarget | null) => void;
+}) {
+  const Icon = item.kind === "Secret" ? KeyRound : FileCog;
+  const workloadCount = referencedWorkloadCount(item);
+  const workloads = [...new Map(
+    item.referenced_by.map((usage) => [
+      `${usage.workload.kind}\u0000${usage.workload.namespace}\u0000${usage.workload.name}`,
+      {
+        kind: usage.workload.kind,
+        namespace: usage.workload.namespace,
+        name: usage.workload.name,
+      },
+    ]),
+  ).values()];
+  const highlightTarget: PodHighlightTarget = {
+    type: "workloads",
+    clusterId,
+    workloads,
+  };
+
+  return (
+    <div className="rrow"
+      data-pod-highlight-source="config"
+      tabIndex={0}
+      onMouseEnter={() => onHighlightTarget?.(highlightTarget)}
+      onMouseLeave={() => onHighlightTarget?.(null)}
+      onFocus={() => onHighlightTarget?.(highlightTarget)}
+      onBlur={() => onHighlightTarget?.(null)}
+      style={{ display: "flex", flexDirection: "column", gap: 6, width: "100%", minHeight: 54, textAlign: "left", border: "1px solid transparent", background: "transparent", borderRadius: 9, padding: "7px 9px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+        <Icon size={14} style={{ color: UI.ink3, flexShrink: 0 }} />
+        <span style={{ minWidth: 0, flex: 1 }}>
+          <span data-pod-highlight-primary title={item.name} style={{ display: "block", fontSize: TYPE.label, fontWeight: 700, fontFamily: MONO, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.name}</span>
+          <span style={{ display: "block", fontSize: TYPE.caption, color: UI.ink3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.namespace} · Deployment {workloadCount}개 참조</span>
+        </span>
+        <ConfigKindChip kind={item.kind} />
+      </div>
     </div>
   );
 }
@@ -166,7 +211,11 @@ function coverageReasonText(coverage: ConfigReferenceCoverage | null): string {
   return labels.length > 0 ? labels.join(" · ") : "인벤토리 응답을 다시 확인하세요.";
 }
 
-export function OpsiaConfigPanel({ activeCluster, selectedNamespace }: OpsiaConfigPanelProps) {
+export function OpsiaConfigPanel({
+  activeCluster,
+  selectedNamespace,
+  onHighlightTarget,
+}: OpsiaConfigPanelProps) {
   const namespaceFilter = selectedNamespace?.trim() || null;
   const configView = useOpsiaConfigReferences(activeCluster, namespaceFilter);
   const items = configView.data?.items ?? [];
@@ -202,7 +251,12 @@ export function OpsiaConfigPanel({ activeCluster, selectedNamespace }: OpsiaConf
           {coverage && <CoverageNote coverage={coverage} />}
           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
             {items.map((item) => (
-              <ConfigReferenceRow key={`${item.kind}:${item.namespace}/${item.name}`} item={item} />
+              <ConfigReferenceRow
+                key={`${item.kind}:${item.namespace}/${item.name}`}
+                item={item}
+                clusterId={activeCluster}
+                onHighlightTarget={onHighlightTarget}
+              />
             ))}
           </div>
         </>

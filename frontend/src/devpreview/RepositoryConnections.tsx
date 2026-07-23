@@ -18,12 +18,14 @@ export function RepositoryConnections({
   onDisconnected,
   selectedRepository,
   expandedRepositories,
+  onHoverRepository,
 }: {
   groups: readonly RepositoryGroup[];
   onOpenRepository?: (repositoryRef: string) => void;
   onDisconnected?: (repositoryRef: string) => void;
   selectedRepository?: string | null;
   expandedRepositories?: readonly string[];
+  onHoverRepository?: (group: RepositoryGroup | null) => void;
 }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
@@ -42,6 +44,7 @@ export function RepositoryConnections({
             accordion={expandedRepositories !== undefined}
             onOpenRepository={onOpenRepository}
             onDisconnected={onDisconnected}
+            onHoverRepository={onHoverRepository}
           />
         );
       })}
@@ -55,12 +58,14 @@ function RepositoryRow({
   accordion,
   onOpenRepository,
   onDisconnected,
+  onHoverRepository,
 }: {
   group: RepositoryGroup;
   selected: boolean;
   accordion: boolean;
   onOpenRepository?: (repositoryRef: string) => void;
   onDisconnected?: (repositoryRef: string) => void;
+  onHoverRepository?: (group: RepositoryGroup | null) => void;
 }) {
   const applicationsId = `repository-${group.repositoryRef.replace(/[^a-zA-Z0-9_-]/g, "-")}-applications`;
   const [confirming, setConfirming] = useState(false);
@@ -92,6 +97,11 @@ function RepositoryRow({
           ? `${group.repositoryRef} GitOps ${selected ? "닫기" : "열기"}`
           : `${group.repositoryRef} 배포 화면에서 열기`}
         onClick={() => onOpenRepository?.(group.repositoryRef)}
+        onMouseEnter={() => onHoverRepository?.(group)}
+        onMouseLeave={() => onHoverRepository?.(null)}
+        onFocus={() => onHoverRepository?.(group)}
+        onBlur={() => onHoverRepository?.(null)}
+        data-pod-highlight-source="repository"
         style={{
           display: "flex",
           alignItems: "center",
@@ -112,6 +122,7 @@ function RepositoryRow({
         <GithubIcon size={16} aria-hidden="true" style={{ flexShrink: 0 }} />
         <span style={{ minWidth: 0, flex: 1 }}>
           <strong
+            data-pod-highlight-primary
             title={group.repositoryRef}
             style={{
               display: "block",

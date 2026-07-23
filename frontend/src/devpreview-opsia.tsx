@@ -30,6 +30,12 @@ import { OpsiaConfigPanel } from "./devpreview/OpsiaConfigPanel";
 import { OpsiaServicePanel } from "./devpreview/OpsiaServicePanel";
 import { RepositoryConnections } from "./devpreview/RepositoryConnections";
 import type { RepositoryGroup } from "./devpreview/repositoryRegistry";
+import { useRelationTopology } from "./devpreview/relationTopologyFeed";
+import {
+  podHighlightIdentity,
+  resolveHighlightedPodIdentities,
+  type PodHighlightTarget,
+} from "./devpreview/podHighlight";
 import "./styles/tokens.css";
 import "./styles/foundation.css";
 
@@ -540,6 +546,8 @@ export function HomeClusterSection({ meta: _meta, onOpen, pending = [] }: {
 export function NodeCard({
   node,
   pods,
+  highlightedPodIdentities,
+  podHighlightActive,
   problemPodCount,
   nodeAlias,
   onOpen,
@@ -549,6 +557,8 @@ export function NodeCard({
 }: {
   node: InvNode;
   pods: readonly InvPod[];
+  highlightedPodIdentities?: ReadonlySet<string>;
+  podHighlightActive?: boolean;
   problemPodCount: number | null;
   nodeAlias?: NodeAliasView | null;
   onOpen: () => void;
@@ -626,7 +636,13 @@ export function NodeCard({
         <ClusterMiniUsage label="CPU" value={node.cpuPercent} />
         <ClusterMiniUsage label="MEM" value={node.memoryPercent} />
       </div>
-      <NodePodSlotGrid node={node} pods={pods} onTip={onTip} />
+      <NodePodSlotGrid
+        node={node}
+        pods={pods}
+        highlightedPodIdentities={highlightedPodIdentities}
+        podHighlightActive={podHighlightActive}
+        onTip={onTip}
+      />
     </motion.div>
   );
 }
@@ -640,9 +656,11 @@ type NodePodSlotState = "occupied" | "warning" | "critical" | "pending" | "empty
  * occupied square; unreturned occupied Pods stay green because `pods_running`
  * is itself observed evidence. Empty capacity is neutral and never fabricated.
  */
-export function NodePodSlotGrid({ node, pods, onTip }: {
+export function NodePodSlotGrid({ node, pods, highlightedPodIdentities, podHighlightActive = false, onTip }: {
   node: InvNode;
   pods: readonly InvPod[];
+  highlightedPodIdentities?: ReadonlySet<string>;
+  podHighlightActive?: boolean;
   onTip?: (tip: TipData) => void;
 }) {
   const reducedMotion = useReducedMotion();
@@ -678,18 +696,25 @@ export function NodePodSlotGrid({ node, pods, onTip }: {
       style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}
     >
       <span className="node-slot-grid" aria-hidden="true" style={{ display: "grid", gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, gap: 4, flex: 1, minWidth: 0 }}>
-        {slots.map(({ state, pod }, index) => (
+        {slots.map(({ state, pod }, index) => {
+          const highlighted = pod !== null && highlightedPodIdentities?.has(
+            podHighlightIdentity(pod.cluster, pod.namespace, pod.name),
+          ) === true;
+          const dimmed = podHighlightActive && state !== "empty" && !highlighted;
+          return (
           <motion.span
             data-slot-state={state}
             data-pod-name={pod?.name}
+            data-pod-highlighted={highlighted ? "true" : undefined}
+            data-pod-dimmed={dimmed ? "true" : undefined}
             data-pod-cpu-millicores={pod?.cpuMillicores ?? undefined}
             data-pod-memory-mebibytes={pod?.memoryMebibytes ?? undefined}
             data-pod-limit-utilization={pod ? podLimitUtilizationPercent(pod) ?? undefined : undefined}
             key={pod?.key ?? index}
             initial={reducedMotion ? false : { opacity: 0, scale: 0.76 }}
-            animate={{ opacity: 1, scale: 1 }}
+            animate={{ opacity: dimmed ? 0.22 : 1, scale: 1 }}
             whileHover={state === "empty" || reducedMotion ? undefined : { scale: 1.08 }}
-            transition={reducedMotion ? { duration: 0 } : { duration: 0.1, delay: Math.min(index, NODE_SLOT_RENDER_LIMIT - 1) * 0.0045, ease: "easeOut" }}
+            transition={reducedMotion ? { duration: 0 } : { duration: 0.12, ease: "easeOut" }}
             onMouseEnter={(event) => {
               if (state === "empty" || !onTip) return;
               event.stopPropagation();
@@ -716,14 +741,20 @@ export function NodePodSlotGrid({ node, pods, onTip }: {
               borderRadius: 3,
               border: `1px solid ${state === "empty" ? UI.line2 : slotColor(state, pod)}`,
               background: state === "empty" ? HP.ghost : slotColor(state, pod),
-              transition: reducedMotion ? "none" : "background-color .3s ease, border-color .3s ease, filter .1s ease, box-shadow .1s ease",
+              outline: highlighted ? `2px solid ${BLUE}` : "none",
+              outlineOffset: -2,
+              boxShadow: highlighted ? `0 0 0 3px ${blueA(0.22)}` : "none",
+              filter: dimmed ? "grayscale(0.5) saturate(0.45)" : highlighted ? "saturate(1.18)" : "none",
+              zIndex: highlighted ? 1 : 0,
+              transition: reducedMotion ? "none" : "background-color .3s ease, border-color .3s ease, filter .12s ease, box-shadow .12s ease",
             }}
           >
             {state === "pending" && (
               <span className="pulsedot" style={{ position: "absolute", inset: "35%", borderRadius: 999, background: UI.ink3 }} />
             )}
           </motion.span>
-        ))}
+          );
+        })}
       </span>
       {hiddenPodCount > 0 && (
         <span
@@ -912,8 +943,16 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
     () => activeCluster === null ? clusterIds : [activeCluster],
     [activeCluster, clusterIds],
   );
+  const [podHighlightTarget, setPodHighlightTarget] = useState<PodHighlightTarget | null>(null);
+  const highlightedApplicationIds = podHighlightTarget?.type === "applications"
+    ? podHighlightTarget.applicationIds
+    : [];
   const clusterSummaries = useClusterSummaries(summaryClusterIds);
   const topology = useClusterTopology(activeCluster);
+  const relationTopology = useRelationTopology(
+    activeCluster ? [activeCluster] : [],
+    highlightedApplicationIds,
+  );
   const nodeAliasCluster = view.level === "clusters" ? null : activeCluster;
   const nodeAliases = useNodeAliases(nodeAliasCluster);
   const nodeAliasEditingAvailable = nodeAliasCluster !== null;
@@ -939,6 +978,20 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
     window.scrollTo({ top: 0, behavior: "auto" });
   };
   const [tip, setTip] = useState<TipData>(null);
+  const highlightedPodIdentities = useMemo(
+    () => resolveHighlightedPodIdentities(
+      podHighlightTarget,
+      relationTopology.evidenceNodes,
+      relationTopology.evidenceEdges,
+    ),
+    [podHighlightTarget, relationTopology.evidenceEdges, relationTopology.evidenceNodes],
+  );
+  const podHighlightActive = useMemo(
+    () => podHighlightTarget !== null && pods.some((pod) => highlightedPodIdentities.has(
+      podHighlightIdentity(pod.cluster, pod.namespace, pod.name),
+    )),
+    [highlightedPodIdentities, podHighlightTarget, pods],
+  );
   // 툴팁 좌표는 CSS px로 — zoom(PRESENT_SCALE) 컨테이너 안 fixed는 시각 px 그대로 쓰면 스케일만큼 어긋난다
   const tipScale = embedded ? PRESENT_SCALE : 1;
   const onTip = (t: TipData) => setTip(t ? { ...t, x: t.x / tipScale, y: t.y / tipScale } : null);
@@ -1109,6 +1162,8 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
                               transition={reducedMotion ? { duration: 0 } : { ...SOFT, delay: Math.min(i, 4) * 0.015 }}
                             >
                               <NodeCard node={node} pods={observedPods ?? []}
+                                highlightedPodIdentities={highlightedPodIdentities}
+                                podHighlightActive={podHighlightActive}
                                 nodeAlias={nodeAliases.aliasesByNodeName.get(node.name) ?? null}
                                 problemPodCount={observedPods === null ? null : observedPods.filter((pod) => isBadHealth(pod.health)).length}
                                 onOpen={() => go({ level: "pods", cluster: view.cluster, node: node.name }, 1)}
@@ -1163,6 +1218,7 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
           <SidePanel key={lensTab ?? "default"} forcedTab={lensTab ?? null} scaled={embedded}
             onAddRepo={onAddRepo} onOpenRepository={onOpenRepository} stickyTop={stickyTop}
             activeCluster={activeCluster} selectedNamespace={selectedNamespace}
+            onHighlightTarget={setPodHighlightTarget}
             pendingRepos={pendingRepos} connectedRepos={connectedRepos}
             repositoryGroups={repositoryGroups} onRepositoryDisconnected={onRepositoryDisconnected} />
         </div>
@@ -1228,6 +1284,22 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
           z-index: 2;
           filter: brightness(1.04);
           box-shadow: 0 5px 12px ${inkA(0.2)};
+        }
+        .op [data-pod-highlight-source] {
+          transition: background-color .14s ease, border-color .14s ease, box-shadow .14s ease;
+          outline: none;
+        }
+        .op [data-pod-highlight-source]:hover,
+        .op [data-pod-highlight-source]:focus {
+          background: ${blueA(0.1)} !important;
+          border-color: ${blueA(0.34)} !important;
+          box-shadow: 0 0 0 2px ${blueA(0.08)};
+        }
+        .op [data-pod-highlight-source]:hover > svg,
+        .op [data-pod-highlight-source]:focus > svg,
+        .op [data-pod-highlight-source]:hover [data-pod-highlight-primary],
+        .op [data-pod-highlight-source]:focus [data-pod-highlight-primary] {
+          color: ${BLUE} !important;
         }
         .op .podrow { position: relative; transition: background .15s ease; }
         .op .podrow:hover { background: ${inkA(0.035)} !important; }
@@ -1343,7 +1415,7 @@ function PodSkeleton() {
 
 // ── 우측 패널 ─────────────────────────────
 // 서비스/구성 탭은 현재 드릴된 클러스터/네임스페이스 범위의 read-only projection을 보여준다.
-function SidePanel({ forcedTab, scaled, onAddRepo, onOpenRepository, stickyTop, activeCluster, selectedNamespace, pendingRepos, connectedRepos, repositoryGroups, onRepositoryDisconnected }: {
+function SidePanel({ forcedTab, scaled, onAddRepo, onOpenRepository, stickyTop, activeCluster, selectedNamespace, onHighlightTarget, pendingRepos, connectedRepos, repositoryGroups, onRepositoryDisconnected }: {
   forcedTab?: "svc" | "cfg" | "git" | null;
   scaled?: boolean;
   onAddRepo?: () => void;
@@ -1351,6 +1423,7 @@ function SidePanel({ forcedTab, scaled, onAddRepo, onOpenRepository, stickyTop, 
   stickyTop?: number;
   activeCluster?: string | null;
   selectedNamespace?: string | null;
+  onHighlightTarget?: (target: PodHighlightTarget | null) => void;
   pendingRepos?: string[];
   connectedRepos?: string[];
   repositoryGroups?: RepositoryGroup[];
@@ -1366,7 +1439,7 @@ function SidePanel({ forcedTab, scaled, onAddRepo, onOpenRepository, stickyTop, 
         {([["svc", "서비스", Plug], ["cfg", "구성", FileCog], ["git", "저장소", GithubIcon]] as const).map(([id, label, I]) => {
           const on = tab === id;
           return (
-            <button key={id} onClick={() => setTab(id)} style={{ position: "relative", flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, padding: "6px 0", borderRadius: 8, border: "none", background: "transparent", cursor: "pointer", fontSize: TYPE.label, fontWeight: 600, color: on ? UI.ink : UI.ink3 }}>
+            <button key={id} onClick={() => { onHighlightTarget?.(null); setTab(id); }} style={{ position: "relative", flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, padding: "6px 0", borderRadius: 8, border: "none", background: "transparent", cursor: "pointer", fontSize: TYPE.label, fontWeight: 600, color: on ? UI.ink : UI.ink3 }}>
               {on && <motion.span layoutId="ptab" transition={SOFT} style={{ position: "absolute", inset: 0, borderRadius: 8, background: UI.card, boxShadow: `0 1px 3px ${inkA(0.12)}` }} />}
               <span style={{ position: "relative", display: "flex", alignItems: "center", gap: 5 }}><I size={12} />{label}</span>
             </button>
@@ -1375,11 +1448,19 @@ function SidePanel({ forcedTab, scaled, onAddRepo, onOpenRepository, stickyTop, 
       </div>
 
       {tab === "svc" && (
-        <OpsiaServicePanel activeCluster={activeCluster ?? null} selectedNamespace={selectedNamespace ?? null} />
+        <OpsiaServicePanel
+          activeCluster={activeCluster ?? null}
+          selectedNamespace={selectedNamespace ?? null}
+          onHighlightTarget={onHighlightTarget}
+        />
       )}
 
       {tab === "cfg" && (
-        <OpsiaConfigPanel activeCluster={activeCluster ?? null} selectedNamespace={selectedNamespace ?? null} />
+        <OpsiaConfigPanel
+          activeCluster={activeCluster ?? null}
+          selectedNamespace={selectedNamespace ?? null}
+          onHighlightTarget={onHighlightTarget}
+        />
       )}
 
       {tab === "git" && (
@@ -1388,6 +1469,15 @@ function SidePanel({ forcedTab, scaled, onAddRepo, onOpenRepository, stickyTop, 
             groups={repositoryGroups}
             onOpenRepository={onOpenRepository}
             onDisconnected={onRepositoryDisconnected}
+            onHoverRepository={(group) => onHighlightTarget?.(
+              group && activeCluster
+                ? {
+                    type: "applications",
+                    clusterId: activeCluster,
+                    applicationIds: group.applications.map((application) => application.id),
+                  }
+                : null,
+            )}
           /> : (connectedRepos ?? []).map((r) => (
             <div key={`connected-${r}`} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", borderRadius: 9, padding: "7px 10px", background: TINT.ok.bg }}>
               <GithubIcon size={14} style={{ color: UI.ink3, flexShrink: 0 }} />
