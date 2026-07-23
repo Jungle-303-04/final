@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
 
 from domains.identity.dependencies import (
     ClusterAgentIdentity,
@@ -13,6 +13,11 @@ from domains.identity.dependencies import (
     require_session,
 )
 from domains.inventory.capabilities import resource_capabilities_response
+from domains.inventory.config_references import (
+    CONFIG_REFERENCE_DEFAULT_WORKLOAD_LIMIT,
+    CONFIG_REFERENCE_MAX_WORKLOAD_LIMIT,
+    config_reference_list_response,
+)
 from domains.inventory.events import InventorySnapshotRecordedBody
 from domains.inventory.ingest import ingest_inventory_snapshot
 from domains.inventory.provider_detail import provider_detail_projection
@@ -35,6 +40,7 @@ from packages.contracts.gateway.requests import InventorySnapshotRequest
 from packages.contracts.gateway.responses import (
     ClusterUsageResponse,
     ClusterUsageSample,
+    ConfigReferenceListResponse,
     InventoryResourceDetailResponse,
     InventoryResourceListResponse,
     InventoryResourceResponse,
@@ -193,6 +199,38 @@ async def list_inventory_resources(
         namespace=namespace,
         include_deleted=include_deleted,
         limit=limit,
+    )
+
+
+@router.get(
+    gateway_routes.CLUSTER_CONFIG_REFERENCES_PATH,
+    response_model=ConfigReferenceListResponse,
+)
+async def list_config_references(
+    cluster_id: Annotated[
+        str,
+        Path(min_length=1, max_length=gateway_limits.CLUSTER_ID_MAX_LENGTH),
+    ],
+    namespace: str | None = Query(
+        default=None,
+        max_length=gateway_limits.KUBERNETES_NAME_MAX_LENGTH,
+    ),
+    limit: int = Query(
+        default=CONFIG_REFERENCE_DEFAULT_WORKLOAD_LIMIT,
+        ge=1,
+        le=CONFIG_REFERENCE_MAX_WORKLOAD_LIMIT,
+    ),
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> ConfigReferenceListResponse:
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    require_inventory_access(db, current, workspace_id, cluster_id)
+    return config_reference_list_response(
+        db,
+        workspace_id=workspace_id,
+        cluster_id=cluster_id,
+        namespace=namespace,
+        workload_limit=limit,
     )
 
 

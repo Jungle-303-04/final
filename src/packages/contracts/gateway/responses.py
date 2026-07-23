@@ -14,6 +14,7 @@ from packages.contracts.cost.observations import (
     CostWorkloadKind,
 )
 from packages.contracts.gateway import facets as gateway_facets
+from packages.contracts.gateway import limits as gateway_limits
 from packages.contracts.gateway.base import StrictModel
 from packages.contracts.inventory_provider import ResourceProviderDetail
 from packages.contracts.kubernetes_discovery import ApiResourceDiscoveryObservation
@@ -920,6 +921,72 @@ class InventoryResourceListResponse(StrictModel):
     cluster_id: str
     resource_type: str | None = None
     resources: list[InventoryResourceResponse]
+
+
+ConfigReferenceKind = Literal["ConfigMap", "Secret"]
+ConfigReferenceSource = Literal["env", "env_from", "volume", "volume_mount"]
+ConfigReferenceAvailability = Literal["available", "partial", "unavailable"]
+
+
+class ConfigReferenceWorkload(StrictModel):
+    kind: Literal["Deployment"]
+    namespace: str = Field(min_length=1, max_length=gateway_limits.KUBERNETES_NAME_MAX_LENGTH)
+    name: str = Field(min_length=1, max_length=gateway_limits.KUBERNETES_NAME_MAX_LENGTH)
+    uid: str | None = Field(default=None, max_length=gateway_limits.KUBERNETES_NAME_MAX_LENGTH)
+
+
+class ConfigReferenceUsage(StrictModel):
+    workload: ConfigReferenceWorkload
+    source: ConfigReferenceSource
+    container_name: str | None = Field(
+        default=None,
+        max_length=gateway_limits.KUBERNETES_NAME_MAX_LENGTH,
+    )
+    env_name: str | None = Field(default=None, max_length=gateway_limits.KUBERNETES_NAME_MAX_LENGTH)
+    key: str | None = Field(default=None, max_length=gateway_limits.KUBERNETES_NAME_MAX_LENGTH)
+    prefix: str | None = Field(default=None, max_length=gateway_limits.KUBERNETES_NAME_MAX_LENGTH)
+    volume_name: str | None = Field(
+        default=None,
+        max_length=gateway_limits.KUBERNETES_NAME_MAX_LENGTH,
+    )
+    mount_path: str | None = Field(
+        default=None,
+        max_length=gateway_limits.FILTER_VALUE_LIST_MAX_LENGTH,
+    )
+    read_only: bool | None = None
+    optional: bool | None = None
+
+
+class ConfigReferenceItem(StrictModel):
+    kind: ConfigReferenceKind
+    namespace: str = Field(min_length=1, max_length=gateway_limits.KUBERNETES_NAME_MAX_LENGTH)
+    name: str = Field(min_length=1, max_length=gateway_limits.KUBERNETES_NAME_MAX_LENGTH)
+    referenced_by: list[ConfigReferenceUsage] = Field(
+        default_factory=list,
+        max_length=gateway_limits.INVENTORY_RESOURCE_MAX_LIMIT,
+    )
+
+
+class ConfigReferenceCoverage(StrictModel):
+    availability: ConfigReferenceAvailability
+    snapshot_id: str | None = Field(default=None, max_length=gateway_limits.CLUSTER_ID_MAX_LENGTH)
+    observed_at: str | None = Field(default=None, max_length=80)
+    workload_count: int = Field(ge=0)
+    projected_reference_count: int = Field(ge=0)
+    reason_codes: tuple[str, ...] = Field(default=(), max_length=16)
+
+
+class ConfigReferenceListResponse(StrictModel):
+    cluster_id: str = Field(min_length=1, max_length=gateway_limits.CLUSTER_ID_MAX_LENGTH)
+    namespace: str | None = Field(
+        default=None,
+        max_length=gateway_limits.KUBERNETES_NAME_MAX_LENGTH,
+    )
+    items: list[ConfigReferenceItem] = Field(
+        default_factory=list,
+        max_length=gateway_limits.INVENTORY_RESOURCE_MAX_LIMIT,
+    )
+    coverage: ConfigReferenceCoverage
 
 
 class InventoryResourceDetailResponse(StrictModel):
