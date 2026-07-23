@@ -60,6 +60,7 @@ import {
   useAlertEvents,
   type AlertEventView,
 } from "./devpreview/alertsFeed";
+import { alertEventPresentation, strongestAlertEventPresentation, type AlertEventIcon } from "./devpreview/alertEventPresentation";
 import { acknowledgeAlertEvent } from "./api/alert-events";
 import { useRelationTopology, type RelationNodeView } from "./devpreview/relationTopologyFeed";
 import { logout as logoutApi } from "./devpreview/sessionFeed";
@@ -1644,6 +1645,16 @@ type SessionNote = {
   lifecycleClusterId?: string;
 };
 
+type ToastTone = "ok" | "crit";
+type ToastPayload = {
+  title: string;
+  sub: string;
+} & (
+  | { tone: ToastTone; color?: never; Icon?: never }
+  | { tone?: never; color: string; Icon: AlertEventIcon }
+);
+type ToastMessage = ToastPayload & { id: number };
+
 function isClusterLifecycleNote(note: SessionNote, clusterId: string): boolean {
   return note.lifecycleClusterId === clusterId
     || (note.icon === "connect" && note.title.startsWith(`${clusterId} · `));
@@ -1938,10 +1949,14 @@ function App() {
   );
   const alertTotal = unreadAlerts.length + notes.length;
   const alertBadge = alertTotal > 5 ? "5+" : String(alertTotal);
+  const alertBadgePresentation = useMemo(
+    () => strongestAlertEventPresentation(unreadAlerts),
+    [unreadAlerts],
+  );
   const [bellRingVersion, setBellRingVersion] = useState(0);
-  const [toasts, setToasts] = useState<{ id: number; title: string; sub: string; tone: "ok" | "crit" }[]>([]);
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const toastSeq = useRef(0);
-  const pushToast = useCallback((t: { title: string; sub: string; tone: "ok" | "crit" }) => {
+  const pushToast = useCallback((t: ToastPayload) => {
     const id = ++toastSeq.current;
     setToasts((cur) => [...cur, { id, ...t }].slice(-5));
     window.setTimeout(() => setToasts((cur) => cur.filter((x) => x.id !== id)), 3800);
@@ -2007,10 +2022,12 @@ function App() {
         || !isIncidentNotification(event)
       ) continue;
       receivedNewIncident = true;
+      const presentation = alertEventPresentation(event);
       pushToast({
         title: `장애 발생 · ${event.ruleName ?? event.name}`,
         sub: `${event.cluster} · ${event.kind} ${event.name}`,
-        tone: "crit",
+        color: presentation.color,
+        Icon: presentation.Icon,
       });
     }
     if (receivedNewIncident) ringBell();
@@ -2232,7 +2249,7 @@ function App() {
             </motion.span>
           </button>
           {alertTotal > 0 && (
-            <span style={{ position: "absolute", top: -3, right: -3, minWidth: 15, height: 15, borderRadius: 999, background: unreadAlerts.some((e) => e.severity === "critical") ? HP.crit : HP.warn, color: UI.card, fontSize: TYPE.caption, fontWeight: 600, display: "grid", placeItems: "center", padding: "0 4px", border: `2px solid ${UI.card}`, boxSizing: "content-box" }}>{alertBadge}</span>
+            <span style={{ position: "absolute", top: -3, right: -3, minWidth: 15, height: 15, borderRadius: 999, background: alertBadgePresentation?.color ?? HP.warn, color: UI.card, fontSize: TYPE.caption, fontWeight: 600, display: "grid", placeItems: "center", padding: "0 4px", border: `2px solid ${UI.card}`, boxSizing: "content-box" }}>{alertBadge}</span>
           )}
           <AnimatePresence>
             {/* 애플 알림 센터 스타일 — 반투명 블러 패널 위 카드 스택 */}
@@ -2292,20 +2309,23 @@ function App() {
                       {notes.map((nn) => (
                         <Card key={`note-${nn.id}`} icon={nn.icon === "rule" ? Bell : Plug} tint={nn.icon === "rule" ? BLUE : HP.ok} title={nn.title} time="방금" body={nn.body} />
                       ))}
-                      {unreadAlerts.map((ev) => (
-                        <Card key={ev.eventId} icon={ev.severity === "critical" ? Activity : Server}
-                          tint={ev.severity === "critical" ? HP.crit : HP.warn} title={ev.name} time={alertTime(ev.firedAt)}
-                          body={[statusLabel(ev.severity), statusLabel(ev.status), ev.kind, ev.namespace, ev.ruleName].filter(Boolean).join(" · ")}
-                          right={ev.cluster} onClick={() => {
-                            markAlertRead(ev);
-                            setBellOpen(false);
-                            if (ev.incidentId) {
-                              setSurface("issues");
-                              return;
-                            }
-                            openRef(ev.kind, ev.name);
-                          }} />
-                      ))}
+                      {unreadAlerts.map((ev) => {
+                        const presentation = alertEventPresentation(ev);
+                        return (
+                          <Card key={ev.eventId} icon={presentation.Icon}
+                            tint={presentation.color} title={ev.name} time={alertTime(ev.firedAt)}
+                            body={[statusLabel(ev.severity), statusLabel(ev.status), ev.kind, ev.namespace, ev.ruleName].filter(Boolean).join(" · ")}
+                            right={ev.cluster} onClick={() => {
+                              markAlertRead(ev);
+                              setBellOpen(false);
+                              if (ev.incidentId) {
+                                setSurface("issues");
+                                return;
+                              }
+                              openRef(ev.kind, ev.name);
+                            }} />
+                        );
+                      })}
                       {alertEvents.status === "unavailable" && unreadAlerts.length === 0 && notes.length === 0 && (
                         <div style={{ padding: "10px 12px", fontSize: TYPE.caption, color: UI.ink3 }}>알림 이벤트 관측 안 됨</div>
                       )}
@@ -2653,19 +2673,23 @@ function App() {
       {/* 작업 토스트 — 우측 상단 스택 */}
       <div style={{ position: "fixed", top: topH + 10, right: 16, zIndex: 80, display: "flex", flexDirection: "column", gap: 8, pointerEvents: "none" }}>
         <AnimatePresence initial={false} mode="popLayout">
-          {toasts.map((t) => (
-            <motion.div key={t.id} layout="position" initial={{ opacity: 0, y: -14, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -8, scale: 0.98 }}
-              transition={{ ...SOFT, layout: { duration: 0.24, ease: [0.32, 0.72, 0, 1] } }}
-              style={{ display: "flex", alignItems: "center", gap: 10, width: 340, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 13, padding: "11px 13px", boxShadow: `0 16px 44px -16px ${inkA(0.3)}`, pointerEvents: "auto" }}>
-              <span style={{ width: 26, height: 26, borderRadius: 9, background: t.tone === "ok" ? HP.ok : HP.crit, display: "grid", placeItems: "center", flexShrink: 0 }}>
-                {t.tone === "ok" ? <Check size={14} color={UI.card} strokeWidth={3} /> : <AlertTriangle size={13} color={UI.card} />}
-              </span>
-              <span style={{ minWidth: 0 }}>
-                <span style={{ display: "block", fontSize: TYPE.body, fontWeight: 600, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.title}</span>
-                <span style={{ display: "block", fontSize: TYPE.caption, color: UI.ink2, marginTop: 1 }}>{t.sub}</span>
-              </span>
-            </motion.div>
-          ))}
+          {toasts.map((t) => {
+            const ToastIcon = t.Icon ?? (t.tone === "crit" ? AlertTriangle : Check);
+            const toastColor = t.color ?? (t.tone === "crit" ? HP.crit : HP.ok);
+            return (
+              <motion.div key={t.id} layout="position" initial={{ opacity: 0, y: -14, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -8, scale: 0.98 }}
+                transition={{ ...SOFT, layout: { duration: 0.24, ease: [0.32, 0.72, 0, 1] } }}
+                style={{ display: "flex", alignItems: "center", gap: 10, width: 340, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 13, padding: "11px 13px", boxShadow: `0 16px 44px -16px ${inkA(0.3)}`, pointerEvents: "auto" }}>
+                <span style={{ width: 26, height: 26, borderRadius: 9, background: toastColor, display: "grid", placeItems: "center", flexShrink: 0 }}>
+                  <ToastIcon size={t.tone === "ok" ? 14 : 13} color={UI.card} strokeWidth={t.tone === "ok" ? 3 : 2.2} />
+                </span>
+                <span style={{ minWidth: 0 }}>
+                  <span style={{ display: "block", fontSize: TYPE.body, fontWeight: 600, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.title}</span>
+                  <span style={{ display: "block", fontSize: TYPE.caption, color: UI.ink2, marginTop: 1 }}>{t.sub}</span>
+                </span>
+              </motion.div>
+            );
+          })}
         </AnimatePresence>
       </div>
 

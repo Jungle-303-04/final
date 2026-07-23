@@ -32,6 +32,7 @@ import { isActiveRcaIssue } from "./devpreview/rcaIssuesFeed";
 import { useSession, sessionInitial } from "./devpreview/sessionFeed";
 import { useAiConversations, useConversationDetail } from "./devpreview/aiFeed";
 import { useAlertEvents, useAlertRules, useAlertChannels } from "./devpreview/alertsFeed";
+import { alertEventPresentation, alertSeverityTone, type AlertEventIcon, type AlertPresentationTone } from "./devpreview/alertEventPresentation";
 import {
   useApplicationRuns,
   useApplications,
@@ -2605,11 +2606,18 @@ export function SettingsSurface() {
 // /api/alert-channels(채널). 이벤트 목록은 현재 비어 있어 정직한 "관측된 알림
 // 없음"으로 렌더한다. 규칙 활성/비활성·생성은 CSRF가 필요한 mutation이므로 여기
 // 서는 읽기 전용(상태 pill)으로만 표시하고 자동 변형은 하지 않는다.
-function severityTone(severity: string): "ok" | "warn" | "crit" | "info" {
-  if (severity === "critical") return "crit";
-  if (severity === "high" || severity === "warning" || severity === "medium") return "warn";
-  return "info";
+function AlertEventPill({ tone, label, icon: Icon, iconColor }: { tone: AlertPresentationTone; label: string; icon: AlertEventIcon; iconColor: string }) {
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: TYPE.caption, fontWeight: 600, borderRadius: 999, padding: "3px 9px", whiteSpace: "nowrap",
+      color: tone === "ok" ? TINT.ok.fg : tone === "warn" ? TINT.warn.fg : tone === "crit" ? TINT.crit.fg : TINT.blue.fg,
+      background: tone === "ok" ? TINT.ok.bg : tone === "warn" ? TINT.warn.bg : tone === "crit" ? critA(0.09) : blueA(0.08),
+      border: `1px solid ${tone === "ok" ? TINT.ok.bd : tone === "warn" ? TINT.warn.bd : tone === "crit" ? critA(0.3) : blueA(0.25)}` }}>
+      <Icon size={11} style={{ color: iconColor, flexShrink: 0 }} />
+      {label}
+    </span>
+  );
 }
+
 export function AlertsSurface({ onOpenRef }: { onOpenRef: (kind: string, name: string) => void }) {
   const events = useAlertEvents();
   const rules = useAlertRules();
@@ -2632,15 +2640,18 @@ export function AlertsSurface({ onOpenRef }: { onOpenRef: (kind: string, name: s
         {events.status === "loading" ? emptyRow("불러오는 중…")
           : events.status === "unavailable" ? emptyRow("알림 이벤트를 불러오지 못했습니다.")
           : events.items.length === 0 ? emptyRow("관측된 알림 없음")
-          : events.items.map((n, i) => (
-            <TRow key={n.eventId} cols={evCols} i={i} onClick={() => onOpenRef(n.kind, n.name)} cells={[
-              <Pill key="s" tone={severityTone(n.severity)} label={koLabel(n.severity)} />,
-              <span key="t" style={{ fontSize: TYPE.label, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{n.kind} · {n.name}{n.namespace ? ` · ${n.namespace}` : ""}</span>,
-              <Mono key="r" dim>{n.ruleName ?? "—"}</Mono>,
-              <span key="st" style={{ fontSize: TYPE.label, color: UI.ink3 }}>{koLabel(n.status)}</span>,
-              <Mono key="w" dim>{fromNow(n.firedAt)}</Mono>,
-            ]} />
-          ))}
+          : events.items.map((n, i) => {
+            const presentation = alertEventPresentation(n);
+            return (
+              <TRow key={n.eventId} cols={evCols} i={i} onClick={() => onOpenRef(n.kind, n.name)} cells={[
+                <AlertEventPill key="s" tone={presentation.tone} label={koLabel(n.severity)} icon={presentation.Icon} iconColor={presentation.color} />,
+                <span key="t" style={{ fontSize: TYPE.label, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{n.kind} · {n.name}{n.namespace ? ` · ${n.namespace}` : ""}</span>,
+                <Mono key="r" dim>{n.ruleName ?? "—"}</Mono>,
+                <span key="st" style={{ fontSize: TYPE.label, color: UI.ink3 }}>{koLabel(n.status)}</span>,
+                <Mono key="w" dim>{fromNow(n.firedAt)}</Mono>,
+              ]} />
+            );
+          })}
       </Card>
       <Card pad={0}>
         <div style={{ padding: "11px 15px", borderBottom: `1px solid ${UI.line2}`, fontSize: TYPE.label, fontWeight: 600, color: UI.ink3 }}>알림 규칙</div>
@@ -2652,7 +2663,7 @@ export function AlertsSurface({ onOpenRef }: { onOpenRef: (kind: string, name: s
             <TRow key={r.ruleId} cols={ruleCols} i={i} cells={[
               <Mono key="n">{r.name}</Mono>,
               <span key="c" style={{ fontSize: TYPE.label, color: UI.ink2, fontFamily: MONO }}>{r.metric} {r.comparator} {r.threshold}</span>,
-              <Pill key="s" tone={severityTone(r.severity)} label={koLabel(r.severity)} />,
+              <Pill key="s" tone={alertSeverityTone(r.severity)} label={koLabel(r.severity)} />,
               <Mono key="ch">{r.channels.length}</Mono>,
               <Pill key="e" tone={r.enabled ? "ok" : "info"} label={r.enabled ? "활성" : "중지"} />,
             ]} />
