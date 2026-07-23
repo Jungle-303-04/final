@@ -1,6 +1,6 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "motion/react";
-import { GitBranch, Package, Rocket, X } from "lucide-react";
+import { GitBranch, ListChecks, Package, Rocket, X } from "lucide-react";
 
 import type { ApplicationDriftEndpoint } from "../api/application-catalog-schemas";
 import type { GitOpsApplicationDetailEndpoint } from "../api/gitops-application-detail-schemas";
@@ -23,7 +23,9 @@ import type { ApplicationRunView, DeployFeedStatus, WorkflowStepView } from "./d
 export type DeployDetailTarget =
   | { kind: "application"; applicationId: string; name: string }
   | { kind: "helm"; identity: HelmReleaseIdentity; displayNamespace: string }
-  | { kind: "run"; workflowRunId: string };
+  | { kind: "run"; workflowRunId: string }
+  | { kind: "releaseRun"; runId: string }
+  | { kind: "releasePlan"; planKey: string };
 
 interface PanelInsets {
   topInset: number;
@@ -563,15 +565,340 @@ function PromotionGateSection({ gate }: { gate: Record<string, unknown> }) {
   );
 }
 
-// ── 진입점 — DeploySurface가 detail 상태 하나로 세 패널을 라우팅한다 ────────
+// ── 확인 다이얼로그 — 모든 릴리스 쓰기 액션의 관문 (z 73: 패널 위, 헤더 아래) ──
 
-export function DeployDetailHost({ target, runs, onClose, topInset, leftInset, rightInset }: {
+export function ConfirmDialog({ title, body, confirmLabel, tone, requireText, busy, onCancel, onConfirm }: {
+  title: string;
+  body: React.ReactNode;
+  confirmLabel: string;
+  tone: "primary" | "danger";
+  /** 파괴적 액션: 이 문자열을 정확히 입력해야 실행 버튼이 활성화된다. */
+  requireText?: string;
+  busy: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const [typed, setTyped] = useState("");
+  const locked = requireText !== undefined && typed.trim() !== requireText;
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { event.stopPropagation(); onCancel(); }
+    };
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => document.removeEventListener("keydown", onKeyDown, true);
+  }, [onCancel]);
+  return (
+    <>
+      <div aria-hidden="true" onClick={busy ? undefined : onCancel}
+        style={{ position: "fixed", inset: 0, background: inkA(0.3), zIndex: 73 }} />
+      <div role="alertdialog" aria-modal="true" aria-label={title}
+        style={{ position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)", width: 420, maxWidth: "calc(100vw - 48px)", background: UI.card, border: `1px solid ${UI.line}`, borderRadius: RADIUS.sheet, boxShadow: ELEV.overlay, zIndex: 74, overflow: "hidden" }}>
+        <div style={{ padding: `${SPACE.card}px ${SPACE.card}px 0`, fontSize: TYPE.body, fontWeight: 700, color: tone === "danger" ? TINT.crit.fg : UI.ink }}>{title}</div>
+        <div style={{ padding: `10px ${SPACE.card}px ${SPACE.card}px`, display: "flex", flexDirection: "column", gap: 10, fontSize: TYPE.label, color: UI.ink2, lineHeight: 1.55 }}>
+          {body}
+          {requireText !== undefined && (
+            <>
+              <span style={{ fontSize: TYPE.caption }}>확인을 위해 <span style={{ fontFamily: MONO, color: UI.ink }}>{requireText}</span> 를 입력하세요:</span>
+              <input value={typed} onChange={(event) => setTyped(event.target.value)} placeholder={requireText} disabled={busy}
+                style={{ border: `1px solid ${UI.line}`, borderRadius: RADIUS.control, padding: "7px 10px", fontSize: TYPE.caption, fontFamily: MONO, color: UI.ink, outline: "none" }} />
+            </>
+          )}
+        </div>
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, padding: `0 ${SPACE.card}px ${SPACE.card}px` }}>
+          <button type="button" className="product-focusable product-control" onClick={onCancel} disabled={busy}
+            style={{ border: `1px solid ${UI.line}`, background: UI.card, color: UI.ink, borderRadius: RADIUS.control, padding: "6px 13px", fontSize: TYPE.label, fontWeight: 600, cursor: busy ? "default" : "pointer" }}>취소</button>
+          <button type="button" className="product-focusable product-action" onClick={onConfirm} disabled={busy || locked}
+            style={{ border: "none", borderRadius: RADIUS.control, padding: "6px 13px", fontSize: TYPE.label, fontWeight: 600,
+              cursor: busy || locked ? "default" : "pointer",
+              background: busy || locked ? "#F3F4F6" : tone === "danger" ? HP.crit : BLUE,
+              color: busy || locked ? "#9AA0AA" : UI.card }}>
+            {busy ? "실행 중…" : confirmLabel}
+          </button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ── 릴리스 런/플랜 상세 — releaseFlowFeed의 서버 응답만 렌더 ────────────────
+
+type ReleaseRunRecord = import("../api/release-flow-schemas").ReleaseRunApi;
+type ReleasePlanRecord = import("../api/release-flow-schemas").ReleasePlanApi;
+type ReleaseActionsApi = import("./releaseFlowFeed").ReleaseActions;
+type RunActionId = import("../api/release-flow").ReleaseRunAction;
+
+interface PendingRunAction {
+  action: RunActionId;
+  label: string;
+  destructive: boolean;
+}
+
+const RUN_ACTION_LABEL: Record<string, string> = {
+  pause: "일시정지", resume: "재개", retry: "재시도", rollback: "롤백", cancel: "취소",
+};
+
+function runStatusView(run: ReleaseRunRecord): React.ReactNode {
+  const derived = typeof run.derived_status === "string" && run.derived_status.trim() !== ""
+    ? run.derived_status
+    : run.status;
+  return statusView(derived);
+}
+
+export function ReleaseRunDetailPanel({ runId, runs, actions, onClose, insets }: {
+  runId: string;
+  runs: ReleaseRunRecord[];
+  actions: ReleaseActionsApi;
+  onClose: () => void;
+  insets: PanelInsets;
+}) {
+  const run = runs.find((candidate) => candidate.run_id === runId) ?? null;
+  const [confirm, setConfirm] = useState<PendingRunAction | null>(null);
+  const busy = actions.state.pendingKey !== null;
+  const lastResult = actions.state.lastResult;
+  const effective = run === null ? "" : (typeof run.derived_status === "string" && run.derived_status.trim() !== "" ? run.derived_status : run.status).toLowerCase();
+  const isActive = ["running", "in_progress", "pending", "starting", "progressing", "waiting_for_approval"].includes(effective);
+  const isPaused = effective === "paused";
+  const hasFailedStep = run !== null && run.steps.some((step) => /fail|error/i.test(step.status));
+
+  // 서버가 허용하지 않을 상태의 버튼은 비활성 + 사유 — 동작 없는 컨트롤을 그리지 않는다.
+  const runActions: { action: RunActionId; enabled: boolean; reason: string; destructive: boolean }[] = [
+    { action: "pause", enabled: isActive, reason: "진행 중인 런에서만 가능", destructive: false },
+    { action: "resume", enabled: isPaused, reason: "일시정지된 런에서만 가능", destructive: false },
+    { action: "retry", enabled: isPaused || hasFailedStep || effective === "failed", reason: "실패가 관측된 런에서만 가능", destructive: false },
+    { action: "rollback", enabled: run !== null, reason: "런 관측 필요", destructive: true },
+    { action: "cancel", enabled: isActive || isPaused, reason: "진행·일시정지 상태에서만 가능", destructive: true },
+  ];
+
+  return (
+    <PanelShell icon={ListChecks} title={run?.plan_name ?? "릴리스 런"} subtitle={runId} onClose={onClose} insets={insets}>
+      {run === null ? (
+        <span style={{ fontSize: TYPE.label, color: UI.ink3, padding: "2px 0" }}>이 런이 현재 관측 범위에 없습니다.</span>
+      ) : (
+        <>
+          <Section title="개요" aside={runStatusView(run)}>
+            <KV label="웨이브 진행" mono>{run.current_wave} / {run.total_waves}</KV>
+            <KV label="시작자">{gapText(typeof run.started_by === "string" ? run.started_by : null)}</KV>
+            <KV label="시작">{fromNow(run.created_at ?? null)}</KV>
+            <KV label="마지막 갱신">{fromNow(run.updated_at ?? null)}</KV>
+          </Section>
+          <Section title="단계" aside={<span style={{ fontSize: TYPE.caption, color: UI.ink3 }}>{run.steps.length}단계</span>}>
+            {run.steps.length === 0 ? (
+              <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>기록된 단계 없음</span>
+            ) : run.steps.map((step) => (
+              <div key={step.run_step_id} style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                <span style={{ flexShrink: 0, fontFamily: MONO, fontSize: TYPE.caption, color: UI.ink3, width: 28 }}>w{step.wave}</span>
+                <span style={{ minWidth: 0, flex: 1, fontFamily: MONO, fontSize: TYPE.label, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{step.name}</span>
+                {statusView(step.status)}
+              </div>
+            ))}
+          </Section>
+          <Section title="감사 로그" aside={<span style={{ fontSize: TYPE.caption, color: UI.ink3 }}>{run.events.length}건</span>}>
+            {run.events.length === 0 ? (
+              <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>기록된 감사 이벤트 없음</span>
+            ) : run.events.slice(0, 20).map((event) => (
+              <div key={event.audit_id} style={{ display: "flex", alignItems: "baseline", gap: 8, minWidth: 0, fontSize: TYPE.caption }}>
+                <span style={{ fontFamily: MONO, color: UI.ink, flexShrink: 0 }}>{event.event_type}</span>
+                <span style={{ minWidth: 0, flex: 1, color: UI.ink2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={event.message}>{event.message}</span>
+                <span style={{ color: UI.ink3, flexShrink: 0 }}>{[typeof event.actor === "string" ? event.actor : null, fromNow(event.created_at ?? null)].filter(Boolean).join(" · ")}</span>
+              </div>
+            ))}
+          </Section>
+          <Section title="런 제어">
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {runActions.map(({ action, enabled, reason, destructive }) => (
+                <button key={action} type="button" className="product-focusable product-control"
+                  disabled={!enabled || busy}
+                  title={enabled ? undefined : reason}
+                  onClick={() => setConfirm({ action, label: RUN_ACTION_LABEL[action] ?? action, destructive })}
+                  style={{ border: `1px solid ${destructive && enabled ? TINT.crit.bd : UI.line}`, borderRadius: RADIUS.control, padding: "6px 13px", fontSize: TYPE.label, fontWeight: 600,
+                    background: !enabled || busy ? "#F3F4F6" : destructive ? TINT.crit.bg : UI.card,
+                    color: !enabled || busy ? "#9AA0AA" : destructive ? TINT.crit.fg : UI.ink,
+                    cursor: !enabled || busy ? "not-allowed" : "pointer" }}>
+                  {RUN_ACTION_LABEL[action] ?? action}
+                </button>
+              ))}
+            </div>
+            {lastResult !== null && (
+              <span style={{ fontSize: TYPE.caption, color: lastResult.ok ? TINT.ok.fg : TINT.crit.fg }}>
+                {lastResult.ok ? "✓" : "✕"} {lastResult.message}
+              </span>
+            )}
+            <span style={{ fontSize: TYPE.caption, color: UI.ink3 }}>비활성 버튼은 서버가 허용하지 않는 상태입니다(사유는 툴팁).</span>
+          </Section>
+        </>
+      )}
+      {confirm !== null && run !== null && (
+        <ConfirmDialog
+          title={confirm.destructive ? `${confirm.label} — 파괴적 액션` : `${confirm.label} 확인`}
+          tone={confirm.destructive ? "danger" : "primary"}
+          confirmLabel={`${confirm.label} 실행`}
+          requireText={confirm.destructive ? run.run_id : undefined}
+          busy={busy}
+          body={<span><span style={{ fontFamily: MONO, color: UI.ink }}>{run.run_id}</span> ({run.plan_name}) 런에 <b>{confirm.label}</b> 을(를) 요청합니다. 결과는 서버 응답과 감사 로그로만 반영됩니다.</span>}
+          onCancel={() => setConfirm(null)}
+          onConfirm={() => {
+            void actions.executeRunAction(run.run_id, confirm.action).then(() => setConfirm(null));
+          }}
+        />
+      )}
+    </PanelShell>
+  );
+}
+
+export function ReleasePlanDetailPanel({ planKey, plans, runs, actions, onClose, insets }: {
+  planKey: string;
+  plans: ReleasePlanRecord[];
+  runs: ReleaseRunRecord[];
+  actions: ReleaseActionsApi;
+  onClose: () => void;
+  insets: PanelInsets;
+}) {
+  const plan = plans.find((candidate) => (candidate.plan_id ?? candidate.name) === planKey) ?? null;
+  const planRuns = plan === null ? [] : runs.filter((run) => run.plan_id === (plan.plan_id ?? ""));
+  const [startOpen, setStartOpen] = useState(false);
+  const [readinessState, setReadinessState] = useState<{
+    key: string;
+    status: DeployFeedStatus;
+    result: import("../api/release-flow-schemas").ReleaseReadinessApi | null;
+  }>({ key: "", status: "loading", result: null });
+  const busy = actions.state.pendingKey !== null;
+  const lastResult = actions.state.lastResult;
+
+  // 시작 다이얼로그를 여는 순간 준비 검사(POST /api/release-readiness)를 실행한다.
+  // 로딩 표시는 key 비교로 파생한다 — effect 안 동기 setState 금지(OpsiaConfigPanel 패턴).
+  const readinessKey = startOpen && plan !== null ? (plan.plan_id ?? plan.name) : "";
+  useEffect(() => {
+    if (readinessKey === "" || plan === null) return;
+    const controller = new AbortController();
+    actions.checkReadiness(plan, controller.signal)
+      .then((result) => {
+        if (!controller.signal.aborted) setReadinessState({ key: readinessKey, status: "ready", result });
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setReadinessState({ key: readinessKey, status: "unavailable", result: null });
+      });
+    return () => controller.abort();
+    // plan 객체는 폴링마다 참조가 바뀐다 — readinessKey가 정체성의 정본이다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [readinessKey, actions]);
+  const readiness = readinessState.key === readinessKey ? readinessState.result : null;
+  const readinessStatus: DeployFeedStatus = readinessState.key === readinessKey ? readinessState.status : "loading";
+
+  return (
+    <PanelShell icon={ListChecks} title={plan?.name ?? "릴리스 플랜"} subtitle={plan?.plan_id ?? planKey} onClose={onClose} insets={insets}>
+      {plan === null ? (
+        <span style={{ fontSize: TYPE.label, color: UI.ink3, padding: "2px 0" }}>이 플랜이 현재 관측 범위에 없습니다.</span>
+      ) : (
+        <>
+          <Section title="개요" aside={statusView(plan.status)}>
+            {plan.description.trim() !== "" && <span style={{ fontSize: TYPE.label, color: UI.ink, lineHeight: 1.55 }}>{plan.description}</span>}
+            <KV label="단계 수" mono>{String(plan.steps.length)}</KV>
+            <KV label="수정">{fromNow(plan.updated_at ?? null)}</KV>
+          </Section>
+          <Section title="단계 구성">
+            {plan.steps.length === 0 ? (
+              <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>구성된 단계 없음</span>
+            ) : plan.steps.map((step, index) => (
+              <div key={step.step_id ?? index} style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                <span style={{ flexShrink: 0, fontFamily: MONO, fontSize: TYPE.caption, color: UI.ink3, width: 20 }}>{index + 1}</span>
+                <span style={{ minWidth: 0, flex: 1, fontFamily: MONO, fontSize: TYPE.label, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{step.name}</span>
+                {step.depends_on.length > 0 && <span style={{ fontSize: TYPE.caption, color: UI.ink3, flexShrink: 0 }}>의존 {step.depends_on.length}</span>}
+              </div>
+            ))}
+          </Section>
+          <Section title="최근 런" aside={<span style={{ fontSize: TYPE.caption, color: UI.ink3 }}>{planRuns.length}개</span>}>
+            {planRuns.length === 0 ? (
+              <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>기록된 런 없음</span>
+            ) : planRuns.slice(0, 5).map((run) => (
+              <div key={run.run_id} style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                <span style={{ minWidth: 0, flex: 1, fontFamily: MONO, fontSize: TYPE.caption, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{run.run_id}</span>
+                {runStatusView(run)}
+                <span style={{ flexShrink: 0, fontSize: TYPE.caption, color: UI.ink3 }}>{fromNow(run.created_at ?? null)}</span>
+              </div>
+            ))}
+          </Section>
+          <Section title="플랜 제어">
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <button type="button" className="product-focusable product-action"
+                disabled={busy || plan.status === "archived"}
+                title={plan.status === "archived" ? "보관된 플랜은 시작할 수 없습니다" : undefined}
+                onClick={() => setStartOpen(true)}
+                style={{ border: "none", borderRadius: RADIUS.control, padding: "6px 13px", fontSize: TYPE.label, fontWeight: 600,
+                  background: busy || plan.status === "archived" ? "#F3F4F6" : BLUE,
+                  color: busy || plan.status === "archived" ? "#9AA0AA" : UI.card,
+                  cursor: busy || plan.status === "archived" ? "not-allowed" : "pointer" }}>
+                런 시작…
+              </button>
+              <span style={{ fontSize: TYPE.caption, color: UI.ink3 }}>시작 전 서버 준비 검사 결과를 먼저 확인합니다.</span>
+            </div>
+            {lastResult !== null && (
+              <span style={{ fontSize: TYPE.caption, color: lastResult.ok ? TINT.ok.fg : TINT.crit.fg }}>
+                {lastResult.ok ? "✓" : "✕"} {lastResult.message}
+              </span>
+            )}
+          </Section>
+        </>
+      )}
+      {startOpen && plan !== null && (
+        <ConfirmDialog
+          title="런 시작 — 준비 검사"
+          tone="primary"
+          confirmLabel="런 시작"
+          busy={busy}
+          requireText={readiness !== null && readiness.impact !== undefined && readiness.impact.production_target_count > 0 ? (plan.plan_id ?? plan.name) : undefined}
+          body={
+            readinessStatus === "loading" ? <span>준비 검사 실행 중… (POST /api/release-readiness)</span>
+            : readinessStatus === "unavailable" ? <span style={{ color: TINT.crit.fg }}>준비 검사를 수행하지 못했습니다 — 시작할 수 없습니다.</span>
+            : readiness === null ? <span>준비 검사 결과 없음</span>
+            : (
+              <span style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <span style={{ color: readiness.ready ? TINT.ok.fg : TINT.crit.fg, fontWeight: 600 }}>
+                  {readiness.ready ? "✓ 준비됨" : "✕ 준비 안 됨"} · {readiness.summary}
+                </span>
+                {readiness.impact !== undefined && readiness.impact.production_target_count > 0 && (
+                  <span style={{ color: TINT.crit.fg, background: TINT.crit.bg, border: `1px solid ${TINT.crit.bd}`, borderRadius: RADIUS.control, padding: "7px 10px", fontSize: TYPE.caption }}>
+                    ⚠ 프로덕션 대상 {readiness.impact.production_target_count}개 포함 — 플랜 식별자 입력이 필요합니다.
+                  </span>
+                )}
+                {readiness.checks.filter((check) => check.status !== "passed").slice(0, 5).map((check) => (
+                  <span key={check.check_id} style={{ fontSize: TYPE.caption, color: UI.ink2 }}>▪ {check.name}: {check.message}</span>
+                ))}
+              </span>
+            )
+          }
+          onCancel={() => setStartOpen(false)}
+          onConfirm={() => {
+            if (readinessStatus !== "ready" || readiness === null || !readiness.ready) return;
+            void actions.startPlan(plan).then((ok) => { if (ok) setStartOpen(false); });
+          }}
+        />
+      )}
+    </PanelShell>
+  );
+}
+
+// ── 진입점 — DeploySurface가 detail 상태 하나로 패널을 라우팅한다 ────────────
+
+export function DeployDetailHost({ target, runs, releasePlans = [], releaseRuns = [], releaseActions = null, onClose, topInset, leftInset, rightInset }: {
   target: DeployDetailTarget;
   runs: ApplicationRunView[];
+  releasePlans?: ReleasePlanRecord[];
+  releaseRuns?: ReleaseRunRecord[];
+  releaseActions?: ReleaseActionsApi | null;
   onClose: () => void;
 } & PanelInsets) {
   const insets: PanelInsets = { topInset, leftInset, rightInset };
   if (target.kind === "application") return <ApplicationDetailPanel target={target} runs={runs} onClose={onClose} insets={insets} />;
   if (target.kind === "helm") return <HelmDetailPanel target={target} onClose={onClose} insets={insets} />;
+  if (target.kind === "releaseRun") {
+    return releaseActions === null ? null : (
+      <ReleaseRunDetailPanel runId={target.runId} runs={releaseRuns} actions={releaseActions} onClose={onClose} insets={insets} />
+    );
+  }
+  if (target.kind === "releasePlan") {
+    return releaseActions === null ? null : (
+      <ReleasePlanDetailPanel planKey={target.planKey} plans={releasePlans} runs={releaseRuns} actions={releaseActions} onClose={onClose} insets={insets} />
+    );
+  }
   return <RunDetailPanel target={target} runs={runs} onClose={onClose} insets={insets} />;
 }
