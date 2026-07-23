@@ -558,9 +558,38 @@ def timeline_item(row: JsonObject) -> RcaTimelineItem:
 
 def issue_item(row: JsonObject) -> RcaIssueItem:
     data = {key: row.get(key) for key in RcaIssueItem.model_fields}
+    report_summary = row.get("rca_issue_report_summary")
+    if isinstance(report_summary, dict):
+        data["situation_summary"] = _nonempty_text(
+            data.get("situation_summary"),
+            report_summary.get("executive_summary"),
+        )
+        data["recommended_action_summary"] = _nonempty_text(
+            data.get("recommended_action_summary"),
+            report_summary.get("recommended_action"),
+        )
+        data["evidence_summary"] = _nonempty_text(
+            data.get("evidence_summary"),
+            report_summary.get("evidence_summary"),
+        )
+        data["evidence_bundle_summary"] = _nonempty_text(
+            data.get("evidence_bundle_summary"),
+            report_summary.get("evidence_bundle_summary"),
+        )
     data["supporting_evidence"] = row.get("supporting_evidence") or []
     data["missing_evidence"] = row.get("missing_evidence") or []
     return RcaIssueItem(**data)
+
+
+def _nonempty_text(*values: object) -> str | None:
+    return next(
+        (
+            value.strip()
+            for value in values
+            if isinstance(value, str) and value.strip()
+        ),
+        None,
+    )
 
 
 def queue_issue_item(row: JsonObject) -> RcaIssueQueueItem:

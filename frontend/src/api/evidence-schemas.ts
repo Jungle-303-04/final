@@ -107,6 +107,8 @@ export const rcaReportSchema = z.strictObject({
   evidence_ref: nullableStringSchema,
   supporting_evidence: z.array(z.string()),
   missing_evidence: z.array(z.string()),
+  evidence_summary: nullableStringSchema,
+  evidence_bundle_summary: nullableStringSchema,
   created_at: nullableStringSchema,
   resource_kind: nullableStringSchema,
   resource_name: nullableStringSchema,

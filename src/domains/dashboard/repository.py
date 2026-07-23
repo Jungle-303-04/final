@@ -18,6 +18,7 @@ from domains.inventory.models import (
     ClusterInventoryResourceRecord,
     ClusterInventorySnapshotRecord,
 )
+from domains.rca.models import RcaReport
 from domains.rca.timeline import issue_presentation_severity
 from packages.contracts.event_bus.interfaces import EventEnvelope, JsonObject
 from packages.contracts.event_bus.subjects import EventSubject
@@ -177,8 +178,51 @@ def _rca_timeline_response_columns(*, include_issue_severity: bool = False) -> t
         table.c.updated_at,
     )
     if include_issue_severity:
-        return (*columns, table.c.severity, table.c.severity_complete)
+        return (
+            *columns,
+            table.c.severity,
+            table.c.severity_complete,
+            latest_rca_issue_report_summary(table).label("rca_issue_report_summary"),
+        )
     return columns
+
+
+def latest_rca_issue_report_summary(timeline: Any) -> Any:
+    """Return the newest safe report prose for one timeline correlation.
+
+    The issue queue deliberately stores only mutable workflow state. Narrative
+    and evidence prose live in ``rca_reports``; projecting nullable response
+    fields directly from the timeline therefore made them permanently null.
+    Keep the join as one indexed, correlated JSON object so the bounded queue
+    scan does not fetch the full report payload or run four independent probes.
+    """
+
+    report = RcaReport.__table__
+    return (
+        select(
+            func.jsonb_build_object(
+                "executive_summary",
+                report.c.payload["narrative"]["executive_summary"].astext,
+                "recommended_action",
+                func.coalesce(
+                    report.c.payload["narrative"]["recommended_action"].astext,
+                    report.c.action,
+                ),
+                "evidence_summary",
+                report.c.payload["rca_detail"]["evidence_summary"].astext,
+                "evidence_bundle_summary",
+                report.c.payload["rca_detail"]["evidence_bundle_summary"].astext,
+            )
+        )
+        .where(
+            report.c.workspace_id == timeline.c.workspace_id,
+            report.c.correlation_id == timeline.c.correlation_id,
+        )
+        .order_by(report.c.created_at.desc(), report.c.id.desc())
+        .limit(1)
+        .correlate(timeline)
+        .scalar_subquery()
+    )
 
 
 class DashboardRepository(DatabaseConnection):
