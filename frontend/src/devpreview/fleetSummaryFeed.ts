@@ -9,8 +9,11 @@ import { useBoundedPoll } from "./useBoundedPoll";
 
 // Fleet 롤업은 전 클러스터를 단일 요청으로 반환한다(클러스터당 1요청 아님).
 // 홈 카드는 이 단일 원장을 소비해 드릴다운과 숫자가 어긋나지 않게 한다.
-// 5초 주기 — 서버 집계는 LATERAL 최신-snapshot 프로브라 요청당 수 ms 수준이다.
+// 기본 5초 — 서버 집계는 LATERAL 최신-snapshot 프로브라 요청당 수 ms 수준이다.
+// SSE 채널이 건강하면(스냅샷 커밋이 즉시 tick 으로 옴) 폴링은 안전망으로만 남아
+// 15초로 완화한다. 채널이 죽으면 5초로 자동 복귀한다.
 const FLEET_REFRESH_MS = 5_000;
+const FLEET_REFRESH_SSE_LIVE_MS = 15_000;
 
 /**
  * Reads the server-computed fleet rollup and exposes it in the existing
@@ -34,13 +37,13 @@ export function useFleetSummaries(
   // load 는 useBoundedPoll 이 매 렌더 ref 로 고정하므로 최신 ids 클로저를 안전하게 쓴다.
   const ids = useMemo(() => (key ? key.split(" ") : []), [key]);
   // 실시간: 스냅샷 커밋 SSE(tick)가 오르면 scopeKey 가 바뀌어 bounded-poll 이 즉시
-  // 재조회한다(관측 도착 즉시 반영). SSE 가 없거나 끊겨도 5초 캐던스는 그대로 유지.
-  const snapshotTick = useHomeSnapshotEvents(ids);
+  // 재조회한다(관측 도착 즉시 반영). SSE 가 없거나 끊겨도 폴링 캐던스는 그대로 유지.
+  const { tick: snapshotTick, live: sseLive } = useHomeSnapshotEvents(ids);
   const scopeKey = key ? `fleet:${snapshotTick}` : "";
 
   useBoundedPoll({
     scopeKey,
-    intervalMs: FLEET_REFRESH_MS,
+    intervalMs: sseLive ? FLEET_REFRESH_SSE_LIVE_MS : FLEET_REFRESH_MS,
     load: async (signal) => {
       try {
         const fleet = await getFleetSummary(signal);
