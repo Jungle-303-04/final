@@ -32,20 +32,17 @@ function serviceHealthSeverity(health: string): "ok" | "warn" | "crit" | "unknow
   return "unknown";
 }
 
-function ServiceHealthChip({ health }: { health: string }) {
+// 레퍼런스 목업 문법 — 상태 칩 대신 우측 점 하나. 정상은 초록 점으로 조용히,
+// 이상만 주황/빨강으로 드러나며, 라벨 폭을 칩이 잡아먹지 않는다.
+function ServiceHealthDot({ health }: { health: string }) {
   const severity = serviceHealthSeverity(health);
-  if (severity === "unknown") {
-    return (
-      <span style={{ fontSize: TYPE.caption, fontWeight: 600, color: UI.ink3, border: `1px solid ${UI.line}`, borderRadius: 5, padding: "1px 6px", whiteSpace: "nowrap" }}>
-        {statusLabel(health)}
-      </span>
-    );
-  }
-  const color = severity === "crit" ? HP.crit : severity === "warn" ? HP.warn : HP.ok;
+  const color = severity === "crit" ? HP.crit : severity === "warn" ? HP.warn : severity === "ok" ? HP.ok : UI.ink3;
   return (
-    <span style={{ fontSize: TYPE.caption, fontWeight: 600, color, background: `${color}14`, border: `1px solid ${color}33`, borderRadius: 5, padding: "1px 6px", whiteSpace: "nowrap" }}>
-      {statusLabel(health)}
-    </span>
+    <span
+      title={statusLabel(health)}
+      aria-label={`헬스 ${statusLabel(health)}`}
+      style={{ width: 8, height: 8, borderRadius: 999, background: color, flexShrink: 0, opacity: severity === "unknown" ? 0.5 : 1 }}
+    />
   );
 }
 
@@ -185,7 +182,7 @@ export function OpsiaServicePanel({ activeCluster, selectedNamespace }: OpsiaSer
                   <span title={name} style={{ display: "block", fontSize: TYPE.label, fontWeight: 600, fontFamily: MONO, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
                   <span style={{ display: "block", fontSize: TYPE.caption, color: UI.ink3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{namespace} · {statusLabel(status)}</span>
                 </span>
-                <ServiceHealthChip health={health} />
+                <ServiceHealthDot health={health} />
               </div>
             );
           })}

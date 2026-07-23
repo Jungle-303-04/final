@@ -7,8 +7,6 @@ import type {
   ConfigReferenceItem,
   ConfigReferenceKind,
   ConfigReferenceList,
-  ConfigReferenceSource,
-  ConfigReferenceUsage,
 } from "../api/config-references-schemas";
 import { BLUE, HP, MONO, TYPE, UI } from "./theme";
 
@@ -27,13 +25,6 @@ interface OpsiaConfigPanelView {
 const KIND_LABELS: Record<ConfigReferenceKind, string> = {
   ConfigMap: "ConfigMap",
   Secret: "Secret",
-};
-
-const SOURCE_LABELS: Record<ConfigReferenceSource, string> = {
-  env: "env",
-  env_from: "envFrom",
-  volume: "volume",
-  volume_mount: "mount",
 };
 
 const COVERAGE_REASON_LABELS: Record<string, string> = {
@@ -137,66 +128,24 @@ function CoverageNote({ coverage }: { coverage: ConfigReferenceCoverage }) {
   );
 }
 
-function ConfigKindChip({ kind }: { kind: ConfigReferenceKind }) {
-  const color = kind === "Secret" ? HP.warn : BLUE;
-  return (
-    <span style={{ fontSize: TYPE.caption, fontWeight: 700, color, background: `${color}14`, border: `1px solid ${color}33`, borderRadius: 5, padding: "1px 6px", whiteSpace: "nowrap" }}>
-      {KIND_LABELS[kind]}
-    </span>
-  );
-}
-
-function usageDetail(usage: ConfigReferenceUsage): string {
-  if (usage.source === "env") {
-    return [usage.env_name, usage.key].filter(Boolean).join(" · ") || SOURCE_LABELS[usage.source];
-  }
-  if (usage.source === "env_from") {
-    return usage.prefix ? `prefix ${usage.prefix}` : SOURCE_LABELS[usage.source];
-  }
-  if (usage.source === "volume") {
-    return usage.volume_name ?? SOURCE_LABELS[usage.source];
-  }
-  return [usage.volume_name, usage.mount_path].filter(Boolean).join(" · ") || SOURCE_LABELS[usage.source];
-}
-
-function usageLabel(usage: ConfigReferenceUsage): string {
-  return `${usage.workload.name} · ${SOURCE_LABELS[usage.source]} · ${usageDetail(usage)}`;
-}
-
-function referencedWorkloadCount(item: ConfigReferenceItem): number {
-  return new Set(
-    item.referenced_by.map((usage) => (
-      usage.workload.uid ?? `${usage.workload.namespace}/${usage.workload.name}`
-    )),
-  ).size;
-}
+// 레퍼런스 목업 문법 — 아이콘 + 이름(모노, 최대 폭) + 종류 서브라벨 + 우측 참조 수 숫자.
+// 종류 칩과 참조 상세 줄은 제거해 이름이 잘리지 않게 한다(상세는 title 툴팁으로 유지).
+const SECRET_TINT = "#7c3aed";
 
 function ConfigReferenceRow({ item }: { item: ConfigReferenceItem }) {
   const Icon = item.kind === "Secret" ? KeyRound : FileCog;
-  const previewUsages = item.referenced_by.slice(0, 2);
-  const hiddenUsageCount = Math.max(0, item.referenced_by.length - previewUsages.length);
-  const workloadCount = referencedWorkloadCount(item);
-
+  const iconColor = item.kind === "Secret" ? SECRET_TINT : BLUE;
+  const referenceCount = item.referenced_by.length;
   return (
-    <div className="rrow" style={{ display: "flex", flexDirection: "column", gap: 6, width: "100%", minHeight: 54, textAlign: "left", border: "1px solid transparent", background: "transparent", borderRadius: 9, padding: "7px 9px" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-        <Icon size={14} style={{ color: UI.ink3, flexShrink: 0 }} />
-        <span style={{ minWidth: 0, flex: 1 }}>
-          <span title={item.name} style={{ display: "block", fontSize: TYPE.label, fontWeight: 700, fontFamily: MONO, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.name}</span>
-          <span style={{ display: "block", fontSize: TYPE.caption, color: UI.ink3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.namespace} · Deployment {workloadCount}개 참조</span>
-        </span>
-        <ConfigKindChip kind={item.kind} />
-      </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 3, paddingLeft: 22 }}>
-        {previewUsages.map((usage, index) => (
-          <span key={`${usage.workload.namespace}/${usage.workload.name}/${usage.source}/${usageDetail(usage)}/${index}`} style={{ display: "block", fontSize: TYPE.caption, color: UI.ink3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {usageLabel(usage)}
-          </span>
-        ))}
-        {hiddenUsageCount > 0 && (
-          <span style={{ fontSize: TYPE.caption, color: UI.ink3 }}>+{hiddenUsageCount}개 참조 더 있음</span>
-        )}
-      </div>
+    <div className="rrow" style={{ display: "flex", alignItems: "center", gap: 9, width: "100%", minHeight: 46, textAlign: "left", border: "1px solid transparent", background: "transparent", borderRadius: 9, padding: "7px 9px" }}>
+      <Icon size={15} style={{ color: iconColor, flexShrink: 0 }} />
+      <span style={{ minWidth: 0, flex: 1 }}>
+        <span title={`${item.namespace}/${item.name}`} style={{ display: "block", fontSize: TYPE.label, fontWeight: 700, fontFamily: MONO, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.name}</span>
+        <span style={{ display: "block", fontSize: TYPE.caption, color: UI.ink3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{KIND_LABELS[item.kind]} · {item.namespace}</span>
+      </span>
+      <span title={`참조 ${referenceCount}개`} style={{ fontSize: TYPE.label, fontWeight: 700, fontFamily: MONO, color: UI.ink3, fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>
+        {referenceCount}
+      </span>
     </div>
   );
 }
