@@ -376,7 +376,16 @@ async def agent_prometheus_integration(
         isinstance(key, str) and isinstance(value, str) for key, value in headers.items()
     ):
         raise HTTPException(status_code=409, detail=PROMETHEUS_CREDENTIAL_UNAVAILABLE)
-    registration = db.get_cluster_registration(identity.workspace_id, identity.cluster_id)
+    private_registration_getter = getattr(
+        db,
+        "get_cluster_registration_install_credentials",
+        None,
+    )
+    registration = (
+        private_registration_getter(identity.workspace_id, identity.cluster_id)
+        if callable(private_registration_getter)
+        else None
+    )
     public_key = (
         str(registration.get("agent_envelope_public_key") or "")
         if isinstance(registration, dict)

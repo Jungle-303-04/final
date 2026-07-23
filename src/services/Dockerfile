@@ -51,9 +51,13 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY --chown=appuser:appuser alembic ./alembic
 COPY --chown=appuser:appuser alembic.ini ./alembic.ini
+COPY --chown=appuser:appuser deploy/target ./deploy/target
+COPY --chown=appuser:appuser scripts/install-telemetry.sh ./scripts/install-telemetry.sh
+COPY --chown=appuser:appuser scripts/install-telemetry.ps1 ./scripts/install-telemetry.ps1
 COPY --chown=appuser:appuser src ./src
-RUN find /app/src -type d -exec chmod 755 {} + \
+RUN find /app/src /app/deploy /app/scripts -type d -exec chmod 755 {} + \
     && find /app/src -type f -exec chmod 644 {} + \
+    && find /app/deploy /app/scripts -type f -exec chmod 644 {} + \
     && test "$(alembic heads | wc -l | tr -d ' ')" = "1" \
     && alembic heads | grep -Eq '^[0-9_]+ \(head\)$' \
     && python -m packages.storage.baseline verify

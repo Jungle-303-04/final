@@ -11,6 +11,7 @@ import subprocess
 import time
 from dataclasses import fields
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -26,6 +27,7 @@ from domains.identity.dependencies import (
     require_cluster_agent,
     require_session,
 )
+from domains.integrations.prometheus import update_prometheus_integration
 from domains.inventory.ingest import ingest_inventory_snapshot
 from domains.inventory.kubernetes_snapshot import kubernetes_evidence_to_inventory_snapshot
 from domains.inventory.snapshot_evidence import snapshot_source_summary
@@ -48,7 +50,6 @@ from domains.target.evidence_jobs import (
     DEFAULT_PENDING_EVIDENCE_EVENT_TTL_SECONDS,
     PENDING_EVIDENCE_EVENT_ID_PREFIX,
 )
-from domains.target.telemetry_readiness import telemetry_stack_view
 from domains.target.evidence_policy import (
     control_namespace_tuple,
     default_agent_policy,
@@ -71,6 +72,7 @@ from domains.target.management_guard import (
 )
 from domains.target.policy_upgrade import target_desired_components
 from domains.target.reconciler import desired_state_version
+from domains.target.telemetry_readiness import telemetry_stack_view
 from domains.target.uninstall import (
     FINAL_CLEANUP_RESOURCE_REFS,
     UNINSTALL_CLEANUP_RESOURCE_REFS,
@@ -122,6 +124,7 @@ from packages.contracts.identity import (
     ClusterRegistrationStatus,
     Permission,
 )
+from packages.contracts.integrations import PrometheusIntegrationUpdateRequest
 from packages.contracts.target import (
     SANDBOX_NAMESPACE,
     TARGET_NAMESPACE,
@@ -132,6 +135,7 @@ from packages.runtime.dependencies import (
     get_dashboard_ready_fanout,
     get_db,
     get_events,
+    get_operation_events,
     get_timeline_fanout,
 )
 from packages.security.credentials import (
@@ -215,6 +219,16 @@ DEFAULT_TARGET_REGISTRATION_CONNECT_TIMEOUT_SECONDS = 1800
 CLUSTER_NOT_FOUND = "cluster not found"
 TEST_FIXTURE_PURGE_FORBIDDEN_CODE = "test_fixture_purge_forbidden"
 TEST_FIXTURE_PURGE_UNSUPPORTED_CODE = "test_fixture_purge_unsupported"
+DEFAULT_PROMETHEUS_URL = "http://prometheus.target.svc.cluster.local:9090"
+DEFAULT_OTEL_TRACES_URL = "http://opentelemetry-collector.target.svc:4318/v1/traces"
+INSTALL_ARTIFACT_ROOT = Path(__file__).resolve().parents[3]
+INSTALL_TELEMETRY_SCRIPTS = {
+    "bash": INSTALL_ARTIFACT_ROOT / "scripts" / "install-telemetry.sh",
+    "powershell": INSTALL_ARTIFACT_ROOT / "scripts" / "install-telemetry.ps1",
+}
+INSTALL_TELEMETRY_ASSETS = frozenset(
+    {"prometheus.yaml", "loki.yaml", "tempo.yaml", "opentelemetry.yaml", "minio.yaml"}
+)
 
 router = APIRouter()
 # per-cluster 토큰 인증 — lease 의 workspace/cluster 는 토큰 identity 에서만 취함.
@@ -645,7 +659,7 @@ def apply_manifest_with_kubectl(manifest: str, kube_context: str | None) -> str:
 
 
 def install_command_for(payload: TargetRegisterRequest, agent_token: str) -> str:
-    """원라인 설치 명령 — 토큰이 박힌 manifest URL 을 kubectl 로 바로 적용.
+    """원라인 설치 명령 — 관측 스택 준비 후 토큰 manifest 를 적용.
 
     base 는 등록 payload 의 management_base_url(agent 가 접속하는 공개 게이트웨이 주소)
     그대로 사용 — 서버가 임의 호스트를 합성하지 않음.
@@ -654,15 +668,40 @@ def install_command_for(payload: TargetRegisterRequest, agent_token: str) -> str
     if not base:
         return ""
     path = gateway_routes.INSTALL_MANIFEST_PATH.format(agent_token=agent_token)
-    return guarded_kubectl_apply_command(payload, f"{base}{path}")
+    return guarded_kubectl_apply_command(
+        payload,
+        f"{base}{path}",
+        telemetry_script_url=telemetry_script_url(base, agent_token, "bash"),
+        telemetry_asset_base_url=telemetry_asset_base_url(base, agent_token),
+    )
+
+
+def telemetry_script_url(base: str, agent_token: str, platform: str) -> str:
+    path = gateway_routes.INSTALL_TELEMETRY_SCRIPT_PATH.format(
+        agent_token=agent_token,
+        platform=platform,
+    )
+    return f"{base}{path}"
+
+
+def telemetry_asset_base_url(base: str, agent_token: str) -> str:
+    marker = "{asset_name}"
+    path = gateway_routes.INSTALL_TELEMETRY_ASSET_PATH.format(
+        agent_token=agent_token,
+        asset_name=marker,
+    )
+    return f"{base}{path.removesuffix(marker).rstrip('/')}"
 
 
 def guarded_kubectl_apply_command(
     payload: TargetRegisterRequest,
     manifest_url: str,
     context: str = "",
+    *,
+    telemetry_script_url: str,
+    telemetry_asset_base_url: str,
 ) -> str:
-    """기존 에이전트 소유권을 다른 등록으로 조용히 덮어쓰지 않는 설치 명령."""
+    """관측 스택을 먼저 준비하고 기존 에이전트 소유권을 안전하게 교체한다."""
     kubectl = "kubectl"
     if context:
         kubectl = f"kubectl --context {shell_quote(context)}"
@@ -676,10 +715,36 @@ def guarded_kubectl_apply_command(
         "then printf 'Kyro agent is already registered as %s; disconnect it before connecting "
         f'{expected_cluster_id}.\\n\' "$existing" >&2; exit 1; fi; '
     )
+    target_context = (
+        f"target_context={shell_quote(context)}; "
+        if context
+        else 'target_context="$(kubectl config current-context)"; '
+    )
+    install_telemetry = (
+        'telemetry_script="$(mktemp "${TMPDIR:-/tmp}/kyro-telemetry.XXXXXX")"; '
+        "trap 'rm -f \"$telemetry_script\"' EXIT; "
+        f'curl -fsSL {shell_quote(telemetry_script_url)} -o "$telemetry_script"; '
+        f"{target_context}"
+        f'TARGET_CONTEXT="$target_context" TARGET_NAMESPACE={shell_quote(namespace)} '
+        f"TELEMETRY_ASSET_BASE_URL={shell_quote(telemetry_asset_base_url)} "
+        'bash "$telemetry_script"; '
+    )
+    wait_for_uninstall = (
+        'if [ -z "$existing" ]; then '
+        "for attempt in $(seq 1 60); do "
+        f"if ! {kubectl} get clusterrole cluster-agent-uninstall >/dev/null 2>&1; "
+        "then break; fi; sleep 2; done; "
+        f"if {kubectl} get clusterrole cluster-agent-uninstall >/dev/null 2>&1; "
+        "then printf 'previous Kyro agent uninstall is still running.\\n' >&2; exit 1; fi; "
+        "fi; "
+    )
     # The command is pasted into an already-open operator terminal. Keep the
     # fail-closed ownership guard, but contain its `exit 1` in a subshell so a
     # mismatch cannot terminate the interactive shell itself.
-    return f"({guard}curl -fsSL {shell_quote(manifest_url)} | {kubectl} apply -f -)"
+    return (
+        f"({guard}{install_telemetry}{wait_for_uninstall}"
+        f"curl -fsSL {shell_quote(manifest_url)} | {kubectl} apply -f -)"
+    )
 
 
 def kubectl_apply_command(
@@ -689,7 +754,13 @@ def kubectl_apply_command(
     if not base:
         return ""
     path = gateway_routes.INSTALL_MANIFEST_PATH.format(agent_token=agent_token)
-    return guarded_kubectl_apply_command(payload, f"{base}{path}", context)
+    return guarded_kubectl_apply_command(
+        payload,
+        f"{base}{path}",
+        context,
+        telemetry_script_url=telemetry_script_url(base, agent_token, "bash"),
+        telemetry_asset_base_url=telemetry_asset_base_url(base, agent_token),
+    )
 
 
 def bootstrap_command_for(payload: TargetRegisterRequest, agent_token: str) -> str:
@@ -770,6 +841,8 @@ def powershell_install_command_for(payload: TargetRegisterRequest, agent_token: 
         return ""
     path = gateway_routes.INSTALL_MANIFEST_PATH.format(agent_token=agent_token)
     manifest_url = f"{base}{path}".replace("'", "''")
+    script_url = telemetry_script_url(base, agent_token, "powershell").replace("'", "''")
+    asset_base_url = telemetry_asset_base_url(base, agent_token).replace("'", "''")
     namespace = agent_namespace(payload).replace("'", "''")
     expected_cluster_id = (payload.cluster_id or "").replace("'", "''")
     return (
@@ -781,10 +854,19 @@ def powershell_install_command_for(payload: TargetRegisterRequest, agent_token: 
         "-o 'jsonpath={.data.TARGET_CLUSTER_ID}' 2>$null) }; "
         f"if ($existing -and $existing -ne '{expected_cluster_id}') "
         f'{{ throw "Kyro agent is already registered as $existing; disconnect it before connecting {expected_cluster_id}." }}; '
-        "$tmp=Join-Path ([IO.Path]::GetTempPath()) ('kyro-'+[guid]::NewGuid().ToString()+'.yaml'); "
-        f"try {{ Invoke-WebRequest -UseBasicParsing -Uri '{manifest_url}' -OutFile $tmp; "
-        "& kubectl apply -f $tmp; if ($LASTEXITCODE -ne 0) { throw 'manifest installation failed' } } "
-        "finally { Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue }"
+        "$context=(& kubectl config current-context).Trim(); "
+        "$script=Join-Path ([IO.Path]::GetTempPath()) ('kyro-'+[guid]::NewGuid().ToString()+'.ps1'); "
+        "$manifest=Join-Path ([IO.Path]::GetTempPath()) ('kyro-'+[guid]::NewGuid().ToString()+'.yaml'); "
+        f"try {{ Invoke-WebRequest -UseBasicParsing -Uri '{script_url}' -OutFile $script; "
+        f"& $script -TargetContext $context -TargetNamespace '{namespace}' -AssetBaseUrl '{asset_base_url}'; "
+        "if (-not $existing) { for ($attempt=0; $attempt -lt 60; $attempt++) { "
+        "$old=(& kubectl get clusterrole cluster-agent-uninstall --ignore-not-found -o name 2>$null); "
+        "if (-not $old) { break }; Start-Sleep -Seconds 2 }; "
+        "if ($old) { throw 'previous Kyro agent uninstall is still running' } }; "
+        f"Invoke-WebRequest -UseBasicParsing -Uri '{manifest_url}' -OutFile $manifest; "
+        "& kubectl apply -f $manifest; "
+        "if ($LASTEXITCODE -ne 0) { throw 'manifest installation failed' } } "
+        "finally { Remove-Item -LiteralPath $script,$manifest -Force -ErrorAction SilentlyContinue }"
     )
 
 
@@ -1387,6 +1469,7 @@ async def connect_cluster(
     current: Any = Depends(require_admin_session),
     db: Any = Depends(get_db),
     events: Any = Depends(get_events),
+    operation_events: Any = Depends(get_operation_events),
 ) -> ClusterConnectResponse:
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
     display_name = payload.name.strip()
@@ -1399,6 +1482,7 @@ async def connect_cluster(
                 cloud_provider="existing-k8s",
                 deploy_provider=MANUAL_MANIFEST_DEPLOY_PROVIDER,
                 provider_config={"provider_hint": CONNECT_PROVIDER_HINTS[payload.provider]},
+                otel_traces_endpoint=DEFAULT_OTEL_TRACES_URL,
             ),
             current=current,
             db=db,
@@ -1413,6 +1497,17 @@ async def connect_cluster(
         raise
     if not receipt.install_command or not receipt.connect_expires_at:
         raise HTTPException(status_code=503, detail="cluster install command is unavailable")
+    await update_prometheus_integration(
+        PrometheusIntegrationUpdateRequest(
+            cluster_id=receipt.cluster_id,
+            prometheus_url=DEFAULT_PROMETHEUS_URL,
+            headers={},
+        ),
+        current=current,
+        db=db,
+        events=events,
+        operation_events=operation_events,
+    )
     return ClusterConnectResponse(
         cluster_id=receipt.cluster_id,
         install_command=receipt.install_command,
@@ -1500,17 +1595,9 @@ async def reissue_cluster_connect_command(
     )
 
 
-@router.get(gateway_routes.INSTALL_MANIFEST_PATH, include_in_schema=True)
-async def install_manifest_by_token(
-    agent_token: str,
-    db: Any = Depends(get_db),
-) -> PlainTextResponse:
-    """원라인 인스톨러 — `curl <base>/install/<token> | kubectl apply -f -`.
+def installer_registration_by_token(agent_token: str, db: Any) -> dict[str, Any]:
+    """Resolve one installer-scoped registration without exposing token validity."""
 
-    토큰 자체가 자격증명: 해시 대조로 등록 클러스터를 찾고, 저장된 등록 설정으로
-    같은 manifest 를 재렌더해 YAML 로 반환함(서버는 토큰 원문·manifest 를 저장하지 않음).
-    미등록/불일치 토큰은 404 — 존재 여부를 구분해 주지 않음.
-    """
     identity = db.authenticate_cluster_agent(hash_agent_token(agent_token))
     if identity is None:
         raise HTTPException(status_code=NOT_FOUND_CODE, detail="install link not found")
@@ -1523,6 +1610,54 @@ async def install_manifest_by_token(
         registration = db.get_cluster_registration(identity["workspace_id"], identity["cluster_id"])
     if registration is None:
         raise HTTPException(status_code=NOT_FOUND_CODE, detail="install link not found")
+    return registration
+
+
+@router.get(gateway_routes.INSTALL_TELEMETRY_SCRIPT_PATH, include_in_schema=False)
+async def install_telemetry_script_by_token(
+    agent_token: str,
+    platform: str,
+    db: Any = Depends(get_db),
+) -> PlainTextResponse:
+    installer_registration_by_token(agent_token, db)
+    path = INSTALL_TELEMETRY_SCRIPTS.get(platform)
+    if path is None or not path.is_file():
+        raise HTTPException(status_code=NOT_FOUND_CODE, detail="install link not found")
+    media_type = "text/x-powershell" if platform == "powershell" else "text/x-shellscript"
+    return PlainTextResponse(
+        path.read_text(encoding="utf-8"),
+        media_type=media_type,
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@router.get(gateway_routes.INSTALL_TELEMETRY_ASSET_PATH, include_in_schema=False)
+async def install_telemetry_asset_by_token(
+    agent_token: str,
+    asset_name: str,
+    db: Any = Depends(get_db),
+) -> PlainTextResponse:
+    installer_registration_by_token(agent_token, db)
+    if asset_name not in INSTALL_TELEMETRY_ASSETS:
+        raise HTTPException(status_code=NOT_FOUND_CODE, detail="install link not found")
+    path = INSTALL_ARTIFACT_ROOT / "deploy" / "target" / asset_name
+    if not path.is_file():
+        raise HTTPException(status_code=NOT_FOUND_CODE, detail="install link not found")
+    return PlainTextResponse(
+        path.read_text(encoding="utf-8"),
+        media_type="text/yaml",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@router.get(gateway_routes.INSTALL_MANIFEST_PATH, include_in_schema=True)
+async def install_manifest_by_token(
+    agent_token: str,
+    db: Any = Depends(get_db),
+) -> PlainTextResponse:
+    """원라인 인스톨러가 사용할 Agent manifest를 토큰 범위로 렌더한다."""
+
+    registration = installer_registration_by_token(agent_token, db)
     try:
         agent_envelope_private_key = decrypt_credential(
             str(registration.get("agent_envelope_private_key_encrypted") or "")

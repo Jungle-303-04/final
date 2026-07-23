@@ -2,12 +2,18 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-source "${ROOT_DIR}/scripts/lib/env.sh"
+
+require_env() {
+  local name="$1"
+  if [[ -z "${!name:-}" ]]; then
+    echo "missing required environment variable: ${name}" >&2
+    exit 1
+  fi
+}
 
 TARGET_CLUSTER="${TARGET_CLUSTER:-}"
 TARGET_CONTEXT="${TARGET_CONTEXT:-${TARGET_CLUSTER}}"
 TARGET_NAMESPACE="${TARGET_NAMESPACE:-target}"
-require_env TARGET_CONTEXT
 
 PROMETHEUS_RELEASE="${PROMETHEUS_RELEASE:-prometheus}"
 LOKI_RELEASE="${LOKI_RELEASE:-loki}"
@@ -23,6 +29,7 @@ LOKI_VALUES="${LOKI_VALUES:-${ROOT_DIR}/deploy/target/loki.yaml}"
 TEMPO_VALUES="${TEMPO_VALUES:-${ROOT_DIR}/deploy/target/tempo.yaml}"
 OTEL_VALUES="${OTEL_VALUES:-${ROOT_DIR}/deploy/target/opentelemetry.yaml}"
 TARGET_MINIO_MANIFEST="${TARGET_MINIO_MANIFEST:-${ROOT_DIR}/deploy/target/minio.yaml}"
+TELEMETRY_ASSET_BASE_URL="${TELEMETRY_ASSET_BASE_URL:-}"
 MINIO_ROOT_USER="${MINIO_ROOT_USER:-minioadmin}"
 MINIO_ROOT_PASSWORD="${MINIO_ROOT_PASSWORD:-}"
 
@@ -142,6 +149,26 @@ ensure_target_minio() {
 need helm
 need kubectl
 need python3
+
+if [[ -z "${TARGET_CONTEXT}" ]]; then
+  TARGET_CONTEXT="$(kubectl config current-context)"
+fi
+require_env TARGET_CONTEXT
+
+if [[ -n "${TELEMETRY_ASSET_BASE_URL}" ]]; then
+  need curl
+  TELEMETRY_ASSET_DIR="$(mktemp -d "${TMPDIR:-/tmp}/kyro-telemetry.XXXXXX")"
+  trap 'rm -rf "${TELEMETRY_ASSET_DIR}"' EXIT
+  for asset in prometheus.yaml loki.yaml tempo.yaml opentelemetry.yaml minio.yaml; do
+    curl -fsSL "${TELEMETRY_ASSET_BASE_URL%/}/${asset}" \
+      -o "${TELEMETRY_ASSET_DIR}/${asset}"
+  done
+  PROMETHEUS_VALUES="${TELEMETRY_ASSET_DIR}/prometheus.yaml"
+  LOKI_VALUES="${TELEMETRY_ASSET_DIR}/loki.yaml"
+  TEMPO_VALUES="${TELEMETRY_ASSET_DIR}/tempo.yaml"
+  OTEL_VALUES="${TELEMETRY_ASSET_DIR}/opentelemetry.yaml"
+  TARGET_MINIO_MANIFEST="${TELEMETRY_ASSET_DIR}/minio.yaml"
+fi
 
 echo "==> ensuring target namespace exists: ${TARGET_NAMESPACE}"
 kubectl --context "${TARGET_CONTEXT}" create namespace "${TARGET_NAMESPACE}" \
