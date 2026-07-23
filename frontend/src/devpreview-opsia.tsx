@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { Activity, AlertTriangle, Box, Check, ChevronLeft, ChevronRight, Clock3, Cpu, EllipsisVertical, ExternalLink, FileCog, Network, Plug, RotateCcw, Server, Settings, Unplug } from "lucide-react";
+import { Activity, AlertTriangle, Box, Check, ChevronLeft, ChevronRight, Clock3, Cpu, EllipsisVertical, ExternalLink, FileCog, Plug, RotateCcw, Server, Settings, Unplug } from "lucide-react";
 import { UI, BLUE, HP, TINT, MONO, TYPE, SOFT, SPRING, PAGE, PRESENT_SCALE, DUR, inkA, blueA, LINE3, INK4, BRAND, cardA } from "./devpreview/theme";
 import { AwsIcon, GithubIcon } from "./devpreview/brandIcons";
 import { statusLabel, reasonLabel } from "./devpreview/statusLabel";
@@ -974,25 +974,11 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
 
                 {view.level === "pods" && (
                   <div style={{ background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 16, padding: 20 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                    {/* 노드 귀속 판정(physical topology server_id)은 유지하되,
+                        설명 카드는 UI에서 제거 — 파드 목록만 바로 보여준다. */}
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
                       <Server size={14} style={{ color: UI.ink3 }} />
                       <span style={{ fontSize: TYPE.body, fontWeight: 700, fontFamily: MONO, color: UI.ink }}>{view.node}</span>
-                    </div>
-                    {/* physical topology의 server_id로만 노드 귀속을 판정한다. */}
-                    <div style={{ display: "flex", alignItems: "flex-start", gap: 8, background: UI.bg2, border: `1px solid ${UI.line}`, borderRadius: 10, padding: "9px 12px", marginBottom: 14 }}>
-                      <Network size={13} strokeWidth={2} style={{ color: UI.ink3, flexShrink: 0, marginTop: 1 }} />
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ fontSize: TYPE.label2, fontWeight: 600, color: UI.ink2 }}>
-                          표시된 파드 {nodePods.length}개
-                          {activeNode?.matchedPodCount !== null && activeNode?.matchedPodCount !== undefined
-                            ? ` / 노드 일치 ${activeNode.matchedPodCount}개`
-                            : ""}
-                        </div>
-                        <div style={{ fontSize: TYPE.caption2, color: UI.ink3, marginTop: 2 }}>
-                          실제 물리 토폴로지의 server_id가 이 노드를 가리키는 파드만 표시합니다.
-                          {topology.partial && " 일부 관측 응답이므로 나머지는 생략될 수 있습니다."}
-                        </div>
-                      </div>
                     </div>
                     {topology.status === "loading" ? (
                       <PodSkeleton />
