@@ -323,7 +323,7 @@ function GateStage({ label, state, evidence, href, actionLabel, onAction }: {
         {state === "done" ? <Check size={13} strokeWidth={3} /> : state === "observed" ? <AlertTriangle size={12} /> : <span style={{ width: 6, height: 6, borderRadius: 999, background: UI.ink3 }} />}
       </span>
       <div style={{ minWidth: 0, flex: 1 }}>
-        <div style={{ fontSize: TYPE.label, fontWeight: 600, color: state === "pending" ? UI.ink2 : tone.fg }}>{label}</div>
+        <div title={label} style={{ fontSize: TYPE.label, fontWeight: 600, color: state === "pending" ? UI.ink2 : tone.fg, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</div>
         <div title={evidence} style={{ marginTop: 2, fontFamily: MONO, fontSize: TYPE.caption, color: UI.ink3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{evidence}</div>
       </div>
       {actionLabel && onAction ? (
@@ -391,7 +391,7 @@ function ScenarioGate({ runs, repositoryRef, status, onRefresh, onOpenRef, onOpe
     <Card pad={12}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 10 }}>
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: TYPE.body, fontWeight: 600, color: UI.heading }}>GitOps 배포 게이트</div>
+          <div style={{ fontSize: TYPE.body, fontWeight: 600, color: UI.heading }}>GitOps 배포 현황</div>
           <div style={{ marginTop: 2, fontFamily: MONO, fontSize: TYPE.caption, color: UI.ink3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {latest?.workflowRunId ?? (status === "loading" ? "실행 기록 확인 중" : "실행 기록 없음")}
           </div>

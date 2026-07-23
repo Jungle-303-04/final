@@ -107,6 +107,7 @@ def build_physical_topology(
         cpu_mcores = _number(measured.get("cpu_mcores"))
         mem_mib = _number(_first(measured, "mem_mib", "memory_mib"))
         cpu_request_mcores, mem_request_mib = _request_denominators(summary)
+        cpu_limit_mcores, mem_limit_mib = _limit_denominators(summary)
         usage_pct = _requests_usage_pct(
             cpu_mcores=cpu_mcores,
             cpu_request_mcores=cpu_request_mcores,
@@ -123,8 +124,10 @@ def build_physical_topology(
                 "usage_pct": usage_pct,
                 "cpu_mcores": cpu_mcores,
                 "cpu_request_mcores": cpu_request_mcores,
+                "cpu_limit_mcores": cpu_limit_mcores,
                 "mem_mib": mem_mib,
                 "mem_request_mib": mem_request_mib,
+                "mem_limit_mib": mem_limit_mib,
                 "phase": _text(row.get("status") or summary.get("phase"), "Unknown"),
                 "health": _text(row.get("health"), "unknown"),
                 "restarts": _non_negative_int(summary.get("restart_total")),
@@ -201,6 +204,20 @@ def _request_denominators(summary: Mapping[str, Any]) -> tuple[float | None, flo
             )
         ),
         _positive_number(_first(summary, "mem_request_mib", "request_mem_mib", "requests_mem_mib")),
+    )
+
+
+def _limit_denominators(summary: Mapping[str, Any]) -> tuple[float | None, float | None]:
+    return (
+        _positive_number(
+            _first(
+                summary,
+                "cpu_limit_mcores",
+                "limit_cpu_mcores",
+                "limits_cpu_mcores",
+            )
+        ),
+        _positive_number(_first(summary, "mem_limit_mib", "limit_mem_mib", "limits_mem_mib")),
     )
 
 

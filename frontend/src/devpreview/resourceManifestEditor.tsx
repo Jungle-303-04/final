@@ -393,7 +393,7 @@ export function LiveResourceManifestEditor({
               승인 완료 — 배포 파이프라인이 진행됩니다.
               {onOpenDeploySurface && (
                 <div style={{ marginTop: 6 }}>
-                  <ActionButton primary disabled={false} onClick={onOpenDeploySurface}>배포 게이트에서 추적</ActionButton>
+                  <ActionButton primary disabled={false} onClick={onOpenDeploySurface}>배포 현황에서 추적</ActionButton>
                 </div>
               )}
             </div>
