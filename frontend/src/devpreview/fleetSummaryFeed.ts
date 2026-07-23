@@ -14,6 +14,9 @@ import { useBoundedPoll } from "./useBoundedPoll";
 // 15초로 완화한다. 채널이 죽으면 5초로 자동 복귀한다.
 const FLEET_REFRESH_MS = 5_000;
 const FLEET_REFRESH_SSE_LIVE_MS = 15_000;
+// fleet 호출 자체 타임아웃. 집계가 "빨리 실패"가 아니라 "매달리는" 장애(DB 타임아웃 등)일 때
+// 폴링의 시도 타임아웃(8s)이 전체를 끊기 전에 fleet 만 끊고 클러스터별 폴백을 돌리기 위함.
+const FLEET_CALL_TIMEOUT_MS = 3_500;
 
 /**
  * Reads the server-computed fleet rollup and exposes it in the existing
@@ -45,8 +48,14 @@ export function useFleetSummaries(
     scopeKey,
     intervalMs: sseLive ? FLEET_REFRESH_SSE_LIVE_MS : FLEET_REFRESH_MS,
     load: async (signal) => {
+      // fleet 요청 전용 abort — 상위 스코프 abort 는 전파하되, 자체 타임아웃은 fleet 만
+      // 끊어서 폴백(클러스터별 요약)이 실행될 기회를 보장한다.
+      const fleetController = new AbortController();
+      const onParentAbort = () => fleetController.abort();
+      signal.addEventListener("abort", onParentAbort);
+      const fleetTimer = setTimeout(() => fleetController.abort(), FLEET_CALL_TIMEOUT_MS);
       try {
-        const fleet = await getFleetSummary(signal);
+        const fleet = await getFleetSummary(fleetController.signal);
         const next: Record<string, ClusterSummaryView> = {};
         for (const cluster of fleet.clusters) {
           next[cluster.cluster_id] = {
@@ -65,7 +74,9 @@ export function useFleetSummaries(
         }
         return next;
       } catch (cause: unknown) {
-        if (signal.aborted || isAbortError(cause)) throw cause;
+        // 상위 스코프 취소만 그대로 전파. fleet 자체 타임아웃(AbortError지만 상위는
+        // 살아있음)은 장애로 간주하고 폴백으로 진행한다.
+        if (signal.aborted) throw cause;
         // fleet 집계 장애 → 클러스터별 canonical nodes/summary 로 동일 값을 채운다.
         const entries = await Promise.all(ids.map(async (id) => {
           try {
@@ -81,6 +92,9 @@ export function useFleetSummaries(
         );
         if (recovered.length === 0) throw cause;
         return Object.fromEntries(recovered);
+      } finally {
+        clearTimeout(fleetTimer);
+        signal.removeEventListener("abort", onParentAbort);
       }
     },
     onResult: (next) => setSummaries(next),
