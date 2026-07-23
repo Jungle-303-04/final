@@ -493,7 +493,12 @@ function RepoStep({ providers, onNext }: { providers: ClusterProvidersView; onNe
     setFailure("");
     void (async () => {
       try {
-        const probe = await probeRepository(repo.full, undefined, controller.signal);
+        const probe = await probeRepository(
+          repo.full,
+          undefined,
+          controller.signal,
+          appInstallationId ?? undefined,
+        );
         if (cancelled) return;
         setAccessProbe(probe);
         setAccess(probe.valid && probe.reachable && probe.private === false ? "public" : "auth");
@@ -504,7 +509,7 @@ function RepoStep({ providers, onNext }: { providers: ClusterProvidersView; onNe
       }
     })();
     return () => { cancelled = true; controller.abort(); };
-  }, [status, repo]);
+  }, [status, repo, appInstallationId]);
 
   const needsToken = access === "auth";
   const resolved = access === "public" || access === "auth";
@@ -518,7 +523,12 @@ function RepoStep({ providers, onNext }: { providers: ClusterProvidersView; onNe
       // 공개면 이미 받은 무인증 probe 를 재사용하고, 비공개면 토큰으로 다시 검증한다.
       const probe = access === "public" && accessProbe
         ? accessProbe
-        : await probeRepository(repo.full, token.trim() || undefined);
+        : await probeRepository(
+            repo.full,
+            token.trim() || undefined,
+            undefined,
+            appInstallationId ?? undefined,
+          );
       if (!probe.valid || !probe.reachable) {
         throw new Error(
           probe.errors[0] ||
@@ -527,7 +537,11 @@ function RepoStep({ providers, onNext }: { providers: ClusterProvidersView; onNe
               : "저장소에 연결할 수 없습니다."),
         );
       }
-      const branchList = await listRepositoryBranches(probe.normalized_repo_ref);
+      const branchList = await listRepositoryBranches(
+        probe.normalized_repo_ref,
+        undefined,
+        appInstallationId ?? undefined,
+      );
       const defaultBranch = branchList.default_branch || probe.default_branch || branchList.branches[0]?.name || "main";
       onNext({
         repo: { ...repo, full: probe.normalized_repo_ref, visibility: probe.private ? "private" : "public", branch: defaultBranch },
@@ -748,7 +762,12 @@ function RepoTargetStep({ source, context, onComplete }: {
 
   useEffect(() => {
     const controller = new AbortController();
-    void listRepositoryManifestCandidates(repoRef, input.branch, controller.signal)
+    void listRepositoryManifestCandidates(
+      repoRef,
+      input.branch,
+      controller.signal,
+      source.installationId ?? undefined,
+    )
       .then((response) => {
         if (controller.signal.aborted) return;
         setManifests(response.candidates);
@@ -791,6 +810,8 @@ function RepoTargetStep({ source, context, onComplete }: {
         input.branch.trim(),
         input.manifestPath.trim(),
         candidate?.source_type ?? "",
+        undefined,
+        source.installationId ?? undefined,
       );
       if (!validation.valid) throw new Error(validation.errors[0] || "매니페스트 검증에 실패했습니다.");
       await connectApplication({

@@ -1136,6 +1136,17 @@ async def connect_application(
         workspace_id,
         validation_credential_ref,
     )
+    # PAT·저장 자격증명이 없고 App 설치 id 만 있으면(비공개 레포 원클릭 연결) 설치
+    # 토큰을 발급해 재검증한다. App 미구성·발급 실패는 무인증으로 degrade.
+    if validation_token is None and payload.installation_id and payload.installation_id.strip():
+        from domains.scm.github_app_credentials import resolve_installation_token
+
+        try:
+            validation_token = await resolve_installation_token(
+                db, workspace_id, payload.installation_id.strip()
+            )
+        except Exception:  # noqa: BLE001 - App 미구성·발급 실패는 무인증 degrade
+            validation_token = None
     validation_discovery = discovery_with_token(discovery, validation_token)
     validation_request = RepositoryManifestValidationRequest(
         repo_ref=normalized_repo_ref,

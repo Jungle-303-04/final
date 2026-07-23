@@ -29,19 +29,32 @@ export function probeRepository(
   repoRef: string,
   token?: string,
   signal?: AbortSignal,
+  installationId?: string,
 ): Promise<RepositoryProbe> {
   return apiRequest(
     REPOSITORY_DISCOVERY_PROBE_PATH,
     repositoryProbeSchema,
-    jsonRequest({ repo_ref: repoRef, ...(token ? { token } : {}) }, signal),
+    jsonRequest(
+      {
+        repo_ref: repoRef,
+        ...(token ? { token } : {}),
+        ...(installationId ? { installation_id: installationId } : {}),
+      },
+      signal,
+    ),
   );
 }
 
 export function listRepositoryBranches(
   repoRef: string,
   signal?: AbortSignal,
+  installationId?: string,
 ): Promise<RepositoryBranchList> {
-  const path = withQuery(REPOSITORY_DISCOVERY_BRANCHES_PATH as ApiPath, [["repo_ref", repoRef]]);
+  const query: Array<[string, string]> = [["repo_ref", repoRef]];
+  if (installationId) {
+    query.push(["installation_id", installationId]);
+  }
+  const path = withQuery(REPOSITORY_DISCOVERY_BRANCHES_PATH as ApiPath, query);
   return apiRequest(path, repositoryBranchListSchema, { signal });
 }
 
@@ -49,11 +62,19 @@ export function listRepositoryManifestCandidates(
   repoRef: string,
   branch: string,
   signal?: AbortSignal,
+  installationId?: string,
 ): Promise<RepositoryManifestCandidateList> {
   return apiRequest(
     REPOSITORY_DISCOVERY_MANIFESTS_PATH,
     repositoryManifestCandidateListSchema,
-    jsonRequest({ repo_ref: repoRef, branch }, signal),
+    jsonRequest(
+      {
+        repo_ref: repoRef,
+        branch,
+        ...(installationId ? { installation_id: installationId } : {}),
+      },
+      signal,
+    ),
   );
 }
 
@@ -63,6 +84,7 @@ export function validateRepositoryManifest(
   manifestPath: string,
   sourceType = "",
   signal?: AbortSignal,
+  installationId?: string,
 ): Promise<RepositoryManifestValidation> {
   return apiRequest(
     REPOSITORY_DISCOVERY_VALIDATE_PATH,
@@ -72,6 +94,7 @@ export function validateRepositoryManifest(
       branch,
       manifest_path: manifestPath,
       source_type: sourceType,
+      ...(installationId ? { installation_id: installationId } : {}),
     }, signal),
   );
 }

@@ -695,11 +695,14 @@ class RepositoryProbeRequest(StrictModel):
         max_length=500,
         json_schema_extra={"writeOnly": True},
     )
+    # GitHub App 설치 id — 있으면 서버가 설치 토큰을 발급해 비공개 레포도 읽는다.
+    installation_id: str | None = Field(default=None, min_length=1, max_length=40)
 
 
 class RepositoryManifestDiscoveryRequest(StrictModel):
     repo_ref: str = Field(min_length=1, max_length=240)
     branch: str = Field(default=DEFAULT_REPO_BRANCH, min_length=1, max_length=200)
+    installation_id: str | None = Field(default=None, min_length=1, max_length=40)
 
 
 class RepositoryManifestValidationRequest(StrictModel):
@@ -708,6 +711,7 @@ class RepositoryManifestValidationRequest(StrictModel):
     manifest_path: str = Field(default=DEFAULT_MANIFEST_PATH, min_length=1, max_length=500)
     source_type: str = Field(default="", max_length=40)
     values_path: str | None = Field(default=None, min_length=1, max_length=500)
+    installation_id: str | None = Field(default=None, min_length=1, max_length=40)
 
     @model_validator(mode="after")
     def values_override_requires_helm(self) -> RepositoryManifestValidationRequest:
