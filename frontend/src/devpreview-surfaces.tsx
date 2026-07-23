@@ -147,12 +147,13 @@ function ReasonNotes({ codes }: { codes: string[] }) {
 }
 
 // ── 공통 프레임: 제목 + 주 액션 1개(P-43) + 탭 ──
-function Page({ title, icon: I, action, tabs, tab, onTab, children }: {
+function Page({ title, icon: I, action, tabs, tab, onTab, ensureVerticalScroll = false, children }: {
   title: string; icon: React.ComponentType<{ size?: number; style?: React.CSSProperties }>;
-  action?: React.ReactNode; tabs?: string[]; tab?: string; onTab?: (t: string) => void; children: React.ReactNode;
+  action?: React.ReactNode; tabs?: string[]; tab?: string; onTab?: (t: string) => void;
+  ensureVerticalScroll?: boolean; children: React.ReactNode;
 }) {
   return (
-    <main style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 16, padding: "14px 18px 40px" }}>
+    <main style={{ minWidth: 0, minHeight: ensureVerticalScroll ? `calc(100vh / ${PRESENT_SCALE})` : undefined, boxSizing: "border-box", display: "flex", flexDirection: "column", gap: 16, padding: "14px 18px 40px" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
         <I size={17} style={{ color: BLUE }} />
         <span style={{ fontSize: TYPE.heading, fontWeight: 700, letterSpacing: "-0.02em", color: UI.ink }}>{title}</span>
@@ -435,7 +436,7 @@ export function DeploySurface({ pendingRepos = [], repositoryFilter = null, onOp
   const helmCols: [string, string][] = [["릴리스", "minmax(120px,1.1fr)"], ["차트", "minmax(150px,1.4fr)"], ["차트 버전", "minmax(80px,0.8fr)"], ["네임스페이스", "minmax(90px,0.9fr)"], ["리비전", "56px"], ["상태", "minmax(90px,0.8fr)"]];
   const loading = appsFeed.status === "loading";
   return (
-    <Page title="배포" icon={Rocket} tabs={["애플리케이션", "GitOps", "워크플로우", "Helm 릴리스"]} tab={tab} onTab={setTab}
+    <Page title="배포" icon={Rocket} tabs={["애플리케이션", "GitOps", "워크플로우", "Helm 릴리스"]} tab={tab} onTab={setTab} ensureVerticalScroll
       action={tab === "GitOps"
         ? <button onClick={onAddRepo} style={{ display: "flex", alignItems: "center", gap: 6, border: "none", background: BLUE, color: UI.card, borderRadius: 9, padding: "6px 13px", fontSize: TYPE.label2, fontWeight: 700, cursor: "pointer" }}>+ 저장소 연결</button>
         : null}>

@@ -1470,6 +1470,46 @@ function App() {
   const togglePin = (id: string) => setPinned((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
   const searchRef = useRef<HTMLInputElement>(null);
   const pageScrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const pageScroller = pageScrollRef.current;
+    if (!pageScroller) return;
+
+    const canScrollInDirection = (element: HTMLElement, deltaY: number) => {
+      const maxScrollTop = element.scrollHeight - element.clientHeight;
+      if (maxScrollTop <= 1) return false;
+      return deltaY < 0 ? element.scrollTop > 0 : element.scrollTop < maxScrollTop;
+    };
+
+    const onWheel = (event: WheelEvent) => {
+      if (event.ctrlKey || event.deltaY === 0) return;
+      const deltaY = event.deltaMode === WheelEvent.DOM_DELTA_LINE
+        ? event.deltaY * 16
+        : event.deltaMode === WheelEvent.DOM_DELTA_PAGE
+          ? event.deltaY * pageScroller.clientHeight
+          : event.deltaY;
+
+      let candidate = event.target instanceof Element ? event.target : null;
+      while (candidate && candidate !== pageScroller) {
+        if (candidate instanceof HTMLElement) {
+          const overflowY = window.getComputedStyle(candidate).overflowY;
+          if ((overflowY === "auto" || overflowY === "scroll") && canScrollInDirection(candidate, deltaY)) {
+            event.preventDefault();
+            candidate.scrollTop += deltaY;
+            return;
+          }
+        }
+        candidate = candidate.parentElement;
+      }
+
+      if (canScrollInDirection(pageScroller, deltaY)) {
+        event.preventDefault();
+        pageScroller.scrollTop += deltaY;
+      }
+    };
+
+    pageScroller.addEventListener("wheel", onWheel, { passive: false });
+    return () => pageScroller.removeEventListener("wheel", onWheel);
+  }, []);
   // 상단 크롬 높이 — 폰트·확대에 따라 변하므로 실측해서 오버레이 기준으로 쓴다
   const headerRef = useRef<HTMLElement>(null);
   useEffect(() => {
