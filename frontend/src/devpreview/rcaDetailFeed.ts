@@ -8,8 +8,8 @@ import { getAuditTimeline } from "../api/audit-timeline";
 import type { AuditTimelineItem } from "../api/audit-timeline-schemas";
 import { getIncidentRecentChanges } from "../api/recent-changes";
 import type { RecentChangeItem } from "../api/recent-changes-schemas";
-import { getEvidenceWindowPayload, listRcaReports } from "../api/evidence";
-import type { EvidenceWindowPayload, RcaReport } from "../api/evidence-schemas";
+import { getEvidenceWindowPayload, listEvidence, listRcaReports } from "../api/evidence";
+import type { EvidenceRecord, EvidenceWindowPayload, RcaReport } from "../api/evidence-schemas";
 import type { RcaIssueList } from "../api/schemas";
 import { loadRcaIssueItems } from "./rcaIssuesFeed";
 import { operationalMessageLabel } from "./statusLabel";
@@ -169,6 +169,142 @@ export interface RcaReportFeed {
 export interface EvidenceWindowFeed {
   status: RcaDetailStatus | "idle";
   evidence: EvidenceWindowPayload | null;
+}
+
+export type RcaEvidenceReference = RcaReport["supporting_evidence_refs"][number];
+
+export interface EvidenceReferenceFeed {
+  status: RcaDetailStatus | "idle";
+  references: RcaEvidenceReference[];
+}
+
+export interface EvidenceObjectReference {
+  value: string;
+  correlationId: string;
+  source: string;
+  name: string;
+}
+
+/** Parse the durable RCA evidence URI without treating it as a browser URL. */
+export function parseEvidenceObjectReference(value: string): EvidenceObjectReference | null {
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== "object:" || parsed.hostname !== "evidence") return null;
+    const path = decodeURIComponent(parsed.pathname.replace(/^\/+/u, ""));
+    const correlationId = path.endsWith(".json") ? path.slice(0, -5) : path;
+    const fragment = decodeURIComponent(parsed.hash.replace(/^#/u, ""));
+    const separator = fragment.indexOf(":");
+    if (!correlationId || separator < 1 || separator === fragment.length - 1) return null;
+    return {
+      value,
+      correlationId,
+      source: fragment.slice(0, separator),
+      name: fragment.slice(separator + 1),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function normalizedEvidenceSource(source: string): string {
+  const normalized = source.trim().toLowerCase();
+  if (normalized === "k8s") return "kubernetes";
+  if (normalized === "prometheus") return "metrics";
+  if (normalized === "loki") return "logs";
+  if (normalized === "tempo") return "traces";
+  return normalized;
+}
+
+/**
+ * Resolve one legacy pointer only against a source summary that identifies a
+ * durable EvidenceWindow. A correlation may contain multiple records for the
+ * same provider while a window is still assembling, so a source-only match can
+ * accidentally select a newer, unkeyed partial record and make the old link
+ * unopenable.
+ */
+export function resolveEvidenceObjectReference(
+  pointer: EvidenceObjectReference,
+  records: readonly EvidenceRecord[],
+): RcaEvidenceReference | null {
+  const source = normalizedEvidenceSource(pointer.source);
+  const sourceSummary = records
+    .filter((record) => record.correlation_id === pointer.correlationId)
+    .flatMap((record) => record.sources)
+    .find((candidate) => (
+      normalizedEvidenceSource(candidate.source) === source
+      && Boolean(candidate.evidence_key?.trim())
+    ));
+  if (!sourceSummary?.evidence_key) return null;
+  return {
+    source,
+    name: pointer.name,
+    check_id: null,
+    summary: sourceSummary.summary || null,
+    query: null,
+    evidence_ref: pointer.value,
+    schema_version: sourceSummary.schema_version,
+    source_version: sourceSummary.source_version,
+    collector: sourceSummary.collector,
+    collector_version: sourceSummary.collector_version,
+    query_version: sourceSummary.query_version,
+    collected_at: sourceSummary.collected_at,
+    evidence_key: sourceSummary.evidence_key,
+    source_id: sourceSummary.source_id,
+    agent_id: sourceSummary.agent_id,
+    window_start: sourceSummary.window_start,
+  };
+}
+
+/**
+ * Resolve legacy object:// evidence strings through the safe Evidence summary
+ * endpoint. This recovers the window key needed by the existing detail panel
+ * without exposing or guessing an object-store URL.
+ */
+export function useEvidenceObjectReferences(values: readonly string[]): EvidenceReferenceFeed {
+  const requestKey = [...new Set(values.filter((value) => parseEvidenceObjectReference(value)))]
+    .sort()
+    .join("\u0000");
+  const [snapshot, setSnapshot] = useState<{
+    requestKey: string;
+    feed: EvidenceReferenceFeed;
+  }>({
+    requestKey: "",
+    feed: { status: "idle", references: [] },
+  });
+  useEffect(() => {
+    if (!requestKey) return;
+    const controller = new AbortController();
+    const pointers = requestKey
+      .split("\u0000")
+      .map(parseEvidenceObjectReference)
+      .filter((pointer): pointer is EvidenceObjectReference => pointer !== null);
+    const correlationIds = [...new Set(pointers.map((pointer) => pointer.correlationId))];
+    void Promise.all(
+      correlationIds.map(async (correlationId) => [
+        correlationId,
+        await listEvidence({ correlationId, limit: 50, signal: controller.signal }),
+      ] as const),
+    )
+      .then((responses) => {
+        if (controller.signal.aborted) return;
+        const recordsByCorrelation = new Map(responses);
+        const references = pointers.flatMap((pointer): RcaEvidenceReference[] => {
+          const records = recordsByCorrelation.get(pointer.correlationId)?.items ?? [];
+          const reference = resolveEvidenceObjectReference(pointer, records);
+          return reference ? [reference] : [];
+        });
+        setSnapshot({ requestKey, feed: { status: "ready", references } });
+      })
+      .catch((cause: unknown) => {
+        if (controller.signal.aborted || isAbortError(cause)) return;
+        setSnapshot({ requestKey, feed: { status: "unavailable", references: [] } });
+      });
+    return () => controller.abort();
+  }, [requestKey]);
+  if (!requestKey) return { status: "idle", references: [] };
+  return snapshot.requestKey === requestKey
+    ? snapshot.feed
+    : { status: "loading", references: [] };
 }
 
 export function useEvidenceWindowPayload(

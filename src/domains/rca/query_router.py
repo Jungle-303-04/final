@@ -289,7 +289,7 @@ def _evidence_window_sources(payload: JsonObject) -> list[str]:
 
 def _evidence_source_summaries(payload: JsonObject) -> list[JsonObject]:
     items: list[JsonObject] = []
-    for source in ("kubernetes", "metrics", "logs", "traces"):
+    for source in ("kubernetes", "metrics", "logs", "traces", "metadata"):
         value = payload.get(source)
         if value in (None, {}, []):
             continue

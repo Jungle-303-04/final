@@ -6,10 +6,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Collection
 from datetime import timedelta
 from typing import Any
 
-from sqlalchemy import Select, Text, and_, case, cast, delete, func, or_, select
+from sqlalchemy import Float, Select, Text, and_, case, cast, delete, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from domains.dashboard.models import MetricQueryPreset, MetricWidget, RcaTimeline
@@ -18,12 +19,59 @@ from domains.inventory.models import (
     ClusterInventoryResourceRecord,
     ClusterInventorySnapshotRecord,
 )
+from domains.rca.models import RcaReport
 from domains.rca.timeline import issue_presentation_severity
 from packages.contracts.event_bus.interfaces import EventEnvelope, JsonObject
 from packages.contracts.event_bus.subjects import EventSubject
 from packages.storage.engine import DatabaseConnection
 
 Path = tuple[str, ...]
+
+ROOT_CAUSE_PATHS: tuple[Path, ...] = (
+    ("root_cause",),
+    ("rca_detail", "root_cause"),
+    ("diagnostics", "root_cause"),
+    ("details", "plan", "candidates", "0", "draft", "params", "root_cause"),
+    ("plan", "candidates", "0", "draft", "params", "root_cause"),
+    ("selected", "draft", "params", "root_cause"),
+)
+CONFIDENCE_PATHS: tuple[Path, ...] = (
+    ("rca_detail", "confidence"),
+    ("confidence",),
+    ("details", "plan", "candidates", "0", "draft", "params", "confidence"),
+    ("plan", "candidates", "0", "draft", "params", "confidence"),
+    ("selected", "draft", "params", "confidence"),
+)
+SITUATION_SUMMARY_PATHS: tuple[Path, ...] = (
+    ("narrative", "executive_summary"),
+    ("incident", "summary"),
+    ("details", "plan", "summary"),
+    ("plan", "summary"),
+    ("summary",),
+)
+RECOMMENDED_ACTION_SUMMARY_PATHS: tuple[Path, ...] = (
+    ("narrative", "recommended_action"),
+    ("details", "approval_summary", "recommended_candidate", "title"),
+    ("details", "plan", "candidates", "0", "title"),
+    ("plan", "candidates", "0", "title"),
+    ("selected", "title"),
+    ("details", "approval_summary", "recommended_candidate", "description"),
+    ("details", "plan", "candidates", "0", "description"),
+    ("plan", "candidates", "0", "description"),
+    ("selected", "description"),
+)
+EVIDENCE_SUMMARY_PATHS: tuple[Path, ...] = (
+    ("rca_detail", "evidence_summary"),
+    ("details", "plan", "candidates", "0", "draft", "reason"),
+    ("plan", "candidates", "0", "draft", "reason"),
+    ("evaluations", "0", "reason"),
+)
+EVIDENCE_BUNDLE_SUMMARY_PATHS: tuple[Path, ...] = (
+    ("rca_detail", "evidence_bundle_summary"),
+    ("details", "plan", "summary"),
+    ("plan", "summary"),
+    ("incident", "summary"),
+)
 
 RCA_TIMELINE_STATUS_BY_SUBJECT: dict[str, str] = {
     EventSubject.CLUSTER_EVIDENCE_RECEIVED.value: "evidence_received",
@@ -35,6 +83,7 @@ RCA_TIMELINE_STATUS_BY_SUBJECT: dict[str, str] = {
     EventSubject.RCA_AI_FALLBACK_REQUESTED.value: "ai_fallback_requested",
     EventSubject.RCA_CANDIDATES_PLANNED.value: "rca_planned",
     EventSubject.RCA_CANDIDATES_EVALUATED.value: "rca_evaluated",
+    EventSubject.RCA_ANALYSIS_BLOCKED.value: "analysis_blocked",
     EventSubject.RCA_COMPLETED.value: "rca_completed",
     EventSubject.RCA_FOLLOWUP_REQUIRED.value: "followup_required",
     EventSubject.RCA_ACTION_REQUIRED.value: "action_required",
@@ -69,6 +118,7 @@ OPEN_INCIDENT_STATUSES: tuple[str, ...] = (
     "ai_fallback_requested",
     "rca_planned",
     "rca_evaluated",
+    "analysis_blocked",
     "rca_completed",
     "followup_required",
     "action_required",
@@ -94,6 +144,8 @@ EPHEMERAL_INCIDENT_RESOURCE_KINDS: tuple[str, ...] = ("Pod", "ReplicaSet")
 EPHEMERAL_INCIDENT_RESOURCE_KINDS_NORMALIZED = tuple(
     kind.casefold() for kind in EPHEMERAL_INCIDENT_RESOURCE_KINDS
 )
+MAX_RCA_REPORT_SUMMARY_BATCH = 101
+VALID_CONFIDENCE_PATTERN = r"^(?:0(?:\.[0-9]+)?|1(?:\.0+)?)$"
 
 
 def latest_inventory_snapshot_id_for_incident(timeline: Any) -> Any:
@@ -166,8 +218,8 @@ def _rca_timeline_response_columns(*, include_issue_severity: bool = False) -> t
         table.c.evidence_ref,
         table.c.current_subject,
         table.c.status,
-        table.c.root_cause,
-        table.c.confidence,
+        effective_root_cause_column(table),
+        effective_confidence_column(table),
         table.c.supporting_evidence,
         table.c.missing_evidence,
         table.c.action_route,
@@ -177,8 +229,151 @@ def _rca_timeline_response_columns(*, include_issue_severity: bool = False) -> t
         table.c.updated_at,
     )
     if include_issue_severity:
-        return (*columns, table.c.severity, table.c.severity_complete)
+        return (
+            *columns,
+            table.c.severity,
+            table.c.severity_complete,
+            *issue_detail_projection_columns(table),
+        )
     return columns
+
+
+def _payload_text_column(payload_column: Any, paths: tuple[Path, ...]) -> Any:
+    values = tuple(func.nullif(payload_column[path].astext, "") for path in paths)
+    return func.coalesce(*values)
+
+
+def effective_root_cause_column(table: Any) -> Any:
+    """Return a scalar RCA verdict for both current and historical payload shapes."""
+    return func.coalesce(
+        table.c.root_cause,
+        _payload_text_column(table.c.payload, ROOT_CAUSE_PATHS),
+    ).label("root_cause")
+
+
+def effective_confidence_column(table: Any) -> Any:
+    """Read the bounded numeric confidence without transferring the full payload."""
+    historical_confidence = _payload_text_column(table.c.payload, CONFIDENCE_PATHS)
+    safe_historical_confidence = case(
+        (
+            historical_confidence.op("~")(VALID_CONFIDENCE_PATTERN),
+            cast(historical_confidence, Float),
+        ),
+        else_=None,
+    )
+    return func.coalesce(
+        table.c.confidence,
+        safe_historical_confidence,
+    ).label("confidence")
+
+
+def issue_detail_projection_columns(table: Any) -> tuple[Any, ...]:
+    """Project operator copy from JSON scalars while keeping large evidence server-side."""
+    return (
+        _payload_text_column(table.c.payload, SITUATION_SUMMARY_PATHS).label(
+            "situation_summary"
+        ),
+        _payload_text_column(table.c.payload, RECOMMENDED_ACTION_SUMMARY_PATHS).label(
+            "recommended_action_summary"
+        ),
+        _payload_text_column(table.c.payload, EVIDENCE_SUMMARY_PATHS).label("evidence_summary"),
+        _payload_text_column(table.c.payload, EVIDENCE_BUNDLE_SUMMARY_PATHS).label(
+            "evidence_bundle_summary"
+        ),
+    )
+
+
+def issue_detail_projection(payload: JsonObject) -> JsonObject:
+    """Pure companion to the SQL projection, used by replay and contract tests."""
+    return {
+        "situation_summary": _first_string(payload, *SITUATION_SUMMARY_PATHS),
+        "recommended_action_summary": _first_string(
+            payload, *RECOMMENDED_ACTION_SUMMARY_PATHS
+        ),
+        "evidence_summary": _first_string(payload, *EVIDENCE_SUMMARY_PATHS),
+        "evidence_bundle_summary": _first_string(payload, *EVIDENCE_BUNDLE_SUMMARY_PATHS),
+    }
+
+
+def latest_rca_issue_report_summaries_statement(
+    workspace_id: str,
+    correlation_ids: Collection[str],
+) -> Select[Any]:
+    """Build one bounded latest-report lookup after timeline deduplication."""
+    report = RcaReport.__table__
+    bounded_ids = tuple(
+        dict.fromkeys(
+            correlation_id.strip()
+            for correlation_id in correlation_ids
+            if isinstance(correlation_id, str) and correlation_id.strip()
+        )
+    )[:MAX_RCA_REPORT_SUMMARY_BATCH]
+    summary = func.jsonb_strip_nulls(
+        func.jsonb_build_object(
+            "executive_summary",
+            report.c.payload["narrative"]["executive_summary"].astext,
+            "recommended_action",
+            report.c.payload["narrative"]["recommended_action"].astext,
+            "evidence_summary",
+            report.c.payload["rca_detail"]["evidence_summary"].astext,
+            "evidence_bundle_summary",
+            report.c.payload["rca_detail"]["evidence_bundle_summary"].astext,
+        )
+    ).label("rca_issue_report_summary")
+    return (
+        select(
+            report.c.correlation_id,
+            summary,
+        )
+        .where(
+            report.c.workspace_id == workspace_id,
+            report.c.correlation_id.in_(bounded_ids),
+        )
+        .distinct(report.c.correlation_id)
+        .order_by(
+            report.c.correlation_id,
+            report.c.created_at.desc(),
+            report.c.id.desc(),
+        )
+    )
+
+
+def fetch_latest_rca_issue_report_summaries(
+    conn: Any,
+    *,
+    workspace_id: str,
+    correlation_ids: Collection[str],
+) -> dict[str, JsonObject]:
+    """Fetch newest operator-safe report prose with one bounded query."""
+    bounded_ids = tuple(
+        dict.fromkeys(
+            correlation_id.strip()
+            for correlation_id in correlation_ids
+            if isinstance(correlation_id, str) and correlation_id.strip()
+        )
+    )[:MAX_RCA_REPORT_SUMMARY_BATCH]
+    if not bounded_ids:
+        return {}
+    rows = conn.execute(
+        latest_rca_issue_report_summaries_statement(workspace_id, bounded_ids)
+    ).mappings()
+    summaries: dict[str, JsonObject] = {}
+    for row in rows:
+        summary = row.get("rca_issue_report_summary")
+        if isinstance(summary, dict):
+            summaries[str(row["correlation_id"])] = summary
+    return summaries
+
+
+def _apply_latest_rca_issue_report_summaries(
+    items: list[JsonObject],
+    summaries: dict[str, JsonObject],
+) -> None:
+    for item in items:
+        correlation_id = item.get("correlation_id")
+        item["rca_issue_report_summary"] = (
+            summaries.get(correlation_id) if isinstance(correlation_id, str) else None
+        )
 
 
 class DashboardRepository(DatabaseConnection):
@@ -463,7 +658,14 @@ class DashboardRepository(DatabaseConnection):
                 (newer_event, insert.excluded.current_subject),
                 else_=table.c.current_subject,
             ),
-            status=case((newer_event, insert.excluded.status), else_=table.c.status),
+            # Inventory recovery is the incident lifecycle authority. A late RCA
+            # completion replay may enrich the verdict, but must not reopen an
+            # already recovered issue in the operator queue.
+            status=case(
+                (table.c.status == "incident_resolved", table.c.status),
+                (newer_event, insert.excluded.status),
+                else_=table.c.status,
+            ),
             error_reason=case(
                 (newer_event, insert.excluded.error_reason),
                 else_=table.c.error_reason,
@@ -569,6 +771,17 @@ class DashboardRepository(DatabaseConnection):
             items.append(item)
             if len(items) >= bounded_limit:
                 break
+        with self.connection() as conn:
+            summaries = fetch_latest_rca_issue_report_summaries(
+                conn,
+                workspace_id=workspace_id,
+                correlation_ids=[
+                    str(item["correlation_id"])
+                    for item in items
+                    if item.get("correlation_id")
+                ],
+            )
+        _apply_latest_rca_issue_report_summaries(items, summaries)
         return items
 
     def _list_rca_timeline_projection(
@@ -615,6 +828,18 @@ class DashboardRepository(DatabaseConnection):
             items.append(item)
             if len(items) >= bounded_limit:
                 break
+        if include_issue_severity:
+            with self.connection() as conn:
+                summaries = fetch_latest_rca_issue_report_summaries(
+                    conn,
+                    workspace_id=workspace_id,
+                    correlation_ids=[
+                        str(item["correlation_id"])
+                        for item in items
+                        if item.get("correlation_id")
+                    ],
+                )
+            _apply_latest_rca_issue_report_summaries(items, summaries)
         return items
 
     def get_rca_timeline_item(
@@ -1203,11 +1428,11 @@ def _evidence_ref(payload: JsonObject) -> str | None:
 
 
 def _root_cause(payload: JsonObject) -> str | None:
-    return _first_string(payload, ("root_cause",), ("rca_detail", "root_cause"))
+    return _first_string(payload, *ROOT_CAUSE_PATHS)
 
 
 def _confidence(payload: JsonObject) -> float | None:
-    value = _first_value(payload, ("rca_detail", "confidence"), ("confidence",))
+    value = _first_value(payload, *CONFIDENCE_PATHS)
     if value is None:
         return None
     try:
@@ -1355,9 +1580,18 @@ def _format_evidence_reference(item: JsonObject) -> str | None:
 def _value_at(payload: JsonObject, path: Path) -> Any | None:
     cursor: Any = payload
     for key in path:
-        if not isinstance(cursor, dict):
+        if isinstance(cursor, dict):
+            cursor = cursor.get(key)
+            continue
+        if isinstance(cursor, list) and key.isdigit():
+            index = int(key)
+            if index >= len(cursor):
+                return None
+            cursor = cursor[index]
+            continue
+        if not isinstance(cursor, (dict, list)):
             return None
-        cursor = cursor.get(key)
+        return None
     return cursor
 
 

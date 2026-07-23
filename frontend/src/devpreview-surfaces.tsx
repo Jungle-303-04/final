@@ -15,12 +15,14 @@ import { useCostOverview } from "./devpreview/costFeed";
 import { useChecksOverview } from "./devpreview/checksFeed";
 import {
   useEvidenceWindowPayload,
+  useEvidenceObjectReferences,
   useIncidentRecentChanges,
   useLatestRcaReport,
   useRcaIssueDetails,
   useRecoveryAudit,
   useRemediationBundle,
   useRecoveryPlan,
+  parseEvidenceObjectReference,
   type RcaIssueDetailView,
 } from "./devpreview/rcaDetailFeed";
 import type { RcaReport } from "./api/evidence-schemas";
@@ -57,6 +59,13 @@ import { issueAnalysisState } from "./devpreview/issueAnalysisState";
 import { canOpenRecoveryPlan } from "./devpreview/recoveryAccess";
 import { pullRequestReference } from "./devpreview/pullRequestReference";
 import { isSafePrRoute, recoveryRouteLabel } from "./devpreview/recoveryRoute";
+import {
+  evidencePreviewLines,
+  evidenceReferenceMatches,
+  mergeEvidenceReferences,
+  missingEvidencePresentations,
+  rcaSummaryPresentation,
+} from "./devpreview/rcaPresentation";
 
 // ── 상대 시간 포맷 — 서버 타임스탬프(ISO 또는 epoch ms)를 사람이 읽는 근사치로 ──
 function fromNow(input: string | number | null): string {
@@ -1362,16 +1371,6 @@ function evidenceNameLabel(name: string): string {
   return labels[name] ?? rcaDisplayLabel(name);
 }
 
-function metricNameLabel(name: string): string {
-  const normalized = name.replace(/_/g, " ");
-  const labels: Record<string, string> = {
-    container_restart_rate: "컨테이너 재시작률",
-    pod_ready_ratio: "Pod 준비 비율",
-    startup_failure_total: "시작 실패 누계",
-  };
-  return labels[name] ? `${labels[name]}(${normalized})` : normalized;
-}
-
 function evidencePayloadSource(source: string): string {
   const normalized = source.trim().toLowerCase();
   if (normalized === "k8s") return "kubernetes";
@@ -1382,97 +1381,20 @@ function evidencePayloadSource(source: string): string {
 }
 
 type EvidenceReference = RcaReport["supporting_evidence_refs"][number];
-
-function normalizedEvidenceToken(value: string): string {
-  return value.trim().toLowerCase().replace(/\s+/g, "");
-}
-
-function evidenceReferenceMatches(value: string, evidence: EvidenceReference): boolean {
-  const source = evidencePayloadSource(evidence.source);
-  const token = normalizedEvidenceToken(value);
-  return [source, evidence.name, `${source}:${evidence.name}`, evidence.check_id ?? "", evidence.evidence_ref ?? ""]
-    .some((candidate) => normalizedEvidenceToken(candidate) === token);
-}
+type MissingEvidenceCheck = RcaReport["missing_evidence_checks"][number];
 
 function evidenceReferenceLabel(value: string, references: readonly EvidenceReference[]): string {
   const evidence = references.find((reference) => evidenceReferenceMatches(value, reference));
+  const pointer = parseEvidenceObjectReference(value);
   return evidence
     ? `${evidenceSourceLabel(evidence.source)} · ${evidenceNameLabel(evidence.name)}`
+    : pointer
+      ? `${evidenceSourceLabel(pointer.source)} · ${evidenceNameLabel(pointer.name)}`
     : rcaDisplayLabel(value.replace(":", " · "));
 }
 
 function evidenceDetailAnchor(index: number): string {
   return `rca-evidence-detail-${index}`;
-}
-
-function missingEvidenceAction(item: string): string {
-  const normalized = item.trim().toLowerCase();
-  if (normalized === "변경 승인 이력" || normalized === "change_approval_history") {
-    return "Git PR·배포 승인 기록에서 Secret 변경 승인 여부를 확인하세요.";
-  }
-  return `${rcaDisplayLabel(item)}을 확인하세요.`;
-}
-
-function stringValue(value: unknown): string | null {
-  if (typeof value === "string" && value.trim()) return value;
-  if (typeof value === "number" || typeof value === "boolean") return String(value);
-  return null;
-}
-
-function recordValue(value: unknown): Record<string, unknown> | null {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : null;
-}
-
-function evidencePreviewLines(source: string, payload: Record<string, unknown>): string[] {
-  const value = payload[source];
-  const normalized = source.trim().toLowerCase();
-  if ((normalized === "logs" || normalized === "loki") && Array.isArray(value)) {
-    const lines: string[] = [];
-    for (const rawEntry of value) {
-      const entry = recordValue(rawEntry);
-      if (!entry) continue;
-      const matchedEntries = Array.isArray(entry.matched_entries) ? entry.matched_entries : [];
-      for (const rawMatch of matchedEntries) {
-        const match = recordValue(rawMatch);
-        const message = match ? stringValue(match.message) : null;
-        if (message) lines.push(message);
-        if (lines.length >= 5) return lines;
-      }
-      const streams = Array.isArray(entry.streams) ? entry.streams : [];
-      for (const rawStream of streams) {
-        const stream = recordValue(rawStream);
-        const values = stream && Array.isArray(stream.values) ? stream.values : [];
-        for (const rawLine of values) {
-          const line = recordValue(rawLine);
-          const message = line ? stringValue(line.line) : null;
-          if (message) lines.push(message);
-          if (lines.length >= 5) return lines;
-        }
-      }
-    }
-    return lines;
-  }
-  if ((normalized === "metrics" || normalized === "prometheus") && recordValue(value)) {
-    const results = recordValue(recordValue(value)?.results);
-    if (!results) return [];
-    return Object.entries(results).slice(0, 5).map(([name, result]) => {
-      const samples = recordValue(result)?.samples;
-      const sampleItems = Array.isArray(samples) ? samples : [];
-      const latest = sampleItems.length > 0 ? recordValue(sampleItems[sampleItems.length - 1]) : null;
-      const latestValue = latest ? stringValue(latest.value) : null;
-      return latestValue === null ? metricNameLabel(name) : `${metricNameLabel(name)} · 최근 값 ${latestValue}`;
-    });
-  }
-  if ((normalized === "kubernetes" || normalized === "k8s") && recordValue(value)) {
-    const body = recordValue(value)!;
-    const groups: Array<[string, unknown]> = [
-      ["이벤트", body.events], ["Pod", body.pods], ["노드", body.nodes], ["워크로드", body.workloads],
-    ];
-    return groups.flatMap(([label, items]) => Array.isArray(items) && items.length > 0 ? [`${label} ${items.length}건`] : []).slice(0, 5);
-  }
-  return [];
 }
 
 function ReportNumberedSection({ number, title, sectionRef, children }: { number: string; title: string; sectionRef?: React.RefObject<HTMLElement | null>; children: React.ReactNode }) {
@@ -1489,23 +1411,44 @@ function ReportNumberedSection({ number, title, sectionRef, children }: { number
   );
 }
 
-function CandidateEvidenceTokens({ label, items, tone, references = [], onEvidenceSelect }: { label: string; items: readonly string[]; tone: "ok" | "warn"; references?: readonly EvidenceReference[]; onEvidenceSelect?: (item: string) => void }) {
+export function CandidateEvidenceTokens({ label, items, tone, references = [], missingChecks = [], onEvidenceSelect }: {
+  label: string;
+  items: readonly string[];
+  tone: "ok" | "warn";
+  references?: readonly EvidenceReference[];
+  missingChecks?: readonly MissingEvidenceCheck[];
+  onEvidenceSelect?: (item: string) => void;
+}) {
   if (items.length === 0) return null;
+  const entries = tone === "warn"
+    ? missingEvidencePresentations(items, missingChecks).map((presentation) => ({
+      item: presentation.item,
+      missingPresentation: presentation,
+    }))
+    : items.map((item) => ({ item, missingPresentation: null }));
   return (
     <div style={{ display: "grid", gap: 4 }}>
       <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: TYPE.caption, fontWeight: 600, color: tone === "ok" ? TINT.ok.fg : TINT.warn.fg }}>
         {tone === "warn" && <ShieldAlert size={13} />}{label}
       </span>
       <span style={{ display: "grid", justifyItems: "start", gap: 3, fontSize: TYPE.caption, color: UI.ink2, lineHeight: 1.5 }}>
-        {items.map((item, index) => {
+        {entries.map(({ item, missingPresentation }, index) => {
           const linked = tone === "ok" && references.some((reference) => evidenceReferenceMatches(item, reference));
-          const content = evidenceReferenceLabel(item, references);
+          const content = missingPresentation?.message
+            ?? evidenceReferenceLabel(item, references);
           return linked ? (
             <button key={`${item}-${index}`} className="product-focusable" type="button" title="해당 근거 상세로 이동" onClick={() => onEvidenceSelect?.(item)}
               onMouseEnter={(event) => { event.currentTarget.style.color = UI.ink; }} onMouseLeave={(event) => { event.currentTarget.style.color = UI.ink2; }}
               onFocus={(event) => { event.currentTarget.style.color = UI.ink; }} onBlur={(event) => { event.currentTarget.style.color = UI.ink2; }}
               style={{ border: "none", borderRadius: 4, background: "transparent", color: UI.ink2, padding: 0, font: "inherit", cursor: "pointer", textDecoration: "underline", textUnderlineOffset: 3, transition: `color ${DUR.micro}s ease` }}>{content}</button>
-          ) : <span key={`${item}-${index}`}>{content}</span>;
+          ) : (
+            <span key={`${item}-${index}`} style={{ display: "grid", gap: 1 }}>
+              <span>{content}</span>
+              {missingPresentation?.metadata && (
+                <span style={{ fontSize: 10, color: UI.ink3 }}>{missingPresentation.metadata}</span>
+              )}
+            </span>
+          );
         })}
       </span>
     </div>
@@ -1550,7 +1493,7 @@ function EvidenceDetailItem({ evidence, id, highlighted = false, onOpenChange }:
   );
 }
 
-function RcaSelectedCause({ report, fallbackCause, onEvidenceSelect }: { report: RcaReport | null; fallbackCause: string | null | undefined; onEvidenceSelect?: (item: string) => void }) {
+function RcaSelectedCause({ report, fallbackCause, references, onEvidenceSelect }: { report: RcaReport | null; fallbackCause: string | null | undefined; references: readonly EvidenceReference[]; onEvidenceSelect?: (item: string) => void }) {
   const candidates = report?.candidates ?? [];
   if (candidates.length === 0) {
     return <p style={{ margin: 0, fontSize: TYPE.label, color: fallbackCause ? UI.ink2 : UI.ink3, lineHeight: 1.55 }}>{fallbackCause || "원인 후보 정보가 아직 없습니다."}</p>;
@@ -1565,14 +1508,19 @@ function RcaSelectedCause({ report, fallbackCause, onEvidenceSelect }: { report:
       </div>
       {selected.reason && <p style={{ margin: 0, fontSize: TYPE.caption, color: UI.ink2, lineHeight: 1.5 }}>- {selected.reason}</p>}
       <div style={{ display: "grid", gap: 9, marginTop: 2, paddingTop: 10, borderTop: `1px solid ${UI.line}` }}>
-        <CandidateEvidenceTokens label="확인된 근거" items={selected.supporting_evidence} tone="ok" references={report?.supporting_evidence_refs} onEvidenceSelect={onEvidenceSelect} />
-        <CandidateEvidenceTokens label="추가 확인 필요" items={selected.missing_evidence} tone="warn" />
+        <CandidateEvidenceTokens label="확인된 근거" items={selected.supporting_evidence} tone="ok" references={references} onEvidenceSelect={onEvidenceSelect} />
+        <CandidateEvidenceTokens
+          label="추가 확인 필요"
+          items={selected.missing_evidence}
+          tone="warn"
+          missingChecks={report?.missing_evidence_checks}
+        />
       </div>
     </div>
   );
 }
 
-function RcaAlternativeCandidates({ report, onEvidenceSelect }: { report: RcaReport | null; onEvidenceSelect?: (item: string) => void }) {
+function RcaAlternativeCandidates({ report, references, onEvidenceSelect }: { report: RcaReport | null; references: readonly EvidenceReference[]; onEvidenceSelect?: (item: string) => void }) {
   const candidates = report?.candidates ?? [];
   const selected = candidates.find((candidate) => candidate.candidate_id === report?.selected_candidate_id) ?? candidates[0];
   const alternatives = selected ? candidates.filter((candidate) => candidate.candidate_id !== selected.candidate_id) : [];
@@ -1586,7 +1534,7 @@ function RcaAlternativeCandidates({ report, onEvidenceSelect }: { report: RcaRep
           key={candidate.candidate_id}
           candidate={candidate}
           first={index === 0}
-          references={report?.supporting_evidence_refs}
+          references={references}
           onEvidenceSelect={onEvidenceSelect}
         />
       ))}
@@ -1602,7 +1550,7 @@ function RcaAlternativeCandidate({
 }: {
   candidate: RcaReport["candidates"][number];
   first: boolean;
-  references: RcaReport["supporting_evidence_refs"] | undefined;
+  references: readonly EvidenceReference[];
   onEvidenceSelect?: (item: string) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -1666,6 +1614,17 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
         : TINT.blue;
   const support = supportingEvidence ?? [];
   const missing = missingEvidence ?? [];
+  const missingPresentations = missingEvidencePresentations(
+    missing,
+    report?.missing_evidence_checks,
+  );
+  const resolvedObjectEvidence = useEvidenceObjectReferences(support);
+  const evidenceReferences = useMemo(() => {
+    return mergeEvidenceReferences([
+      ...(report?.supporting_evidence_refs ?? []),
+      ...resolvedObjectEvidence.references,
+    ]);
+  }, [report?.supporting_evidence_refs, resolvedObjectEvidence.references]);
   const observedStatus = status?.trim() ? koLabel(status) : currentSubject?.trim() ? koLabel(currentSubject) : "상태 미확인";
   const reportConfidence = report?.confidence ?? confidence ?? null;
   const reportConfidencePercent = typeof reportConfidence === "number" && Number.isFinite(reportConfidence) ? Math.round(reportConfidence * 100) : null;
@@ -1675,6 +1634,41 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
   const reportAnalysisAt = report?.created_at ?? updatedAt;
   const reportElapsed = reportElapsedLabel(reportFirstSeenAt, reportAnalysisAt);
   const reportImpact = report?.narrative?.impact?.trim() || null;
+  const effectiveRootCause = report?.root_cause?.trim() || rootCause?.trim() || null;
+  const recoverySummaryCandidate = recovery.plan?.selected_action
+    ?? recovery.plan?.candidates[0]
+    ?? null;
+  const summaryPresentation = rcaSummaryPresentation({
+    report: {
+      narrativeExecutiveSummary: report?.narrative?.executive_summary,
+      narrativeRecommendedAction: report?.narrative?.recommended_action,
+      narrativeReasoning: report?.narrative?.reasoning,
+      reason: report?.reason,
+      evidenceSummary: report?.evidence_summary,
+      evidenceBundleSummary: report?.evidence_bundle_summary,
+      rawAction: report?.action,
+    },
+    issue: {
+      situationSummary,
+      recommendedActionSummary,
+      evidenceSummary,
+      evidenceBundleSummary,
+    },
+    recovery: {
+      summary: recovery.plan?.summary,
+      candidateDescription: recoverySummaryCandidate?.description,
+      candidateTitle: recoverySummaryCandidate?.title,
+    },
+    fallbackSituation: effectiveRootCause
+      ? `${rcaDisplayLabel(effectiveRootCause)}로 ${reportSymptom} 증상이 발생한 것으로 분석했습니다.`
+      : reportSymptom?.trim() || null,
+  });
+  const effectiveSituationSummary = summaryPresentation.situation;
+  const effectiveFinalJudgment = report?.narrative?.executive_summary?.trim()
+    || effectiveSituationSummary;
+  const effectiveRecommendedAction = summaryPresentation.recommendedAction;
+  const effectiveEvidenceSummary = summaryPresentation.evidence;
+  const effectiveEvidenceBundleSummary = summaryPresentation.evidenceBundle;
   const recoveryTarget = recovery.plan?.target;
   const recoveryTargetKind = typeof recoveryTarget?.resource_kind === "string" && recoveryTarget.resource_kind.trim()
     ? recoveryTarget.resource_kind
@@ -1743,7 +1737,7 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
     }
   };
   const openEvidenceDetail = (item: string) => {
-    const index = report?.supporting_evidence_refs.findIndex((evidence) => evidenceReferenceMatches(item, evidence)) ?? -1;
+    const index = evidenceReferences.findIndex((evidence) => evidenceReferenceMatches(item, evidence));
     if (index < 0) return;
     setHighlightedEvidenceIndex(index);
     const target = document.getElementById(evidenceDetailAnchor(index)) as HTMLDetailsElement | null;
@@ -1819,7 +1813,7 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
             {activeTab === "detail" ? <>
             <section aria-labelledby="issue-summary-heading" style={{ flexShrink: 0, display: "grid", gap: SPACE.stack, border: `1px solid ${UI.line}`, borderRadius: RADIUS.card, background: UI.card, padding: SPACE.card, boxShadow: `0 6px 16px -10px ${inkA(0.26)}, 0 1px 3px ${inkA(0.06)}` }}>
               <h2 id="issue-summary-heading" style={{ margin: 0, fontSize: ISSUE_DETAIL_TYPE.sectionTitle, fontWeight: 700, color: UI.heading }}>상황 요약</h2>
-              <p style={{ margin: 0, fontSize: TYPE.body, fontWeight: 600, color: situationSummary?.trim() ? UI.ink : UI.ink3, lineHeight: 1.65 }}>{situationSummary?.trim() || "상황 요약 정보가 아직 없습니다."}</p>
+              <p style={{ margin: 0, fontSize: TYPE.body, fontWeight: 600, color: effectiveSituationSummary ? UI.ink : UI.ink3, lineHeight: 1.65 }}>{effectiveSituationSummary || "상황 요약 정보가 아직 없습니다."}</p>
               {(reportFirstSeenAt || reportElapsed || reportImpact) && <dl style={{ display: "grid", gridTemplateColumns: "86px minmax(0, 1fr)", gap: "7px 10px", margin: 0, paddingTop: 12, borderTop: `1px solid ${UI.line2}`, fontSize: TYPE.caption, lineHeight: 1.5 }}>
                 {reportFirstSeenAt && <><dt style={{ color: UI.ink3 }}>장애 시작</dt><dd style={{ margin: 0, color: UI.ink2 }}>{reportTimeLabel(reportFirstSeenAt)}</dd></>}
                 {reportElapsed && <><dt style={{ color: UI.ink3 }}>분석 시점까지</dt><dd style={{ margin: 0, color: UI.ink2 }}>{reportElapsed}</dd></>}
@@ -1830,13 +1824,23 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
                 {conf !== null && <span style={{ border: `1px solid ${UI.line}`, borderRadius: 999, padding: "3px 9px", fontSize: TYPE.caption, color: UI.ink2, background: UI.card }}>신뢰도 {conf}%</span>}
                 <button type="button" className="product-focusable product-control" onClick={() => evidenceSummaryRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
                   onMouseEnter={() => setEvidenceChipActive(true)} onMouseLeave={() => setEvidenceChipActive(false)} onFocus={() => setEvidenceChipActive(true)} onBlur={() => setEvidenceChipActive(false)}
-                  style={{ border: `1px solid ${evidenceChipActive ? UI.ink3 : UI.line}`, borderRadius: 999, padding: "3px 9px", fontSize: TYPE.caption, color: evidenceChipActive ? UI.ink : UI.ink2, background: evidenceChipActive ? inkA(0.055) : UI.card, cursor: "pointer", transition: `background ${DUR.micro}s ease, color ${DUR.micro}s ease, border-color ${DUR.micro}s ease` }}>확인된 근거 {support.length}</button>
+                  style={{ border: `1px solid ${evidenceChipActive ? UI.ink3 : UI.line}`, borderRadius: 999, padding: "3px 9px", fontSize: TYPE.caption, color: evidenceChipActive ? UI.ink : UI.ink2, background: evidenceChipActive ? inkA(0.055) : UI.card, cursor: "pointer", transition: `background ${DUR.micro}s ease, color ${DUR.micro}s ease, border-color ${DUR.micro}s ease` }}>확인된 근거 {Math.max(support.length, evidenceReferences.length)}</button>
               </div>
-              {missing.length > 0 && (
+              {missingPresentations.length > 0 && (
                 <div style={{ display: "grid", gap: 8, border: `1px solid ${UI.line}`, borderRadius: 8, background: UI.bg2, padding: 11 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: TYPE.caption, fontWeight: 600, color: UI.ink2 }}><ShieldAlert size={14} style={{ color: TINT.warn.fg }} />추가 확인 필요</div>
                   <ul style={{ display: "grid", gap: 5, margin: 0, padding: 0, listStyle: "none" }}>
-                    {missing.map((item, index) => <li key={`${item}-${index}`} style={{ display: "grid", gridTemplateColumns: "10px minmax(0, 1fr)", gap: 4, fontSize: TYPE.caption, color: UI.ink2, lineHeight: 1.45 }}><span aria-hidden="true">-</span><span>{missingEvidenceAction(item)}</span></li>)}
+                    {missingPresentations.map((presentation, index) => (
+                      <li key={`${presentation.message}-${presentation.metadata ?? ""}-${index}`} style={{ display: "grid", gridTemplateColumns: "10px minmax(0, 1fr)", gap: 4, fontSize: TYPE.caption, color: UI.ink2, lineHeight: 1.45 }}>
+                        <span aria-hidden="true">-</span>
+                        <span style={{ display: "grid", gap: 1 }}>
+                          <span>{presentation.message}</span>
+                          {presentation.metadata && (
+                            <span style={{ fontSize: 10, color: UI.ink3 }}>{presentation.metadata}</span>
+                          )}
+                        </span>
+                      </li>
+                    ))}
                   </ul>
                 </div>
               )}
@@ -1905,29 +1909,30 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
                   <dt style={{ fontSize: TYPE.caption, color: UI.ink2 }}>영향 범위</dt><dd title={reportScope} style={{ margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: TYPE.caption, color: reportScope ? UI.ink : UI.ink3 }}>{reportScope || "미확인"}</dd>
                 </dl>
                 <ReportNumberedSection number="01" title="최종 판단">
-                  <p style={{ margin: 0, fontSize: TYPE.label, color: report?.narrative?.executive_summary || situationSummary || rootCause ? UI.ink2 : UI.ink3, lineHeight: 1.6 }}>{report?.narrative?.executive_summary || situationSummary || (rootCause ? `${rootCause}로 ${reportSymptom} 증상이 발생한 것으로 판단했습니다.` : "최종 판단 정보가 아직 없습니다.")}</p>
+                  <p style={{ margin: 0, fontSize: TYPE.label, color: effectiveFinalJudgment ? UI.ink2 : UI.ink3, lineHeight: 1.6 }}>{effectiveFinalJudgment || "최종 판단 정보가 아직 없습니다."}</p>
                 </ReportNumberedSection>
                 <ReportNumberedSection number="02" title="최종 원인">
                   {latestReport.status === "loading" && <span style={{ fontSize: TYPE.caption, color: UI.ink2 }}>원인 후보를 불러오는 중…</span>}
                   {latestReport.status === "unavailable" && <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: TYPE.caption, color: TINT.crit.fg }}><CircleAlert size={14} />원인 후보를 불러오지 못했습니다.</span>}
-                  <RcaSelectedCause report={report} fallbackCause={rootCause} onEvidenceSelect={openEvidenceDetail} />
+                  <RcaSelectedCause report={report} fallbackCause={effectiveRootCause} references={evidenceReferences} onEvidenceSelect={openEvidenceDetail} />
                 </ReportNumberedSection>
                 <ReportNumberedSection number="03" title="원인 후보">
-                  <RcaAlternativeCandidates report={report} onEvidenceSelect={openEvidenceDetail} />
+                  <RcaAlternativeCandidates report={report} references={evidenceReferences} onEvidenceSelect={openEvidenceDetail} />
                 </ReportNumberedSection>
                 <ReportNumberedSection number="04" title="근거 요약" sectionRef={evidenceSummaryRef}>
-                  {evidenceSummary || evidenceBundleSummary ? <div style={{ display: "grid", gap: 7 }}>
-                    {evidenceSummary && <div style={{ display: "grid", gridTemplateColumns: "16px minmax(0, 1fr)", gap: 7, alignItems: "start" }}><span aria-hidden="true" style={{ width: 16, height: 20, display: "grid", placeItems: "center", color: TINT.ok.fg }}><CircleCheck size={14} /></span><p style={{ margin: 0, fontSize: TYPE.label, color: UI.ink2, lineHeight: 1.55 }}>{evidenceSummary}</p></div>}
-                    {evidenceBundleSummary && <p style={{ margin: "0 0 0 23px", fontSize: TYPE.caption, color: UI.ink2, lineHeight: 1.5 }}>{evidenceBundleSummary}</p>}
+                  {effectiveEvidenceSummary || effectiveEvidenceBundleSummary ? <div style={{ display: "grid", gap: 7 }}>
+                    {effectiveEvidenceSummary && <div style={{ display: "grid", gridTemplateColumns: "16px minmax(0, 1fr)", gap: 7, alignItems: "start" }}><span aria-hidden="true" style={{ width: 16, height: 20, display: "grid", placeItems: "center", color: TINT.ok.fg }}><CircleCheck size={14} /></span><p style={{ margin: 0, fontSize: TYPE.label, color: UI.ink2, lineHeight: 1.55 }}>{effectiveEvidenceSummary}</p></div>}
+                    {effectiveEvidenceBundleSummary && <p style={{ margin: "0 0 0 23px", fontSize: TYPE.caption, color: UI.ink2, lineHeight: 1.5 }}>{effectiveEvidenceBundleSummary}</p>}
                   </div> : <p style={{ margin: 0, fontSize: TYPE.label, color: UI.ink3 }}>근거 요약이 아직 없습니다.</p>}
                 </ReportNumberedSection>
                 <ReportNumberedSection number="05" title="근거 상세">
-                  {(report?.supporting_evidence_refs.length ?? 0) > 0 ? <div style={{ display: "grid", borderBottom: `1px dashed ${UI.line}` }}>
-                    {report!.supporting_evidence_refs.map((evidence, index) => <EvidenceDetailItem key={`${evidence.source}-${evidence.name}-${index}`} id={evidenceDetailAnchor(index)} evidence={evidence} highlighted={highlightedEvidenceIndex === index} onOpenChange={(open) => { if (!open) setHighlightedEvidenceIndex((current) => current === index ? null : current); }} />)}
-                  </div> : support.length > 0 ? <ul style={{ display: "grid", gap: 7, margin: 0, padding: 0, listStyle: "none" }}>{support.map((item, index) => <li key={`${item}-${index}`} style={{ fontSize: TYPE.label, color: UI.ink2, lineHeight: 1.5 }}>{item}</li>)}</ul> : <p style={{ margin: 0, fontSize: TYPE.label, color: UI.ink3 }}>근거 상세가 아직 없습니다.</p>}
+                  {resolvedObjectEvidence.status === "loading" && evidenceReferences.length === 0 && <span style={{ fontSize: TYPE.caption, color: UI.ink2 }}>근거 상세를 연결하는 중…</span>}
+                  {evidenceReferences.length > 0 ? <div style={{ display: "grid", borderBottom: `1px dashed ${UI.line}` }}>
+                    {evidenceReferences.map((evidence, index) => <EvidenceDetailItem key={`${evidence.source}-${evidence.name}-${index}`} id={evidenceDetailAnchor(index)} evidence={evidence} highlighted={highlightedEvidenceIndex === index} onOpenChange={(open) => { if (!open) setHighlightedEvidenceIndex((current) => current === index ? null : current); }} />)}
+                  </div> : support.length > 0 && resolvedObjectEvidence.status !== "loading" ? <ul style={{ display: "grid", gap: 7, margin: 0, padding: 0, listStyle: "none" }}>{support.map((item, index) => <li key={`${item}-${index}`} style={{ fontSize: TYPE.label, color: UI.ink2, lineHeight: 1.5 }}>{evidenceReferenceLabel(item, [])}</li>)}</ul> : resolvedObjectEvidence.status !== "loading" ? <p style={{ margin: 0, fontSize: TYPE.label, color: UI.ink3 }}>근거 상세가 아직 없습니다.</p> : null}
                 </ReportNumberedSection>
                 <ReportNumberedSection number="06" title="권장 조치">
-                  <p style={{ margin: 0, fontSize: TYPE.label, color: recommendedActionSummary || report?.narrative?.recommended_action ? UI.ink2 : UI.ink3, lineHeight: 1.55 }}>{recommendedActionSummary || report?.narrative?.recommended_action || "권장 조치가 아직 없습니다."}</p>
+                  <p style={{ margin: 0, fontSize: TYPE.label, color: effectiveRecommendedAction ? UI.ink2 : UI.ink3, lineHeight: 1.55 }}>{effectiveRecommendedAction || "권장 조치가 아직 없습니다."}</p>
                   <button type="button" className="product-focusable product-control" disabled={!recoveryAvailable}
                     title={!recoveryAvailable ? "원인 후보와 복구 플랜이 확인되면 열 수 있습니다." : undefined}
                     onClick={() => {
