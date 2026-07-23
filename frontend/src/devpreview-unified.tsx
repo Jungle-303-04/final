@@ -1072,7 +1072,7 @@ function HomeSurface({ clusterMeta, incidentClusterIds, onDrillCluster, onCluste
   onOpenPod: (name: string) => void; onPickNs: (ns: string) => void;
   pendingCl?: string[]; pendingRepo?: string[]; onWidgetDeepLink?: (id: string) => void; onOpenIssues?: () => void;
 }) {
-  // 상단 요약 칩은 렌더 지점(아래 IIFE)에서 실 관측 파생(issues·apps)으로 계산 — fixture 인벤토리 제거.
+  // 상단 요약 칩은 렌더 지점(아래 IIFE)에서 실 관측 이슈로 계산 — fixture 인벤토리 제거.
   const clusters = Object.keys(clusterMeta);
   // W2 이슈 위젯 — 실 RCA 이슈 큐(GET /api/dashboard/rca/issues). 빈 배열=관측된 이슈 없음.
   const issues = useRcaIssues(incidentClusterIds);
@@ -1082,7 +1082,6 @@ function HomeSurface({ clusterMeta, incidentClusterIds, onDrillCluster, onCluste
   // priority 14: 좁은 화면(≤768px)에서 클러스터 카드·위젯 보드를 1열로, 상단 컨트롤을
   // 줄바꿈해 한글이 글자 단위로 세로 붕괴하지 않도록 한다.
   const narrow = useNarrowViewport();
-  const [period, setPeriod] = useState<"오늘" | "7일" | "30일">("오늘");
   const [board, setBoard] = useState<BoardState>(readBoard);
   const [editing, setEditing] = useState(false);
   const save = (b: BoardState) => { setBoard(b); try { localStorage.setItem(BOARD_KEY, JSON.stringify(b)); } catch { /* 데모 */ } };
@@ -1223,24 +1222,12 @@ function HomeSurface({ clusterMeta, incidentClusterIds, onDrillCluster, onCluste
         {(() => {
           const seg: React.CSSProperties = { display: "flex", alignItems: "center", gap: 5, fontSize: TYPE.label, fontWeight: 600, color: UI.ink2, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 999, padding: "5px 11px", whiteSpace: "nowrap" };
           const num: React.CSSProperties = { fontWeight: 700, color: UI.ink, fontVariantNumeric: "tabular-nums" };
-          // 실 관측 파생: 장애=RCA 이슈 큐, 동기화 필요=애플리케이션 배송 상태. 노드/파드 세분은 계약 미노출이라 클러스터 카드에만.
+          // 실 관측 파생: 장애=RCA 이슈 큐. 노드/파드 세분은 계약 미노출이라 클러스터 카드에만.
           const critCount = issues.status === "ready" ? issues.items.length : 0;
           const firstCrit = issues.items[0]?.clusterId ?? undefined;
-          const outSyncCount = apps.status === "ready"
-            ? apps.items.filter((a) => a.deliveryStatus && /pending|outofsync|drift|degraded|error/i.test(a.deliveryStatus)).length
-            : 0;
           return (
             <span style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
               <span style={seg}><Server size={11} style={{ color: UI.ink3 }} />클러스터 <b style={num}>{clusters.length}</b>{pendingCl.length > 0 && <span style={{ color: TINT.blue.fg }}>· 연결 중 {pendingCl.length}</span>}</span>
-              {outSyncCount > 0 && (
-                <span style={{ ...seg, borderColor: TINT.warn.bd, background: TINT.warn.bg, color: TINT.warn.fg }}>
-                  <span aria-hidden="true" style={{ width: 13, height: 13, flexShrink: 0, display: "grid", placeItems: "center", lineHeight: 0 }}>
-                    <GithubIcon size={11} />
-                  </span>
-                  <span style={{ lineHeight: 1 }}>동기화 필요</span>
-                  <b style={{ ...num, color: TINT.warn.fg }}>{outSyncCount}</b>
-                </span>
-              )}
               {critCount > 0 && (
                 <button className="product-focusable product-destructive" onClick={() => (onOpenIssues ? onOpenIssues() : (firstCrit && onDrillCluster(firstCrit)))} title="이슈 목록에서 원인·복구 보기"
                   style={{ ...seg, borderColor: TINT.crit.bd, background: TINT.crit.bg, color: HP.crit, fontWeight: 600, cursor: "pointer" }}>
@@ -1252,12 +1239,6 @@ function HomeSurface({ clusterMeta, incidentClusterIds, onDrillCluster, onCluste
         })()}
         {/* 좁은 화면: 우측 컨트롤을 왼쪽 정렬로 되돌리고 줄바꿈해 상단 잘림/가로 넘침을 막는다. */}
         <span style={{ marginLeft: narrow ? 0 : "auto", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-          <span style={{ display: "flex", gap: 2, background: inkA(0.05), borderRadius: 8, padding: 2 }}>
-            {(["오늘", "7일", "30일"] as const).map((p) => (
-              <button key={p} className="product-focusable product-control" aria-selected={period === p} onClick={() => setPeriod(p)}
-                style={{ border: "none", borderRadius: 6, padding: "3px 10px", fontSize: TYPE.caption, fontWeight: 600, cursor: "pointer", background: period === p ? UI.card : "transparent", color: period === p ? UI.ink : UI.ink3, boxShadow: period === p ? `0 1px 3px ${inkA(0.12)}` : "none" }}>{p}</button>
-            ))}
-          </span>
           <button className="product-focusable product-control" aria-label={editing ? "레이아웃 편집 완료" : "레이아웃 편집"} title={editing ? "편집 완료" : "레이아웃 편집"} aria-pressed={editing} onClick={() => setEditing(!editing)}
             style={{ width: 34, height: 34, display: "grid", placeItems: "center", border: `1px solid ${editing ? blueA(0.45) : UI.line}`, background: editing ? blueA(0.07) : UI.card, color: editing ? BLUE : UI.ink2, borderRadius: 9, padding: 0 }}>
             {editing ? <Check size={14} /> : <Pencil size={13} />}
