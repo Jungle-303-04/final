@@ -14,8 +14,17 @@ import { getInventorySummary } from "../api/inventory-summary";
 import { getClusterUsage } from "../api/metrics";
 import {
   connectApplication as connectApplicationApi,
+  previewApplicationConnection as previewApplicationConnectionApi,
   type ApplicationConnectInput,
+  type ApplicationConnectPreviewInput,
 } from "../api/applications";
+import type {
+  ConnectionPreview,
+  ConnectionPreviewResource,
+} from "../api/applications-schemas";
+
+export type ConnectionPreviewView = ConnectionPreview;
+export type ConnectionPreviewResourceView = ConnectionPreviewResource;
 import { listClusters as listClustersApi, type ListClustersOptions } from "../api/clusters";
 import type { ClusterSummary } from "../api/cluster-schemas";
 import {
@@ -101,6 +110,13 @@ export function connectApplication(
   signal?: AbortSignal,
 ) {
   return connectApplicationApi(input, signal);
+}
+
+export function previewApplicationConnection(
+  input: ApplicationConnectPreviewInput,
+  signal?: AbortSignal,
+): Promise<ConnectionPreview> {
+  return previewApplicationConnectionApi(input, signal);
 }
 
 export function listClusters(
