@@ -2815,6 +2815,37 @@ class RepositoryConnectionStatusResponse(StrictModel):
         return self
 
 
+class RepositoryListItem(StrictModel):
+    repo_ref: str = Field(min_length=1, max_length=240)
+    repository_id: str = Field(min_length=1, max_length=160)
+    provider: str = ""
+    default_branch: str = ""
+    repository_status: Literal[
+        "active",
+        "invalid_credential",
+        "disabled",
+        "source_unreachable",
+        "disconnected",
+        "unknown",
+    ]
+    degraded_reason: (
+        Literal[
+            "credential_invalid",
+            "source_unreachable",
+            "permission_revoked",
+            "disconnected",
+            "disabled",
+        ]
+        | None
+    ) = None
+    application_count: int = Field(default=0, ge=0)
+    updated_at: str | None = None
+
+
+class RepositoryListResponse(StrictModel):
+    repositories: list[RepositoryListItem] = Field(default_factory=list)
+
+
 class ClusterConnectResponse(StrictModel):
     cluster_id: str
     install_command: str = Field(min_length=1)

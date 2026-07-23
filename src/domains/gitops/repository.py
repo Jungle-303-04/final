@@ -657,6 +657,43 @@ class RepoChangeRepository(GitOpsOverviewRepository):
             rows = conn.execute(statement).mappings().all()
         return [row_dict(row) for row in rows]
 
+    def list_repositories(self, workspace_id: str) -> list[JsonObject]:
+        """워크스페이스의 모든 저장소를 상태와 활성 앱 수와 함께 나열한다.
+
+        활성 뷰(active 조인)와 달리 degraded/disconnected 저장소도 포함해, 연결 상태
+        관리 화면이 '연결은 있는데 상태가 나쁜' 것까지 보여줄 수 있게 한다.
+        """
+        if not workspace_id:
+            return []
+        repo = GitRepository.__table__
+        app = Application.__table__
+        app_count = (
+            select(
+                app.c.repository_id.label("repository_id"),
+                func.count().label("application_count"),
+            )
+            .where(
+                app.c.workspace_id == workspace_id,
+                app.c.status == ApplicationStatus.ACTIVE.value,
+            )
+            .group_by(app.c.repository_id)
+            .subquery()
+        )
+        statement = (
+            select(
+                repo,
+                func.coalesce(app_count.c.application_count, 0).label("application_count"),
+            )
+            .select_from(
+                repo.outerjoin(app_count, repo.c.repository_id == app_count.c.repository_id)
+            )
+            .where(repo.c.workspace_id == workspace_id)
+            .order_by(repo.c.repo_ref.asc())
+        )
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        return [row_dict(row) for row in rows]
+
     def register_watch_target(self, payload: JsonObject) -> JsonObject:
         workspace_id = str(payload.get("workspace_id", DEFAULT_WORKSPACE_ID))
         repository_id = derive_repository_id(payload)

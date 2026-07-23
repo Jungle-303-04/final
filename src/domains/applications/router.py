@@ -75,6 +75,8 @@ from packages.contracts.gateway.responses import (
     ApplicationResponse,
     DeploymentBindingResponse,
     RepositoryConnectionStatusResponse,
+    RepositoryListItem,
+    RepositoryListResponse,
     WorkflowRunListResponse,
 )
 from packages.contracts.gitops import DEFAULT_REPO_BRANCH, PUBLIC_GITHUB_CREDENTIAL_REF
@@ -881,6 +883,55 @@ async def disconnect_repository_connection(
         refresh_after_seconds=None,
         degraded_reason="disconnected",
     )
+
+
+_REPOSITORY_DEGRADED_REASON = {
+    "invalid_credential": "credential_invalid",
+    "source_unreachable": "source_unreachable",
+    "disabled": "disabled",
+    "disconnected": "disconnected",
+}
+_KNOWN_REPOSITORY_STATUSES = {
+    "active",
+    "invalid_credential",
+    "disabled",
+    "source_unreachable",
+    "disconnected",
+}
+
+
+@router.get(gateway_routes.REPOSITORIES_PATH, response_model=RepositoryListResponse)
+async def list_workspace_repositories(
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> RepositoryListResponse:
+    """워크스페이스의 모든 연결 저장소를 상태와 함께 나열한다(연결 상태 관리 화면용).
+
+    active 뷰와 달리 degraded/disconnected 저장소도 포함해, 외부 변경으로 상태가
+    내려간 저장소를 사용자가 한눈에 보고 재연결·해제할 수 있게 한다.
+    """
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    lister = getattr(db, "list_repositories", None)
+    rows = await to_thread_db_retry(lister, workspace_id) if callable(lister) else []
+    items: list[RepositoryListItem] = []
+    for row in rows:
+        status = str(row.get("status") or "unknown")
+        if status not in _KNOWN_REPOSITORY_STATUSES:
+            status = "unknown"
+        updated_at = row.get("updated_at")
+        items.append(
+            RepositoryListItem(
+                repo_ref=str(row.get("repo_ref") or ""),
+                repository_id=str(row.get("repository_id") or ""),
+                provider=str(row.get("provider") or ""),
+                default_branch=str(row.get("default_branch") or ""),
+                repository_status=status,
+                degraded_reason=_REPOSITORY_DEGRADED_REASON.get(status),
+                application_count=int(row.get("application_count") or 0),
+                updated_at=str(updated_at) if updated_at is not None else None,
+            )
+        )
+    return RepositoryListResponse(repositories=items)
 
 
 @router.get(gateway_routes.APPLICATIONS_PATH, response_model=ApplicationProductListResponse)

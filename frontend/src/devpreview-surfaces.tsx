@@ -42,6 +42,7 @@ import { useUiPreferences, useRefreshPolicies, useSettingsAccess } from "./devpr
 import { MiniTimeline } from "./devpreview/widgets";
 import { statusLabel } from "./devpreview/statusLabel";
 import { RepositoryConnections } from "./devpreview/RepositoryConnections";
+import { RepositoryStatusList } from "./devpreview/RepositoryStatusList";
 import { groupApplicationsByRepository } from "./devpreview/repositoryRegistry";
 import { selectScenarioRuns } from "./devpreview/scenarioGateSelection";
 import { recoveryProgressState, type RecoveryProgressState } from "./devpreview/recoveryProgress";
@@ -480,7 +481,6 @@ export function DeploySurface({ pendingRepos = [], repositoryFilter = null, onOp
         <Card pad={10}>
           {loading ? emptyRow("불러오는 중…")
             : appsFeed.status === "unavailable" ? emptyRow("GitOps 바인딩을 불러오지 못했습니다.")
-            : (repositoryGroups.length === 0 && pendingOnly.length === 0) ? emptyRow("연결된 저장소 없음")
             : <>
               <RepositoryConnections
                 groups={repositoryGroups}
@@ -504,6 +504,14 @@ export function DeploySurface({ pendingRepos = [], repositoryFilter = null, onOp
                   <span style={{ marginLeft: "auto" }}><Pill tone="info" label="연결 중" /></span>
                 </div>
               ))}
+              {/* 연결 상태 관리 — degraded/disconnected 포함 전체 저장소 상태 + 해제. */}
+              <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid #eef0f2" }}>
+                <div style={{ marginBottom: 6, color: "#6b7280", fontSize: 11, fontWeight: 700 }}>전체 연결 상태</div>
+                <RepositoryStatusList
+                  key={repositoryRefreshKey}
+                  onChanged={() => setRepositoryRefreshKey((key) => key + 1)}
+                />
+              </div>
             </>}
         </Card>
       )}
