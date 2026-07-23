@@ -61,7 +61,7 @@ import { operationalMessageLabel, reasonLabel, statusLabel, isCriticalStatus } f
 import { LiveResourceManifestEditor } from "./devpreview/resourceManifestEditor";
 import { groupApplicationsByRepository } from "./devpreview/repositoryRegistry";
 import { podsForNode, useClusterTopology } from "./devpreview/inventoryTopologyFeed";
-import { UI, BLUE, BLUE2, HP, TINT, MONO, TYPE, SOFT, SPRING, PRESENT_SCALE, DUR, RADIUS, SPACE, inkA, blueA, MARK, cardA, GLASS, critA } from "./devpreview/theme";
+import { UI, BLUE, BLUE2, HP, INTERACTION, TINT, MONO, TYPE, SOFT, SPRING, PRESENT_SCALE, DUR, RADIUS, SPACE, inkA, blueA, MARK, cardA, GLASS, critA } from "./devpreview/theme";
 import "./styles/tokens.css";
 import "./styles/foundation.css";
 
@@ -2327,6 +2327,19 @@ function App() {
 
       <style>{`
         .uni { font-family: var(--font-sans); font-weight: var(--font-weight-body); -webkit-font-smoothing: antialiased; }
+        /* 이 셸은 라이트 전용 디자인이다. OS 다크 모드가 <html>에 .dark 를 켜면 product-*
+           유틸(.product-control 등)의 상호작용 토큰이 다크 값으로 바뀌어, 라이트 화면 위에
+           검은 hover 알약이 뜨는 오류가 났다. 셸 스코프 안에서 라이트 값을 고정한다. */
+        .uni { color-scheme: light;
+          --control-hover: ${INTERACTION.controlHover};
+          --control-selected: ${INTERACTION.controlSelected};
+          --disabled-background: ${INTERACTION.disabledBg};
+          --disabled-foreground: ${INTERACTION.disabledText};
+          --focus-ring: ${INTERACTION.focusRing};
+          --action: ${INTERACTION.action};
+          --action-hover: ${INTERACTION.actionHover};
+          --action-pressed: ${INTERACTION.actionPressed};
+        }
         .uni .krow { transition: background .14s ease; }
         .uni .krow:hover { background: ${inkA(0.045)}; }
         .uni .krow:hover .kpin { opacity: .5 !important; }
