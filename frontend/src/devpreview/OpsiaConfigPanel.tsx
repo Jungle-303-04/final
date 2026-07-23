@@ -105,7 +105,7 @@ function PanelEmptyState({ label, hint }: { label: string; hint: string }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "26px 14px", textAlign: "center" }}>
       <FileCog size={20} style={{ color: UI.ink3 }} />
-      <span style={{ fontSize: TYPE.label2, fontWeight: 600, color: UI.ink2 }}>{label}</span>
+      <span style={{ fontSize: TYPE.label, fontWeight: 600, color: UI.ink2 }}>{label}</span>
       <span style={{ fontSize: TYPE.caption, color: UI.ink3, lineHeight: 1.5 }}>{hint}</span>
     </div>
   );
@@ -140,7 +140,7 @@ function CoverageNote({ coverage }: { coverage: ConfigReferenceCoverage }) {
 function ConfigKindChip({ kind }: { kind: ConfigReferenceKind }) {
   const color = kind === "Secret" ? HP.warn : BLUE;
   return (
-    <span style={{ fontSize: TYPE.micro, fontWeight: 700, color, background: `${color}14`, border: `1px solid ${color}33`, borderRadius: 5, padding: "1px 6px", whiteSpace: "nowrap" }}>
+    <span style={{ fontSize: TYPE.caption, fontWeight: 700, color, background: `${color}14`, border: `1px solid ${color}33`, borderRadius: 5, padding: "1px 6px", whiteSpace: "nowrap" }}>
       {KIND_LABELS[kind]}
     </span>
   );
@@ -182,19 +182,19 @@ function ConfigReferenceRow({ item }: { item: ConfigReferenceItem }) {
       <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
         <Icon size={14} style={{ color: UI.ink3, flexShrink: 0 }} />
         <span style={{ minWidth: 0, flex: 1 }}>
-          <span title={item.name} style={{ display: "block", fontSize: TYPE.label2, fontWeight: 700, fontFamily: MONO, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.name}</span>
+          <span title={item.name} style={{ display: "block", fontSize: TYPE.label, fontWeight: 700, fontFamily: MONO, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.name}</span>
           <span style={{ display: "block", fontSize: TYPE.caption, color: UI.ink3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.namespace} · Deployment {workloadCount}개 참조</span>
         </span>
         <ConfigKindChip kind={item.kind} />
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 3, paddingLeft: 22 }}>
         {previewUsages.map((usage, index) => (
-          <span key={`${usage.workload.namespace}/${usage.workload.name}/${usage.source}/${usageDetail(usage)}/${index}`} style={{ display: "block", fontSize: TYPE.micro, color: UI.ink3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          <span key={`${usage.workload.namespace}/${usage.workload.name}/${usage.source}/${usageDetail(usage)}/${index}`} style={{ display: "block", fontSize: TYPE.caption, color: UI.ink3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {usageLabel(usage)}
           </span>
         ))}
         {hiddenUsageCount > 0 && (
-          <span style={{ fontSize: TYPE.micro, color: UI.ink3 }}>+{hiddenUsageCount}개 참조 더 있음</span>
+          <span style={{ fontSize: TYPE.caption, color: UI.ink3 }}>+{hiddenUsageCount}개 참조 더 있음</span>
         )}
       </div>
     </div>
@@ -230,12 +230,12 @@ export function OpsiaConfigPanel({ activeCluster, selectedNamespace }: OpsiaConf
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "2px 2px 4px" }}>
-        <span style={{ fontSize: TYPE.bodyStrong, fontWeight: 700, color: UI.ink }}>구성</span>
-        <span style={{ fontSize: TYPE.caption2, color: UI.ink3 }}>
+        <span style={{ fontSize: TYPE.body, fontWeight: 700, color: UI.ink }}>구성</span>
+        <span style={{ fontSize: TYPE.caption, color: UI.ink3 }}>
           {configStatusLabel(configView.status, items.length, coverage)}
         </span>
       </div>
-      <span style={{ fontSize: TYPE.caption2, color: UI.ink3, padding: "0 2px 3px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+      <span style={{ fontSize: TYPE.caption, color: UI.ink3, padding: "0 2px 3px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
         {scopeLabel}
       </span>
       {!activeCluster ? (
