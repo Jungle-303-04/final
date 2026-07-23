@@ -1376,6 +1376,7 @@ function App() {
   const [meOpen, setMeOpen] = useState(false); // 계정 메뉴 (헤더 맨 오른쪽, D20)
   const [detail, setDetail] = useState<{ kind: Kind; row: Row } | null>(null);
   const [rcaIncident, setRcaIncident] = useState<RcaIncident | null>(null); // 이슈 RCA 사이드바 — 셸 레벨 렌더(transform 조상 밖)
+  const [recoverySelectionCorrelations, setRecoverySelectionCorrelations] = useState<ReadonlySet<string>>(() => new Set());
   const [navCollapsed, setNavCollapsed] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const [aiW, setAiW] = useState(440);                 // 실제 제품처럼 리사이즈 가능한 도킹 폭
@@ -1965,7 +1966,7 @@ function App() {
         <DeploySurface pendingRepos={pendingRepo} repositoryFilter={deployRepositoryFilter} onOpenRef={openRef}
           onOpenIssues={() => setSurface("issues")} onAskAi={() => setAiOpen(true)} onAddRepo={() => setConnectModal("repo")} />
       ) : surface === "issues" ? (
-        <IssuesSurface incidentClusterIds={incidentClusterIds} sessionRules={notes.filter((n) => n.icon === "rule").map((n) => n.body.split(" · ")[0])} onOpenRef={openRef} onAskAi={() => setAiOpen(true)} onOpenRca={setRcaIncident} />
+        <IssuesSurface incidentClusterIds={incidentClusterIds} recoverySelectionCorrelations={recoverySelectionCorrelations} sessionRules={notes.filter((n) => n.icon === "rule").map((n) => n.body.split(" · ")[0])} onOpenRef={openRef} onAskAi={() => setAiOpen(true)} onOpenRca={setRcaIncident} />
       ) : surface === "timeline" ? (
         <TimelineSurface onOpenRef={openRef} />
       ) : surface === "checks" ? (
@@ -2188,8 +2189,10 @@ function App() {
       <AnimatePresence>
         {rcaIncident && <IssueDetail key={rcaIncident.name} {...rcaIncident} topInset={topH} leftInset={navCollapsed ? 60 : 208}
           onClose={() => setRcaIncident(null)}
-          onOpenRef={(k, n) => { setRcaIncident(null); openRef(k, n); }}
-          onAskAi={() => { setAiOpen(true); }} rightInset={aiOpen ? aiW : 0} />}
+          onOpenRef={(k, n) => openRef(k, n)}
+          onAskAi={() => { setAiOpen(true); }}
+          onRecoverySelected={(correlationId) => setRecoverySelectionCorrelations((current) => new Set(current).add(correlationId))}
+          rightInset={aiOpen ? aiW : 0} />}
       </AnimatePresence>
 
       {/* 작업 토스트 — 우측 상단 스택 */}
