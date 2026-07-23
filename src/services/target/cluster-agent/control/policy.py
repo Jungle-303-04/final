@@ -163,6 +163,8 @@ class AgentPolicySync:
         if (
             candidate_policy is None
             or self.store.active_generation() >= candidate_policy.generation
+            or candidate_policy.cluster_id != self.cluster_id
+            or candidate_policy.cluster_role != active_policy.cluster_role
         ):
             return None
         active_deployment = self.target_agent_deployment(active_policy)

@@ -206,6 +206,32 @@ def test_failed_activation_without_agent_deployment_change_keeps_active_reconcil
         assert "desired_state_handoff" not in client.statuses[-1]["details"]
 
 
+def test_failed_cross_cluster_policy_never_stages_an_upgrade_handoff(
+    tmp_path: Path,
+) -> None:
+    active = policy(12, OLD_IMAGE)
+    incoming = policy(13, NEW_IMAGE).model_copy(update={"cluster_id": "other-target"})
+    client = PolicyClient(incoming)
+
+    with AgentControlStore(str(tmp_path / "agent-control.db")) as store:
+        store.save_policy(active)
+        sync = AgentPolicySync(
+            cluster_id="target-1",
+            store=store,
+            default_policy=active,
+            apply_policy=lambda candidate: (_ for _ in ()).throw(
+                ValueError(f"policy cluster_id does not match agent: {candidate.cluster_id}")
+            ),
+            interval_seconds=15,
+        )
+
+        assert asyncio.run(sync.sync_once(client)) == "failed"
+
+        assert store.load_pending_reconcile_policy() is None
+        assert store.load_reconcile_policy() == active
+        assert "desired_state_handoff" not in client.statuses[-1]["details"]
+
+
 def test_successful_policy_save_promotes_active_and_clears_staged_handoff(
     tmp_path: Path,
 ) -> None:
