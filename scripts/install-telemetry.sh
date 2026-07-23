@@ -214,6 +214,7 @@ require_release_workload "${OTEL_RELEASE}"
 require_service_endpoints prometheus
 require_service_endpoints loki-gateway
 require_service_endpoints tempo
+require_service_endpoints opentelemetry-collector
 
 echo
 echo "telemetry is installed in context ${TARGET_CONTEXT}, namespace ${TARGET_NAMESPACE}."

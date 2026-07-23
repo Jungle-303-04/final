@@ -13,6 +13,10 @@ TARGET_ENVIRONMENT="${TARGET_ENVIRONMENT:-sandbox}"
 WORKSPACE_ID="${WORKSPACE_ID:-default}"
 MANAGEMENT_BASE_URL="${MANAGEMENT_BASE_URL:-}"
 LOKI_BASE_URL="${LOKI_BASE_URL:-http://loki-gateway.target.svc}"
+TEMPO_BASE_URL="${TEMPO_BASE_URL:-http://tempo.target.svc:3200}"
+OTEL_TRACES_ENDPOINT="${OTEL_TRACES_ENDPOINT:-http://opentelemetry-collector.target.svc:4318/v1/traces}"
+PROMETHEUS_URL="${PROMETHEUS_URL:-http://prometheus.target.svc.cluster.local:9090}"
+AUTO_CONNECT_PROMETHEUS="${AUTO_CONNECT_PROMETHEUS:-true}"
 EVIDENCE_INTERVAL_SECONDS="${EVIDENCE_INTERVAL_SECONDS:-8}"
 IMAGE_NAME="${IMAGE_NAME:-}"
 INSTALL_TELEMETRY="${INSTALL_TELEMETRY:-true}"
@@ -89,6 +93,7 @@ if [ -z "${IMAGE_NAME}" ]; then
   exit 1
 fi
 require_boolean INSTALL_TELEMETRY "${INSTALL_TELEMETRY}"
+require_boolean AUTO_CONNECT_PROMETHEUS "${AUTO_CONNECT_PROMETHEUS}"
 if is_true "${INSTALL_SAMPLE_WORKLOAD}" && { [ -z "${SAMPLE_WORKLOAD_NAME}" ] || [ -z "${SAMPLE_WORKLOAD_IMAGE}" ]; }; then
   echo "SAMPLE_WORKLOAD_NAME and SAMPLE_WORKLOAD_IMAGE are required when INSTALL_SAMPLE_WORKLOAD is true" >&2
   exit 1
@@ -142,6 +147,8 @@ registration_body="$(
   WORKSPACE_ID="${WORKSPACE_ID}" \
   MANAGEMENT_BASE_URL="${MANAGEMENT_BASE_URL}" \
   LOKI_BASE_URL="${LOKI_BASE_URL}" \
+  TEMPO_BASE_URL="${TEMPO_BASE_URL}" \
+  OTEL_TRACES_ENDPOINT="${OTEL_TRACES_ENDPOINT}" \
   EVIDENCE_INTERVAL_SECONDS="${EVIDENCE_INTERVAL_SECONDS}" \
   IMAGE_NAME="${IMAGE_NAME}" \
   INSTALL_NODE_COLLECTOR="${INSTALL_NODE_COLLECTOR}" \
@@ -167,6 +174,8 @@ body = {
     "workspace_id": os.environ["WORKSPACE_ID"],
     "management_base_url": os.environ["MANAGEMENT_BASE_URL"],
     "loki_base_url": os.environ["LOKI_BASE_URL"],
+    "tempo_base_url": os.environ["TEMPO_BASE_URL"],
+    "otel_traces_endpoint": os.environ["OTEL_TRACES_ENDPOINT"],
     "evidence_interval_seconds": int(os.environ["EVIDENCE_INTERVAL_SECONDS"]),
     "image": os.environ["IMAGE_NAME"],
     "install_node_collector": install_node_collector,
@@ -191,6 +200,17 @@ registration_response="$(curl -fsS -X POST "${API_BASE_URL}/targets" \
 echo "==> removing legacy target agent deployment if present"
 kubectl --context "${TARGET_CONTEXT}" -n target delete deploy/target-cluster-agent --ignore-not-found
 
+# Disconnect is finalized asynchronously: the old agent deletes this owner
+# ClusterRole only after its completion receipt is acknowledged. Applying a new
+# same-named Deployment before that deletion makes Kubernetes garbage-collect
+# the fresh agent as part of the old uninstall.
+if kubectl --context "${TARGET_CONTEXT}" get clusterrole/cluster-agent-uninstall >/dev/null 2>&1; then
+  echo "==> waiting for previous target agent uninstall to finish"
+  kubectl --context "${TARGET_CONTEXT}" wait \
+    --for=delete clusterrole/cluster-agent-uninstall \
+    --timeout=180s
+fi
+
 echo "==> applying generated target install manifest"
 printf "%s" "${registration_response}" \
   | python3 -c 'import json, sys; print(json.load(sys.stdin)["install_manifest"])' \
@@ -204,6 +224,58 @@ kubectl --context "${TARGET_CONTEXT}" -n target rollout status deploy/cluster-ag
 if is_true "${INSTALL_NODE_COLLECTOR}"; then
   wait_for_node_collector
   kubectl --context "${TARGET_CONTEXT}" -n target rollout status daemonset/optional-node-collector --timeout=180s
+fi
+
+if is_true "${AUTO_CONNECT_PROMETHEUS}"; then
+  echo "==> connecting Prometheus to the target cluster agent"
+  prometheus_body="$(
+    TARGET_CLUSTER_ID="${TARGET_CLUSTER_ID}" \
+    PROMETHEUS_URL="${PROMETHEUS_URL}" \
+    python3 - <<'PY'
+import json
+import os
+
+print(json.dumps({
+    "cluster_id": os.environ["TARGET_CLUSTER_ID"],
+    "prometheus_url": os.environ["PROMETHEUS_URL"],
+    "headers": {},
+}))
+PY
+  )"
+  curl -fsS -X PUT "${API_BASE_URL}/integrations/prometheus" \
+    -b "${COOKIE_JAR}" \
+    -H "content-type: application/json" \
+    -H "x-service-csrf: same-origin" \
+    -d "${prometheus_body}" >/dev/null
+
+  prometheus_state=""
+  prometheus_response=""
+  for _ in $(seq 1 45); do
+    prometheus_response="$(curl -fsS \
+      -b "${COOKIE_JAR}" \
+      "${API_BASE_URL}/integrations/prometheus?cluster_id=${TARGET_CLUSTER_ID}")"
+    prometheus_state="$(
+      PROMETHEUS_STATUS="${prometheus_response}" python3 - <<'PY'
+import json
+import os
+
+print(json.loads(os.environ["PROMETHEUS_STATUS"]).get("state", ""))
+PY
+    )"
+    if [ "${prometheus_state}" = "connected" ]; then
+      echo "==> Prometheus connected: ${PROMETHEUS_URL}"
+      break
+    fi
+    if [ "${prometheus_state}" = "failed" ]; then
+      echo "Prometheus connection failed: ${prometheus_response}" >&2
+      exit 1
+    fi
+    sleep 2
+  done
+  if [ "${prometheus_state}" != "connected" ]; then
+    echo "Prometheus connection did not reach connected state: ${prometheus_response}" >&2
+    exit 1
+  fi
 fi
 
 echo "Target registered and installed."

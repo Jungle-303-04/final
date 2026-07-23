@@ -47,6 +47,30 @@ def test_standard_profile_collects_control_namespaces() -> None:
     assert "color_turf_namespace_snapshot" in names
 
 
+def test_standard_profile_collects_control_namespace_logs() -> None:
+    queries = evidence_provider_queries(
+        "logs",
+        cluster_id="c-1",
+        evidence_profile="standard",
+        control_namespaces=("sandbox", "color-turf"),
+    )
+    names = [str(query["name"]) for query in queries]
+    assert "sandbox_namespace_related_logs" in names
+    assert "color_turf_namespace_related_logs" in names
+    assert any(query["query"] == '{k8s_namespace_name="sandbox"}' for query in queries)
+
+
+def test_target_profile_enables_cluster_local_tempo_query() -> None:
+    queries = evidence_provider_queries(
+        "traces",
+        cluster_id="c-1",
+        evidence_profile="standard",
+    )
+    assert [query["name"] for query in queries] == ["cluster_recent_traces"]
+    assert queries[0]["query"] == "{}"
+    assert queries[0]["provenance"]["backend_scope"] == "cluster_local"
+
+
 def test_demo_profile_does_not_duplicate_covered_namespaces() -> None:
     queries = evidence_provider_queries(
         "kubernetes",

@@ -4,6 +4,13 @@
 mode: daemonset
 fullnameOverride: opentelemetry-collector
 
+service:
+  # DaemonSet mode disables the Service by default. Target workloads and the
+  # cluster agent need one stable OTLP endpoint.
+  enabled: true
+  type: ClusterIP
+  internalTrafficPolicy: Cluster
+
 image:
   # cluster에서 자주 쓰는 receiver/processor 포함 Kubernetes distribution
   repository: otel/opentelemetry-collector-k8s

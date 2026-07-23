@@ -15,6 +15,9 @@ def test_target_registration_installs_telemetry_before_registering_agent() -> No
 
     assert 'INSTALL_TELEMETRY="${INSTALL_TELEMETRY:-true}"' in register
     assert install < registration
+    assert "/integrations/prometheus" in register
+    assert "clusterrole/cluster-agent-uninstall" in register
+    assert "OTEL_TRACES_ENDPOINT" in register
 
 
 def test_aws_target_registration_keeps_telemetry_required_by_default() -> None:
@@ -43,8 +46,17 @@ def test_telemetry_installer_pins_and_verifies_every_provider() -> None:
     ):
         assert f'require_release_workload "${{{release_name}}}"' in installer
 
-    for service_name in ("prometheus", "loki-gateway", "tempo"):
+    for service_name in (
+        "prometheus",
+        "loki-gateway",
+        "tempo",
+        "opentelemetry-collector",
+    ):
         assert f"require_service_endpoints {service_name}" in installer
+
+    otel_values = (ROOT / "deploy" / "target" / "opentelemetry.yaml").read_text(encoding="utf-8")
+    assert "service:\n" in otel_values
+    assert "  enabled: true" in otel_values
 
 
 def test_loki_object_store_declares_every_required_bucket() -> None:

@@ -240,6 +240,41 @@ def _control_namespace_queries(
     return queries
 
 
+def _control_namespace_log_queries(
+    control_namespaces: tuple[str, ...],
+    covered: set[str],
+    *,
+    cluster_id: str,
+    evidence_profile: EvidenceProfile,
+) -> list[dict[str, object]]:
+    """Collect RCA-relevant failures from every configured control namespace."""
+
+    queries: list[dict[str, object]] = []
+    used_names: set[str] = set()
+    for namespace in control_namespaces:
+        if namespace in covered:
+            continue
+        slug = re.sub(r"[^a-z0-9]+", "_", namespace.lower()).strip("_") or "namespace"
+        name = f"{slug}_namespace_related_logs"
+        if name in used_names:
+            continue
+        used_names.add(name)
+        covered.add(namespace)
+        queries.append(
+            _namespace_query(
+                source="loki",
+                name=name,
+                description=f"Recent RCA-related logs in the {namespace} control namespace.",
+                query=f'{{k8s_namespace_name="{namespace}"}}',
+                namespace=namespace,
+                matcher=f'k8s_namespace_name="{namespace}"',
+                cluster_id=cluster_id,
+                evidence_profile=evidence_profile,
+            )
+        )
+    return queries
+
+
 def evidence_provider_queries(
     provider_key: str,
     *,
@@ -539,12 +574,37 @@ def evidence_provider_queries(
                     ),
                 ]
             )
+        covered = (
+            {"target", "sandbox", "color-turf"}
+            if evidence_profile == DEMO_EVIDENCE_PROFILE
+            else {"target"}
+        )
+        queries.extend(
+            _control_namespace_log_queries(
+                control_namespaces,
+                covered,
+                cluster_id=cluster_id,
+                evidence_profile=evidence_profile,
+            )
+        )
         return queries
 
     if provider_key == "traces":
-        # Current OTEL resources expose service.name only. Until a verified
-        # cluster attribute exists, emitting a shared-backend TraceQL query is unsafe.
-        return []
+        # Each target uses its own in-cluster Tempo service, so an unscoped
+        # TraceQL selector cannot cross cluster boundaries.
+        return [
+            _query(
+                source="tempo",
+                name="cluster_recent_traces",
+                description="Recent traces from the target cluster-local Tempo backend.",
+                query="{}",
+                provenance=_provenance(
+                    cluster_id=cluster_id,
+                    evidence_profile=evidence_profile,
+                    query_scope="cluster",
+                ),
+            )
+        ]
     if provider_key == "metadata":
         return [
             _query(
