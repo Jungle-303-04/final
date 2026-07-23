@@ -189,6 +189,14 @@ registration_response="$(curl -fsS -X POST "${API_BASE_URL}/targets" \
   -H "x-service-csrf: same-origin" \
   -d "${registration_body}")"
 
+if is_true "${INSTALL_TELEMETRY}"; then
+  echo "==> installing required target telemetry before cluster-agent manifest"
+  TARGET_CONTEXT="${TARGET_CONTEXT}" \
+  bash "${SCRIPT_DIR}/install-telemetry.sh"
+else
+  echo "==> skipping target telemetry installation (INSTALL_TELEMETRY=${INSTALL_TELEMETRY})"
+fi
+
 echo "==> removing legacy target agent deployment if present"
 kubectl --context "${TARGET_CONTEXT}" -n target delete deploy/target-cluster-agent --ignore-not-found
 
@@ -219,14 +227,6 @@ if is_true "${INSTALL_NODE_COLLECTOR}"; then
 fi
 
 echo "==> cluster-agent online — registration complete (approval/commands available)"
-
-if is_true "${INSTALL_TELEMETRY}"; then
-  echo "==> installing target telemetry stack after agent is online"
-  TARGET_CONTEXT="${TARGET_CONTEXT}" \
-  bash "${SCRIPT_DIR}/install-telemetry.sh"
-else
-  echo "==> skipping target telemetry installation (INSTALL_TELEMETRY=${INSTALL_TELEMETRY})"
-fi
 
 if is_true "${AUTO_CONNECT_PROMETHEUS}"; then
   echo "==> connecting Prometheus to the target cluster agent"

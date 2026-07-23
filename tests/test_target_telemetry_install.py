@@ -24,16 +24,17 @@ def script(name: str) -> str:
     return (ROOT / "scripts" / name).read_text(encoding="utf-8")
 
 
-def test_target_registration_installs_telemetry_after_agent_is_online() -> None:
+def test_target_registration_issues_receipt_then_installs_telemetry_before_agent() -> None:
     register = script("register-target.sh")
 
     install = register.index('bash "${SCRIPT_DIR}/install-telemetry.sh"')
     registration = register.index('echo "==> registering target in operations tool"')
-    agent_online = register.index("rollout status deploy/cluster-agent")
+    manifest = register.index('echo "==> applying generated target install manifest"')
 
     assert 'INSTALL_TELEMETRY="${INSTALL_TELEMETRY:-true}"' in register
-    # 에이전트-우선: 관측 스택은 에이전트가 온라인(승인/명령 가능)이 된 뒤 순차 합류한다.
-    assert install > agent_online > registration
+    # API가 installer-scoped asset token을 먼저 발급하고, 이후 UI one-liner와
+    # 동일하게 telemetry readiness를 통과한 뒤 agent manifest를 적용한다.
+    assert registration < install < manifest
     assert "/integrations/prometheus" in register
     assert "clusterrole/cluster-agent-uninstall" in register
     assert "OTEL_TRACES_ENDPOINT" in register

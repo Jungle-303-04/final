@@ -50,11 +50,13 @@ def target_install_manifest(
     role = payload.cluster_role
     pull_secret = image_pull_secret.strip()
     pull_secret_name = IMAGE_PULL_SECRET_NAME if pull_secret else ""
+    namespaces = "\n---\n".join(
+        namespace_manifest(name).strip() for name in install_namespaces(payload)
+    )
     return "\n---\n".join(
         block.strip()
         for block in [
-            namespace_manifest(namespace),
-            namespace_manifest(SANDBOX_NAMESPACE) if role != MANAGEMENT_CLUSTER_ROLE else "",
+            namespaces,
             priority_class_manifest(),
             service_account_manifest(namespace, pull_secret_name),
             image_pull_secret_manifest(pull_secret, namespace) if pull_secret else "",
@@ -101,7 +103,17 @@ apiVersion: v1
 kind: Namespace
 metadata:
   name: {name}
-	"""
+"""
+
+
+def install_namespaces(payload: TargetRegisterRequest) -> tuple[str, ...]:
+    """Namespaces required before applying any namespaced install resources."""
+
+    names = [agent_namespace(payload)]
+    if payload.cluster_role != MANAGEMENT_CLUSTER_ROLE:
+        names.append(SANDBOX_NAMESPACE)
+    names.extend(configured_control_namespaces(payload))
+    return tuple(dict.fromkeys(names))
 
 
 def priority_class_manifest() -> str:
