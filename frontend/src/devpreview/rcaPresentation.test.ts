@@ -5,6 +5,7 @@ import {
   evidencePreviewLines,
   evidenceReferenceMatches,
   mergeEvidenceReferences,
+  missingEvidencePresentations,
   missingEvidencePresentation,
   rcaSummaryPresentation,
 } from "./rcaPresentation";
@@ -52,6 +53,29 @@ describe("missingEvidencePresentation", () => {
     expect(presentation.message).toBe("원인 확정에 필요한 추가 진단 신호를 수집해 확인하세요.");
     expect(presentation.message).not.toContain("new_internal_check");
     expect(presentation.metadata).toBeNull();
+  });
+
+  it("renders source-qualified legacy refs as a provider-level operator action", () => {
+    const presentation = missingEvidencePresentation("traces:related_traces", []);
+
+    expect(presentation.message).toBe("트레이스 근거를 추가로 수집해 확인하세요.");
+    expect(presentation.message).not.toContain("traces");
+    expect(presentation.message).not.toContain("related_traces");
+  });
+
+  it("deduplicates repeated generic signals while preserving a provider action", () => {
+    const presentations = missingEvidencePresentations([
+      "signal:probe_path_failure_signal",
+      "signal:probe_port_failure_signal",
+      "signal:probe_timeout_signal",
+      "signal:startup_probe_window_signal",
+      "traces:related_traces",
+    ], []);
+
+    expect(presentations.map((item) => item.message)).toEqual([
+      "원인 확정에 필요한 추가 진단 신호를 수집해 확인하세요.",
+      "트레이스 근거를 추가로 수집해 확인하세요.",
+    ]);
   });
 });
 

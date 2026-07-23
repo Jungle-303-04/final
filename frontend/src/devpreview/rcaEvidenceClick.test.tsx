@@ -44,4 +44,28 @@ describe("legacy metadata evidence navigation", () => {
     expect(onEvidenceSelect).toHaveBeenCalledOnce();
     expect(onEvidenceSelect).toHaveBeenCalledWith(objectRef);
   });
+
+  it("shows repeated legacy signal gaps once next to the trace collection action", () => {
+    render(
+      <CandidateEvidenceTokens
+        label="추가 확인 필요"
+        items={[
+          "signal:probe_path_failure_signal",
+          "signal:probe_port_failure_signal",
+          "signal:probe_timeout_signal",
+          "signal:startup_probe_window_signal",
+          "traces:related_traces",
+        ]}
+        tone="warn"
+      />,
+    );
+
+    expect(screen.getAllByText(
+      "원인 확정에 필요한 추가 진단 신호를 수집해 확인하세요.",
+    )).toHaveLength(1);
+    expect(screen.getAllByText(
+      "트레이스 근거를 추가로 수집해 확인하세요.",
+    )).toHaveLength(1);
+    expect(screen.queryByText(/traces related traces/u)).not.toBeInTheDocument();
+  });
 });
