@@ -1689,8 +1689,6 @@ function App() {
   const [detail, setDetail] = useState<{ kind: Kind; row: Row } | null>(null);
   const [rcaIncident, setRcaIncident] = useState<RcaIncident | null>(null); // 이슈 RCA 사이드바 — 셸 레벨 렌더(transform 조상 밖)
   const [recoverySelectionRoutes, setRecoverySelectionRoutes] = useState<ReadonlyMap<string, string>>(() => new Map());
-  const [previewCompletedRecoveryIds, setPreviewCompletedRecoveryIds] = useState<ReadonlySet<string>>(() => new Set());
-  const notifiedRecoveryCompletionIds = useRef(new Set<string>());
   const [navCollapsed, setNavCollapsed] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const [aiMounted, setAiMounted] = useState(false);
@@ -2360,7 +2358,7 @@ function App() {
           onOpenIssues={() => setSurface("issues")} onAskAi={showAi} onAddRepo={() => setConnectModal("repo")}
           topInset={topH} leftInset={navCollapsed ? 60 : 208} rightInset={aiOpen ? aiW : 0} />
       ) : surface === "issues" ? (
-        <IssuesSurface incidentClusterIds={incidentClusterIds} recoverySelectionRoutes={recoverySelectionRoutes} previewCompletedRecoveryIds={previewCompletedRecoveryIds} sessionRules={notes.filter((n) => n.icon === "rule").map((n) => n.body.split(" · ")[0])} onOpenRef={openRef} onAskAi={() => openAi()} onOpenRca={setRcaIncident} />
+        <IssuesSurface incidentClusterIds={incidentClusterIds} recoverySelectionRoutes={recoverySelectionRoutes} sessionRules={notes.filter((n) => n.icon === "rule").map((n) => n.body.split(" · ")[0])} onOpenRef={openRef} onAskAi={() => openAi()} onOpenRca={setRcaIncident} />
       ) : surface === "timeline" ? (
         <TimelineSurface onOpenRef={openRef} />
       ) : surface === "checks" ? (
@@ -2635,22 +2633,6 @@ function App() {
           onClose={() => setRcaIncident(null)}
           onOpenRef={(k, n) => openRef(k, n)}
           onAskAi={openAi}
-          previewRecoveryCompleted={previewCompletedRecoveryIds.has(rcaIncident.correlationId ?? "")}
-          onRecoveryCompleted={(correlationId) => {
-            if (!notifiedRecoveryCompletionIds.current.has(correlationId)) {
-              notifiedRecoveryCompletionIds.current.add(correlationId);
-              pushToast({
-                title: "복구가 완료되었습니다",
-                sub: "성공 조건 검증을 마쳐 이슈 상태를 해결됨으로 변경했습니다.",
-                tone: "ok",
-              });
-            }
-            setPreviewCompletedRecoveryIds((current) => {
-              const next = new Set(current);
-              next.add(correlationId);
-              return next;
-            });
-          }}
           onRecoverySelected={(correlationId, route, source) => {
             setRecoverySelectionRoutes((current) => {
               const next = new Map(current);

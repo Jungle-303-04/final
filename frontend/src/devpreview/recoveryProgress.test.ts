@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { recoveryDisplayedStep, recoveryProgressState } from "./recoveryProgress";
+import {
+  recoveryDisplayedStep,
+  recoveryProgressState,
+  withCreatedPullRequest,
+} from "./recoveryProgress";
 
 describe("recoveryProgressState", () => {
   it("keeps recovery at zero while RCA is still running", () => {
@@ -78,6 +82,69 @@ describe("recoveryProgressState", () => {
       phase: "failed",
       label: "복구 실패",
       step: 2,
+    });
+  });
+
+  it("uses workflow terminal events without claiming the incident is resolved", () => {
+    expect(recoveryProgressState({
+      audit: [{
+        event_id: "workflow-completed",
+        subject: "workflow.run.completed",
+        source: "workflow-controller",
+        created_at: "2026-07-24T01:00:00Z",
+        causation_id: null,
+        journey_stage: "workflow",
+        payload_summary: { summary: "rollout health completed" },
+      }],
+    })).toMatchObject({
+      phase: "verifying",
+      label: "검증 중",
+      step: 3,
+    });
+
+    expect(recoveryProgressState({
+      audit: [{
+        event_id: "workflow-failed",
+        subject: "workflow.run.failed",
+        source: "workflow-controller",
+        created_at: "2026-07-24T01:00:00Z",
+        causation_id: null,
+        journey_stage: "workflow",
+        payload_summary: { reason: "health check failed" },
+      }],
+    })).toMatchObject({
+      phase: "failed",
+      label: "복구 실패",
+      step: 3,
+    });
+  });
+
+  it("keeps the PR reference without overwriting a completed recovery", () => {
+    const completed = recoveryProgressState({ status: "incident_resolved" });
+
+    expect(withCreatedPullRequest(
+      completed,
+      "https://github.com/kyro/platform/pull/17",
+      "PR 검토 필요",
+    )).toBe(completed);
+  });
+
+  it("marks a created PR as ready for review before recovery completes", () => {
+    const requested = recoveryProgressState({
+      status: "recovery_selected",
+      actionRoute: "safe_pr",
+      selectionAccepted: true,
+    });
+
+    expect(withCreatedPullRequest(
+      requested,
+      "https://github.com/kyro/platform/pull/17",
+      "PR 생성됨",
+    )).toMatchObject({
+      phase: "verifying",
+      label: "PR 생성됨",
+      step: 3,
+      tone: "approval",
     });
   });
 });

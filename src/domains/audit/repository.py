@@ -30,13 +30,21 @@ AUDIT_TIMELINE_SUMMARY_FIELDS = (
     "command_id",
     "plan_id",
     "workflow_run_id",
+    "pr_url",
+    "provider",
+    "mode",
     "repository_id",
     "binding_id",
     "application_id",
     "environment",
     "commit_sha",
+    "patch_sha256",
     "evidence_ref",
     "confidence",
+    "reason",
+    "diagnosis",
+    "next_action",
+    "summary",
 )
 
 

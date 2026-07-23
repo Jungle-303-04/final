@@ -10,19 +10,23 @@ export interface AiRecoveryPreview {
   note?: string;
 }
 
+export interface AiRecoveryExecutionReceipt {
+  accepted: boolean;
+  eventId: string;
+  correlationId: string;
+  commandId: string | null;
+}
+
 export interface AiRecoveryHandoff {
   id: string;
+  correlationId: string;
   prompt: string;
   displayPrompt: string;
   actionTitle: string;
   actionRoute: "auto" | "safe_pr" | "approval_required" | string;
+  validationChecks: readonly string[];
   contextView: string;
   contextScope: string;
-  /** 로컬 RCA UI 미리보기에서만 사용하는 AI 검토 완료 응답. */
-  previewReviewResponse?: string;
-  /** 로컬 RCA UI 미리보기에서만 사용하는 복구 완료 응답과 상태 전환. */
-  previewCompletionResponse?: string;
-  previewComplete?: () => void;
   preview?: AiRecoveryPreview;
-  execute: () => Promise<boolean>;
+  execute: () => Promise<AiRecoveryExecutionReceipt | null>;
 }

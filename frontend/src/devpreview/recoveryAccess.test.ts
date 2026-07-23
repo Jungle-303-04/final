@@ -1,0 +1,33 @@
+import { describe, expect, it } from "vitest";
+
+import type { RcaReport } from "../api/evidence-schemas";
+import type { RecoveryPlan } from "../api/recovery-schemas";
+import { canOpenRecoveryPlan, hasRcaCauseOrCandidate } from "./recoveryAccess";
+
+const reportWithCandidate = {
+  root_cause: "insufficient_evidence",
+  candidates: [{ candidate_id: "probe_path_wrong" }],
+} as RcaReport;
+
+const planWithCandidate = {
+  candidates: [{ action_id: "fix-probe" }],
+} as RecoveryPlan;
+
+describe("recovery access", () => {
+  it("blocks recovery when RCA has neither a cause nor a candidate", () => {
+    expect(hasRcaCauseOrCandidate(null, null)).toBe(false);
+    expect(canOpenRecoveryPlan(null, null, planWithCandidate)).toBe(false);
+  });
+
+  it("blocks recovery when the server has no recovery candidate", () => {
+    expect(canOpenRecoveryPlan("Probe path 설정 오류", null, null)).toBe(false);
+  });
+
+  it("allows recovery for a final cause with a real recovery candidate", () => {
+    expect(canOpenRecoveryPlan("Probe path 설정 오류", null, planWithCandidate)).toBe(true);
+  });
+
+  it("allows recovery for an observed RCA candidate with a real recovery candidate", () => {
+    expect(canOpenRecoveryPlan(null, reportWithCandidate, planWithCandidate)).toBe(true);
+  });
+});
