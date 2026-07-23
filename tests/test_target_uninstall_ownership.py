@@ -59,6 +59,9 @@ def test_namespace_scoped_management_deploy_does_not_mutate_priority_classes() -
 
     assert "Reconcile shared management scheduling" not in workflow
     assert "--filename deploy/management/scheduling.yaml" not in workflow
+    assert "Verify shared management scheduling" in workflow
+    assert "--dry-run=server" in workflow
+    assert 'priorityClassName":"gitops-control-critical"' in workflow
     assert "- scheduling.yaml" in management_kustomization
 
 

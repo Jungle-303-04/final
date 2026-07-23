@@ -590,6 +590,27 @@ jobs:
 
       # Cluster-scoped PriorityClasses are reconciled by management bootstrap.
       # This deploy identity intentionally remains scoped to the management namespace.
+      - name: Verify shared management scheduling
+        if: steps.release_lease.outputs.mode == 'deploy'
+        shell: bash
+        run: |
+          set -euo pipefail
+          priority_probe="$(
+            kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" run \
+              opsia-priorityclass-preflight \
+              --image=registry.k8s.io/pause:3.10 \
+              --restart=Never \
+              --overrides='{"spec":{"priorityClassName":"gitops-control-critical"}}' \
+              --dry-run=server \
+              -o json
+          )"
+          jq -e '
+            .spec.priorityClassName == "gitops-control-critical"
+            and .spec.priority == 1000000
+            and .spec.preemptionPolicy == "PreemptLowerPriority"
+          ' >/dev/null <<<"${priority_probe}"
+          unset priority_probe
+
       - name: Run pre-deploy smoke
         id: pre_smoke
         if: steps.release_lease.outputs.mode == 'deploy'
