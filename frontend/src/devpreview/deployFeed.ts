@@ -184,7 +184,7 @@ function toRunView(run: WorkflowRun, application: ApplicationView): ApplicationR
     createdAt: readString(run, "created_at"),
     updatedAt: readString(run, "updated_at"),
     steps: readObjects(run, "steps").map((step) => ({
-      name: readString(step, "name") ?? "unknown",
+      name: readString(step, "name") ?? "",
       status: readString(step, "status"),
       message: readString(step, "message"),
       updatedAt: readString(step, "updated_at"),

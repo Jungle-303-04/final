@@ -49,7 +49,7 @@ import { useChangeTimeline } from "./devpreview/changeTimelineFeed";
 import { useTimelineBoard } from "./devpreview/timelineFeed";
 import { useUiPreferences, useRefreshPolicies, useSettingsAccess } from "./devpreview/settingsFeed";
 import { MiniTimeline } from "./devpreview/widgets";
-import { statusLabel } from "./devpreview/statusLabel";
+import { operationalMessageLabel, statusLabel } from "./devpreview/statusLabel";
 import { RepositoryConnections } from "./devpreview/RepositoryConnections";
 import { RepositoryStatusList } from "./devpreview/RepositoryStatusList";
 import { SegmentedControl } from "./devpreview/SegmentedControl";
@@ -289,10 +289,6 @@ function deliveryPill(status: string | null): React.ReactNode {
 }
 const emptyRow = (msg: string) => <div style={{ padding: "14px 15px", fontSize: TYPE.label, color: UI.ink3 }}>{msg}</div>;
 
-function workflowStep(run: ApplicationRunView | null, name: string): WorkflowStepView | null {
-  return run?.steps.find((step) => step.name === name) ?? null;
-}
-
 function detailString(details: Record<string, unknown>, key: string): string | null {
   const value = details[key];
   return typeof value === "string" && value.trim() !== "" ? value : null;
@@ -323,12 +319,28 @@ function detailEvidence(details: Record<string, unknown>, needles: string[]): st
   return visit(details);
 }
 
-function scenarioRun(runs: ApplicationRunView[], stepName: string): { run: ApplicationRunView; step: WorkflowStepView } | null {
-  for (const run of runs) {
-    const step = workflowStep(run, stepName);
-    if (step) return { run, step };
-  }
-  return null;
+const WORKFLOW_STEP_KO: Record<string, string> = {
+  git: "Git 변경",
+  render: "매니페스트 렌더링",
+  diff: "변경 비교",
+  policy: "정책 검토",
+  approval: "승인",
+  apply: "클러스터 적용",
+  health: "상태 확인",
+  safe_pr: "복구 PR",
+};
+
+function workflowStepLabel(name: string): string {
+  const normalized = name.trim().toLowerCase();
+  if (normalized === "") return "단계 이름 미관측";
+  return WORKFLOW_STEP_KO[normalized] ?? name;
+}
+
+function workflowStepState(status: string | null): "done" | "observed" | "pending" {
+  const normalized = status?.trim().toLowerCase() ?? "";
+  if (["succeeded", "completed", "ready"].includes(normalized)) return "done";
+  if (["failed", "error", "degraded", "blocked"].includes(normalized)) return "observed";
+  return "pending";
 }
 
 function GateStage({ label, state, evidence, href, actionLabel, onAction }: {
@@ -360,7 +372,7 @@ function GateStage({ label, state, evidence, href, actionLabel, onAction }: {
   return href ? <a href={href} target="_blank" rel="noreferrer" style={{ textDecoration: "none" }}>{content}</a> : content;
 }
 
-function ScenarioGate({ runs, repositoryRef, status, onRefresh, onOpenRef, onOpenIssues, onAskAi }: {
+function WorkflowEvidencePanel({ runs, repositoryRef, status, onRefresh, onOpenRef, onOpenIssues, onAskAi }: {
   runs: ApplicationRunView[];
   repositoryRef: string | null;
   status: "loading" | "ready" | "unavailable";
@@ -372,67 +384,76 @@ function ScenarioGate({ runs, repositoryRef, status, onRefresh, onOpenRef, onOpe
   const selection = selectScenarioRuns(runs, repositoryRef);
   const scopedRuns = selection.runs;
   const latest = scopedRuns[0] ?? null;
-  const gitRecord = scenarioRun(scopedRuns, "git");
-  const applyRecord = scenarioRun(scopedRuns, "apply");
-  const healthRecord = scenarioRun(scopedRuns, "health");
-  const safePrRecord = scenarioRun(scopedRuns, "safe_pr");
-  const diffRecord = scenarioRun(scopedRuns, "diff");
-  const failureRecord = scopedRuns.flatMap((run) => run.steps.map((step) => ({ run, step }))).find(({ step }) =>
+  const failureStep = latest?.steps.find((step) =>
     detailEvidence(step.details, ["imagepullbackoff", "errimagepull", "image_pull_back_off"]) !== null
     || step.message?.toLowerCase().includes("imagepullbackoff") === true
     || step.message?.toLowerCase().includes("errimagepull") === true) ?? null;
-  const blocked = scopedRuns.find((run) =>
-    run.status === "waiting_for_approval"
-    || run.promotionGate?.eligible === false);
-  const actualImage = diffRecord ? detailString(diffRecord.step.details, "actual_image") : null;
-  const desiredImage = diffRecord ? detailString(diffRecord.step.details, "desired_image") : null;
-  const failureEvidence = failureRecord
-    ? detailEvidence(failureRecord.step.details, ["imagepullbackoff", "errimagepull", "image_pull_back_off"])
-      ?? failureRecord.step.message
-      ?? failureRecord.run.workflowRunId
+  const failureResource = failureStep
+    ? detailString(failureStep.details, "pod_name")
+      ?? detailString(failureStep.details, "resource_name")
+      ?? detailString(failureStep.details, "name")
     : null;
-  const failureResource = failureRecord
-    ? detailString(failureRecord.step.details, "pod_name")
-      ?? detailString(failureRecord.step.details, "resource_name")
-      ?? detailString(failureRecord.step.details, "name")
-    : null;
-  const failedImageCandidate = failureRecord === null && actualImage !== null
-    ? `배포 diff 이미지 ${actualImage}${desiredImage ? ` → ${desiredImage}` : ""} · 직접 장애 이벤트 없음`
-    : null;
-  const prUrl = safePrRecord ? detailString(safePrRecord.step.details, "pr_url") : null;
-  const repository = latest?.repositoryRef ?? selection.repositoryRef;
-  const commitSha = gitRecord?.run.commitSha ?? null;
-  const commitUrl = commitSha && repository ? `https://github.com/${repository}/commit/${commitSha}` : null;
-  const gitDone = gitRecord?.step.status === "succeeded" && commitSha !== null;
-  const applyDone = applyRecord?.step.status === "succeeded";
-  const safePrDone = safePrRecord?.step.status === "succeeded" && prUrl !== null;
-  const healthStepDone = healthRecord?.step.status === "succeeded";
-  const rolloutRun = scopedRuns.find((run) => run.promotionGate?.rollout_ready === true) ?? null;
-  const rolloutReady = rolloutRun !== null;
 
   return (
     <Card pad={12}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 10 }}>
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: TYPE.body, fontWeight: 600, color: UI.heading }}>GitOps 배포 현황</div>
+          <div style={{ fontSize: TYPE.body, fontWeight: 600, color: UI.heading }}>최근 워크플로 실행</div>
           <div style={{ marginTop: 2, fontFamily: MONO, fontSize: TYPE.caption, color: UI.ink3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {latest?.workflowRunId ?? (status === "loading" ? "실행 기록 확인 중" : "실행 기록 없음")}
           </div>
         </div>
-        <button className="product-focusable product-control" onClick={onRefresh} aria-label="배포 증거 새로고침" style={{ width: 30, height: 30, borderRadius: 8, border: `1px solid ${UI.line}`, background: UI.card, color: UI.ink2, cursor: "pointer", display: "grid", placeItems: "center" }}><RefreshCw size={14} /></button>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {latest && deliveryPill(latest.status)}
+          {latest?.status === "waiting_for_approval" && (
+            <button type="button" className="product-focusable product-control" onClick={onOpenIssues}
+              style={{ border: `1px solid ${TINT.warn.bd}`, background: TINT.warn.bg, color: TINT.warn.fg, borderRadius: 7, padding: "5px 8px", fontSize: TYPE.caption, fontWeight: 600, cursor: "pointer" }}>
+              이슈/RCA
+            </button>
+          )}
+          <button className="product-focusable product-control" onClick={onRefresh} aria-label="워크플로 실행 새로고침" style={{ width: 30, height: 30, borderRadius: 8, border: `1px solid ${UI.line}`, background: UI.card, color: UI.ink2, cursor: "pointer", display: "grid", placeItems: "center" }}><RefreshCw size={14} /></button>
+        </div>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8 }}>
-        <GateStage label="Git commit" state={gitDone ? "done" : "pending"} evidence={commitSha ?? "커밋 증거 없음"} href={commitUrl} />
-        <GateStage label="GitOps sync" state={applyDone ? "done" : "pending"} evidence={applyDone ? `${applyRecord?.run.commandId ?? "command"} · ${applyRecord?.step.message ?? "적용 완료"}` : "적용 증거 없음"} />
-        <GateStage label="ImagePullBackOff" state={failureEvidence ? "observed" : "pending"}
-          evidence={failureEvidence ? `실패 관측: ${failureEvidence}` : failedImageCandidate ?? "보존된 장애 이벤트 없음"}
-          actionLabel={failureRecord ? (failureResource ? "게임 로그" : "AI 분석") : null}
-          onAction={failureRecord ? (failureResource ? () => onOpenRef("Pod", failureResource) : onAskAi) : null} />
-        <GateStage label="PromotionBlocked" state={blocked ? "observed" : "pending"} evidence={blocked ? `${blocked.workflowRunId} · 승인 대기` : "차단 증거 없음"}
-          actionLabel={blocked ? "이슈/RCA" : null} onAction={blocked ? onOpenIssues : null} />
-        <GateStage label="Safe PR" state={safePrDone ? "done" : "pending"} evidence={prUrl ?? "PR 증거 없음"} href={prUrl} />
-        <GateStage label="정상 rollout" state={rolloutReady ? "done" : healthStepDone ? "observed" : "pending"} evidence={rolloutReady ? `Ready · ${desiredImage ?? rolloutRun?.workflowRunId ?? "rollout"}` : healthStepDone ? "health 단계 완료 · Ready 직접 증거는 없음" : "rollout 증거 없음"} />
-      </div>
+      {latest ? (
+        <>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: latest.steps.length > 0 ? 10 : 0, fontSize: TYPE.caption, color: UI.ink3 }}>
+            <span>{latest.applicationName}</span>
+            {latest.repositoryRef && <span style={{ fontFamily: MONO }}>{latest.repositoryRef}</span>}
+            {latest.commitSha && <span style={{ fontFamily: MONO }}>commit {latest.commitSha}</span>}
+            {latest.updatedAt && <span>{fromNow(latest.updatedAt)}</span>}
+          </div>
+          {latest.steps.length > 0 ? (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 8 }}>
+              {latest.steps.map((step, index) => {
+                const prUrl = step.name === "safe_pr" ? detailString(step.details, "pr_url") : null;
+                const isFailureStep = step === failureStep;
+                const evidence = [
+                  koLabel(step.status),
+                  step.message ? operationalMessageLabel(step.message) : null,
+                  step.updatedAt ? fromNow(step.updatedAt) : null,
+                ].filter((value): value is string => value !== null && value !== "");
+                return (
+                  <GateStage
+                    key={`${step.name || "unnamed"}-${step.updatedAt ?? index}`}
+                    label={workflowStepLabel(step.name)}
+                    state={workflowStepState(step.status)}
+                    evidence={evidence.join(" · ") || "—"}
+                    href={prUrl}
+                    actionLabel={isFailureStep ? (failureResource ? "파드 상세" : "AI 분석") : null}
+                    onAction={isFailureStep ? (failureResource ? () => onOpenRef("Pod", failureResource) : onAskAi) : null}
+                  />
+                );
+              })}
+            </div>
+          ) : (
+            <div style={{ fontSize: TYPE.label, color: UI.ink3 }}>단계 데이터 관측 안 됨</div>
+          )}
+        </>
+      ) : (
+        <div style={{ fontSize: TYPE.label, color: UI.ink3 }}>
+          {status === "loading" ? "불러오는 중…" : status === "unavailable" ? "워크플로 실행을 불러오지 못했습니다." : "관측된 워크플로 실행 없음"}
+        </div>
+      )}
     </Card>
   );
 }
@@ -471,9 +492,17 @@ export function DeploySurface({ pendingRepos = [], repositoryFilter = null, onOp
     [repositoryGroups],
   );
   const pendingOnly = pendingRepos.filter((repositoryRef) => !connectedRepositoryKeys.has(repositoryRef.toLowerCase()));
-  const visibleWorkflowApps = apps.filter((application) =>
-    application.workflowRunId !== null
-    && !application.workflowRunId.startsWith("workflow-connect-validation-"));
+  const workflowStatus = appsFeed.status === "unavailable"
+    ? "unavailable"
+    : appsFeed.status === "loading"
+      ? "loading"
+      : workflowFeed.status;
+  const visibleWorkflowRuns = workflowFeed.items.filter((run) =>
+    !run.workflowRunId.startsWith("workflow-connect-validation-")
+    && (
+      selectedRepository === null
+      || run.repositoryRef?.toLowerCase() === selectedRepository.toLowerCase()
+    ));
   const appCols: [string, string][] = [["앱", "minmax(140px,1.4fr)"], ["환경", "minmax(80px,0.8fr)"], ["저장소", "minmax(150px,1.4fr)"], ["헬스", "minmax(110px,0.9fr)"], ["배포", "minmax(90px,0.8fr)"], ["브랜치", "minmax(70px,0.6fr)"]];
   const wfCols: [string, string][] = [["앱", "minmax(140px,1.2fr)"], ["워크플로우 실행", "minmax(200px,1.8fr)"], ["상태", "minmax(90px,0.8fr)"], ["관측 시각", "minmax(80px,0.7fr)"]];
   const helmCols: [string, string][] = [["릴리스", "minmax(120px,1.1fr)"], ["차트", "minmax(150px,1.4fr)"], ["차트 버전", "minmax(80px,0.8fr)"], ["네임스페이스", "minmax(90px,0.9fr)"], ["리비전", "56px"], ["상태", "minmax(90px,0.8fr)"]];
@@ -505,7 +534,7 @@ export function DeploySurface({ pendingRepos = [], repositoryFilter = null, onOp
         { label: "앱", value: appsFeed.status === "ready" ? apps.length : "—" },
         { label: "배포 대기", value: appsFeed.status === "ready" ? apps.filter((a) => a.deliveryStatus === "pending").length : "—" },
         { label: "저장소", value: appsFeed.status === "ready" ? repositoryGroups.length + pendingOnly.length : "—" },
-        { label: "Helm", value: helm.status === "ready" ? helm.items.length : "—", warn: helm.status === "ready" && helm.coverageAvailability === "unavailable" },
+        { label: "Helm", value: helm.status === "ready" && helm.coverageAvailability === "available" ? helm.items.length : "—", warn: helm.status === "ready" && helm.coverageAvailability === "unavailable" },
       ]} />
       {tab === "애플리케이션" && (
         <Card pad={0}>
@@ -566,23 +595,22 @@ export function DeploySurface({ pendingRepos = [], repositoryFilter = null, onOp
       )}
       {tab === "워크플로우" && (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          <ScenarioGate runs={workflowFeed.items} repositoryRef={selectedRepository} status={workflowFeed.status}
+          <WorkflowEvidencePanel runs={workflowFeed.items} repositoryRef={selectedRepository} status={workflowStatus}
             onRefresh={() => setRepositoryRefreshKey((key) => key + 1)}
             onOpenRef={onOpenRef} onOpenIssues={onOpenIssues} onAskAi={onAskAi} />
           <Card pad={0}>
             <THead cols={wfCols} />
-            {loading ? emptyRow("불러오는 중…")
-              : appsFeed.status === "unavailable" ? emptyRow("워크플로우 실행을 불러오지 못했습니다.")
-              : visibleWorkflowApps.length === 0 ? emptyRow("관측된 배포 실행 없음")
-              : visibleWorkflowApps.map((a, i) => {
-                const runId = a.workflowRunId;
+            {workflowStatus === "loading" ? emptyRow("불러오는 중…")
+              : workflowStatus === "unavailable" ? emptyRow("워크플로우 실행을 불러오지 못했습니다.")
+              : visibleWorkflowRuns.length === 0 ? emptyRow("관측된 워크플로 실행 없음")
+              : visibleWorkflowRuns.map((run, i) => {
                 return (
-                <TRow key={a.id} cols={wfCols} i={i}
-                  onClick={runId === null ? undefined : () => setDetail({ kind: "run", workflowRunId: runId })} cells={[
-                  <span key="n" style={{ display: "flex", alignItems: "center", gap: 8 }}><Rocket size={13} style={{ color: BLUE, flexShrink: 0 }} /><Mono>{a.name}</Mono></span>,
-                  <Mono key="w" dim>{a.workflowRunId}</Mono>,
-                  deliveryPill(a.deliveryStatus),
-                  <Mono key="t" dim>{fromNow(a.deliveryObservedAt)}</Mono>,
+                <TRow key={run.workflowRunId} cols={wfCols} i={i}
+                  onClick={() => setDetail({ kind: "run", workflowRunId: run.workflowRunId })} cells={[
+                  <span key="n" style={{ display: "flex", alignItems: "center", gap: 8 }}><Rocket size={13} style={{ color: BLUE, flexShrink: 0 }} /><Mono>{run.applicationName}</Mono></span>,
+                  <Mono key="w" dim>{run.workflowRunId}</Mono>,
+                  deliveryPill(run.status),
+                  <Mono key="t" dim>{fromNow(run.updatedAt ?? run.createdAt)}</Mono>,
                 ]} />
                 );
               })}
