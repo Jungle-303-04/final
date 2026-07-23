@@ -95,7 +95,11 @@ function isAbortError(error: unknown): boolean {
  * an honest `unavailable`; the queue already carries the observed RCA fields, so
  * no per-incident refetch is needed for cause/confidence/evidence.
  */
-export function useRcaIssueDetails(clusterIds?: readonly string[], pollMs = 0): RcaIssueDetailsFeed {
+export function useRcaIssueDetails(
+  clusterIds?: readonly string[],
+  pollMs = 0,
+  onItems?: (items: RcaIssueDetailView[]) => void,
+): RcaIssueDetailsFeed {
   const scopeKey = clusterIds === undefined
     ? null
     : [...new Set(clusterIds.filter((clusterId) => clusterId.trim() !== ""))].sort().join("\u0000");
@@ -111,7 +115,9 @@ export function useRcaIssueDetails(clusterIds?: readonly string[], pollMs = 0): 
       void loadRcaIssueItems(scopedClusterIds, controller.signal)
         .then((items) => {
           if (controller.signal.aborted) return;
-          setSnapshot({ scopeKey, feed: { status: "ready", items: items.map(toRcaIssueDetailView) } });
+          const views = items.map(toRcaIssueDetailView);
+          setSnapshot({ scopeKey, feed: { status: "ready", items: views } });
+          onItems?.(views);
         })
         .catch((cause: unknown) => {
           if (controller.signal.aborted || isAbortError(cause)) return;
@@ -129,7 +135,7 @@ export function useRcaIssueDetails(clusterIds?: readonly string[], pollMs = 0): 
       controller.abort();
       if (timer !== undefined) window.clearTimeout(timer);
     };
-  }, [scopeKey, pollMs]);
+  }, [scopeKey, pollMs, onItems]);
   return snapshot.scopeKey === scopeKey
     ? snapshot.feed
     : { status: "loading", items: [] };

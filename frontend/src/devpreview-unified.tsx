@@ -65,6 +65,13 @@ import {
   type AlertEventView,
 } from "./devpreview/alertsFeed";
 import { alertEventPresentation, strongestAlertEventPresentation, type AlertEventIcon } from "./devpreview/alertEventPresentation";
+import {
+  alertIncidentClusterIds,
+  alertIncidentPollMs,
+  incidentFromAlertEvent,
+  incidentFromRcaIssue,
+  promoteAlertIncident,
+} from "./devpreview/alertIncident";
 import { acknowledgeAlertEvent } from "./api/alert-events";
 import { useRelationTopology, type RelationNodeView } from "./devpreview/relationTopologyFeed";
 import { logout as logoutApi } from "./devpreview/sessionFeed";
@@ -85,33 +92,6 @@ import { podsForNode, useClusterTopology } from "./devpreview/inventoryTopologyF
 import { UI, BLUE, BLUE2, HP, INTERACTION, TINT, MONO, TYPE, SOFT, SPRING, PRESENT_SCALE, DUR, RADIUS, SPACE, inkA, blueA, MARK, cardA, GLASS, critA } from "./devpreview/theme";
 import "./styles/tokens.css";
 import "./styles/foundation.css";
-
-function incidentFromIssue(issue: RcaIssueDetailView): RcaIncident {
-  return {
-    name: issue.resourceName ?? issue.correlationId.slice(0, 12),
-    symptom: issue.symptom ?? issue.status,
-    rawSymptom: issue.rawSymptom,
-    cluster: issue.clusterId ?? "-",
-    svc: issue.resourceName ?? issue.correlationId.slice(0, 12),
-    ns: issue.namespace ?? "-",
-    resourceKind: issue.resourceKind,
-    correlationId: issue.correlationId,
-    incidentId: issue.incidentId,
-    currentSubject: issue.currentSubject,
-    updatedAt: issue.updatedAt,
-    status: issue.status,
-    severity: issue.severity,
-    rootCause: issue.rootCause,
-    confidence: issue.confidence,
-    supportingEvidence: issue.supportingEvidence,
-    missingEvidence: issue.missingEvidence,
-    situationSummary: issue.situationSummary,
-    recommendedActionSummary: issue.recommendedActionSummary,
-    evidenceSummary: issue.evidenceSummary,
-    evidenceBundleSummary: issue.evidenceBundleSummary,
-    prUrl: issue.prUrl,
-  };
-}
 
 
 // ── 파생 헬퍼 (가짜 rng/합성 행 제거 — 표는 라이브 인벤토리 계약으로 배선) ──
@@ -1698,7 +1678,15 @@ function App() {
     () => activeIncidentClusterIds(contract.clusters),
     [contract.clusters],
   );
-  const alertRcaIssues = useRcaIssueDetails(incidentClusterIds);
+  const [rcaIncident, setRcaIncident] = useState<RcaIncident | null>(null); // 이슈 RCA 사이드바 — 셸 레벨 렌더(transform 조상 밖)
+  const promoteAlertRcaIssue = useCallback((items: RcaIssueDetailView[]) => {
+    setRcaIncident((current) => promoteAlertIncident(current, items));
+  }, []);
+  const alertRcaIssues = useRcaIssueDetails(
+    alertIncidentClusterIds(rcaIncident, incidentClusterIds),
+    alertIncidentPollMs(rcaIncident),
+    promoteAlertRcaIssue,
+  );
   const [kindId, setKindId] = useState("Deployment");
   const [resView, setResView] = useState<ResView>("map"); // D18 관점 — 지도가 기본, 스코프는 관점 공유
   const [trafficFocus, setTrafficFocus] = useState<string | null>(null); // 트래픽 보조 패널 → 그래프 포커스
@@ -1724,7 +1712,6 @@ function App() {
   const selectedNamespace = ns === "모든 네임스페이스" ? null : ns;
   const [meOpen, setMeOpen] = useState(false); // 계정 메뉴 (헤더 맨 오른쪽, D20)
   const [detail, setDetail] = useState<{ kind: Kind; row: Row } | null>(null);
-  const [rcaIncident, setRcaIncident] = useState<RcaIncident | null>(null); // 이슈 RCA 사이드바 — 셸 레벨 렌더(transform 조상 밖)
   const [recoverySelectionRoutes, setRecoverySelectionRoutes] = useState<ReadonlyMap<string, string>>(() => new Map());
   const [navCollapsed, setNavCollapsed] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
@@ -2423,15 +2410,11 @@ function App() {
                                   (issue) => issue.incidentId === ev.incidentId,
                                 );
                                 if (matchingIssue) {
-                                  setRcaIncident(incidentFromIssue(matchingIssue));
-                                  markAlertRead(ev);
+                                  setRcaIncident(incidentFromRcaIssue(matchingIssue));
                                 } else {
-                                  pushToast({
-                                    title: "이슈 상세 동기화 중",
-                                    sub: "이슈 목록을 새로고침한 뒤 다시 열어 주세요. 알림은 읽지 않은 상태로 유지됩니다.",
-                                    tone: "crit",
-                                  });
+                                  setRcaIncident(incidentFromAlertEvent(ev));
                                 }
+                                markAlertRead(ev);
                                 return;
                               }
                               markAlertRead(ev);
