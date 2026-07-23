@@ -4,6 +4,7 @@ import { getClusterNodesSummary } from "../api/cluster-summary";
 import { getFleetSummary } from "../api/fleet";
 import { isAbortError } from "../shared/data/asyncResourceState";
 import { toClusterSummaryView, type ClusterSummaryView } from "./clusterSummaryFeed";
+import { useHomeSnapshotEvents } from "./homeSnapshotEvents";
 import { useBoundedPoll } from "./useBoundedPoll";
 
 // Fleet 롤업은 전 클러스터를 단일 요청으로 반환한다(클러스터당 1요청 아님).
@@ -32,7 +33,10 @@ export function useFleetSummaries(
   const key = Array.from(new Set(clusterIds)).sort().join(" ");
   // load 는 useBoundedPoll 이 매 렌더 ref 로 고정하므로 최신 ids 클로저를 안전하게 쓴다.
   const ids = useMemo(() => (key ? key.split(" ") : []), [key]);
-  const scopeKey = key ? "fleet" : "";
+  // 실시간: 스냅샷 커밋 SSE(tick)가 오르면 scopeKey 가 바뀌어 bounded-poll 이 즉시
+  // 재조회한다(관측 도착 즉시 반영). SSE 가 없거나 끊겨도 5초 캐던스는 그대로 유지.
+  const snapshotTick = useHomeSnapshotEvents(ids);
+  const scopeKey = key ? `fleet:${snapshotTick}` : "";
 
   useBoundedPoll({
     scopeKey,
