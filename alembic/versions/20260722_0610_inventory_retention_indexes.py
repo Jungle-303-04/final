@@ -26,7 +26,7 @@ down_revision: str | None = "20260722_0600"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-LOCK_TIMEOUT = "5s"
+LOCK_TIMEOUT = "30s"
 CREATE_RETRY_DELAYS = (2.0, 4.0, 8.0)
 INDEX_STATEMENTS = (
     (

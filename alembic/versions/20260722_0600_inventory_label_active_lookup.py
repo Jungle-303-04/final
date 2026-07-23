@@ -28,7 +28,7 @@ depends_on: str | Sequence[str] | None = None
 
 LABEL_INDEX_NAME = "ix_inventory_label_versions_active_lookup"
 VERSION_INDEX_NAME = "ix_inventory_versions_active_facets"
-LOCK_TIMEOUT = "5s"
+LOCK_TIMEOUT = "30s"
 CREATE_RETRY_DELAYS = (2.0, 4.0, 8.0)
 
 
