@@ -9,7 +9,7 @@ import type { AuditTimelineItem } from "../api/audit-timeline-schemas";
 import { getIncidentRecentChanges } from "../api/recent-changes";
 import type { RecentChangeItem } from "../api/recent-changes-schemas";
 import { getEvidenceWindowPayload, listEvidence, listRcaReports } from "../api/evidence";
-import type { EvidenceWindowPayload, RcaReport } from "../api/evidence-schemas";
+import type { EvidenceRecord, EvidenceWindowPayload, RcaReport } from "../api/evidence-schemas";
 import type { RcaIssueList } from "../api/schemas";
 import { loadRcaIssueItems } from "./rcaIssuesFeed";
 import { operationalMessageLabel } from "./statusLabel";
@@ -216,6 +216,46 @@ function normalizedEvidenceSource(source: string): string {
 }
 
 /**
+ * Resolve one legacy pointer only against a source summary that identifies a
+ * durable EvidenceWindow. A correlation may contain multiple records for the
+ * same provider while a window is still assembling, so a source-only match can
+ * accidentally select a newer, unkeyed partial record and make the old link
+ * unopenable.
+ */
+export function resolveEvidenceObjectReference(
+  pointer: EvidenceObjectReference,
+  records: readonly EvidenceRecord[],
+): RcaEvidenceReference | null {
+  const source = normalizedEvidenceSource(pointer.source);
+  const sourceSummary = records
+    .filter((record) => record.correlation_id === pointer.correlationId)
+    .flatMap((record) => record.sources)
+    .find((candidate) => (
+      normalizedEvidenceSource(candidate.source) === source
+      && Boolean(candidate.evidence_key?.trim())
+    ));
+  if (!sourceSummary?.evidence_key) return null;
+  return {
+    source,
+    name: pointer.name,
+    check_id: null,
+    summary: sourceSummary.summary || null,
+    query: null,
+    evidence_ref: pointer.value,
+    schema_version: sourceSummary.schema_version,
+    source_version: sourceSummary.source_version,
+    collector: sourceSummary.collector,
+    collector_version: sourceSummary.collector_version,
+    query_version: sourceSummary.query_version,
+    collected_at: sourceSummary.collected_at,
+    evidence_key: sourceSummary.evidence_key,
+    source_id: sourceSummary.source_id,
+    agent_id: sourceSummary.agent_id,
+    window_start: sourceSummary.window_start,
+  };
+}
+
+/**
  * Resolve legacy object:// evidence strings through the safe Evidence summary
  * endpoint. This recovers the window key needed by the existing detail panel
  * without exposing or guessing an object-store URL.
@@ -250,29 +290,8 @@ export function useEvidenceObjectReferences(values: readonly string[]): Evidence
         const recordsByCorrelation = new Map(responses);
         const references = pointers.flatMap((pointer): RcaEvidenceReference[] => {
           const records = recordsByCorrelation.get(pointer.correlationId)?.items ?? [];
-          const source = normalizedEvidenceSource(pointer.source);
-          const sourceSummary = records
-            .flatMap((record) => record.sources)
-            .find((candidate) => normalizedEvidenceSource(candidate.source) === source);
-          if (!sourceSummary?.evidence_key) return [];
-          return [{
-            source,
-            name: pointer.name,
-            check_id: null,
-            summary: sourceSummary.summary || null,
-            query: null,
-            evidence_ref: pointer.value,
-            schema_version: sourceSummary.schema_version,
-            source_version: sourceSummary.source_version,
-            collector: sourceSummary.collector,
-            collector_version: sourceSummary.collector_version,
-            query_version: sourceSummary.query_version,
-            collected_at: sourceSummary.collected_at,
-            evidence_key: sourceSummary.evidence_key,
-            source_id: sourceSummary.source_id,
-            agent_id: sourceSummary.agent_id,
-            window_start: sourceSummary.window_start,
-          }];
+          const reference = resolveEvidenceObjectReference(pointer, records);
+          return reference ? [reference] : [];
         });
         setSnapshot({ requestKey, feed: { status: "ready", references } });
       })
