@@ -20,6 +20,12 @@ import { useVisibleRefreshClock } from "../shared/data/useVisibleRefreshClock";
 
 /** 애플리케이션·워크플로우 목록 폴링 주기. */
 export const DEPLOY_LIST_POLL_MS = 15_000;
+/** 배포가 진행 중(관측된 활성 상태)일 때의 가속 폴링 주기. */
+export const DEPLOY_LIST_ACTIVE_POLL_MS = 5_000;
+/** 서버가 보고한 진행형 상태 — 이 상태가 하나라도 관측되면 폴링을 가속한다. */
+const ACTIVE_DELIVERY_STATUSES = new Set([
+  "pending", "progressing", "running", "waiting_for_approval",
+]);
 const HELM_LIST_MIN_POLL_MS = 5_000;
 const HELM_LIST_MAX_POLL_MS = 60_000;
 const HELM_LIST_FALLBACK_POLL_MS = 15_000;
@@ -108,7 +114,11 @@ function toApplicationView(record: Application, index: number): ApplicationView 
  */
 export function useApplications(refreshKey: unknown = null): ApplicationsFeed {
   const [feed, setFeed] = useState<ApplicationsFeed>({ status: "loading", items: [] });
-  const { revision } = useVisibleRefreshClock(true, DEPLOY_LIST_POLL_MS);
+  // 진행 중 배포가 관측되면 폴링을 가속한다 — 상태는 항상 서버 관측값에서만 파생.
+  const active = feed.items.some((item) =>
+    (item.deliveryStatus !== null && ACTIVE_DELIVERY_STATUSES.has(item.deliveryStatus))
+    || (item.lifecycleStatus !== null && ACTIVE_DELIVERY_STATUSES.has(item.lifecycleStatus)));
+  const { revision } = useVisibleRefreshClock(true, active ? DEPLOY_LIST_ACTIVE_POLL_MS : DEPLOY_LIST_POLL_MS);
   useEffect(() => {
     const controller = new AbortController();
     void listApplications({ signal: controller.signal })
@@ -192,7 +202,13 @@ export function useApplicationRuns(
   refreshKey: unknown = null,
 ): ApplicationRunsFeed {
   const [feed, setFeed] = useState<ApplicationRunsFeed>({ status: "loading", items: [] });
-  const { revision } = useVisibleRefreshClock(applications.length > 0, DEPLOY_LIST_POLL_MS);
+  // 활성 실행이 관측되면 가속 — 최신 run의 상태만 보면 충분하다(정렬 최상단).
+  const active = feed.items.some((run) =>
+    run.status !== null && ACTIVE_DELIVERY_STATUSES.has(run.status));
+  const { revision } = useVisibleRefreshClock(
+    applications.length > 0,
+    active ? DEPLOY_LIST_ACTIVE_POLL_MS : DEPLOY_LIST_POLL_MS,
+  );
   const applicationKey = applications.map(({ id, workflowRunId }) => `${id}:${workflowRunId ?? ""}`).join("|");
   useEffect(() => {
     const controller = new AbortController();

@@ -3,11 +3,14 @@ import { useEffect, useState } from "react";
 import { getApplicationDrift } from "../api/application-catalog";
 import type { ApplicationDriftEndpoint } from "../api/application-catalog-schemas";
 import { getApplication, listApplicationDeployments } from "../api/applications";
+import { getChangeTimeline } from "../api/change-timeline";
+import type { ChangeTimelineEndpoint } from "../api/change-timeline-schemas";
 import { getGitOpsApplicationDetail } from "../api/gitops-application-detail";
 import type { GitOpsApplicationDetailEndpoint } from "../api/gitops-application-detail-schemas";
 import { getHelmRelease } from "../api/helm-releases";
 import type { HelmReleaseDetailEndpoint } from "../api/helm-releases-schemas";
 import { useVisibleRefreshClock } from "../shared/data/useVisibleRefreshClock";
+import { operationalMessageLabel } from "./statusLabel";
 import type { DeployFeedStatus } from "./deployFeed";
 
 // 배포 상세 패널 전용 라이브 어댑터 — UI-PHASE2-001 원칙 유지.
@@ -151,5 +154,72 @@ export function useHelmReleaseDetail(target: HelmReleaseIdentity | null): HelmRe
   }, [key, revision]);
 
   if (key === "" || state.key !== key) return { status: "loading", detail: null };
+  return state.feed;
+}
+
+// ── 애플리케이션 스코프 변경 이벤트 ──────────────────────────────────────────
+
+/** 이벤트 섹션 관측 창(직전 24시간)과 폴링 주기. */
+export const APPLICATION_EVENTS_WINDOW_MS = 24 * 60 * 60 * 1000;
+export const APPLICATION_EVENTS_BUCKET_MS = 60 * 60 * 1000;
+
+export interface ApplicationChangeEventView {
+  id: string;
+  kind: ChangeTimelineEndpoint["events"][number]["kind"];
+  occurredMs: number;
+  /** 서버 원문 — 증거 보존용. */
+  rawTitle: string;
+  /** 한국어 표시 문자열. */
+  title: string;
+  severity: ChangeTimelineEndpoint["events"][number]["severity"];
+}
+
+export interface ApplicationChangeEventsFeed {
+  status: DeployFeedStatus;
+  events: ApplicationChangeEventView[];
+}
+
+/**
+ * GET /api/changes 를 applications=<id> 로 스코프해 직전 24시간의 실제 변경
+ * 이벤트(배포·GitOps·인시던트·인벤토리)를 읽는다. 창은 매 조회 시점 기준으로
+ * 다시 계산해 패널이 열려 있는 동안 최신 이벤트가 계속 유입된다.
+ */
+export function useApplicationChangeEvents(applicationId: string | null): ApplicationChangeEventsFeed {
+  const { revision } = useVisibleRefreshClock(applicationId !== null, APPLICATION_DETAIL_POLL_MS);
+  const [state, setState] = useState<{ key: string; feed: ApplicationChangeEventsFeed }>({
+    key: "",
+    feed: { status: "loading", events: [] },
+  });
+
+  useEffect(() => {
+    if (applicationId === null) return;
+    const controller = new AbortController();
+    const toMs = Date.now();
+    void getChangeTimeline({
+      fromMs: toMs - APPLICATION_EVENTS_WINDOW_MS,
+      toMs,
+      bucketMs: APPLICATION_EVENTS_BUCKET_MS,
+      applications: [applicationId],
+    }, controller.signal).then((response) => {
+      if (controller.signal.aborted) return;
+      const events = response.events
+        .map((event) => ({
+          id: event.id,
+          kind: event.kind,
+          occurredMs: event.occurredMs,
+          rawTitle: event.title,
+          title: operationalMessageLabel(event.title),
+          severity: event.severity,
+        }))
+        .sort((left, right) => right.occurredMs - left.occurredMs);
+      setState({ key: applicationId, feed: { status: "ready", events } });
+    }).catch(() => {
+      if (controller.signal.aborted) return;
+      setState({ key: applicationId, feed: { status: "unavailable", events: [] } });
+    });
+    return () => controller.abort();
+  }, [applicationId, revision]);
+
+  if (applicationId === null || state.key !== applicationId) return { status: "loading", events: [] };
   return state.feed;
 }

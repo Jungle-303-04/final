@@ -7,8 +7,10 @@ import type { GitOpsApplicationDetailEndpoint } from "../api/gitops-application-
 import { BLUE, ELEV, HP, MONO, PRESENT_SCALE, RADIUS, SOFT, SPACE, TINT, TYPE, UI, blueA, critA, inkA } from "./theme";
 import { statusLabel } from "./statusLabel";
 import {
+  useApplicationChangeEvents,
   useApplicationDetail,
   useHelmReleaseDetail,
+  type ApplicationChangeEventView,
   type DetailSection,
   type HelmReleaseIdentity,
 } from "./deployDetailFeed";
@@ -306,6 +308,51 @@ function DriftSection({ section }: { section: DetailSection<ApplicationDriftEndp
   );
 }
 
+const EVENT_KIND_KO: Record<ApplicationChangeEventView["kind"], string> = {
+  inventory_event: "인벤토리",
+  incident: "장애",
+  deployment: "배포",
+  gitops_change: "GitOps",
+};
+
+function eventSeverityColor(severity: ApplicationChangeEventView["severity"]): string {
+  if (severity === "critical") return HP.crit;
+  if (severity === "warning") return HP.warn;
+  if (severity === "info") return BLUE;
+  return UI.ink3;
+}
+
+/** 직전 24시간의 앱 스코프 실제 변경 이벤트 — 서버가 반환한 것만 그린다. */
+function ChangeEventsSection({ applicationId }: { applicationId: string }) {
+  const feed = useApplicationChangeEvents(applicationId);
+  const visible = feed.events.slice(0, 20);
+  return (
+    <Section title="변경 이벤트 · 24시간"
+      aside={feed.status === "ready" ? <span style={{ fontSize: TYPE.caption, color: UI.ink3 }}>{feed.events.length}건</span> : undefined}>
+      {feed.status !== "ready" ? (
+        <SectionState status={feed.status} emptyLabel="변경 이벤트를 불러오지 못했습니다." />
+      ) : visible.length === 0 ? (
+        <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>관측된 변경 이벤트 없음</span>
+      ) : (
+        <>
+          {visible.map((event) => (
+            <div key={event.id} style={{ display: "flex", alignItems: "flex-start", gap: 8, minWidth: 0 }}>
+              <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: 999, background: eventSeverityColor(event.severity), flexShrink: 0, marginTop: 5 }} />
+              <span style={{ minWidth: 0, flex: 1 }}>
+                <span title={event.rawTitle} style={{ display: "block", fontSize: TYPE.label, color: UI.ink, lineHeight: 1.45, overflowWrap: "anywhere" }}>{event.title}</span>
+                <span style={{ display: "block", marginTop: 1, fontSize: TYPE.caption, color: UI.ink3 }}>{EVENT_KIND_KO[event.kind]} · {fromNow(new Date(event.occurredMs).toISOString())}</span>
+              </span>
+            </div>
+          ))}
+          {feed.events.length > visible.length && (
+            <span style={{ fontSize: TYPE.caption, color: UI.ink3 }}>최근 20건 표시 · {feed.events.length - visible.length}건 더 있음</span>
+          )}
+        </>
+      )}
+    </Section>
+  );
+}
+
 export function ApplicationDetailPanel({ target, runs, onClose, insets }: {
   target: Extract<DeployDetailTarget, { kind: "application" }>;
   runs: ApplicationRunView[];
@@ -336,6 +383,7 @@ export function ApplicationDetailPanel({ target, runs, onClose, insets }: {
           </>
         )}
       </Section>
+      <ChangeEventsSection applicationId={target.applicationId} />
       <Section title="배포 바인딩" aside={detail.deployments.data && <span style={{ fontSize: TYPE.caption, color: UI.ink3 }}>{detail.deployments.data.length}개</span>}>
         {detail.deployments.data === null || detail.deployments.data.length === 0 ? (
           <SectionState status={detail.deployments.status} emptyLabel="배포 바인딩을 불러오지 못했습니다." />
