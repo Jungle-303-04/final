@@ -1367,8 +1367,12 @@ function App() {
   // 계약이 unavailable/빈이면 "모든 네임스페이스"만 남는다.
   const resourcesListActive = surface === "resources" && resView === "list";
   const resourcesDrillActive = surface === "resources" && resView === "map" && scope.level !== "clusters";
-  const nsFeed = useInventoryNamespaces(resourcesListActive ? clusterIds : []);
+  const namespaceClusterIds = resourcesListActive
+    ? clusterIds
+    : resourcesDrillActive && scope.cluster ? [scope.cluster] : [];
+  const nsFeed = useInventoryNamespaces(namespaceClusterIds);
   const nsOptions = useMemo(() => ["모든 네임스페이스", ...nsFeed.items.map((item) => item.namespace)], [nsFeed.items]);
+  const selectedNamespace = ns === "모든 네임스페이스" ? null : ns;
   const [meOpen, setMeOpen] = useState(false); // 계정 메뉴 (헤더 맨 오른쪽, D20)
   const [detail, setDetail] = useState<{ kind: Kind; row: Row } | null>(null);
   const [rcaIncident, setRcaIncident] = useState<RcaIncident | null>(null); // 이슈 RCA 사이드바 — 셸 레벨 렌더(transform 조상 밖)
@@ -2027,6 +2031,7 @@ function App() {
                 repositoryGroups={repositoryGroups}
                 onRepositoryDisconnected={() => setManifestRefreshKey((key) => key + 1)}
                 embedded onScopeChange={setScope} onOpenResource={openFromMap} onOpenRca={setRcaIncident} lensTab={lensTabFor(kindId)}
+                selectedNamespace={selectedNamespace}
                 onAddCluster={() => setConnectModal("cluster")}
                 onAddRepo={() => setConnectModal("repo")}
                 onOpenRepository={(repositoryRef) => { setDeployRepositoryFilter(repositoryRef); setSurface("deploy"); }}
