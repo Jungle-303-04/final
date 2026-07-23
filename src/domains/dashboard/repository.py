@@ -318,6 +318,10 @@ def latest_rca_issue_report_summaries_statement(
             report.c.payload["rca_detail"]["evidence_summary"].astext,
             "evidence_bundle_summary",
             report.c.payload["rca_detail"]["evidence_bundle_summary"].astext,
+            "supporting_evidence",
+            report.c.supporting_evidence,
+            "missing_evidence",
+            report.c.missing_evidence,
         )
     ).label("rca_issue_report_summary")
     return (
