@@ -129,14 +129,6 @@ resolve_api_base_url() {
 
 API_BASE_URL="$(resolve_api_base_url)"
 
-if is_true "${INSTALL_TELEMETRY}"; then
-  echo "==> installing required target telemetry before cluster-agent registration"
-  TARGET_CONTEXT="${TARGET_CONTEXT}" \
-  bash "${SCRIPT_DIR}/install-telemetry.sh"
-else
-  echo "==> skipping target telemetry installation (INSTALL_TELEMETRY=${INSTALL_TELEMETRY})"
-fi
-
 echo "==> logging in operator for target registration"
 login_with_password "${API_BASE_URL}" "${COOKIE_JAR}"
 
@@ -224,6 +216,16 @@ kubectl --context "${TARGET_CONTEXT}" -n target rollout status deploy/cluster-ag
 if is_true "${INSTALL_NODE_COLLECTOR}"; then
   wait_for_node_collector
   kubectl --context "${TARGET_CONTEXT}" -n target rollout status daemonset/optional-node-collector --timeout=180s
+fi
+
+echo "==> cluster-agent online — registration complete (approval/commands available)"
+
+if is_true "${INSTALL_TELEMETRY}"; then
+  echo "==> installing target telemetry stack after agent is online"
+  TARGET_CONTEXT="${TARGET_CONTEXT}" \
+  bash "${SCRIPT_DIR}/install-telemetry.sh"
+else
+  echo "==> skipping target telemetry installation (INSTALL_TELEMETRY=${INSTALL_TELEMETRY})"
 fi
 
 if is_true "${AUTO_CONNECT_PROMETHEUS}"; then
