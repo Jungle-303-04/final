@@ -1,5 +1,18 @@
 import { useEffect, useState } from "react";
-import { Network, Plug } from "lucide-react";
+import {
+  Box,
+  Braces,
+  CreditCard,
+  Database,
+  Globe2,
+  KeyRound,
+  Layers3,
+  Network,
+  Plug,
+  Search,
+  ShoppingCart,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
 import { listInventoryResourcesByType } from "../api/inventory-query";
 import type { InventoryResource } from "../api/inventory-schemas";
@@ -8,7 +21,7 @@ import type {
   PodHighlightTarget,
 } from "./podHighlight";
 import { podsSelectedByService } from "./podInventoryHighlight";
-import { MONO, TYPE, UI } from "./theme";
+import { BLUE, HP, IDENT, MONO, TINT, TYPE, UI } from "./theme";
 import { statusLabel } from "./statusLabel";
 
 type ServicePanelStatus = "loading" | "ready" | "unavailable";
@@ -76,13 +89,32 @@ function ServiceSkeletonList() {
   );
 }
 
-function serviceStatusLabel(status: ServicePanelStatus, count: number): string {
-  if (status === "ready") return `${count}개`;
-  if (status === "loading") return "불러오는 중";
-  return "관측 안 됨";
+const SERVICE_QUERY_LIMIT = 1000;
+
+interface ServiceIconStyle {
+  Icon: LucideIcon;
+  color: string;
 }
 
-const SERVICE_QUERY_LIMIT = 1000;
+/**
+ * Exact service names are intentionally not hard-coded. Stable, generic name
+ * hints give familiar roles distinct glyphs while unknown services keep the
+ * neutral Kubernetes Service plug.
+ */
+export function serviceIconStyle(name: string): ServiceIconStyle {
+  const normalized = name.toLowerCase();
+  if (/(auth|oauth|identity|login|sso)/.test(normalized)) return { Icon: KeyRound, color: TINT.purple.fg };
+  if (/(redis|cache|memcached)/.test(normalized)) return { Icon: Layers3, color: IDENT.ruby };
+  if (/(gateway|proxy|ingress|router)/.test(normalized)) return { Icon: Network, color: IDENT.indigo };
+  if (/(search|elastic|opensearch)/.test(normalized)) return { Icon: Search, color: IDENT.teal };
+  if (/(payment|billing|card)/.test(normalized)) return { Icon: CreditCard, color: HP.crit };
+  if (/(checkout|cart|order)/.test(normalized)) return { Icon: ShoppingCart, color: HP.warn };
+  if (/(web|frontend|ui)(-|$)/.test(normalized)) return { Icon: Globe2, color: HP.ok };
+  if (/(api|server|backend)/.test(normalized)) return { Icon: Braces, color: BLUE };
+  if (/(worker|consumer|processor)/.test(normalized)) return { Icon: Box, color: IDENT.jade };
+  if (/(db|database|postgres|mysql|mongo)/.test(normalized)) return { Icon: Database, color: TINT.purple.fg };
+  return { Icon: Plug, color: UI.ink3 };
+}
 
 function isAbortError(error: unknown): boolean {
   return typeof error === "object" && error !== null && "name" in error
@@ -170,23 +202,9 @@ export function OpsiaServicePanel({
 }: OpsiaServicePanelProps) {
   const namespaceFilter = selectedNamespace?.trim() || null;
   const serviceView = useOpsiaServices(activeCluster, namespaceFilter);
-  const scopeLabel = activeCluster
-    ? [activeCluster, namespaceFilter ?? "모든 네임스페이스"].join(" · ")
-    : "클러스터 선택 필요";
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8, height: "100%", minHeight: 0 }}>
-      <div style={{ display: "flex", flexDirection: "column", gap: 8, flexShrink: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "2px 2px 4px" }}>
-          <span style={{ fontSize: TYPE.body, fontWeight: 600, color: UI.heading }}>서비스</span>
-          <span style={{ fontSize: TYPE.caption, color: UI.ink3 }}>
-            {serviceStatusLabel(serviceView.status, serviceView.rows.length)}
-          </span>
-        </div>
-        <span style={{ fontSize: TYPE.caption, color: UI.ink3, padding: "0 2px 3px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {scopeLabel}
-        </span>
-      </div>
       <div style={{ flex: 1, minHeight: 0, overflowY: "auto", scrollbarGutter: "stable", overscrollBehavior: "contain", paddingRight: 8 }}>
         {!activeCluster ? (
           <PanelEmptyState label="클러스터를 선택하세요" hint="서비스 목록은 클러스터 범위에서 표시됩니다." />
@@ -203,6 +221,7 @@ export function OpsiaServicePanel({
           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
           {serviceView.rows.map((service) => {
             const name = textValue(service.name, "이름 없음");
+            const { Icon, color } = serviceIconStyle(name);
             const namespace = textValue(service.ns, "클러스터 범위");
             const relationNamespace = typeof service.ns === "string" ? service.ns : "";
             const status = textValue(service.status);
@@ -228,7 +247,7 @@ export function OpsiaServicePanel({
                 onFocus={() => onHighlightTarget?.(highlightTarget)}
                 onBlur={() => onHighlightTarget?.(null)}
                 style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", minHeight: 48, textAlign: "left", border: "1px solid transparent", background: "transparent", borderRadius: 9, padding: "7px 9px" }}>
-                <Plug size={14} style={{ color: UI.ink3, flexShrink: 0 }} />
+                <Icon size={15} style={{ color, flexShrink: 0 }} />
                 <span style={{ minWidth: 0, flex: 1 }}>
                   <span data-pod-highlight-primary title={name} style={{ display: "block", fontSize: TYPE.label, fontWeight: 600, fontFamily: MONO, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
                   <span style={{ display: "block", fontSize: TYPE.caption, color: UI.ink3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{namespace} · {statusLabel(status)}</span>

@@ -11,7 +11,7 @@ import type {
 import type { InventoryResource } from "../api/inventory-schemas";
 import type { PodHighlightTarget } from "./podHighlight";
 import { podsOwnedByWorkloads } from "./podInventoryHighlight";
-import { HP, MONO, TYPE, UI } from "./theme";
+import { HP, MONO, TINT, TYPE, UI } from "./theme";
 
 type ConfigPanelStatus = "loading" | "ready" | "unavailable";
 
@@ -47,17 +47,6 @@ const COVERAGE_REASON_LABELS: Record<string, string> = {
 function isAbortError(error: unknown): boolean {
   return typeof error === "object" && error !== null && "name" in error
     && (error as { name?: unknown }).name === "AbortError";
-}
-
-function configStatusLabel(
-  status: ConfigPanelStatus,
-  count: number,
-  coverage: ConfigReferenceCoverage | null,
-): string {
-  if (status === "loading") return "불러오는 중";
-  if (status === "unavailable" || coverage?.availability === "unavailable") return "관측 불가";
-  if (coverage?.availability === "partial") return `${count}개 · 일부`;
-  return `${count}개`;
 }
 
 function useOpsiaConfigReferences(
@@ -199,6 +188,7 @@ function ConfigReferenceRow({
   onHighlightTarget?: (target: PodHighlightTarget | null) => void;
 }) {
   const Icon = item.kind === "Secret" ? KeyRound : FileCog;
+  const iconColor = item.kind === "Secret" ? TINT.purple.fg : TINT.blue.fg;
   const workloadCount = referencedWorkloadCount(item);
   const workloads = [...new Map(
     item.referenced_by.map((usage) => [
@@ -234,7 +224,7 @@ function ConfigReferenceRow({
       onBlur={() => onHighlightTarget?.(null)}
       style={{ display: "flex", flexDirection: "column", gap: 6, width: "100%", minHeight: 54, textAlign: "left", border: "1px solid transparent", background: "transparent", borderRadius: 9, padding: "7px 9px" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-        <Icon size={14} style={{ color: UI.ink3, flexShrink: 0 }} />
+        <Icon size={15} style={{ color: iconColor, flexShrink: 0 }} />
         <span style={{ minWidth: 0, flex: 1 }}>
           <span data-pod-highlight-primary title={item.name} style={{ display: "block", fontSize: TYPE.label, fontWeight: 700, fontFamily: MONO, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.name}</span>
           <span style={{ display: "block", fontSize: TYPE.caption, color: UI.ink3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.namespace} · Deployment {workloadCount}개 참조</span>
@@ -271,23 +261,9 @@ export function OpsiaConfigPanel({
   const items = configView.data?.items ?? [];
   const coverage = configView.data?.coverage ?? null;
   const coverageUnavailable = coverage?.availability === "unavailable";
-  const scopeLabel = activeCluster
-    ? [activeCluster, namespaceFilter ?? "모든 네임스페이스"].join(" · ")
-    : "클러스터 선택 필요";
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8, height: "100%", minHeight: 0 }}>
-      <div style={{ display: "flex", flexDirection: "column", gap: 8, flexShrink: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "2px 2px 4px" }}>
-          <span style={{ fontSize: TYPE.body, fontWeight: 700, color: UI.ink }}>구성</span>
-          <span style={{ fontSize: TYPE.caption, color: UI.ink3 }}>
-            {configStatusLabel(configView.status, items.length, coverage)}
-          </span>
-        </div>
-        <span style={{ fontSize: TYPE.caption, color: UI.ink3, padding: "0 2px 3px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {scopeLabel}
-        </span>
-      </div>
       <div style={{ flex: 1, minHeight: 0, overflowY: "auto", scrollbarGutter: "stable", overscrollBehavior: "contain", paddingRight: 8 }}>
         {!activeCluster ? (
           <PanelEmptyState label="클러스터를 선택하세요" hint="구성 참조는 클러스터 범위에서 표시됩니다." />

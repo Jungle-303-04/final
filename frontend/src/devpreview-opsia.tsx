@@ -1435,13 +1435,12 @@ function SidePanel({ forcedTab, scaled, onAddRepo, onOpenRepository, stickyTop, 
   return (
     <aside className="opsia-side-panel" style={{ width: 270, flexShrink: 0, alignSelf: "flex-start", background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 16, position: "static", top: stickyTop ?? 24, height: scaled ? `calc(100vh / ${PRESENT_SCALE} - ${(stickyTop ?? 24) + 16}px)` : "calc(100vh - 60px)", maxHeight: scaled ? `calc(100vh / ${PRESENT_SCALE} - ${(stickyTop ?? 24) + 16}px)` : "calc(100vh - 60px)", overflow: "hidden", display: "flex" }}>
     <div style={{ flex: 1, minWidth: 0, minHeight: 0, padding: "14px 6px 14px 14px", display: "flex", flexDirection: "column", gap: 12, overflow: "hidden" }}>
-      {/* 서비스/구성/저장소 탭과 각 패널의 제목·범위는 고정하고,
-          실제 결과 목록만 패널 내부에서 스크롤한다. */}
-      <div style={{ display: "flex", gap: 3, flexShrink: 0, background: UI.bg2, borderRadius: 10, padding: 3, zIndex: 2, boxShadow: `0 6px 12px -12px ${inkA(0.3)}` }}>
+      {/* 탭이 이미 콘텐츠 종류를 설명하므로 내부에 제목을 반복하지 않는다. */}
+      <div role="tablist" aria-label="인프라 보조 정보" style={{ display: "flex", gap: 3, flexShrink: 0, background: UI.bg2, borderRadius: 10, padding: 3, zIndex: 2, boxShadow: `0 6px 12px -12px ${inkA(0.3)}` }}>
         {([["svc", "서비스", Plug], ["cfg", "구성", FileCog], ["git", "저장소", GithubIcon]] as const).map(([id, label, I]) => {
           const on = tab === id;
           return (
-            <button key={id} onClick={() => { onHighlightTarget?.(null); setTab(id); }} style={{ position: "relative", flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, padding: "6px 0", borderRadius: 8, border: "none", background: "transparent", cursor: "pointer", fontSize: TYPE.label, fontWeight: 600, color: on ? UI.ink : UI.ink3 }}>
+            <button type="button" role="tab" aria-selected={on} key={id} onClick={() => { onHighlightTarget?.(null); setTab(id); }} style={{ position: "relative", flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, padding: "6px 0", borderRadius: 8, border: "none", background: "transparent", cursor: "pointer", fontSize: TYPE.label, fontWeight: 600, color: on ? UI.ink : UI.ink3 }}>
               {on && <motion.span layoutId="ptab" transition={SOFT} style={{ position: "absolute", inset: 0, borderRadius: 8, background: UI.card, boxShadow: `0 1px 3px ${inkA(0.12)}` }} />}
               <span style={{ position: "relative", display: "flex", alignItems: "center", gap: 5 }}><I size={12} />{label}</span>
             </button>

@@ -2765,6 +2765,26 @@ def workload_summary(
         "completion_time": workload_status.get("completionTime"),
         "scheduled_run_kinds": ["Job"] if kind == "CronJob" else [],
     }
+    if kind == "DaemonSet":
+        summary.update(
+            {
+                "desired_replicas": workload_status.get("desiredNumberScheduled"),
+                "ready_replicas": workload_status.get("numberReady", 0),
+                "available_replicas": workload_status.get("numberAvailable", 0),
+                "updated_replicas": workload_status.get("updatedNumberScheduled", 0),
+                "unavailable_replicas": workload_status.get("numberUnavailable", 0),
+            }
+        )
+    if kind == "CronJob":
+        workload_spec = spec(item)
+        summary.update(
+            {
+                "schedule": workload_spec.get("schedule"),
+                "timezone": workload_spec.get("timeZone"),
+                "suspend": workload_spec.get("suspend", False),
+                "last_schedule_time": workload_status.get("lastScheduleTime"),
+            }
+        )
     if kind in {K8S_KIND_DEPLOYMENT, "StatefulSet", "DaemonSet"}:
         owned = owned_workload_revisions(item, kind, revisions or [])
         summary.update(
