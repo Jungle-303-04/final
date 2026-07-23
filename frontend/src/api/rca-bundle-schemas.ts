@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { recoveryActionCandidateSchema } from "./recovery-schemas";
+
 const nullableStringSchema = z.string().nullable();
 const optionalNullableStringSchema = nullableStringSchema.optional();
 
@@ -41,21 +43,8 @@ export const remediationBundleActionDraftSchema = z.strictObject({
   params: z.record(z.string(), z.unknown()),
 });
 
-export const remediationBundleRecoveryCandidateSchema = z.strictObject({
-  action_id: z.string(),
-  title: z.string(),
-  description: z.string(),
+export const remediationBundleRecoveryCandidateSchema = recoveryActionCandidateSchema.extend({
   draft: remediationBundleActionDraftSchema,
-  route: z.string(),
-  rank: z.number().int(),
-  score: z.number(),
-  risk_level: z.string(),
-  blast_radius: z.string(),
-  approval_required: z.boolean(),
-  prerequisites: z.array(z.string()),
-  validation_checks: z.array(z.string()),
-  rollback_plan: z.string(),
-  evidence_refs: z.array(z.string()),
 });
 
 export const remediationBundleRemediationSchema = z.strictObject({

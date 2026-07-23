@@ -559,8 +559,8 @@ def timeline_item(row: JsonObject) -> RcaTimelineItem:
 def issue_item(row: JsonObject) -> RcaIssueItem:
     data = {key: row.get(key) for key in RcaIssueItem.model_fields}
     _apply_rca_report_summary(data, row)
-    data["supporting_evidence"] = row.get("supporting_evidence") or []
-    data["missing_evidence"] = row.get("missing_evidence") or []
+    data["supporting_evidence"] = data.get("supporting_evidence") or []
+    data["missing_evidence"] = data.get("missing_evidence") or []
     return RcaIssueItem(**data)
 
 
@@ -584,6 +584,10 @@ def _apply_rca_report_summary(data: JsonObject, row: JsonObject) -> None:
         report.get("evidence_bundle_summary"),
         data.get("evidence_bundle_summary"),
     )
+    for field in ("supporting_evidence", "missing_evidence"):
+        completed_report_evidence = _string_list_or_none(report.get(field))
+        if completed_report_evidence is not None:
+            data[field] = completed_report_evidence
 
 
 def _nonempty_text(*values: object) -> str | None:
@@ -597,19 +601,25 @@ def _nonempty_text(*values: object) -> str | None:
     )
 
 
+def _string_list_or_none(value: object) -> list[str] | None:
+    if not isinstance(value, list):
+        return None
+    return [item for item in value if isinstance(item, str) and item]
+
+
 def queue_issue_item(row: JsonObject) -> RcaIssueQueueItem:
     data = {key: row.get(key) for key in RcaIssueQueueItem.model_fields}
     _apply_rca_report_summary(data, row)
-    data["supporting_evidence"] = row.get("supporting_evidence") or []
-    data["missing_evidence"] = row.get("missing_evidence") or []
+    data["supporting_evidence"] = data.get("supporting_evidence") or []
+    data["missing_evidence"] = data.get("missing_evidence") or []
     return RcaIssueQueueItem(**data)
 
 
 def resource_issue_item(row: JsonObject) -> ResourceIssueItem:
     data = {key: row.get(key) for key in ResourceIssueItem.model_fields}
     _apply_rca_report_summary(data, row)
-    data["supporting_evidence"] = row.get("supporting_evidence") or []
-    data["missing_evidence"] = row.get("missing_evidence") or []
+    data["supporting_evidence"] = data.get("supporting_evidence") or []
+    data["missing_evidence"] = data.get("missing_evidence") or []
     return ResourceIssueItem(**data)
 
 
