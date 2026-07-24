@@ -55,6 +55,9 @@ APP_TIMEOUT_TEXT_PATTERNS = (
     "timeout",
 )
 MAX_LOG_SIGNAL_AGE = timedelta(minutes=5)
+# 플랫폼 제어 컴포넌트의 재시작·폴링 오류는 애플리케이션 장애가 아니다.
+# 해당 로그는 운영 관측에는 보존하되 app-runtime incident 판별에서 제외한다.
+CONTROL_PLANE_LOG_NAMESPACES = frozenset({"management", "target"})
 
 
 @dataclass(frozen=True)
@@ -178,6 +181,8 @@ def derive_log_incident_signal(
     collected_at: datetime | None = None,
 ) -> LogIncidentSignal | None:
     for sample in iter_log_samples(logs, collected_at=collected_at):
+        if str(sample.get("namespace") or "").strip() in CONTROL_PLANE_LOG_NAMESPACES:
+            continue
         parsed = parse_json_line(sample["line"])
         if has_5xx_status(parsed, sample["line"]):
             signal = APPLICATION_5XX_SIGNAL
