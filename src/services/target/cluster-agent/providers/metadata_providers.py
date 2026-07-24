@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from urllib.parse import quote
@@ -381,6 +382,10 @@ class MetadataProvider:
 
     def build_response(self, results: JsonObject) -> JsonObject:
         """Return the finished metadata evidence bucket."""
+        change_context = object_or_empty(results.get(CHANGE_CONTEXT_KEY))
+        results[CHANGE_CONTEXT_KEY] = (
+            limit_change_context(change_context) if change_context else empty_change_context()
+        )
         return results
 
     def normalize_payload(
@@ -531,9 +536,8 @@ def specific_workload_change_context(
 
 def merge_change_context(target: JsonObject, source: JsonObject) -> None:
     """Merge one normalized change context into another."""
-    snapshots = source.get(CURRENT_WORKLOAD_SNAPSHOTS_KEY)
-    if isinstance(snapshots, list):
-        target[CURRENT_WORKLOAD_SNAPSHOTS_KEY] = snapshots
+    for key in CHANGE_CONTEXT_LIST_LIMITS:
+        merge_unique_context_list(target, source, key)
 
     snapshot = source.get(CURRENT_WORKLOAD_SNAPSHOT_KEY)
     if isinstance(snapshot, dict) and snapshot:
@@ -541,25 +545,55 @@ def merge_change_context(target: JsonObject, source: JsonObject) -> None:
             target.pop(CURRENT_WORKLOAD_SNAPSHOTS_KEY, None)
         target[CURRENT_WORKLOAD_SNAPSHOT_KEY] = snapshot
 
-    service_matches = source.get(SERVICE_SELECTOR_MATCHES_KEY)
-    if isinstance(service_matches, list):
-        target[SERVICE_SELECTOR_MATCHES_KEY] = service_matches
-
-    endpoint_slices = source.get(ENDPOINT_SLICE_READY_ENDPOINTS_KEY)
-    if isinstance(endpoint_slices, list):
-        target[ENDPOINT_SLICE_READY_ENDPOINTS_KEY] = endpoint_slices
-
-    referenced_config_objects = source.get(REFERENCED_CONFIG_OBJECTS_KEY)
-    if isinstance(referenced_config_objects, list):
-        target[REFERENCED_CONFIG_OBJECTS_KEY] = referenced_config_objects
-
-    resource_quotas = source.get(RESOURCE_QUOTAS_KEY)
-    if isinstance(resource_quotas, list):
-        target[RESOURCE_QUOTAS_KEY] = resource_quotas
-
     collection_limits = source.get(COLLECTION_LIMITS_KEY)
     if isinstance(collection_limits, dict) and collection_limits:
         target[COLLECTION_LIMITS_KEY] = collection_limits
+
+
+def merge_unique_context_list(target: JsonObject, source: JsonObject, key: str) -> None:
+    """Append one metadata list while retaining order and resource uniqueness."""
+
+    incoming = source.get(key)
+    if not isinstance(incoming, list):
+        return
+    existing = target.get(key)
+    merged = (
+        [item for item in existing if isinstance(item, dict)]
+        if isinstance(existing, list)
+        else []
+    )
+    seen = {change_context_item_identity(key, item) for item in merged}
+    for item in incoming:
+        if not isinstance(item, dict):
+            continue
+        identity = change_context_item_identity(key, item)
+        if identity in seen:
+            continue
+        seen.add(identity)
+        merged.append(item)
+    target[key] = merged
+
+
+def change_context_item_identity(key: str, item: JsonObject) -> tuple[str, ...]:
+    """Return a stable resource identity for one normalized metadata list item."""
+
+    nested_key = {
+        CURRENT_WORKLOAD_SNAPSHOTS_KEY: "workload",
+        SERVICE_SELECTOR_MATCHES_KEY: "service",
+        ENDPOINT_SLICE_READY_ENDPOINTS_KEY: "endpoint_slice",
+    }.get(key)
+    identity = object_or_empty(item.get(nested_key)) if nested_key else item
+    namespace = str(identity.get("namespace") or "")
+    name = str(identity.get("name") or "")
+    if namespace and name:
+        return (
+            key,
+            str(identity.get("kind") or ""),
+            namespace,
+            name,
+            str(identity.get("uid") or ""),
+        )
+    return (key, json.dumps(item, sort_keys=True, separators=(",", ":"), default=str))
 
 
 def empty_change_context() -> JsonObject:

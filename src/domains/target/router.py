@@ -735,7 +735,8 @@ def guarded_kubectl_apply_command(
         (
             'telemetry_script="$(mktemp "${TMPDIR:-/tmp}/kyro-telemetry.XXXXXX")"; '
             "trap 'rm -f \"$telemetry_script\"' EXIT; "
-            f'curl -fsSL {shell_quote(telemetry_script_url)} -o "$telemetry_script"; '
+            f'curl -fsSL {shell_quote(telemetry_script_url)} '
+            '-o "$telemetry_script" || exit 1; '
             f"{target_context}"
             f'TARGET_CONTEXT="$target_context" TARGET_NAMESPACE={shell_quote(namespace)} '
             f"TARGET_CLUSTER_ID={shell_quote(expected_cluster_id)} "
@@ -743,7 +744,7 @@ def guarded_kubectl_apply_command(
             f"MANAGEMENT_API_BASE_URL={shell_quote(management_api_base_url)} "
             f"ALERTMANAGER_AGENT_TOKEN={shell_quote(telemetry_agent_token)} "
             f"TELEMETRY_ASSET_BASE_URL={shell_quote(telemetry_asset_base_url)} "
-            'bash "$telemetry_script"; '
+            'bash "$telemetry_script" || exit 1; '
         )
         if (
             telemetry_script_url

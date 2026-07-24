@@ -640,7 +640,7 @@ const now = () => new Date().toISOString();
 const noop = () => {};
 export type RecoveryReviewState = "idle" | "reviewing" | "ready" | "executing" | "executed" | "error";
 
-export function AiPanel({ onClose, onCancelRecovery, onRecoveryReviewStateChange, embedded = false, contextView = "resources", contextScope = "game-server", full = false, onToggleFull, recoveryRequest = null }: {
+export function AiPanel({ onClose, onCancelRecovery, onRecoveryReviewStateChange, embedded = false, contextView = "resources", contextScope = "", contextScopeLabel, full = false, onToggleFull, recoveryRequest = null }: {
   /** 셸 임베드: 닫기 버튼 동작 */
   onClose?: () => void;
   /** 제출 전 복구 AI 검토를 명시적으로 중단한다. 패널 숨기기와 구분한다. */
@@ -651,7 +651,10 @@ export function AiPanel({ onClose, onCancelRecovery, onRecoveryReviewStateChange
   embedded?: boolean;
   /** 현재 화면 맥락 칩 — 셸이 실제 화면·범위를 알려준다 */
   contextView?: string;
+  /** API에 전달할 실제 cluster id. 전체 범위는 빈 문자열이다. */
   contextScope?: string;
+  /** 맥락 칩의 표시 문자열. cluster id와 분리해 sentinel 전송을 막는다. */
+  contextScopeLabel?: string;
   /** 셸 임베드: 전체 화면 상태와 토글 (미전달 시 버튼 미노출) */
   full?: boolean;
   onToggleFull?: () => void;
@@ -938,7 +941,7 @@ export function AiPanel({ onClose, onCancelRecovery, onRecoveryReviewStateChange
       <div className="flex items-center gap-1.5 border-b border-black/[0.04] bg-white/30 px-3.5 py-2 text-black backdrop-blur">
         <span className="text-caption font-medium text-black">맥락</span>
         <span className="inline-flex items-center gap-1 rounded-full bg-black/[0.05] px-2 py-0.5 text-caption font-medium text-black"><Boxes className="size-3" />{contextView}</span>
-        <span className="inline-flex items-center gap-1 rounded-full bg-black/[0.05] px-2 py-0.5 text-caption font-medium text-black"><Server className="size-3" />{contextScope}</span>
+        <span className="inline-flex items-center gap-1 rounded-full bg-black/[0.05] px-2 py-0.5 text-caption font-medium text-black"><Server className="size-3" />{contextScopeLabel ?? (contextScope || "전체 클러스터")}</span>
       </div>
       {listOpen ? (
         <div className="max-h-64 shrink-0 overflow-y-auto border-b border-black/[0.06] bg-white/90 shadow-sm backdrop-blur-xl" style={{ animation: `fadeUp 0.2s ${SPRING}` }}>

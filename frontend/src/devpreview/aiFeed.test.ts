@@ -1,6 +1,17 @@
 import { describe, expect, it } from "vitest";
 
-import { isAiProviderFailureTurn, toAssistantTurn } from "./aiFeed";
+import { buildAiContext, isAiProviderFailureTurn, toAssistantTurn } from "./aiFeed";
+
+describe("AI context identity", () => {
+  it("uses an empty cluster filter for the all-clusters scope", () => {
+    expect(buildAiContext("이슈", "").filters.clusters).toEqual([]);
+  });
+
+  it("sends a selected cluster id unchanged", () => {
+    expect(buildAiContext("이슈", "battlegrounds-8352").filters.clusters)
+      .toEqual(["battlegrounds-8352"]);
+  });
+});
 
 describe("AI provider failure messages", () => {
   it("localizes a rate-limit fallback and does not treat it as a completed review", () => {
