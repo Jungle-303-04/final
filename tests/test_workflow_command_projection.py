@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 from conftest import load_service, run_handler
 
 from domains.command.events import (
@@ -10,9 +12,11 @@ from domains.command.events import (
 from domains.gitops.events import (
     ApprovalGrantedBody,
     ApprovalRequestedBody,
+    DesiredDesiredDiffDetectedBody,
     Diff,
     DiffAnalyzedBody,
 )
+from domains.scm.events import SafePrRequestedBody
 from domains.timeline.repository import TimelineLedgerAppend
 from packages.config.constants import RiskLevel
 from packages.contracts.gitops import WorkflowMutation
@@ -105,6 +109,154 @@ class DiffApprovalDb(MultiApprovalWorkflowDb):
         return WorkflowMutation(applied=True)
 
 
+class MergedRecoveryApprovalDb(DiffApprovalDb):
+    def __init__(self, *, tampered_commit: bool = False) -> None:
+        super().__init__()
+        self.tampered_commit = tampered_commit
+        self.resolved: list[tuple[object, ...]] = []
+        self.requested: list[dict[str, object]] = []
+
+    async def request_workflow_approval(
+        self,
+        payload: dict[str, object],
+    ) -> dict[str, object]:
+        self.requested.append(payload)
+        return payload
+
+    async def resolve_workflow_approval_if_open(
+        self,
+        approval_id: str,
+        workspace_id: str,
+        status: str,
+        decided_by: str,
+        decision: str,
+        details: dict[str, object],
+    ) -> bool:
+        self.resolved.append(
+            (
+                approval_id,
+                workspace_id,
+                status,
+                decided_by,
+                decision,
+                details,
+            )
+        )
+        return True
+
+    async def get_recovery_plan_for_workflow(
+        self,
+        workspace_id: str,
+        workflow_run_id: str,
+        binding_id: str,
+        application_id: str,
+    ) -> dict[str, object]:
+        assert (
+            workspace_id,
+            workflow_run_id,
+            binding_id,
+            application_id,
+        ) == ("workspace-a", "workflow-a", "binding-a", "application-a")
+        commit_sha = "tampered-merge" if self.tampered_commit else "merge-a"
+        return {
+            "plan_id": "plan-a",
+            "workspace_id": "workspace-a",
+            "correlation_id": "correlation-a",
+            "status": "deploy_pending",
+            "selected_action_id": "action-a",
+            "payload": {
+                "execution_route": "safe_pr",
+                "target": {
+                    "cluster_id": "cluster-a",
+                    "namespace": "sandbox",
+                    "resource_kind": "Deployment",
+                    "resource_name": "api-server",
+                },
+                "lifecycle": {
+                    "phase": "deploy_pending",
+                    "pr": {
+                        "url": "https://github.com/acme/game/pull/18",
+                        "head_sha": "head-a",
+                        "repository_id": "repository-a",
+                        "repo_ref": "acme/game",
+                        "base_branch": "main",
+                        "binding_id": "binding-a",
+                        "application_id": "application-a",
+                        "environment": "production",
+                        "cluster_id": "cluster-a",
+                        "manifest_path": "deploy/k8s",
+                    },
+                    "merge": {
+                        "pr_url": "https://github.com/acme/game/pull/18",
+                        "head_sha": "head-a",
+                        "merge_commit_sha": commit_sha,
+                        "workflow_run_id": "workflow-a",
+                        "repository_id": "repository-a",
+                        "binding_id": "binding-a",
+                        "application_id": "application-a",
+                        "cluster_id": "cluster-a",
+                        "deployment_request": {
+                            "commit_sha": "merge-a",
+                            "image": "demo/game:v2",
+                            "replicas": 2,
+                            "correlation_id": "correlation-a",
+                            "workspace_id": "workspace-a",
+                            "repository_id": "repository-a",
+                            "repo_ref": "acme/game",
+                            "branch": "main",
+                            "watch_target_id": "watch-a",
+                            "binding_id": "binding-a",
+                            "application_id": "application-a",
+                            "workflow_run_id": "workflow-a",
+                            "environment": "production",
+                            "cluster_id": "cluster-a",
+                            "manifest_path": "deploy/k8s",
+                            "source_type": "kustomize",
+                            "force": True,
+                        },
+                    },
+                    "verification": {
+                        "target": {
+                            "cluster_id": "cluster-a",
+                            "namespace": "sandbox",
+                            "resource_kind": "Deployment",
+                            "resource_name": "api-server",
+                        },
+                        "expected": {"replicas": 2},
+                    },
+                    "authorization": {
+                        "target": {
+                            "cluster_id": "cluster-a",
+                            "namespace": "sandbox",
+                            "resource_kind": "Deployment",
+                            "resource_name": "api-server",
+                        },
+                        "changes": [
+                            {
+                                "field_path": "spec.replicas",
+                                "current_value": 1,
+                                "desired_value": 2,
+                            }
+                        ],
+                    },
+                },
+            },
+        }
+
+    async def get_workflow_run(self, workflow_run_id: str) -> dict[str, object]:
+        assert workflow_run_id == "workflow-a"
+        return {
+            "workflow_run_id": "workflow-a",
+            "workspace_id": "workspace-a",
+            "application_id": "application-a",
+            "binding_id": "binding-a",
+            "environment": "production",
+            "cluster_id": "cluster-a",
+            "commit_sha": "merge-a",
+            "status": "waiting_for_approval",
+        }
+
+
 def analyzed_diff(resource: str, artifact: str) -> DiffAnalyzedBody:
     return DiffAnalyzedBody(
         diff=Diff(
@@ -128,7 +280,21 @@ def analyzed_diff(resource: str, artifact: str) -> DiffAnalyzedBody:
                     "name": resource.split("/", 1)[1],
                     "namespace": "sandbox",
                 },
+                "spec": {"replicas": 2},
             },
+            status="intended_change",
+            has_changes=True,
+            changes=[
+                {
+                    "field_path": "spec.replicas",
+                    "classification": "intended_change",
+                    "old_desired": 1,
+                    "live": 1,
+                    "new_desired": 2,
+                    "before": 1,
+                    "after": 2,
+                }
+            ],
             basis={"artifact_digest": artifact},
         ),
         safe=False,
@@ -198,6 +364,146 @@ def test_diff_analysis_creates_resource_scoped_approvals_and_commands() -> None:
         approvals[0].approval_id,
         approvals[1].approval_id,
     ]
+
+
+def test_exact_merged_recovery_pr_reuses_human_approval_and_dispatches_command() -> None:
+    service = load_service("gitops/workflow-controller")
+    db = MergedRecoveryApprovalDb()
+
+    emitted = run_handler(
+        service.on_diff_analyzed,
+        analyzed_diff("Deployment/api-server", "sha256:" + "a" * 64),
+        db,
+    )
+
+    assert not any(isinstance(body, ApprovalRequestedBody) for body in emitted)
+    commands = [body for body in emitted if isinstance(body, CommandRequestedBody)]
+    assert len(commands) == 1
+    assert commands[0].workflow_run_id == "workflow-a"
+    assert commands[0].binding_id == "binding-a"
+    assert commands[0].cluster_id == "cluster-a"
+    assert commands[0].requested_by == "recovery-pr-merge"
+    assert db.resolved[0][2:5] == (
+        "granted",
+        "recovery-pr-merge",
+        "approved-by-merged-recovery-pr",
+    )
+
+
+def test_converged_merged_recovery_dispatches_one_idempotent_command() -> None:
+    service = load_service("gitops/workflow-controller")
+    db = MergedRecoveryApprovalDb()
+    analyzed = analyzed_diff("Deployment/api-server", "sha256:" + "a" * 64)
+    converged = replace(
+        analyzed,
+        diff=replace(
+            analyzed.diff,
+            status="already_converged",
+            has_changes=False,
+            changes=[
+                {
+                    "field_path": "spec.replicas",
+                    "classification": "already_converged",
+                    "old_desired": 1,
+                    "live": 2,
+                    "new_desired": 2,
+                    "before": 2,
+                    "after": 2,
+                }
+            ],
+        ),
+    )
+
+    emitted = run_handler(service.on_diff_analyzed, converged, db)
+
+    assert not any(isinstance(body, ApprovalRequestedBody) for body in emitted)
+    commands = [body for body in emitted if isinstance(body, CommandRequestedBody)]
+    assert len(commands) == 1
+    assert commands[0].requested_by == "recovery-pr-merge"
+
+
+def test_no_change_merged_recovery_creates_no_second_pr_and_dispatches_once() -> None:
+    analyzer = load_service("gitops/diff-analyze-worker")
+    controller = load_service("gitops/workflow-controller")
+    db = MergedRecoveryApprovalDb()
+    analyzed = analyzed_diff("Deployment/api-server", "sha256:" + "a" * 64)
+    no_change = replace(
+        analyzed.diff,
+        status="no_change",
+        has_changes=False,
+        changes=[],
+    )
+
+    policy_events = run_handler(
+        analyzer.on_desired_diff,
+        DesiredDesiredDiffDetectedBody(diff=no_change),
+        db,
+    )
+    projected = run_handler(controller.on_diff_analyzed, policy_events[0], db)
+
+    assert not any(isinstance(body, SafePrRequestedBody) for body in policy_events)
+    assert not any(isinstance(body, ApprovalRequestedBody) for body in projected)
+    commands = [body for body in projected if isinstance(body, CommandRequestedBody)]
+    assert len(commands) == 1
+    assert commands[0].requested_by == "recovery-pr-merge"
+
+
+def test_exact_merged_recovery_does_not_create_a_second_safe_pr() -> None:
+    analyzer = load_service("gitops/diff-analyze-worker")
+    db = MergedRecoveryApprovalDb()
+    diff = replace(
+        analyzed_diff("Deployment/api-server", "sha256:" + "a" * 64).diff,
+        risk=RiskLevel.SANDBOX_ONLY,
+    )
+
+    emitted = run_handler(
+        analyzer.on_desired_diff,
+        DesiredDesiredDiffDetectedBody(diff=diff),
+        db,
+    )
+
+    assert not any(isinstance(body, SafePrRequestedBody) for body in emitted)
+    assert db.requested[0]["status"] == "requested"
+    details = db.requested[0]["details"]
+    assert isinstance(details, dict)
+    assert details["policy_route"] == "recovery_pr_merged"
+
+
+def test_out_of_scope_resource_in_recovery_run_creates_no_pr_or_approval() -> None:
+    analyzer = load_service("gitops/diff-analyze-worker")
+    controller = load_service("gitops/workflow-controller")
+    db = MergedRecoveryApprovalDb()
+    diff = analyzed_diff("RoleBinding/api-server", "sha256:" + "b" * 64)
+
+    analyzed = run_handler(
+        analyzer.on_desired_diff,
+        DesiredDesiredDiffDetectedBody(diff=diff.diff),
+        db,
+    )
+    projected = run_handler(
+        controller.on_diff_analyzed,
+        analyzed[0],
+        db,
+    )
+
+    assert not any(isinstance(body, SafePrRequestedBody) for body in analyzed)
+    assert not any(isinstance(body, ApprovalRequestedBody) for body in projected)
+    assert not any(isinstance(body, CommandRequestedBody) for body in projected)
+    assert db.requested == []
+
+
+def test_tampered_merged_recovery_identity_fails_closed_without_second_approval() -> None:
+    service = load_service("gitops/workflow-controller")
+    db = MergedRecoveryApprovalDb(tampered_commit=True)
+
+    emitted = run_handler(
+        service.on_diff_analyzed,
+        analyzed_diff("Deployment/api-server", "sha256:" + "a" * 64),
+        db,
+    )
+
+    assert not any(isinstance(body, ApprovalRequestedBody) for body in emitted)
+    assert not any(isinstance(body, CommandRequestedBody) for body in emitted)
 
 
 def approval_granted(approval_id: str, resource: str) -> ApprovalGrantedBody:

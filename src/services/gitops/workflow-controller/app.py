@@ -21,6 +21,7 @@ from domains.gitops.events import (
     ApprovalRejectedBody,
     ApprovalRequestedBody,
     DesiredDesiredDiffDetectedBody,
+    Diff,
     DiffAnalyzedBody,
     GitChangedBody,
     GitWebhookReceivedBody,
@@ -32,6 +33,7 @@ from domains.gitops.events import (
     WorkflowRunStartedBody,
     WorkflowStepRecordedBody,
 )
+from domains.gitops.recovery_merge import recovery_merge_authorization
 from domains.gitops.repository import (
     derive_application_id,
     derive_approval_id,
@@ -49,7 +51,7 @@ from domains.scm.events import SafePrCreatedBody, SafePrFailedBody
 from domains.target.events import ClusterDesiredStateChangedBody
 from domains.target.management_guard import is_management_registration
 from domains.timeline.repository import TimelineLedgerAppend
-from packages.config.constants import CommandStatus, Sandbox, Target
+from packages.config.constants import Command, CommandStatus, Sandbox, Target
 from packages.config.logs import get_logger
 from packages.contracts.event_bus.bodies import EventBody
 from packages.contracts.event_bus.interfaces import JsonObject
@@ -74,6 +76,8 @@ LOGGER = get_logger(__name__)
 MANUAL_APPROVAL_ROLE = ResourceRole.RELEASE_OPERATOR.value
 POLICY_DECISION_REF_PREFIX = "policy-decision"
 POLICY_ROUTE_SAFE_PR = "safe_pr"
+POLICY_ROUTE_RECOVERY_PR_MERGED = "recovery_pr_merged"
+RECOVERY_PR_MERGE_APPROVER = "recovery-pr-merge"
 
 
 def normalize_payload(payload: JsonObject) -> JsonObject:
@@ -460,6 +464,29 @@ def policy_decision_ref(approval_id: str, route: str) -> str:
     return f"{POLICY_DECISION_REF_PREFIX}:{approval_id}:{route}"
 
 
+def merged_recovery_command(
+    diff: Diff,
+    *,
+    approval_ref: str,
+    decision_ref: str,
+) -> CommandRequestedBody:
+    return CommandRequestedBody(
+        cluster_id=diff.cluster_id,
+        action=Command.APPLY_MANIFEST_ACTION,
+        namespace=diff.namespace,
+        reason="operator-reviewed recovery PR merged",
+        diff=diff,
+        workspace_id=diff.workspace_id,
+        application_id=diff.application_id,
+        workflow_run_id=diff.workflow_run_id,
+        binding_id=diff.binding_id,
+        environment=diff.environment,
+        requested_by=RECOVERY_PR_MERGE_APPROVER,
+        approval_ref=approval_ref,
+        policy_decision_ref=decision_ref,
+    )
+
+
 def command_result_succeeded(result: JsonObject) -> bool:
     return bool(promotion_gate_from_command_result(result)["eligible"])
 
@@ -678,6 +705,72 @@ async def on_diff_analyzed(
             summary=Sandbox.NO_DIFF_REASON,
             details=evt.diff.to_body(),
         )
+        return
+
+    recovery_authorization = await recovery_merge_authorization(ctx.db, evt.diff)
+    if recovery_authorization.tracked and recovery_authorization.request is None:
+        return
+    merged_recovery = recovery_authorization.request
+    if merged_recovery is not None:
+        approval = approval_payload(
+            run,
+            evt.reason,
+            ApprovalStatus.REQUESTED.value,
+        )
+        approval_ref = str(approval["approval_id"])
+        decision_ref = policy_decision_ref(
+            approval_ref,
+            POLICY_ROUTE_RECOVERY_PR_MERGED,
+        )
+        command = merged_recovery_command(
+            evt.diff,
+            approval_ref=approval_ref,
+            decision_ref=decision_ref,
+        )
+        details = {
+            "safe": False,
+            "risk": evt.risk,
+            "policy_route": POLICY_ROUTE_RECOVERY_PR_MERGED,
+            "policy_decision_ref": decision_ref,
+            "approval_ref": approval_ref,
+            "diff": evt.diff.to_body(),
+            "command_requested": command.to_body(),
+            "merge_commit_sha": merged_recovery.commit_sha,
+        }
+        resolver = getattr(ctx.db, "resolve_workflow_approval_if_open", None)
+        if not callable(resolver):
+            return
+        resolved = await resolver(
+            approval_ref,
+            str(run["workspace_id"]),
+            ApprovalStatus.GRANTED.value,
+            RECOVERY_PR_MERGE_APPROVER,
+            "approved-by-merged-recovery-pr",
+            details,
+        )
+        if not resolved:
+            return
+        applying_run = await transition_run(
+            ctx,
+            run,
+            WorkflowRunStatus.APPLYING.value,
+            WorkflowStepName.APPLY.value,
+            "merged recovery PR approved; dispatching exact deployment",
+            {"merge_commit_sha": merged_recovery.commit_sha},
+        )
+        if applying_run is None:
+            raise RuntimeError("merged recovery approval could not advance workflow")
+        approval_step = await record_step(
+            ctx,
+            run,
+            WorkflowStepName.APPROVAL.value,
+            WorkflowStepStatus.SUCCEEDED.value,
+            "operator approval reused from exact merged recovery PR",
+            details,
+        )
+        if approval_step is not None:
+            yield approval_step
+        yield command
         return
 
     if evt.safe:

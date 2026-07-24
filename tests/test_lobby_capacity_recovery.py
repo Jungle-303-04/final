@@ -457,6 +457,13 @@ def test_safe_pr_preflight_snapshots_arbitrary_active_workload_identity() -> Non
 
     assert not isinstance(prepared, RcaActionRequiredBody)
     assert prepared.draft.params["expected_replicas"] == 3
+    assert prepared.draft.params["authorized_changes"] == [
+        {
+            "field_path": "spec.replicas",
+            "current_value": 2,
+            "desired_value": 3,
+        }
+    ]
     assert prepared.draft.params["protected_baseline"] == [
         {
             "kind": "Deployment",

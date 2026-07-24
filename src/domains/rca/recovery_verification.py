@@ -313,8 +313,21 @@ def verification_checks(
     updated = nonnegative_int(deployment.get("updated_replicas"))
     available = nonnegative_int(deployment.get("available_replicas"))
     unavailable = nonnegative_int(deployment.get("unavailable_replicas"))
+    unavailable_omitted = deployment.get("unavailable_replicas_omitted") is True
     generation = nonnegative_int(deployment.get("generation"))
     observed_generation = nonnegative_int(deployment.get("observed_generation"))
+    omitted_unavailable_means_zero = (
+        unavailable_omitted
+        and unavailable is None
+        and replicas is not None
+        and desired == replicas
+        and ready == replicas
+        and updated == replicas
+        and available == replicas
+        and generation is not None
+        and observed_generation is not None
+        and observed_generation >= generation
+    )
     protected_expected = nonnegative_int(expected.get("protected_workloads")) or 0
     protected = after.get("protected_workloads")
     protected_count = len(protected) if isinstance(protected, list) else None
@@ -377,7 +390,11 @@ def verification_checks(
             available == replicas if available is not None and replicas is not None else None
         ),
         "unavailable_replicas_zero": (
-            unavailable == 0 if unavailable is not None else None
+            unavailable == 0
+            if unavailable is not None
+            else True
+            if omitted_unavailable_means_zero
+            else None
         ),
         "deployment_generation_observed": (
             observed_generation == generation
@@ -730,6 +747,9 @@ def deployment_replicas(
                 "updated_replicas": nonnegative_int(status.get("updated_replicas")),
                 "available_replicas": nonnegative_int(status.get("available_replicas")),
                 "unavailable_replicas": nonnegative_int(status.get("unavailable_replicas")),
+                "unavailable_replicas_omitted": (
+                    "unavailable_replicas" not in status
+                ),
             }
         )
     return matches[0] if len(matches) == 1 else None

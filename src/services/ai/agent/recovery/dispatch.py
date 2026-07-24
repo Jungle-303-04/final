@@ -266,10 +266,7 @@ class RecoveryActionPreflight:
         draft = evt.selected.draft
         verification_params: JsonObject = {}
         expected_replicas: int | None = None
-        if (
-            evt.selected.draft.action_type == "replica_scale"
-            and self.authority is not None
-        ):
+        if self.authority is not None:
             query = authority_query(evt, correlation_id)
             resolved_authority = await self.authority.load_authority(query)
             if (
@@ -281,8 +278,18 @@ class RecoveryActionPreflight:
                     evt.selected,
                     resolved_authority,
                 )
+                if replacements:
+                    verification_params["authorized_changes"] = [
+                        {
+                            "field_path": replacement.field_path,
+                            "current_value": replacement.current_value,
+                            "desired_value": replacement.desired_value,
+                        }
+                        for replacement in replacements
+                    ]
                 if (
-                    len(replacements) == 1
+                    evt.selected.draft.action_type == "replica_scale"
+                    and len(replacements) == 1
                     and replacements[0].field_path == "spec.replicas"
                     and isinstance(replacements[0].desired_value, int)
                     and not isinstance(replacements[0].desired_value, bool)

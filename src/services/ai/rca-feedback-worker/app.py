@@ -28,6 +28,7 @@ from domains.rca.recovery_verification import (
     DEFAULT_MAXIMUM_SECONDS,
     DEFAULT_MINIMUM_SECONDS,
     STANDARD_SLI_ALERT_NAME,
+    VerificationDecision,
     before_alert_snapshot,
     evaluate_recovery_evidence,
     finite_float,
@@ -297,6 +298,7 @@ async def on_recovery_safe_pr_created(
     params = selected_candidate_params(
         await recovery_approval_record(ctx, record, evt.workspace_id)
     )
+    authorized_changes = approved_change_contract(params.get("authorized_changes"))
     identity_error = safe_pr_identity_error(evt, params)
     if identity_error is not None:
         reopened = await ctx.db.reopen_recovery_plan_action(
@@ -504,6 +506,8 @@ async def on_recovery_safe_pr_created(
         missing_prerequisites.append("alertmanager:original_exact_alert")
     if expected_replicas is None:
         missing_prerequisites.append("gitops:approved_replica_baseline")
+    if not authorized_changes:
+        missing_prerequisites.append("gitops:approved_change_contract")
     if evidence_cadence_seconds is None or evidence_cadence_seconds <= 0:
         missing_prerequisites.append("cluster:evidence_cadence")
     if missing_prerequisites:
@@ -584,6 +588,10 @@ async def on_recovery_safe_pr_created(
             "protected_session_baseline": protected_session_baseline,
             "target": target,
             "status": "waiting_for_merge",
+        },
+        "authorization": {
+            "target": target,
+            "changes": authorized_changes,
         },
     }
     saved = await ctx.db.update_recovery_plan_lifecycle_if_status(
@@ -767,6 +775,24 @@ async def on_recovery_deploy_failed(
     )
 
 
+def apply_verification_terminal_state(
+    lifecycle: JsonObject,
+    decision: VerificationDecision,
+    *,
+    evidence_ref: str,
+) -> None:
+    """Persist the retry identity whenever evidence ends verification."""
+
+    if decision.status == "failed":
+        lifecycle["failure"] = {
+            "reason_code": decision.reason_code,
+            "reason": decision.reason,
+            "evidence_ref": evidence_ref,
+        }
+    elif decision.status == "completed":
+        lifecycle.pop("failure", None)
+
+
 @app.on(ClusterEvidenceReceivedBody)
 async def on_recovery_verification_evidence(
     evt: ClusterEvidenceReceivedBody,
@@ -852,6 +878,11 @@ async def on_recovery_verification_evidence(
             else RECOVERY_STATUS_VERIFICATION_PENDING
         )
         lifecycle["phase"] = target_status
+        apply_verification_terminal_state(
+            lifecycle,
+            decision,
+            evidence_ref=evt.evidence_key,
+        )
         saved = await ctx.db.update_recovery_plan_lifecycle_if_status(
             str(record["plan_id"]),
             evt.workspace_id,
@@ -939,6 +970,33 @@ def selected_candidate_params(approval: Mapping[str, object]) -> JsonObject:
     selected = mapping(details.get("selected_candidate"))
     draft = mapping(selected.get("draft"))
     return dict(mapping(draft.get("params")))
+
+
+def approved_change_contract(value: object) -> list[JsonObject]:
+    if not isinstance(value, list) or not value:
+        return []
+    changes: list[JsonObject] = []
+    paths: set[str] = set()
+    for item in value:
+        if not isinstance(item, Mapping):
+            return []
+        field_path = text_value(item.get("field_path"))
+        if (
+            not field_path
+            or field_path in paths
+            or "current_value" not in item
+            or "desired_value" not in item
+        ):
+            return []
+        paths.add(field_path)
+        changes.append(
+            {
+                "field_path": field_path,
+                "current_value": item.get("current_value"),
+                "desired_value": item.get("desired_value"),
+            }
+        )
+    return changes
 
 
 def selected_recovery_target(
