@@ -19,6 +19,7 @@ import httpx
 from domains.gitops.kustomize_edit_source import resolve_unique_kustomize_edit_source
 from domains.gitops.repository_discovery import MAX_MANIFEST_BYTES
 from domains.gitops.source_patch import (
+    DECLARED_SOURCE_STALE_VALUE_MESSAGE,
     DeclaredScalarPatch,
     ManifestImagePatchPlan,
     ManifestScalarPatchPlan,
@@ -833,7 +834,9 @@ class GithubScmProvider:
         except RuntimeError as exc:
             if str(exc) == STALE_TARGET_MESSAGE:
                 raise
-            raise RuntimeError(STALE_TARGET_MESSAGE) from exc
+            if str(exc) == DECLARED_SOURCE_STALE_VALUE_MESSAGE:
+                raise RuntimeError(STALE_TARGET_MESSAGE) from exc
+            raise
 
     async def resolve_declared_patches(
         self,
@@ -943,6 +946,7 @@ class GithubScmProvider:
                     source_type=resolved_source.source_type,
                     source_path=resolved_source.path,
                     replacements=plan.replacements,
+                    document_identity=resolved_source.document_identity,
                 )
             )
         return resolved

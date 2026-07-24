@@ -18,6 +18,7 @@ from domains.gitops.source_patch import (
     ScalarFieldReplacement,
     scalar_patch_content,
 )
+from domains.manifest_editor.validation import ManifestIdentity
 from domains.scm.events import SafePrFilePatch, SafePrRequestedBody
 
 APPROVED_SHA = "a" * 40
@@ -256,6 +257,68 @@ def test_advanced_base_with_changed_target_scalar_fails_closed(provider_module) 
         asyncio.run(validate())
 
 
+def test_advanced_base_preserves_unrelated_documents_in_selected_source(
+    provider_module,
+) -> None:
+    plan = _plan()
+    request = _request(plan)
+    declared = DeclaredScalarPatch(
+        source_type="raw-yaml",
+        source_path=SOURCE_PATH,
+        replacements=plan.replacements,
+        document_identity=ManifestIdentity(
+            "apps/v1",
+            "Deployment",
+            "sandbox",
+            "api-server",
+        ),
+    )
+    service = """\
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-server
+  namespace: sandbox
+spec:
+  selector:
+    app: api-server
+"""
+    source = f"{_deployment(1, release_note='unrelated-change')}---\n{service}"
+
+    def handler(raw_request: httpx.Request) -> httpx.Response:
+        if "/compare/" in raw_request.url.path:
+            return httpx.Response(200, json=_compare_payload())
+        if raw_request.url.path.endswith(f"/contents/{SOURCE_PATH}"):
+            assert raw_request.url.params["ref"] == CURRENT_SHA
+            return httpx.Response(200, json=_encoded_content(source))
+        return httpx.Response(404, json={"message": "unexpected request"})
+
+    provider = provider_module.GithubScmProvider()
+    provider.resolve_declared_patches = AsyncMock(return_value=[declared])
+
+    async def validate() -> list[tuple[str, str]]:
+        async with httpx.AsyncClient(
+            base_url="https://api.github.test",
+            transport=httpx.MockTransport(handler),
+        ) as client:
+            return await provider.validate_structured_base_advance(
+                client,
+                "org/repo",
+                APPROVED_SHA,
+                CURRENT_SHA,
+                request,
+                [plan],
+                authority={},
+            )
+
+    contents = asyncio.run(validate())
+
+    assert contents[0][0] == SOURCE_PATH
+    assert "replicas: 2" in contents[0][1]
+    assert service in contents[0][1]
+    assert "demo.opsia.dev/release-note: unrelated-change" in contents[0][1]
+
+
 def test_advanced_base_with_changed_declared_source_fails_closed(provider_module) -> None:
     plan = _plan()
     request = _request(plan)
@@ -291,6 +354,43 @@ def test_advanced_base_with_changed_declared_source_fails_closed(provider_module
         RuntimeError,
         match=re.escape(provider_module.STALE_TARGET_MESSAGE),
     ):
+        asyncio.run(validate())
+
+
+def test_advanced_base_preserves_source_resolution_failure(provider_module) -> None:
+    plan = _plan()
+    request = _request(plan)
+    message = (
+        "remediation source patch unsupported: "
+        "Kustomize resource source is missing or ambiguous"
+    )
+
+    def handler(raw_request: httpx.Request) -> httpx.Response:
+        if "/compare/" in raw_request.url.path:
+            return httpx.Response(200, json=_compare_payload())
+        return httpx.Response(404, json={"message": "unexpected request"})
+
+    provider = provider_module.GithubScmProvider()
+    provider.resolve_declared_patches = AsyncMock(
+        side_effect=RuntimeError(message),
+    )
+
+    async def validate() -> None:
+        async with httpx.AsyncClient(
+            base_url="https://api.github.test",
+            transport=httpx.MockTransport(handler),
+        ) as client:
+            await provider.validate_structured_base_advance(
+                client,
+                "org/repo",
+                APPROVED_SHA,
+                CURRENT_SHA,
+                request,
+                [plan],
+                authority={},
+            )
+
+    with pytest.raises(RuntimeError, match=re.escape(message)):
         asyncio.run(validate())
 
 
