@@ -106,6 +106,10 @@ class LiveNodeResourceObservation(StrictModel):
     status: LiveNodeStatus
     cpu_mcores: float | None = Field(default=None, ge=0.0)
     mem_mib: float | None = Field(default=None, ge=0.0)
+    cpu_capacity_mcores: float | None = Field(default=None, gt=0.0)
+    mem_capacity_mib: float | None = Field(default=None, gt=0.0)
+    cpu_pct: float | None = Field(default=None, ge=0.0)
+    mem_pct: float | None = Field(default=None, ge=0.0)
     observed_at: datetime | None = None
     source: MetricSource
     stale: bool
@@ -122,6 +126,14 @@ class LiveNodeResourceObservation(StrictModel):
             raise ValueError("fresh node metrics require measured cpu, memory, and observed_at")
         if not self.status_stale and self.status_observed_at is None:
             raise ValueError("fresh node status requires status_observed_at")
+        if self.cpu_pct is not None and (
+            self.cpu_mcores is None or self.cpu_capacity_mcores is None
+        ):
+            raise ValueError("node cpu percentage requires measured usage and capacity")
+        if self.mem_pct is not None and (
+            self.mem_mib is None or self.mem_capacity_mib is None
+        ):
+            raise ValueError("node memory percentage requires measured usage and capacity")
         return self
 
 
@@ -142,6 +154,10 @@ class LiveClusterResourceObservation(StrictModel):
     status: LiveClusterStatus
     cpu_mcores: float | None = Field(default=None, ge=0.0)
     mem_mib: float | None = Field(default=None, ge=0.0)
+    cpu_capacity_mcores: float | None = Field(default=None, gt=0.0)
+    mem_capacity_mib: float | None = Field(default=None, gt=0.0)
+    cpu_pct: float | None = Field(default=None, ge=0.0)
+    mem_pct: float | None = Field(default=None, ge=0.0)
     observed_at: datetime | None = None
     source: MetricSource
     stale: bool
@@ -172,6 +188,14 @@ class LiveClusterResourceObservation(StrictModel):
                 raise ValueError("complete cluster metrics require exact nodes_ready")
         elif self.nodes_total is not None or self.nodes_ready is not None:
             raise ValueError("partial cluster metrics cannot claim node totals")
+        if self.cpu_pct is not None and (
+            self.cpu_mcores is None or self.cpu_capacity_mcores is None
+        ):
+            raise ValueError("cluster cpu percentage requires measured usage and capacity")
+        if self.mem_pct is not None and (
+            self.mem_mib is None or self.mem_capacity_mib is None
+        ):
+            raise ValueError("cluster memory percentage requires measured usage and capacity")
         return self
 
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Literal, Self, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -2327,7 +2328,12 @@ class FleetClusterSummaryItem(StrictModel):
 
 
 class FleetTotals(StrictModel):
-    """fleet 상단 카드 합계 — dead_letters 는 플랫폼 전역 카운트(내용 비노출)."""
+    """Fleet summary totals visible within the caller's authorization scope.
+
+    ``dead_letters`` is platform-global rather than workspace-scoped, so it is
+    observed only for service administrators. ``None`` means the value is not
+    authorized/observed; it must never be rendered as a synthetic zero.
+    """
 
     clusters: int = 0
     healthy: int = 0
@@ -2338,12 +2344,22 @@ class FleetTotals(StrictModel):
     open_incidents: int = 0
     pending_approvals: int = 0
     running_workflows: int = 0
-    dead_letters: int = 0
+    dead_letters: int | None = None
 
 
 class FleetSummaryResponse(StrictModel):
     clusters: list[FleetClusterSummaryItem] = Field(default_factory=list)
     totals: FleetTotals = Field(default_factory=FleetTotals)
+
+
+class FleetSummaryStreamFrame(StrictModel):
+    """Latest-state fleet projection sent over one authenticated workspace SSE."""
+
+    cursor: str = Field(min_length=1, max_length=8192)
+    revision: str = Field(pattern=r"^[0-9a-f]{64}$")
+    generated_at: datetime
+    refresh_after_ms: int = Field(ge=5_000, le=10_000)
+    summary: FleetSummaryResponse
 
 
 class ClusterWorkloadHealthItem(StrictModel):

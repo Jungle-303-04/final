@@ -23,7 +23,8 @@ import { operationalMessageLabel } from "./statusLabel";
 // fabricated: absent fields stay null/empty and a load failure is an honest
 // `unavailable`, never a synthesised cause/evidence/recovery.
 
-export type RcaDetailStatus = "loading" | "ready" | "unavailable";
+export type RcaDetailStatus = "loading" | "ready" | "stale" | "unavailable";
+export const RCA_DETAIL_REFRESH_MS = 4_000;
 
 export interface RcaIssueDetailView {
   correlationId: string;
@@ -124,10 +125,18 @@ export function useRcaIssueDetails(
         })
         .catch((cause: unknown) => {
           if (controller.signal.aborted || isAbortError(cause)) return;
-          setSnapshot({
-            scopeKey,
-            feed: { status: "unavailable", items: [] },
-          });
+          setSnapshot((previous) => (
+            previous.scopeKey === scopeKey
+            && (previous.feed.status === "ready" || previous.feed.status === "stale")
+              ? {
+                  scopeKey,
+                  feed: { status: "stale", items: previous.feed.items },
+                }
+              : {
+                  scopeKey,
+                  feed: { status: "unavailable", items: [] },
+                }
+          ));
         })
         .finally(() => {
           if (!controller.signal.aborted && pollMs > 0) timer = window.setTimeout(load, pollMs);

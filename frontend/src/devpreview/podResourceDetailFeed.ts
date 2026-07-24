@@ -1,18 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { getInventoryResourceDetail } from "../api/inventory";
 import type { InventoryResourceDetail } from "../api/inventory-schemas";
 import { podContainerSummary, type PodContainerView } from "./podContainerSummary";
 import { kindToResourceType } from "./inventoryResourcesFeed";
 import { KUBERNETES_KIND } from "./kubernetesKinds";
 import { conditionItemsFromSummary, type ResourceConditionItem } from "./resourceConditions";
 import {
-  RESOURCE_DETAIL_EVENT_LIMIT,
-  RESOURCE_DETAIL_RELATED_LIMIT,
   toResourceEvent,
   type ResourceEventView,
   type ResourceEventsView,
 } from "./resourceEventsFeed";
+import { loadSharedInventoryResourceDetail } from "./resourceDetailFeed";
 
 type PodResourceDetailStatus = ResourceEventsView["status"];
 
@@ -120,12 +118,12 @@ export function usePodResourceDetail(
   useEffect(() => {
     if (!key || ns === null) return;
     const controller = new AbortController();
-    void getInventoryResourceDetail(cid, {
+    void loadSharedInventoryResourceDetail(cid, {
       resourceType: POD_RESOURCE_TYPE,
       kind: POD_KIND,
       namespace: ns,
       name: resourceName,
-    }, { relatedLimit: RESOURCE_DETAIL_RELATED_LIMIT, eventLimit: RESOURCE_DETAIL_EVENT_LIMIT }, controller.signal)
+    })
       .then((detail) => {
         if (controller.signal.aborted) return;
         setState({

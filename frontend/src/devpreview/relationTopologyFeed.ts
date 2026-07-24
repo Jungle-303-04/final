@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { getRelationTopology } from "../api/relation-topology";
+import type { RelationTopologyQuery } from "../api/relation-topology";
 import type { RelationTopologyEndpoint } from "../api/relation-topology-schemas";
 
 // UI-PHASE2-001 TOP-01/TOP-07 · DEMO_WIRING_PLAN §3.4: a typed live adapter for
@@ -76,6 +77,43 @@ const LOADING: RelationTopologyView = {
   partialReasonCodes: [],
   clusterId: null,
 };
+
+// The traffic graph and its auxiliary panel consume the same read-on-open
+// relation snapshot. Share only the in-flight request: retaining settled
+// payloads here could expose a previous session's authorized graph after an
+// account/workspace switch. React StrictMode remounts and simultaneous
+// consumers still collapse to one canonical HTTP request.
+const inFlightRelationTopology = new Map<string, Promise<RelationTopologyEndpoint>>();
+
+function relationTopologyRequestKey(query: RelationTopologyQuery): string {
+  return JSON.stringify({
+    clusters: [...(query.clusters ?? [])].sort(),
+    applications: [...(query.applications ?? [])].sort(),
+    snapshotRevision: query.snapshotRevision ?? null,
+  });
+}
+
+export function loadSharedRelationTopology(
+  query: RelationTopologyQuery,
+): Promise<RelationTopologyEndpoint> {
+  const key = relationTopologyRequestKey(query);
+  const existing = inFlightRelationTopology.get(key);
+  if (existing) return existing;
+  const request = getRelationTopology(query);
+  inFlightRelationTopology.set(key, request);
+  const release = () => {
+    if (inFlightRelationTopology.get(key) === request) {
+      inFlightRelationTopology.delete(key);
+    }
+  };
+  void request.then(release, release);
+  return request;
+}
+
+/** @internal test isolation for the request coalescer. */
+export function resetSharedRelationTopologyForTests(): void {
+  inFlightRelationTopology.clear();
+}
 
 /** Stable identity a topology node and a traffic endpoint can both produce. */
 export function serviceKeyOf(
@@ -191,7 +229,7 @@ export function useRelationTopology(
       return () => controller.abort();
     }
     if (ids.length === 1) {
-      void getRelationTopology({ clusters: ids, applications }, controller.signal)
+      void loadSharedRelationTopology({ clusters: ids, applications })
         .then((endpoint) => {
           if (controller.signal.aborted) return;
           setView(toRelationTopologyView(endpoint));
@@ -203,7 +241,7 @@ export function useRelationTopology(
       return () => controller.abort();
     }
     void Promise.all(ids.map((id) => (
-      getRelationTopology({ clusters: [id], applications }, controller.signal)
+      loadSharedRelationTopology({ clusters: [id], applications })
         .then(toRelationTopologyView)
         .catch((cause: unknown): RelationTopologyView | null => {
           if (isAbortError(cause)) return null;

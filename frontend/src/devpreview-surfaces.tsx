@@ -14,6 +14,7 @@ import { GithubIcon } from "./devpreview/brandIcons";
 import { useCostOverview } from "./devpreview/costFeed";
 import { useChecksOverview } from "./devpreview/checksFeed";
 import {
+  RCA_DETAIL_REFRESH_MS,
   useEvidenceWindowPayload,
   useEvidenceObjectReferences,
   useIncidentRecentChanges,
@@ -32,19 +33,23 @@ import { isApiError } from "./api/client";
 import { retryRecovery, selectRecoveryAction } from "./api/recovery";
 import type { AiRecoveryHandoff, AiRecoveryPreview, AiRecoveryPreviewLine } from "./features/ai-assistant/aiRecoveryHandoff";
 import { isActiveRcaIssue } from "./devpreview/rcaIssuesFeed";
-import { useSession, sessionInitial } from "./devpreview/sessionFeed";
+import { sessionInitial, type SessionView } from "./devpreview/sessionFeed";
 import {
   deleteAllStoredAiConversations,
   deleteStoredAiConversation,
   useAiConversations,
   useConversationDetail,
 } from "./devpreview/aiFeed";
-import { useAlertEvents, useAlertRules, useAlertChannels } from "./devpreview/alertsFeed";
+import {
+  useAlertRules,
+  useAlertChannels,
+  type AlertEventsFeed,
+} from "./devpreview/alertsFeed";
 import { alertEventPresentation, alertSeverityTone, type AlertEventIcon, type AlertPresentationTone } from "./devpreview/alertEventPresentation";
 import {
   useApplicationRuns,
-  useApplications,
   useHelmReleases,
+  type ApplicationsFeed,
   type ApplicationRunView,
 } from "./devpreview/deployFeed";
 import { ProgressNodeRail, type ProgressNode } from "./devpreview/ProgressNodeRail";
@@ -454,7 +459,9 @@ function WorkflowEvidencePanel({ runs, repositoryRef, status, onRefresh, onOpenR
     </Card>
   );
 }
-export function DeploySurface({ pendingRepos = [], repositoryFilter = null, onOpenRef, onOpenIssues, onAskAi, onAddRepo, topInset = 57, leftInset = 208, rightInset = 0 }: {
+export function DeploySurface({ applicationsFeed, onRefreshApplications, pendingRepos = [], repositoryFilter = null, onOpenRef, onOpenIssues, onAskAi, onAddRepo, topInset = 57, leftInset = 208, rightInset = 0 }: {
+  applicationsFeed: ApplicationsFeed;
+  onRefreshApplications: () => void;
   pendingRepos?: string[]; repositoryFilter?: string | null; onOpenRef: (kind: string, name: string) => void; onOpenIssues: () => void; onAskAi: () => void; onAddRepo: () => void;
   /** 상세 패널 겹침 방지용 크롬 인셋 — unified DetailOverlay와 같은 계약. */
   topInset?: number; leftInset?: number; rightInset?: number;
@@ -478,7 +485,11 @@ export function DeploySurface({ pendingRepos = [], repositoryFilter = null, onOp
     return () => window.clearTimeout(timer);
   }, [repositoryFilter]);
   const [repositoryRefreshKey, setRepositoryRefreshKey] = useState(0);
-  const appsFeed = useApplications(repositoryRefreshKey);
+  const appsFeed = applicationsFeed;
+  const refreshRepositoryData = () => {
+    setRepositoryRefreshKey((key) => key + 1);
+    onRefreshApplications();
+  };
   const workflowFeed = useApplicationRuns(appsFeed.items, repositoryRefreshKey);
   const helm = useHelmReleases();
   // 릴리스 탭 — 탭이 열려 있을 때만 조회한다(진행 중 런 관측 시 5초 폴링).
@@ -535,6 +546,11 @@ export function DeploySurface({ pendingRepos = [], repositoryFilter = null, onOp
         { label: "저장소", value: appsFeed.status === "ready" ? repositoryGroups.length + pendingOnly.length : "—" },
         { label: "Helm", value: helm.status === "ready" && helm.coverageAvailability === "available" ? helm.items.length : "—", warn: helm.status === "ready" && helm.coverageAvailability === "unavailable" },
       ]} />
+      {appsFeed.stale && (
+        <span style={{ fontSize: TYPE.caption, color: TINT.warn.fg }}>
+          애플리케이션 · 최근 관측값 표시 중 · 재조회 대기
+        </span>
+      )}
       {tab === "애플리케이션" && (
         <Card pad={0}>
           <THead cols={appCols} />
@@ -572,7 +588,7 @@ export function DeploySurface({ pendingRepos = [], repositoryFilter = null, onOp
                   );
                   setSelectedRepository(isOpen ? null : repositoryRef);
                 }}
-                onDisconnected={() => setRepositoryRefreshKey((key) => key + 1)}
+                onDisconnected={refreshRepositoryData}
               />
               {pendingOnly.map((repositoryRef) => (
                 <div key={repositoryRef} style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 8px", color: UI.ink3 }}>
@@ -586,7 +602,7 @@ export function DeploySurface({ pendingRepos = [], repositoryFilter = null, onOp
                 <div style={{ marginBottom: 6, color: "#6b7280", fontSize: 11, fontWeight: 700 }}>전체 연결 상태</div>
                 <RepositoryStatusList
                   key={repositoryRefreshKey}
-                  onChanged={() => setRepositoryRefreshKey((key) => key + 1)}
+                  onChanged={refreshRepositoryData}
                 />
               </div>
             </>}
@@ -595,7 +611,7 @@ export function DeploySurface({ pendingRepos = [], repositoryFilter = null, onOp
       {tab === "워크플로우" && (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           <WorkflowEvidencePanel runs={workflowFeed.items} repositoryRef={selectedRepository} status={workflowStatus}
-            onRefresh={() => setRepositoryRefreshKey((key) => key + 1)}
+            onRefresh={refreshRepositoryData}
             onOpenRef={onOpenRef} onOpenIssues={onOpenIssues} onAskAi={onAskAi} />
           <Card pad={0}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "13px 15px", borderBottom: `1px solid ${UI.line2}` }}>
@@ -2527,7 +2543,7 @@ export function IssuesSurface({ incidentClusterIds, recoveryProgressOverrides = 
   const [severityFilter, setSeverityFilter] = useState<IssueSeverityFilter>("all");
   // 이슈 탭 — 실 RCA 이슈 큐(GET /api/dashboard/rca/issues, 홈 W2와 동일 소스).
   // 큐 항목이 관측 RCA 필드(원인/확신도/증거/AI 요약)를 이미 실어주므로 상세 드로어로 그대로 전달한다.
-  const issues = useRcaIssueDetails(incidentClusterIds, recoveryProgressOverrides.size > 0 ? 4000 : 0);
+  const issues = useRcaIssueDetails(incidentClusterIds, RCA_DETAIL_REFRESH_MS);
   const issueItems = issues.items;
   const activeIssues = issueItems.filter(isActiveRcaIssue);
   const resolvedIssues = issueItems.filter((issue) => !isActiveRcaIssue(issue));
@@ -2582,6 +2598,11 @@ export function IssuesSurface({ incidentClusterIds, recoveryProgressOverrides = 
       {tab === "진행 중" && (
         <IssueSeverityFilters active={severityFilter} criticalCount={critCount} warningCount={warnCount} onChange={setSeverityFilter} totalCount={activeIssues.length} />
       )}
+      {issues.status === "stale" && (
+        <span style={{ fontSize: TYPE.caption, color: TINT.warn.fg }}>
+          최근 관측된 이슈를 표시하고 있습니다 · 재조회 대기
+        </span>
+      )}
       {tab !== "예방 점검" && (
         <div style={{ display: "grid", gap: 8 }}>
           {issues.status === "loading" && visibleIssues.length === 0 ? (
@@ -2613,10 +2634,9 @@ export function IssuesSurface({ incidentClusterIds, recoveryProgressOverrides = 
 
 // ── 타임라인 /timeline (5.9 — P-21 문법 + 유형 필터 칩 P-22) ──
 // UI-PHASE2-001 §2: 실 timeline API로 재배선. 활동 개요·문제 수·커버리지 공백은
-// GET /api/timeline/capabilities → POST /api/timeline/overview에서, 고정 항목은
-// GET /api/timeline/pins에서 조회한다(useTimelineBoard). 읽을 수 있는 변경 스트림은
-// 실 GET /api/changes(useChangeTimeline). 예전의 "핀·라이브 스트림·전체 스냅샷은
-// 미지원" 오판 표기를 제거하고, 실제 데이터가 비면 정직한 빈 상태로 둔다.
+// GET /api/timeline/capabilities + NDJSON snapshot → cursor SSE가 전체 권한
+// 클러스터의 변경을 직접 전달하고, 고정 항목은 GET /api/timeline/pins에서 조회한다.
+// 예전의 단발성 /api/changes 조회와 "라이브 스트림 미지원" 오판을 제거했다.
 type TlCat = "전체" | "이슈" | "배포" | "구성";
 function changeCat(kind: string): Exclude<TlCat, "전체"> {
   if (kind === "incident") return "이슈";
@@ -2628,10 +2648,18 @@ function changeTone(severity: string): "ok" | "warn" | "crit" {
   if (severity === "warning") return "warn";
   return "ok";
 }
-export function TimelineSurface({ onOpenRef: _onOpenRef }: { onOpenRef: (kind: string, name: string) => void }) {
+export function TimelineSurface({
+  workspaceId,
+  clusterIds,
+  onOpenRef: _onOpenRef,
+}: {
+  workspaceId: string | null;
+  clusterIds: readonly string[];
+  onOpenRef: (kind: string, name: string) => void;
+}) {
   const [cat, setCat] = useState<TlCat>("전체");
   const [page, setPage] = useState(0);
-  const feed = useChangeTimeline();
+  const feed = useChangeTimeline(workspaceId, clusterIds);
   const board = useTimelineBoard();
   const items = feed.events.map((e) => ({
     id: e.id,
@@ -2647,14 +2675,25 @@ export function TimelineSurface({ onOpenRef: _onOpenRef }: { onOpenRef: (kind: s
   const pageCount = Math.max(1, Math.ceil(shown.length / pageSize));
   const safePage = Math.min(page, pageCount - 1);
   const visibleItems = shown.slice(safePage * pageSize, (safePage + 1) * pageSize);
-  const activityChips = board.activityFacets.filter((f) => f.count > 0);
+  const timelineObserved = feed.status === "ready"
+    || feed.status === "partial"
+    || feed.status === "stale";
+  const problemCount = feed.events.filter(
+    (event) => event.severity === "warning" || event.severity === "critical",
+  ).length;
+  const activityChips = Object.entries(
+    feed.events.reduce<Record<string, number>>((counts, event) => {
+      counts[event.activity] = (counts[event.activity] ?? 0) + 1;
+      return counts;
+    }, {}),
+  ).map(([activity, count]) => ({ activity, count }));
   return (
     <Page title="타임라인" icon={Clock}>
       {/* 실 timeline/overview 파생 요약(대표 클러스터 스코프) + 실 timeline/pins 고정 수 */}
       <ChipRow chips={[
-        { label: "이벤트", value: board.overviewStatus === "ready" ? board.totalEvents : "—" },
-        { label: "문제", value: board.overviewStatus === "ready" ? board.totalProblems : "—", warn: board.overviewStatus === "ready" && board.totalProblems > 0 },
-        { label: "커버리지 공백", value: board.overviewStatus === "ready" ? board.coverageGaps : "—", warn: board.overviewStatus === "ready" && board.coverageGaps > 0 },
+        { label: "이벤트", value: timelineObserved ? feed.events.length : "—" },
+        { label: "문제", value: timelineObserved ? problemCount : "—", warn: timelineObserved && problemCount > 0 },
+        { label: "커버리지 공백", value: timelineObserved ? feed.gaps.length : "—", warn: timelineObserved && feed.gaps.length > 0 },
         { label: "고정", value: board.pins.status === "ready" ? board.pins.items.length : "—" },
       ]} />
       {activityChips.length > 0 && (
@@ -2716,11 +2755,11 @@ export function TimelineSurface({ onOpenRef: _onOpenRef }: { onOpenRef: (kind: s
             </div>
           ))}
       </Card>
-      {/* 정직한 표기 — 개요/문제/커버리지/고정은 실 timeline API 조회값이다. 관측 소스 모드만 부기 */}
+      {/* 정직한 표기 — 변경/문제/커버리지는 보존 snapshot+cursor SSE, 고정은 서버 pin 원장이다. */}
       <span style={{ fontSize: TYPE.caption, color: UI.ink3 }}>
         {board.status === "unavailable"
-          ? "타임라인 개요를 불러오지 못했습니다 · 변경 스트림은 최근 24시간"
-          : `개요·고정은 실 timeline API 조회 · 관측 소스 ${board.selectedSourceMode ? koLabel(board.selectedSourceMode) : "—"} · 변경 스트림은 최근 24시간`}
+          ? "타임라인 제어 정보를 불러오지 못했습니다"
+          : `보존 snapshot ${feed.observedScopes}/${feed.totalScopes} · SSE ${feed.streamingScopes}/${feed.totalScopes}${feed.status === "stale" ? " · 재연결 중" : ""} · 관측 소스 ${board.selectedSourceMode ? koLabel(board.selectedSourceMode) : "—"}`}
       </span>
     </Page>
   );
@@ -2827,11 +2866,16 @@ function Segmented<T extends string>({ value, options, onPick, disabled }: {
     </div>
   );
 }
-export function SettingsSurface() {
-  const session = useSession();
+export function SettingsSurface({
+  session,
+  clusterId,
+}: {
+  session: SessionView;
+  clusterId: string | null;
+}) {
   const prefs = useUiPreferences();
   const refresh = useRefreshPolicies();
-  const access = useSettingsAccess();
+  const access = useSettingsAccess(clusterId);
   const [noise, setNoise] = useState(() => { try { return sessionStorage.getItem("opsia-demo-toast-crit-only") === "1"; } catch { return false; } });
   const toggleNoise = () => setNoise((v) => { const n = !v; try { sessionStorage.setItem("opsia-demo-toast-crit-only", n ? "1" : "0"); } catch { /* 데모 */ } return n; });
   const workspaceSub = session.status === "loading" ? "세션 확인 중…"
@@ -2942,8 +2986,10 @@ function AlertEventPill({ tone, label, icon: Icon, iconColor }: { tone: AlertPre
   );
 }
 
-export function AlertsSurface({ onOpenRef }: { onOpenRef: (kind: string, name: string) => void }) {
-  const events = useAlertEvents();
+export function AlertsSurface({ events, onOpenRef }: {
+  events: AlertEventsFeed;
+  onOpenRef: (kind: string, name: string) => void;
+}) {
   const rules = useAlertRules();
   const channels = useAlertChannels();
   const evCols: [string, string][] = [["심각도", "88px"], ["대상", "minmax(220px,1.8fr)"], ["규칙", "minmax(90px,0.8fr)"], ["상태", "80px"], ["발생", "minmax(70px,0.5fr)"]];
@@ -2958,6 +3004,15 @@ export function AlertsSurface({ onOpenRef }: { onOpenRef: (kind: string, name: s
         { label: "규칙", value: rules.status === "ready" ? rules.items.length : "—" },
         { label: "채널", value: channels.status === "ready" ? channels.items.length : "—" },
       ]} />
+      <span style={{ fontSize: TYPE.caption, color: UI.ink3 }}>
+        이벤트 채널 · {events.transport === "sse"
+          ? "실시간 연결"
+          : events.transport === "http"
+            ? "스냅샷"
+            : events.transport === "stale"
+              ? "최근 관측값 · 재연결 중"
+              : "연결 중"}
+      </span>
       <Card pad={0}>
         <div style={{ padding: "11px 15px", borderBottom: `1px solid ${UI.line2}`, fontSize: TYPE.label, fontWeight: 600, color: UI.ink3 }}>발생 이벤트</div>
         <THead cols={evCols} />

@@ -8,8 +8,8 @@ from domains.dashboard.repository import (
     timeline_update_from_event,
 )
 from domains.rca.models import RcaReport
-from domains.rca.repository import rca_report_storage_projection
 from domains.rca.report_projection import rca_report_projection, rca_report_summary
+from domains.rca.repository import rca_report_storage_projection
 from packages.contracts.event_bus.interfaces import EventEnvelope
 from packages.contracts.event_bus.subjects import EventSubject
 

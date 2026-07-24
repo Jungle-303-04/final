@@ -329,6 +329,13 @@ class NodeClusterResourceMetricsCollector:
     ) -> LiveNodeResourceObservation:
         metadata = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
         status_value = item.get("status") if isinstance(item.get("status"), dict) else {}
+        allocatable = (
+            status_value.get("allocatable")
+            if isinstance(status_value.get("allocatable"), dict)
+            else {}
+        )
+        cpu_capacity_mcores = _positive(parse_cpu_mcores(allocatable.get("cpu")))
+        mem_capacity_mib = _positive(parse_memory_mib(allocatable.get("memory")))
         conditions = (
             status_value.get("conditions")
             if isinstance(status_value.get("conditions"), list)
@@ -417,6 +424,10 @@ class NodeClusterResourceMetricsCollector:
             status=status,
             cpu_mcores=cpu_mcores,
             mem_mib=mem_mib,
+            cpu_capacity_mcores=cpu_capacity_mcores,
+            mem_capacity_mib=mem_capacity_mib,
+            cpu_pct=_ratio_percent(cpu_mcores, cpu_capacity_mcores),
+            mem_pct=_ratio_percent(mem_mib, mem_capacity_mib),
             observed_at=observed_at,
             source=KUBELET_SOURCE,
             stale=stale,
@@ -446,6 +457,20 @@ class NodeClusterResourceMetricsCollector:
         mem_mib = (
             sum(float(node.mem_mib) for node in nodes if node.mem_mib is not None)
             if metric_complete
+            else None
+        )
+        capacity_complete = metric_complete and all(
+            node.cpu_capacity_mcores is not None and node.mem_capacity_mib is not None
+            for node in nodes
+        )
+        cpu_capacity_mcores = (
+            sum(float(node.cpu_capacity_mcores) for node in nodes)
+            if capacity_complete
+            else None
+        )
+        mem_capacity_mib = (
+            sum(float(node.mem_capacity_mib) for node in nodes)
+            if capacity_complete
             else None
         )
         observed_at = (
@@ -492,6 +517,10 @@ class NodeClusterResourceMetricsCollector:
             status=status,
             cpu_mcores=cpu_mcores,
             mem_mib=mem_mib,
+            cpu_capacity_mcores=cpu_capacity_mcores,
+            mem_capacity_mib=mem_capacity_mib,
+            cpu_pct=_ratio_percent(cpu_mcores, cpu_capacity_mcores),
+            mem_pct=_ratio_percent(mem_mib, mem_capacity_mib),
             observed_at=observed_at,
             source=source,
             stale=(not metric_complete or any(node.stale for node in nodes)),

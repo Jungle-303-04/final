@@ -298,7 +298,7 @@ const IDLE_CONNECTION_STATE: ConnectionStatusState = {
   clusterId: null,
 };
 
-const POLL_INTERVAL_MS = 3000;
+export const CONNECTION_STATUS_POLL_MS = 3_000;
 
 /**
  * Polls the real connection status for a registered cluster.
@@ -323,7 +323,7 @@ export function useClusterConnectionStatus(clusterId: string | null): Connection
 
     const schedule = () => {
       if (timer !== null || document.hidden) return;
-      timer = setTimeout(() => { timer = null; void poll(); }, POLL_INTERVAL_MS);
+      timer = setTimeout(() => { timer = null; void poll(); }, CONNECTION_STATUS_POLL_MS);
     };
     const poll = async () => {
       if (cancelled || document.hidden || requestInFlight) return;
@@ -427,7 +427,7 @@ export function useClusterActivationReadiness(
       timer = setTimeout(() => {
         timer = null;
         void poll();
-      }, POLL_INTERVAL_MS);
+      }, CONNECTION_STATUS_POLL_MS);
     };
     const poll = async () => {
       if (cancelled || document.hidden || controller !== null) return;

@@ -32,6 +32,9 @@ import { ConnectionControlCenter } from "./devpreview/ConnectionControlCenter";
 import { ClusterDisconnectDialog } from "./pages/clusters/ClusterDisconnectDialog";
 import { createClusterDisconnectPort } from "./app/composition/surfaces/clusters";
 import { DetailDrawer, DetailDrawerTabs } from "./devpreview/DetailDrawer";
+import { useFleetSummaryFeed } from "./devpreview/fleetSummaryFeed";
+import { fleetHeaderGroups } from "./devpreview/fleetSummaryPresentation";
+import { type ProductSurfaceId } from "./devpreview/realtimeContractMatrix";
 
 // 목록(⋮ 메뉴) 연결 해제도 상세 뷰와 같은 캐논 계약 port 를 공유한다 —
 // 두 번째 unregister 구현이 생기지 않게 하는 ClusterLifecycleControl 원칙 준수.
@@ -63,9 +66,12 @@ import {
 } from "./devpreview/rcaDetailFeed";
 import { useCostOverview } from "./devpreview/costFeed";
 import { useSession, sessionInitial } from "./devpreview/sessionFeed";
-import { useInventoryNamespaces } from "./devpreview/inventoryNamespacesFeed";
+import {
+  useInventoryNamespaces,
+  type InventoryNamespacesView,
+} from "./devpreview/inventoryNamespacesFeed";
 import { useChangeTimeline } from "./devpreview/changeTimelineFeed";
-import { useApplications } from "./devpreview/deployFeed";
+import { useApplications, type ApplicationsFeed } from "./devpreview/deployFeed";
 import {
   isIncidentNotification,
   useAlertEvents,
@@ -625,8 +631,14 @@ function ResourceMetricsChart({ points }: { points: ResourceUsagePoint[] }) {
   const padding = rawMax === rawMin ? Math.max(rawMax * 0.12, 1) : (rawMax - rawMin) * 0.12;
   const min = Math.max(0, rawMin - padding);
   const max = Math.max(rawMax + padding, min + 1);
-  const x = (index: number) => PL + (values.length <= 1 ? 0 : index / (values.length - 1) * chartW);
-  const y = (value: number) => PT + (1 - (value - min) / (max - min)) * chartH;
+  const x = useCallback(
+    (index: number) => PL + (values.length <= 1 ? 0 : index / (values.length - 1) * chartW),
+    [chartW, values.length],
+  );
+  const y = useCallback(
+    (value: number) => PT + (1 - (value - min) / (max - min)) * chartH,
+    [chartH, max, min],
+  );
   const paths = useMemo(() => {
     const result: string[] = [];
     let current = "";
@@ -640,7 +652,7 @@ function ResourceMetricsChart({ points }: { points: ResourceUsagePoint[] }) {
     });
     if (current) result.push(current.trim());
     return result;
-  }, [max, min, values]);
+  }, [values, x, y]);
   const gapPaths = useMemo(() => {
     const result: string[] = [];
     for (let index = 1; index < observed.length; index += 1) {
@@ -653,7 +665,7 @@ function ResourceMetricsChart({ points }: { points: ResourceUsagePoint[] }) {
       );
     }
     return result;
-  }, [max, min, observed, values.length]);
+  }, [observed, x, y]);
   const hovered = hoverIndex === null || values[hoverIndex] === null
     ? null
     : { index: hoverIndex, value: values[hoverIndex] as number };
@@ -911,7 +923,9 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
     Math.min(560, (viewportW - leftInset - rightInset) * 0.52),
   );
   useEffect(() => {
-    if (forceFull) setYamlEditorOpen(false);
+    if (!forceFull) return;
+    const timer = window.setTimeout(() => setYamlEditorOpen(false), 0);
+    return () => window.clearTimeout(timer);
   }, [forceFull]);
   const switchTab = (next: DetailTab) => {
     if (next !== "yaml") setYamlEditorOpen(false);
@@ -1239,6 +1253,7 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
 
           {tab === "yaml" && (
             <LiveResourceManifestEditor
+              key={`${resourceId}:${manifestRefreshKey}`}
               resourceId={resourceId}
               resolving={observedResourceId === "" && resolvedIdentity.status === "loading"}
               refreshKey={manifestRefreshKey}
@@ -1504,7 +1519,7 @@ const NAV_BOTTOM: { id: string; label: string; icon: typeof Home }[] = [
   { id: "settings", label: "설정", icon: Settings },
 ];
 
-type Surface = "home" | "resources" | "connect" | "deploy" | "issues" | "timeline" | "checks" | "cost" | "alerts" | "ai" | "settings";
+type Surface = ProductSurfaceId;
 const SURFACE_OF: Record<string, Surface> = { home: "home", resources: "resources", deploy: "deploy", issues: "issues", timeline: "timeline", cost: "cost", alerts: "alerts", ai: "ai", settings: "settings" };
 // 리소스 서피스의 관점(D18) — 한 서피스, 세 관점. 스코프는 관점을 넘어 보존된다.
 type ResView = "map" | "list" | "flow";
@@ -1606,7 +1621,10 @@ const readBoard = (): BoardState => {
   return defaultBoard();
 };
 
-function HomeSurface({ clusterMeta, incidentClusterIds, onDrillCluster, onClusterSettings, onClusterDisconnect, onConnect, onAddRepo, onOpenPod: _onOpenPod, onPickNs, onWidgetDeepLink, onOpenIssues, pendingCl = [], pendingRepo = [] }: {
+function HomeSurface({ workspaceId, applicationsFeed, namespaceFeed, clusterMeta, incidentClusterIds, onDrillCluster, onClusterSettings, onClusterDisconnect, onConnect, onAddRepo, onOpenPod: _onOpenPod, onPickNs, onWidgetDeepLink, onOpenIssues, pendingCl = [], pendingRepo = [] }: {
+  workspaceId: string | null;
+  applicationsFeed: ApplicationsFeed;
+  namespaceFeed: InventoryNamespacesView;
   clusterMeta: Record<string, Record<string, number>>;
   incidentClusterIds: readonly string[];
   onDrillCluster: (clId: string) => void; onConnect: () => void; onAddRepo: () => void;
@@ -1616,6 +1634,13 @@ function HomeSurface({ clusterMeta, incidentClusterIds, onDrillCluster, onCluste
 }) {
   // 상단 요약 칩은 렌더 지점(아래 IIFE)에서 실 관측 이슈로 계산 — fixture 인벤토리 제거.
   const clusters = Object.keys(clusterMeta);
+  const fleet = useFleetSummaryFeed(workspaceId, clusters);
+  const fleetHeader = useMemo(
+    () => fleet.totalsObservation === "observed" && fleet.totals
+      ? fleetHeaderGroups(fleet.totals)
+      : null,
+    [fleet.totals, fleet.totalsObservation],
+  );
   // W2 이슈 위젯 — 실 RCA 이슈 큐(GET /api/dashboard/rca/issues). 빈 배열=관측된 이슈 없음.
   const issues = useRcaIssues(incidentClusterIds);
   // W7 비용 위젯 — 실 GET /api/cost/overview. 현 계약은 관측 unavailable(가격 backfill 금지).
@@ -1642,13 +1667,12 @@ function HomeSurface({ clusterMeta, incidentClusterIds, onDrillCluster, onCluste
   // 활동 추이 — 기간 컨텍스트에 따라 포인트 수만 달라지는 결정적 시계열 (단일 시드)
 
   // W5 네임스페이스 분포 — 실 클러스터 인벤토리 요약의 네임스페이스별 파드 수.
-  const nsView = useInventoryNamespaces(clusters);
   const nsDist = useMemo(() => {
-    const arr = nsView.items;
+    const arr = namespaceFeed.items;
     const top = arr.slice(0, 5).map((n) => ({ label: n.namespace, value: n.podCount }));
     const rest = arr.slice(5).reduce((s, n) => s + n.podCount, 0);
     return rest > 0 ? [...top, { label: "기타", value: rest, pick: false }] : top; // '기타'는 필터 목적지가 없다 — 클릭 불가
-  }, [nsView.items]);
+  }, [namespaceFeed.items]);
   // W6 장애·주의 리소스 — 실 RCA 이슈 큐의 미해결 이슈 상위 5(홈 W2와 동일 소스).
   const watch = useMemo(() => {
     if (issues.status !== "ready") return [];
@@ -1664,9 +1688,9 @@ function HomeSurface({ clusterMeta, incidentClusterIds, onDrillCluster, onCluste
       }));
   }, [issues]);
   // W8 최근 변경 · W4 활동 — 실 GET /api/changes(버킷 시계열 + 순서 이벤트).
-  const changeTimeline = useChangeTimeline();
+  const changeTimeline = useChangeTimeline(workspaceId, clusters);
   // W3 저장소 동기화 — 실 GET /api/applications(배포/GitOps 상태).
-  const apps = useApplications();
+  const apps = applicationsFeed;
   // 렌더 순수성 — Date.now() 상대시각 금지. 이벤트의 절대 시각(월/일 HH:MM)만 표기.
   const clockTime = (ms: number) => {
     const d = new Date(ms);
@@ -1680,11 +1704,12 @@ function HomeSurface({ clusterMeta, incidentClusterIds, onDrillCluster, onCluste
   const body = (id: string) => {
     switch (id) {
       case "W1":
-        return <HomeClustersWidget onOpen={onDrillCluster} onSettings={onClusterSettings} onDisconnect={onClusterDisconnect} pending={pendingCl} />;
+        return <HomeClustersWidget summaries={fleet.clusters} onOpen={onDrillCluster} onSettings={onClusterSettings} onDisconnect={onClusterDisconnect} pending={pendingCl} />;
       case "W2":
         if (issues.status === "loading") return <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>불러오는 중…</span>;
         if (issues.status === "unavailable") return <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>이슈를 불러오지 못했습니다</span>;
-        return issues.items.length
+        {
+          const content = issues.items.length
           ? <RankList onPick={onOpenIssues ? () => onOpenIssues() : undefined} rows={issues.items.slice(0, 3).map((iss) => ({
               id: iss.correlationId,
               tone: iss.severity === "warning" ? "warn" as const : "crit" as const,
@@ -1693,6 +1718,10 @@ function HomeSurface({ clusterMeta, incidentClusterIds, onDrillCluster, onCluste
               right: statusLabel(iss.status),
             }))} />
           : <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>활성 이슈가 없습니다</span>;
+          return issues.status === "stale"
+            ? <div style={{ display: "flex", flexDirection: "column", gap: 6 }}><span style={{ fontSize: TYPE.caption, color: TINT.warn.fg }}>최근 관측값 · 재조회 대기</span>{content}</div>
+            : content;
+        }
       case "W3":
         if (apps.status === "loading") return <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>불러오는 중…</span>;
         if (apps.status === "unavailable") return <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>애플리케이션을 불러오지 못했습니다</span>;
@@ -1703,6 +1732,7 @@ function HomeSurface({ clusterMeta, incidentClusterIds, onDrillCluster, onCluste
           return (
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               <RatioBar a={syncedApps} b={outSyncApps} aLabel="동기화" bLabel="대기/드리프트" />
+              {apps.stale && <span style={{ fontSize: TYPE.caption, color: TINT.warn.fg }}>최근 관측값 · 재조회 대기</span>}
               {pendingRepo.length > 0 && <span style={{ fontSize: TYPE.caption, color: TINT.blue.fg }}>연결 중 {pendingRepo.length} · 초기 동기화 대기</span>}
             </div>
           );
@@ -1716,17 +1746,22 @@ function HomeSurface({ clusterMeta, incidentClusterIds, onDrillCluster, onCluste
           { label: "경고", color: HP.warn, values: changeTimeline.buckets.map((b) => b.warnings) },
         ]} />;
       case "W5":
-        if (nsView.status === "loading") return <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>불러오는 중…</span>;
-        if (nsView.status === "unavailable") return <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>네임스페이스 관측 안 됨</span>;
+        if (namespaceFeed.status === "loading") return <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>불러오는 중…</span>;
+        if (namespaceFeed.status === "unavailable") return <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>네임스페이스 관측 안 됨</span>;
         return nsDist.length
           ? <div style={{ flex: 1, display: "flex", alignItems: "center" }}><Donut items={nsDist} onPick={(l) => l !== "기타" && onPickNs(l)} /></div>
           : <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>관측된 파드가 없습니다</span>;
       case "W6":
         if (issues.status === "loading") return <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>불러오는 중…</span>;
         if (issues.status === "unavailable") return <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>불러오지 못했습니다</span>;
-        return watch.length
+        {
+          const content = watch.length
           ? <RankList onPick={onOpenIssues ? () => onOpenIssues() : undefined} rows={watch} />
           : <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>주의가 필요한 리소스가 없습니다</span>;
+          return issues.status === "stale"
+            ? <div style={{ display: "flex", flexDirection: "column", gap: 6 }}><span style={{ fontSize: TYPE.caption, color: TINT.warn.fg }}>최근 관측값 · 재조회 대기</span>{content}</div>
+            : content;
+        }
       case "W7": {
         if (cost.status === "loading") return <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>불러오는 중…</span>;
         if (cost.status === "error") return <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>비용을 불러오지 못했습니다</span>;
@@ -1764,16 +1799,49 @@ function HomeSurface({ clusterMeta, incidentClusterIds, onDrillCluster, onCluste
         {(() => {
           const seg: React.CSSProperties = { display: "flex", alignItems: "center", gap: 5, fontSize: TYPE.label, fontWeight: 600, color: UI.ink2, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 999, padding: "5px 11px", whiteSpace: "nowrap" };
           const num: React.CSSProperties = { fontWeight: 700, color: UI.ink, fontVariantNumeric: "tabular-nums" };
-          // 실 관측 파생: 장애=RCA 이슈 큐. 노드/파드 세분은 계약 미노출이라 클러스터 카드에만.
-          const critCount = issues.status === "ready" ? issues.items.length : 0;
-          const firstCrit = issues.items[0]?.clusterId ?? undefined;
+          const healthMetrics = fleetHeader?.health ?? [{
+            key: "clusters",
+            label: "클러스터",
+            value: clusters.length,
+          }];
+          const operationMetrics = fleetHeader?.operations ?? [];
+          const openIncidentCount = fleet.totalsObservation === "observed"
+            ? fleet.totals?.open_incidents ?? 0
+            : null;
           return (
             <span style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-              <span style={seg}><Server size={11} style={{ color: UI.ink3 }} />클러스터 <b style={num}>{clusters.length}</b>{pendingCl.length > 0 && <span style={{ color: TINT.blue.fg }}>· 연결 중 {pendingCl.length}</span>}</span>
-              {critCount > 0 && (
-                <button className="product-focusable product-destructive" onClick={() => (onOpenIssues ? onOpenIssues() : (firstCrit && onDrillCluster(firstCrit)))} title="이슈 목록에서 원인·복구 보기"
-                  style={{ ...seg, borderColor: TINT.crit.bd, background: TINT.crit.bg, color: HP.crit, fontWeight: 600, cursor: "pointer" }}>
-                  <Activity size={12} />장애 {critCount}
+              <span style={seg}>
+                <Server size={11} style={{ color: UI.ink3 }} />
+                {healthMetrics.map((metric, index) => (
+                  <span key={metric.key}>
+                    {index > 0 && <span aria-hidden="true" style={{ marginRight: 5, color: UI.line }}>·</span>}
+                    {metric.label} <b style={num}>{metric.value}</b>
+                  </span>
+                ))}
+                {pendingCl.length > 0 && <span style={{ color: TINT.blue.fg }}>· 연결 중 {pendingCl.length}</span>}
+              </span>
+              {operationMetrics.length > 0 && (
+                <button
+                  type="button"
+                  className="product-focusable product-control"
+                  disabled={!onOpenIssues || openIncidentCount === 0}
+                  onClick={onOpenIssues}
+                  title={openIncidentCount && openIncidentCount > 0 ? "이슈 목록에서 원인·복구 보기" : undefined}
+                  style={{
+                    ...seg,
+                    borderColor: openIncidentCount && openIncidentCount > 0 ? TINT.crit.bd : UI.line,
+                    background: openIncidentCount && openIncidentCount > 0 ? TINT.crit.bg : UI.card,
+                    color: openIncidentCount && openIncidentCount > 0 ? HP.crit : UI.ink2,
+                    cursor: onOpenIssues && openIncidentCount && openIncidentCount > 0 ? "pointer" : "default",
+                  }}
+                >
+                  <Activity size={12} />
+                  {operationMetrics.map((metric, index) => (
+                    <span key={metric.key}>
+                      {index > 0 && <span aria-hidden="true" style={{ marginRight: 5, color: UI.line }}>·</span>}
+                      {metric.label} <b style={{ ...num, color: "inherit" }}>{metric.value}</b>
+                    </span>
+                  ))}
                 </button>
               )}
             </span>
@@ -1924,7 +1992,9 @@ function App() {
   // 계약이 unavailable/빈이면 "모든 네임스페이스"만 남는다.
   const resourcesListActive = surface === "resources" && resView === "list";
   const resourcesDrillActive = surface === "resources" && resView === "map" && scope.level !== "clusters";
-  const namespaceClusterIds = resourcesListActive
+  const namespaceClusterIds = surface === "home"
+    ? clusterIds
+    : resourcesListActive
     ? clusterIds
     : resourcesDrillActive && scope.cluster ? [scope.cluster] : [];
   const nsFeed = useInventoryNamespaces(namespaceClusterIds);
@@ -1946,7 +2016,10 @@ function App() {
   const aiRestoreFocusRef = useRef(false);
   const [drillCl, setDrillCl] = useState<string | null>(null); // 홈 카드 → 지도 드릴 스코프 전달(D21)
   const [connectView, setConnectView] = useState<null | "repo" | "cluster">(null); // 연결 위저드 딥오픈 대상 (설정 서피스)
-  const [connectModal, setConnectModal] = useState<null | "repo" | "cluster">(null); // 문맥 진입 = 모달 팝업
+  const [connectModal, setConnectModal] = useState<null | "repo" | "cluster">(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("github_app_installation_id") ? "repo" : null;
+  }); // 문맥 진입 = 모달 팝업
   const [connectionManagerOpen, setConnectionManagerOpen] = useState(false);
   const [resumeClusterConnection, setResumeClusterConnection] = useState<ResumeClusterConnection | null>(null);
   const [repositoryConnectContext, setRepositoryConnectContext] = useState<RepositoryConnectionContext | null>(null);
@@ -1991,14 +2064,15 @@ function App() {
     });
     return () => window.cancelAnimationFrame(frame);
   }, [aiOpen]);
-  // GitHub App 설치 복귀(?github_app_installation_id=...)가 홈으로 떨어져도
-  // 연결 위저드를 자동으로 다시 열어 RepoStep 복귀 핸들러가 이어받게 한다.
-  useEffect(() => { const p = new URLSearchParams(window.location.search); if (p.get("github_app_installation_id")) setConnectModal("repo"); }, []);
   const [manifestRefreshKey, setManifestRefreshKey] = useState(0);
   // 세션 중 등록한 연결 대기 항목 — 등록의 결과가 목록에 보여야 한다(로그아웃=세션 초기화로 함께 소멸)
   const [pendingCl, setPendingCl] = useState<string[]>(() => { try { return JSON.parse(sessionStorage.getItem(PENDING_CLUSTER_STORAGE_KEY) || "[]"); } catch { return []; } });
   const [pendingRepo, setPendingRepo] = useState<string[]>(() => { try { return JSON.parse(sessionStorage.getItem("opsia-demo-pending-repo") || "[]"); } catch { return []; } });
-  const repositoryApplications = useApplications(manifestRefreshKey);
+  const applicationsActive = surface === "home"
+    || surface === "resources"
+    || surface === "deploy"
+    || pendingRepo.length > 0;
+  const repositoryApplications = useApplications(manifestRefreshKey, applicationsActive);
   const connectedRepos = useMemo(
     () => Array.from(new Set(repositoryApplications.items.map((item) => item.repositoryRef).filter((ref): ref is string => Boolean(ref)))).sort(),
     [repositoryApplications.items],
@@ -2020,16 +2094,16 @@ function App() {
       return next;
     });
   };
-  // 서버 인벤토리에 실 클러스터가 나타나면 부트스트랩 임시 카드는 즉시 승격한다.
-  // id/name/displayName 중 어느 식별자로 연결했더라도 중복 카드와 새로고침 재등장을 막는다.
+  // 서버 인벤토리에 실 클러스터가 나타나면 부트스트랩 임시 카드는 렌더 단계에서
+  // 즉시 숨긴다. 서버 동기화 effect 안에서 다시 setState 하지 않아 중복 렌더를 막는다.
+  const visiblePendingCl = useMemo(
+    () => reconcilePendingClusters(pendingCl, contract.clusters),
+    [contract.clusters, pendingCl],
+  );
   useEffect(() => {
-    setPendingCl((current) => {
-      const next = reconcilePendingClusters(current, contract.clusters);
-      if (next === current) return current;
-      try { sessionStorage.setItem(PENDING_CLUSTER_STORAGE_KEY, JSON.stringify(next)); } catch { /* 세션 저장 불가 */ }
-      return next;
-    });
-  }, [contract.clusters, pendingCl]);
+    if (visiblePendingCl === pendingCl) return;
+    try { sessionStorage.setItem(PENDING_CLUSTER_STORAGE_KEY, JSON.stringify(visiblePendingCl)); } catch { /* 세션 저장 불가 */ }
+  }, [pendingCl, visiblePendingCl]);
   // 연결 완료는 세션 타이머가 아니라 서버가 소유한 repository 상태로 확정한다.
   // 이전 구현은 pendingRepo를 추가만 하고 제거하지 않아 active 저장소도 영원히
   // "초기 동기화 대기"로 남았다. 서버가 ready를 반환하는 즉시 대기 목록과
@@ -2721,29 +2795,40 @@ function App() {
       {surface === "connect" ? (
         /* 연결 설정 — 셸 안에서 위저드 서피스로 전환 (별도 페이지 아님) */
         <div style={{ position: "relative", minHeight: `calc(100vh / ${PRESENT_SCALE} - 57px)`, background: UI.bg }}>
-          <ConnectWizard key={connectView ?? "launcher"} embedded initialView={connectView} />
+          <ConnectWizard
+            key={connectView ?? "launcher"}
+            embedded
+            initialView={connectView}
+            repositoryClusters={contract.clusters}
+          />
         </div>
       ) : surface === "deploy" ? (
-        <DeploySurface pendingRepos={pendingRepo} repositoryFilter={deployRepositoryFilter} onOpenRef={openRef}
+        <DeploySurface applicationsFeed={repositoryApplications} onRefreshApplications={() => setManifestRefreshKey((key) => key + 1)}
+          pendingRepos={pendingRepo} repositoryFilter={deployRepositoryFilter} onOpenRef={openRef}
           onOpenIssues={() => setSurface("issues")} onAskAi={showAi} onAddRepo={() => setConnectModal("repo")}
           topInset={topH} leftInset={navCollapsed ? 60 : 208} rightInset={aiOpen ? aiW : 0} />
       ) : surface === "issues" ? (
         <IssuesSurface incidentClusterIds={incidentClusterIds} recoveryProgressOverrides={recoveryProgressOverrides} sessionRules={notes.filter((n) => n.icon === "rule").map((n) => n.body.split(" · ")[0])} onOpenRef={openRef} onOpenRca={setRcaIncident} />
       ) : surface === "timeline" ? (
-        <TimelineSurface onOpenRef={openRef} />
+        <TimelineSurface
+          workspaceId={workspaceIdentityId}
+          clusterIds={clusterIds}
+          onOpenRef={openRef}
+        />
       ) : surface === "checks" ? (
         <ChecksSurface onOpenRef={openRef} />
       ) : surface === "cost" ? (
         <CostSurface onOpenRef={openRef} />
       ) : surface === "alerts" ? (
-        <AlertsSurface onOpenRef={openRef} />
+        <AlertsSurface events={alertEvents} onOpenRef={openRef} />
       ) : surface === "ai" ? (
         <AiHistorySurface onOpenPanel={showAi} />
       ) : surface === "settings" ? (
-        <SettingsSurface />
+        <SettingsSurface session={session} clusterId={clusterIds[0] ?? null} />
       ) : surface === "home" ? (
         /* 홈 — 위젯 보드 (D21). 카드 클릭=지도 드릴, 위젯 액션=전부 실 목적지 */
-        <HomeSurface clusterMeta={clusterMeta} incidentClusterIds={incidentClusterIds} pendingCl={pendingCl} pendingRepo={pendingRepo}
+        <HomeSurface workspaceId={workspaceIdentityId} applicationsFeed={repositoryApplications} namespaceFeed={nsFeed}
+          clusterMeta={clusterMeta} incidentClusterIds={incidentClusterIds} pendingCl={visiblePendingCl} pendingRepo={pendingRepo}
           onWidgetDeepLink={(id) => {
             if (id === "W1") { setSurface("resources"); setResView("map"); }
             else if (id === "W2") setSurface("issues");
@@ -3055,6 +3140,7 @@ function App() {
               key={connectModal}
               embedded
               initialView={connectModal}
+              repositoryClusters={contract.clusters}
               repositoryContext={repositoryConnectContext ?? undefined}
               resumeCluster={resumeClusterConnection ?? undefined}
               onRepositoryComplete={() => {

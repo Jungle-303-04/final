@@ -17,6 +17,7 @@ DASHBOARD_READY_POSITION_ID = "snapshot_id"
 ORIGIN_SNAPSHOT_ID = "origin"
 DASHBOARD_READY_HEARTBEAT_SECONDS_ENV = "DASHBOARD_READY_HEARTBEAT_SECONDS"
 DASHBOARD_READY_RECONNECT_AFTER_MS_ENV = "DASHBOARD_READY_RECONNECT_AFTER_MS"
+FLEET_SUMMARY_PUSH_INTERVAL_SECONDS_ENV = "FLEET_SUMMARY_PUSH_INTERVAL_SECONDS"
 
 
 @dataclass(frozen=True)
@@ -218,6 +219,17 @@ def dashboard_ready_reconnect_after_ms() -> int:
             minimum=100,
             maximum=30_000,
         )
+    )
+
+
+def fleet_summary_push_interval_seconds() -> float:
+    """Maximum delay between complete fleet payloads on the workspace stream."""
+
+    return _bounded_number(
+        FLEET_SUMMARY_PUSH_INTERVAL_SECONDS_ENV,
+        default="5",
+        minimum=5,
+        maximum=10,
     )
 
 

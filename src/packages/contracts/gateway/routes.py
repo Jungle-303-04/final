@@ -17,6 +17,12 @@ PROMETHEUS_INTEGRATION_PATH = "/integrations/prometheus"
 AGENT_PROMETHEUS_INTEGRATION_PATH = "/agent/integrations/prometheus"
 AGENT_PROMETHEUS_INTEGRATION_STATUS_PATH = "/agent/integrations/prometheus/status"
 GITHUB_WEBHOOK_PATH = "/github/webhook"
+GITHUB_APP_CONFIG_PATH = "/integrations/github/app/config"
+GITHUB_APP_INSTALL_URL_PATH = "/integrations/github/app/install-url"
+GITHUB_APP_CALLBACK_PATH = "/integrations/github/app/callback"
+GITHUB_APP_MANIFEST_PATH = "/integrations/github/app/manifest"
+GITHUB_APP_MANIFEST_CALLBACK_PATH = "/integrations/github/app/manifest/callback"
+GITHUB_APP_VERIFY_PATH = "/integrations/github/app/installations/{installation_id}/verify"
 # 외부 모니터링(Alertmanager/Grafana) 알림 수신 — 인시던트 파이프라인 트리거.
 ALERTMANAGER_WEBHOOK_PATH = "/webhooks/alertmanager"
 AGENT_CONNECT_PATH = "/agent/connect"
@@ -205,6 +211,8 @@ CLUSTER_PATH = "/clusters/{cluster_id}"
 CLUSTER_CONNECT_COMMAND_PATH = "/clusters/{cluster_id}/connect-command"
 # 콘솔 fleet 화면용 집계 — 워크스페이스 전체 클러스터 health/사용량 롤업(세션 범위).
 FLEET_SUMMARY_PATH = "/fleet/summary"
+# 콘솔 홈용 단일 workspace SSE — 권한으로 허용된 fleet 전체 payload를 직접 전송.
+FLEET_SUMMARY_EVENTS_PATH = "/fleet/events"
 # 클러스터 타일 클릭 드릴다운 — 워크로드 health 그룹/경고 이벤트/열린 인시던트/usage 스냅샷.
 CLUSTER_SUMMARY_PATH = "/clusters/{cluster_id}/summary"
 CLUSTER_HOME_EVENTS_PATH = "/clusters/{cluster_id}/home/events"

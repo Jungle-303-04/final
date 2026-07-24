@@ -3,13 +3,14 @@ import { useEffect, useState } from "react";
 import { listRcaIssues } from "../api/rca-issues";
 import type { RcaIssueList } from "../api/schemas";
 import type { DevpreviewCluster } from "./contracts";
+import { useVisibleRefreshClock } from "../shared/data/useVisibleRefreshClock";
 
 // UI-PHASE2-001 §5.2: typed live adapter for the Issue widget/surface and the
 // notification bell. Reads the additive RCA Issue queue from
 // `GET /api/dashboard/rca/issues`. Empty means no observed issues; a load
 // failure is an honest `unavailable`, never a fabricated queue.
 
-export type RcaFeedStatus = "loading" | "ready" | "unavailable";
+export type RcaFeedStatus = "loading" | "ready" | "stale" | "unavailable";
 
 export interface RcaIssueView {
   correlationId: string;
@@ -28,6 +29,7 @@ export interface RcaIssuesFeed {
 }
 
 export type RcaIssueItem = RcaIssueList["items"][number];
+export const RCA_ISSUES_REFRESH_MS = 10_000;
 
 const OBSERVED_TARGET_STAGES = new Set(["agent_connected", "snapshot_received", "ready"]);
 const TERMINAL_ISSUE_STATUSES = new Set([
@@ -161,6 +163,7 @@ export function useRcaIssues(clusterIds?: readonly string[]): RcaIssuesFeed {
     scopeKey,
     feed: { status: "loading", items: [] },
   });
+  const { revision } = useVisibleRefreshClock(true, RCA_ISSUES_REFRESH_MS);
   useEffect(() => {
     const controller = new AbortController();
     const scopedClusterIds = scopeKey === null ? null : scopeKey === "" ? [] : scopeKey.split("\u0000");
@@ -172,10 +175,18 @@ export function useRcaIssues(clusterIds?: readonly string[]): RcaIssuesFeed {
       })
       .catch((cause: unknown) => {
         if (controller.signal.aborted || isAbortError(cause)) return;
-        setSnapshot({ scopeKey, feed: { status: "unavailable", items: [] } });
+        setSnapshot((previous) => (
+          previous.scopeKey === scopeKey
+          && (previous.feed.status === "ready" || previous.feed.status === "stale")
+            ? {
+                scopeKey,
+                feed: { status: "stale", items: previous.feed.items },
+              }
+            : { scopeKey, feed: { status: "unavailable", items: [] } }
+        ));
       });
     return () => controller.abort();
-  }, [scopeKey]);
+  }, [revision, scopeKey]);
   return snapshot.scopeKey === scopeKey
     ? snapshot.feed
     : { status: "loading", items: [] };

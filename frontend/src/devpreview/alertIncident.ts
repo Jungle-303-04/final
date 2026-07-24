@@ -73,9 +73,9 @@ export function alertIncidentPollMs(incident: RcaIncident | null): number {
 
 export function alertIncidentClusterIds(
   incident: RcaIncident | null,
-  defaultClusterIds: readonly string[],
+  _defaultClusterIds: readonly string[],
 ): readonly string[] {
   return incident?.incidentId && !incident.correlationId && incident.cluster !== "-"
     ? [incident.cluster]
-    : defaultClusterIds;
+    : [];
 }

@@ -6,7 +6,18 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
 
+from sqlalchemy import and_, delete, exists, func, or_, select, tuple_, update
+from sqlalchemy.engine import Connection
+from sqlalchemy.sql.schema import Table
+
 from domains.ai.models import AiLlmInvocationMetric
+from domains.command.models import (
+    AgentCommand,
+    AgentCommandAttempt,
+    CommandControlAction,
+    CommandOperationEvent,
+    CommandOperationEventCursor,
+)
 from domains.dashboard.models import RcaTimeline
 from domains.inventory.models import (
     ClusterInventoryResourceRecord,
@@ -27,6 +38,10 @@ from domains.rca.models import (
     RecoveryPlanRecord,
 )
 from domains.rca_changes.models import WorkloadChange
+from domains.target.evidence_jobs import (
+    EVIDENCE_JOB_STATUS_COMPLETED,
+    EVIDENCE_JOB_STATUS_FAILED,
+)
 from domains.target.models import (
     AgentPolicyStatusRecord,
     AgentReconcileStatusRecord,
@@ -36,24 +51,9 @@ from domains.target.models import (
     TargetReconcileRecord,
 )
 from domains.timeline.models import TimelineLedgerCursor, TimelineLedgerEvent
+from packages.config.constants import CommandStatus
 from packages.storage.engine import DatabaseConnection
 from packages.storage.schema import EventDeadLetter, EventModel, EventProcessing
-from sqlalchemy import and_, delete, exists, func, or_, select, tuple_, update
-from sqlalchemy.engine import Connection
-from sqlalchemy.sql.schema import Table
-
-from domains.command.models import (
-    AgentCommand,
-    AgentCommandAttempt,
-    CommandControlAction,
-    CommandOperationEvent,
-    CommandOperationEventCursor,
-)
-from domains.target.evidence_jobs import (
-    EVIDENCE_JOB_STATUS_COMPLETED,
-    EVIDENCE_JOB_STATUS_FAILED,
-)
-from packages.config.constants import CommandStatus
 
 TERMINAL_COMMAND_STATUSES = (
     CommandStatus.COMPLETED,

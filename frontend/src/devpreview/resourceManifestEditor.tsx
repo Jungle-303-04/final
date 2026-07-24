@@ -20,6 +20,8 @@ import {
   type ResourceManifestSourceEndpoint,
   type ResourceManifestRemediation,
 } from "./resourceManifestFeed";
+
+export const RESOURCE_MANIFEST_COMMAND_POLL_MS = 1_500;
 import { grantApproval, rejectApproval } from "../api/approvals";
 import { reasonLabel } from "./statusLabel";
 import { BLUE, HP, MONO, TINT, TYPE, UI, inkA } from "./theme";
@@ -133,17 +135,21 @@ export function LiveResourceManifestEditor({
   useEffect(() => {
     controller.current?.abort();
     if (!resourceId) return;
-    setEditingSelf(false);
-    if (initialSource?.resource_id === resourceId) {
-      setSource(initialSource);
-      setApplicationId(initialSource.selected?.application_id ?? "");
-      setYaml(restoreManifestDraft(resourceId, initialSource));
-      setPhase("ready");
-      return;
-    }
     const next = new AbortController();
     controller.current = next;
     void (async () => {
+      // Defer prop-to-editor synchronization out of the effect body. This
+      // preserves the supplied source without a synchronous render cascade.
+      await Promise.resolve();
+      if (next.signal.aborted) return;
+      setEditingSelf(false);
+      if (initialSource?.resource_id === resourceId) {
+        setSource(initialSource);
+        setApplicationId(initialSource.selected?.application_id ?? "");
+        setYaml(restoreManifestDraft(resourceId, initialSource));
+        setPhase("ready");
+        return;
+      }
       try {
         const loaded = await getResourceManifestSource(resourceId, null, next.signal);
         if (next.signal.aborted) return;
@@ -188,7 +194,7 @@ export function LiveResourceManifestEditor({
         if (abort.signal.aborted) return;
         setApplyStatus(next);
         if (next.status !== "completed" && next.status !== "failed") {
-          timer = setTimeout(() => void poll(), 1_500);
+          timer = setTimeout(() => void poll(), RESOURCE_MANIFEST_COMMAND_POLL_MS);
         }
       } catch {
         // The immutable receipt remains visible. A transient status read must not

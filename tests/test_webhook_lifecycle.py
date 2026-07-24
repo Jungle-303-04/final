@@ -18,7 +18,6 @@ from domains.gitops.router import (
     github_lifecycle_intents,
 )
 
-
 # --- 파서(순수) -------------------------------------------------------------
 
 

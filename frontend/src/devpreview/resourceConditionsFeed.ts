@@ -1,14 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { getInventoryResourceDetail, RESOURCE_DETAIL_MIN_LIMIT } from "../api/inventory";
 import { kindToResourceType } from "./inventoryResourcesFeed";
 import { KUBERNETES_KIND } from "./kubernetesKinds";
+import { loadSharedInventoryResourceDetail } from "./resourceDetailFeed";
 import {
   resourceConditionSnapshot,
   type ResourceConditionEventItem,
   type ResourceConditionItem,
 } from "./resourceConditions";
-import { RESOURCE_DETAIL_EVENT_LIMIT } from "./resourceEventsFeed";
 
 export type ResourceConditionsStatus = "idle" | "loading" | "ready" | "unavailable" | "error";
 
@@ -21,8 +20,8 @@ export interface ResourceConditionsView {
   retry: () => void;
 }
 
-// ReplicaSet conditions are often empty, so fetch a bounded pod fan-out for
-// fallback evidence without using the wider resource-detail defaults.
+// ReplicaSet conditions are often empty. The shared detail request uses this
+// bounded related-resource limit once for every drawer consumer.
 export const REPLICA_SET_CONDITION_RELATED_POD_LIMIT = 20;
 const EMPTY_ITEMS: ResourceConditionItem[] = [];
 const EMPTY_EVENTS: ResourceConditionEventItem[] = [];
@@ -87,19 +86,12 @@ export function useResourceConditions(
     if (!key) return;
     const controller = new AbortController();
     const needsReplicaSetFallback = resourceKind === KUBERNETES_KIND.replicaSet;
-    void getInventoryResourceDetail(cid, {
+    void loadSharedInventoryResourceDetail(cid, {
       resourceType: resolvedResourceType,
       kind: resourceKind,
       namespace: ns,
       name: resourceName,
-    }, {
-      relatedLimit: needsReplicaSetFallback
-        ? REPLICA_SET_CONDITION_RELATED_POD_LIMIT
-        : RESOURCE_DETAIL_MIN_LIMIT,
-      eventLimit: needsReplicaSetFallback
-        ? RESOURCE_DETAIL_EVENT_LIMIT
-        : RESOURCE_DETAIL_MIN_LIMIT,
-    }, controller.signal)
+    })
       .then((detail) => {
         if (controller.signal.aborted) return;
         setState({

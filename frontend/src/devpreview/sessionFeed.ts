@@ -37,6 +37,17 @@ const INITIAL: SessionView = {
   logoutSupported: false,
 };
 
+type SessionListener = (view: SessionView) => void;
+
+interface SharedSessionChannel {
+  state: SessionView;
+  listeners: Set<SessionListener>;
+  controller: AbortController;
+  disposeTimer: ReturnType<typeof setTimeout> | null;
+}
+
+let sharedSessionChannel: SharedSessionChannel | null = null;
+
 function toSessionView(session: AuthSession): SessionView {
   return {
     status: "ready",
@@ -65,21 +76,73 @@ export function sessionInitial(view: SessionView): string {
 }
 
 export function useSession(): SessionView {
-  const [view, setView] = useState<SessionView>(INITIAL);
+  const [view, setView] = useState<SessionView>(
+    () => sharedSessionChannel?.state ?? INITIAL,
+  );
   useEffect(() => {
-    const controller = new AbortController();
-    void getSession(controller.signal)
-      .then((session) => {
-        if (controller.signal.aborted) return;
-        setView(toSessionView(session));
-      })
-      .catch((cause: unknown) => {
-        if (controller.signal.aborted || isAbortError(cause)) return;
-        setView((prev) => ({ ...prev, status: "error" }));
-      });
-    return () => controller.abort();
+    const channel = acquireSharedSessionChannel();
+    channel.listeners.add(setView);
+    return () => releaseSharedSessionChannel(channel, setView);
   }, []);
   return view;
+}
+
+function acquireSharedSessionChannel(): SharedSessionChannel {
+  let channel = sharedSessionChannel;
+  if (channel !== null) {
+    if (channel.disposeTimer !== null) {
+      clearTimeout(channel.disposeTimer);
+      channel.disposeTimer = null;
+    }
+    return channel;
+  }
+  const controller = new AbortController();
+  channel = {
+    state: INITIAL,
+    listeners: new Set(),
+    controller,
+    disposeTimer: null,
+  };
+  sharedSessionChannel = channel;
+  const active = channel;
+  const publish = (next: SessionView) => {
+    if (controller.signal.aborted || sharedSessionChannel !== active) return;
+    active.state = next;
+    active.listeners.forEach((listener) => listener(next));
+  };
+  void getSession(controller.signal)
+    .then((session) => publish(toSessionView(session)))
+    .catch((cause: unknown) => {
+      if (controller.signal.aborted || isAbortError(cause)) return;
+      publish({ ...active.state, status: "error" });
+    });
+  return channel;
+}
+
+function releaseSharedSessionChannel(
+  channel: SharedSessionChannel,
+  listener: SessionListener,
+): void {
+  channel.listeners.delete(listener);
+  if (channel.listeners.size > 0 || channel.disposeTimer !== null) return;
+  // React StrictMode unmount/remounts effects synchronously. A zero-delay grace
+  // keeps that probe on one request while still clearing authorization-bearing
+  // state as soon as the last real consumer leaves.
+  channel.disposeTimer = setTimeout(() => {
+    if (channel.listeners.size > 0 || sharedSessionChannel !== channel) return;
+    channel.controller.abort();
+    sharedSessionChannel = null;
+  }, 0);
+}
+
+/** @internal Test isolation for the shell-owned session channel. */
+export function resetSharedSessionForTests(): void {
+  const channel = sharedSessionChannel;
+  if (channel?.disposeTimer !== null && channel?.disposeTimer !== undefined) {
+    clearTimeout(channel.disposeTimer);
+  }
+  channel?.controller.abort();
+  sharedSessionChannel = null;
 }
 
 // 로그아웃도 이 도메인 어댑터 경계를 통해서만 노출한다(shell이 api를 직접 import하지 않도록).

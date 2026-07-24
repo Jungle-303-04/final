@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { getInventoryResourceDetail } from "../api/inventory";
+import { loadSharedInventoryResourceDetail } from "./resourceDetailFeed";
 
 export interface ResourceIdentityView {
   status: "idle" | "loading" | "ready" | "unavailable" | "error";
@@ -38,12 +38,12 @@ export function useResourceIdentity(
   useEffect(() => {
     if (!key) return;
     const controller = new AbortController();
-    void getInventoryResourceDetail(cid, {
+    void loadSharedInventoryResourceDetail(cid, {
       resourceType: rt,
       kind,
       namespace: ns,
       name: resourceName,
-    }, { relatedLimit: 1, eventLimit: 1 }, controller.signal)
+    })
       .then((detail) => {
         if (controller.signal.aborted) return;
         setState({ key, status: "ready", resourceId: detail.resource.inventory_key });

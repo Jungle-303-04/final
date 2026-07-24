@@ -4,7 +4,6 @@ import { renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { InventoryResource, InventoryResourceDetail } from "../api/inventory-schemas";
-import { RESOURCE_DETAIL_MIN_LIMIT } from "../api/inventory";
 
 const getInventoryResourceDetail = vi.fn();
 
@@ -22,6 +21,10 @@ import {
 } from "./resourceConditionsFeed";
 import { KUBERNETES_KIND } from "./kubernetesKinds";
 import { RESOURCE_DETAIL_EVENT_LIMIT } from "./resourceEventsFeed";
+import {
+  resetSharedInventoryResourceDetailForTests,
+  SHARED_RESOURCE_DETAIL_RELATED_LIMIT,
+} from "./resourceDetailFeed";
 
 function resource(kind: string, summary: Record<string, unknown> = {}): InventoryResource {
   return {
@@ -69,6 +72,7 @@ function detail(
 }
 
 afterEach(() => {
+  resetSharedInventoryResourceDetailForTests();
   getInventoryResourceDetail.mockReset();
 });
 
@@ -81,7 +85,7 @@ describe("useResourceConditions", () => {
     expect(getInventoryResourceDetail).not.toHaveBeenCalled();
   });
 
-  it("keeps non-ReplicaSet detail reads bounded to the minimum related/event limits", async () => {
+  it("uses the shared bounded detail projection for non-ReplicaSet resources", async () => {
     getInventoryResourceDetail.mockResolvedValue(detail("Deployment"));
 
     renderHook(() =>
@@ -92,8 +96,10 @@ describe("useResourceConditions", () => {
     expect(getInventoryResourceDetail).toHaveBeenCalledWith(
       "cluster",
       expect.objectContaining({ kind: "Deployment", resourceType: "deployment" }),
-      { relatedLimit: RESOURCE_DETAIL_MIN_LIMIT, eventLimit: RESOURCE_DETAIL_MIN_LIMIT },
-      expect.any(AbortSignal),
+      {
+        relatedLimit: SHARED_RESOURCE_DETAIL_RELATED_LIMIT,
+        eventLimit: RESOURCE_DETAIL_EVENT_LIMIT,
+      },
     );
   });
 
@@ -147,7 +153,6 @@ describe("useResourceConditions", () => {
         relatedLimit: REPLICA_SET_CONDITION_RELATED_POD_LIMIT,
         eventLimit: RESOURCE_DETAIL_EVENT_LIMIT,
       },
-      expect.any(AbortSignal),
     );
   });
 });

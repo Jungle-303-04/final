@@ -46,7 +46,6 @@ import {
   listRepositoryManifestCandidates,
   probeRepository,
   validateRepositoryManifest,
-  type ClusterSummaryView,
   type ClusterConnectResponseView,
   type ConnectionPreviewView,
   type RepositoryBranchView,
@@ -802,9 +801,17 @@ function PreviewChip({ change, count }: { change: string; count: number }) {
   );
 }
 
-function RepoTargetStep({ source, context, onComplete, onReconnectCredential }: {
+export interface RepositoryTargetCluster {
+  id: string;
+  name: string;
+  environment: string;
+  connectionStatus: string;
+}
+
+function RepoTargetStep({ source, context, repositoryClusters, onComplete, onReconnectCredential }: {
   source: RepoSource;
   context?: RepositoryConnectionContext;
+  repositoryClusters?: readonly RepositoryTargetCluster[];
   onComplete: (repo: string) => void;
   onReconnectCredential: () => void;
 }) {
@@ -819,7 +826,7 @@ function RepoTargetStep({ source, context, onComplete, onReconnectCredential }: 
     namespace: context?.namespace?.trim() || "sandbox",
     environment: "development",
   });
-  const [clusters, setClusters] = useState<ClusterSummaryView[]>([]);
+  const [clusters, setClusters] = useState<RepositoryTargetCluster[]>([]);
   const [clusterStatus, setClusterStatus] = useState<"loading" | "ready" | "error">("loading");
   const [submitStatus, setSubmitStatus] = useState<"idle" | "submitting" | "error">("idle");
   const [failure, setFailure] = useState<ConnectionFailurePresentation | null>(null);
@@ -832,17 +839,38 @@ function RepoTargetStep({ source, context, onComplete, onReconnectCredential }: 
   const [previewStatus, setPreviewStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
 
   useEffect(() => {
+    if (repositoryClusters) {
+      const connected = repositoryClusters.filter((cluster) =>
+        ["online", "connected"].includes(cluster.connectionStatus.toLowerCase())
+      );
+      setClusters(connected);
+      setInput((current) => ({
+        ...current,
+        clusterId: connected.some((cluster) => cluster.id === current.clusterId)
+          ? current.clusterId
+          : connected[0]?.id || "",
+      }));
+      setClusterStatus("ready");
+      return undefined;
+    }
     const controller = new AbortController();
     void listClusters({}, controller.signal)
       .then((response) => {
         if (controller.signal.aborted) return;
-        const connected = response.clusters.filter((cluster) => ["online", "connected"].includes(cluster.connection_status.toLowerCase()));
+        const connected = response.clusters
+          .filter((cluster) => ["online", "connected"].includes(cluster.connection_status.toLowerCase()))
+          .map((cluster) => ({
+            id: cluster.cluster_id,
+            name: cluster.name,
+            environment: cluster.environment,
+            connectionStatus: cluster.connection_status,
+          }));
         setClusters(connected);
         setInput((current) => ({
           ...current,
-          clusterId: connected.some((cluster) => cluster.cluster_id === current.clusterId)
+          clusterId: connected.some((cluster) => cluster.id === current.clusterId)
             ? current.clusterId
-            : connected[0]?.cluster_id || "",
+            : connected[0]?.id || "",
         }));
         setClusterStatus("ready");
       })
@@ -851,7 +879,7 @@ function RepoTargetStep({ source, context, onComplete, onReconnectCredential }: 
         setClusterStatus("error");
       });
     return () => controller.abort();
-  }, []);
+  }, [repositoryClusters]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -1009,7 +1037,7 @@ function RepoTargetStep({ source, context, onComplete, onReconnectCredential }: 
             {clusterStatus === "loading" && <option value="">클러스터 확인 중…</option>}
             {clusterStatus === "error" && <option value="">클러스터를 불러오지 못함</option>}
             {clusterStatus === "ready" && clusters.length === 0 && <option value="">연결된 클러스터 없음</option>}
-            {clusters.map((cluster) => <option key={cluster.cluster_id} value={cluster.cluster_id}>{cluster.name} · {cluster.environment}</option>)}
+            {clusters.map((cluster) => <option key={cluster.id} value={cluster.id}>{cluster.name} · {cluster.environment}</option>)}
           </select>
         </label>
         <label className="grid gap-1.5 text-label font-semibold c-2">
@@ -1140,7 +1168,7 @@ function RepoDoneStep({ repo, onDone }: { repo: string; onDone: () => void }) {
   );
 }
 
-function RepoWizard({ providers, context, onClose, onComplete }: { providers: ClusterProvidersView; context?: RepositoryConnectionContext; onClose: () => void; onComplete: (repo: string) => void }) {
+function RepoWizard({ providers, context, repositoryClusters, onClose, onComplete }: { providers: ClusterProvidersView; context?: RepositoryConnectionContext; repositoryClusters?: readonly RepositoryTargetCluster[]; onClose: () => void; onComplete: (repo: string) => void }) {
   const [step, setStep] = useState(0);
   const [source, setSource] = useState<RepoSource | null>(null);
   const el = {
@@ -1150,6 +1178,7 @@ function RepoWizard({ providers, context, onClose, onComplete }: { providers: Cl
         key="s1"
         source={source}
         context={context}
+        repositoryClusters={repositoryClusters}
         onComplete={() => setStep(2)}
         onReconnectCredential={() => setStep(0)}
       />
@@ -1540,6 +1569,7 @@ interface ConnectWizardProps {
   initialView?: null | "repo" | "cluster";
   onDismiss?: () => void;
   repositoryContext?: RepositoryConnectionContext;
+  repositoryClusters?: readonly RepositoryTargetCluster[];
   resumeCluster?: ResumeClusterConnection;
   onRepositoryComplete?: (repo: string) => void;
 }
@@ -1549,6 +1579,7 @@ export function ConnectWizard({
   initialView = null,
   onDismiss,
   repositoryContext,
+  repositoryClusters,
   resumeCluster,
   onRepositoryComplete,
 }: ConnectWizardProps = {}) {
@@ -1596,7 +1627,7 @@ export function ConnectWizard({
                   tabIndex={-1} autoFocus onClick={(e) => e.stopPropagation()} initial={{ opacity: 0, y: 22, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 16, scale: 0.98 }} transition={{ type: "spring", visualDuration: 0.42, bounce: 0.2 }}
                   style={{ width: 580, maxWidth: "100%", maxHeight: "88vh", display: "flex", flexDirection: "column", borderRadius: 26, alignSelf: "flex-start", boxShadow: "0 44px 100px -30px rgba(0,0,0,0.4), 0 8px 24px -12px rgba(0,0,0,0.15)" }} className="modal-surface overflow-hidden">
                   {view === "repo"
-                    ? <RepoWizard providers={providers} context={repositoryContext} onClose={closeView} onComplete={completeRepo} />
+                    ? <RepoWizard providers={providers} context={repositoryContext} repositoryClusters={repositoryClusters} onClose={closeView} onComplete={completeRepo} />
                     : <ClusterWizard providers={providers} resumeCluster={resumeCluster} onClose={closeView} onComplete={completeCluster} />}
                 </motion.div>
               </div>

@@ -31,17 +31,18 @@ from domains.scm.github_app_manifest import (
     store_app_config_from_conversion,
 )
 from packages.config.settings import env
+from packages.contracts.gateway.routes import (
+    GITHUB_APP_CALLBACK_PATH,
+    GITHUB_APP_CONFIG_PATH,
+    GITHUB_APP_INSTALL_URL_PATH,
+    GITHUB_APP_MANIFEST_CALLBACK_PATH,
+    GITHUB_APP_MANIFEST_PATH,
+    GITHUB_APP_VERIFY_PATH,
+)
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID, ServiceRole
 from packages.runtime.dependencies import get_db
 
 router = APIRouter()
-
-GITHUB_APP_CONFIG_PATH = "/integrations/github/app/config"
-GITHUB_APP_INSTALL_URL_PATH = "/integrations/github/app/install-url"
-GITHUB_APP_CALLBACK_PATH = "/integrations/github/app/callback"
-GITHUB_APP_MANIFEST_PATH = "/integrations/github/app/manifest"
-GITHUB_APP_MANIFEST_CALLBACK_PATH = "/integrations/github/app/manifest/callback"
-GITHUB_APP_VERIFY_PATH = "/integrations/github/app/installations/{installation_id}/verify"
 
 # 설치 완료 후 GitHub 이 브라우저를 되돌려보낼 프론트 위저드 URL.
 # 프로덕션은 동일 오리진("/"), 로컬 dev 는 http://localhost:5173/ 등으로 지정.

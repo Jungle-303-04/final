@@ -91,6 +91,8 @@ describe("incidentFromAlertEvent", () => {
       confidence: 0.92,
     });
     expect(alertIncidentPollMs(promoted)).toBe(0);
+    expect(alertIncidentClusterIds(promoted, ["cluster-1", "cluster-2"])).toEqual([]);
+    expect(alertIncidentClusterIds(null, ["cluster-1", "cluster-2"])).toEqual([]);
   });
 
   it("never regresses a promoted RCA when a later issue fetch is empty", () => {

@@ -4,7 +4,7 @@ import { getChecksOverview } from "../api/checks";
 import { useBoundedPoll } from "./useBoundedPoll";
 
 // 점검 개요 실시간 갱신 주기(bounded, 60Hz 아님). 갱신 빈도 낮아 30초.
-const CHECKS_REFRESH_MS = 30_000;
+export const CHECKS_REFRESH_MS = 30_000;
 
 // UI-PHASE2-001 §5.2: typed live adapter for the Checks surface. Reads
 // `GET /api/checks/overview`. The current dev contract reports check

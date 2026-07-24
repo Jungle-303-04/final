@@ -138,7 +138,7 @@ export {
   logout,
   type LoginCredentials,
 } from "./auth";
-export { getFleetSummary } from "./fleet";
+export { FLEET_SUMMARY_EVENTS_PATH, getFleetSummary } from "./fleet";
 export {
   getWorkloadDetail,
   WORKLOAD_DETAIL_PATH,
@@ -466,12 +466,14 @@ export {
   fleetClusterSummarySchema,
   fleetHealthSchema,
   fleetSummarySchema,
+  fleetSummaryStreamFrameSchema,
   fleetTotalsSchema,
   logoutResponseSchema,
   type AuthSession,
   type FleetClusterSummary,
   type FleetHealth,
   type FleetSummary,
+  type FleetSummaryStreamFrame,
   type FleetTotals,
 } from "./schemas";
 export {

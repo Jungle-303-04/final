@@ -246,7 +246,7 @@ class GitHubPoller:
         """주기 대기 — 직접 커밋 알림이 오면 즉시 깨어나 버스트 폴링으로 전환."""
         try:
             await asyncio.wait_for(self._burst_wake.wait(), timeout=self.interval)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return  # 일반 주기 도래
         self._burst_wake.clear()
         await self.burst_poll(client)

@@ -41,6 +41,7 @@ export interface AlertEventView {
 export interface AlertEventsFeed {
   status: AlertsFeedStatus;
   items: AlertEventView[];
+  transport: "connecting" | "http" | "sse" | "stale";
 }
 
 export function isIncidentNotification(event: AlertEventView): boolean {
@@ -72,13 +73,21 @@ function toEventView(event: AlertEvent): AlertEventView {
  * an empty list is an honest "no observed alerts", never backfilled.
  */
 export function useAlertEvents(): AlertEventsFeed {
-  const [feed, setFeed] = useState<AlertEventsFeed>({ status: "loading", items: [] });
+  const [feed, setFeed] = useState<AlertEventsFeed>({
+    status: "loading",
+    items: [],
+    transport: "connecting",
+  });
   useEffect(() => {
     const controller = new AbortController();
     const refresh = async () => {
       const events = await listAlertEvents({ signal: controller.signal });
       if (!controller.signal.aborted) {
-        setFeed({ status: "ready", items: events.map(toEventView) });
+        setFeed({
+          status: "ready",
+          items: events.map(toEventView),
+          transport: "http",
+        });
       }
     };
     const run = async () => {
@@ -86,25 +95,45 @@ export function useAlertEvents(): AlertEventsFeed {
         await refresh();
       } catch (cause: unknown) {
         if (controller.signal.aborted || isAbortError(cause)) return;
-        setFeed({ status: "unavailable", items: [] });
+        setFeed({
+          status: "unavailable",
+          items: [],
+          transport: "stale",
+        });
       }
       while (!controller.signal.aborted) {
         try {
-          for await (const event of subscribeAlertEvents(controller.signal)) {
+          for await (const event of subscribeAlertEvents({
+            signal: controller.signal,
+            onLifecycle: (lifecycle) => {
+              if (controller.signal.aborted) return;
+              setFeed((current) => ({
+                ...current,
+                transport: lifecycle === "connected"
+                  ? "sse"
+                  : lifecycle === "connecting"
+                    ? current.status === "ready" ? "stale" : "connecting"
+                    : "stale",
+              }));
+            },
+          })) {
             if (controller.signal.aborted) return;
             const next = toEventView(event);
             setFeed((current) => ({
               status: "ready",
               items: mergeAlertEvent(current.items, next),
+              transport: "sse",
             }));
           }
         } catch (cause: unknown) {
           if (controller.signal.aborted || isAbortError(cause)) return;
+          setFeed((current) => ({ ...current, transport: "stale" }));
         }
         try {
           await refresh();
         } catch (cause: unknown) {
           if (controller.signal.aborted || isAbortError(cause)) return;
+          setFeed((current) => ({ ...current, transport: "stale" }));
         }
         await reconnectDelay(controller.signal);
       }

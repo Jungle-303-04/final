@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { getInventoryResourceDetail } from "../api/inventory";
 import type { InventoryResource } from "../api/inventory-schemas";
 import { kindToResourceType } from "./inventoryResourcesFeed";
+import {
+  loadSharedInventoryResourceDetail,
+  SHARED_RESOURCE_DETAIL_EVENT_LIMIT,
+  SHARED_RESOURCE_DETAIL_RELATED_LIMIT,
+} from "./resourceDetailFeed";
 
 export interface ResourceEventView {
   id: string;
@@ -20,8 +24,8 @@ export interface ResourceEventsView {
 }
 
 const IDLE = { status: "idle" as const, items: [] as ResourceEventView[] };
-export const RESOURCE_DETAIL_RELATED_LIMIT = 1;
-export const RESOURCE_DETAIL_EVENT_LIMIT = 100;
+export const RESOURCE_DETAIL_RELATED_LIMIT = SHARED_RESOURCE_DETAIL_RELATED_LIMIT;
+export const RESOURCE_DETAIL_EVENT_LIMIT = SHARED_RESOURCE_DETAIL_EVENT_LIMIT;
 
 function text(value: unknown): string | null {
   return typeof value === "string" && value.trim() !== "" ? value : null;
@@ -64,9 +68,9 @@ export function useResourceEvents(
   useEffect(() => {
     if (!key) return;
     const controller = new AbortController();
-    getInventoryResourceDetail(cid, {
+    loadSharedInventoryResourceDetail(cid, {
       resourceType: kindToResourceType(kind), kind, name: resourceName, namespace: ns,
-    }, { relatedLimit: RESOURCE_DETAIL_RELATED_LIMIT, eventLimit: RESOURCE_DETAIL_EVENT_LIMIT }, controller.signal).then((detail) => {
+    }).then((detail) => {
       if (!controller.signal.aborted) setState({ key, status: "ready", items: detail.events.map(toResourceEvent) });
     }).catch((error: unknown) => {
       if (controller.signal.aborted || isAbortError(error)) return;

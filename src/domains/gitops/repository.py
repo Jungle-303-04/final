@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from contextlib import nullcontext
 from typing import Any
 
@@ -1701,26 +1701,46 @@ class RepoChangeRepository(GitOpsOverviewRepository):
             row = conn.execute(statement).mappings().first()
         return dict(row) if row else None
 
-    def count_open_workflow_approvals(self, workspace_id: str) -> int:
+    def count_open_workflow_approvals(
+        self,
+        workspace_id: str,
+        application_ids: Collection[str] | None = None,
+    ) -> int:
         """fleet 합계용 — 사람 결정 대기(requested) 승인 수.
 
         NOT_REQUIRED 는 자동 진행 표식이라 '대기'로 세지 않음(OPEN_APPROVAL_STATUSES 와 다른 기준).
         """
+        if application_ids is not None and not application_ids:
+            return 0
         table = Approval.__table__
         statement = select(func.count()).where(
             table.c.workspace_id == workspace_id,
             table.c.status == ApprovalStatus.REQUESTED.value,
         )
+        if application_ids is not None:
+            statement = statement.where(
+                table.c.application_id.in_(tuple(sorted(application_ids)))
+            )
         with self.connection() as conn:
             return int(conn.execute(statement).scalar() or 0)
 
-    def count_running_workflow_runs(self, workspace_id: str) -> int:
+    def count_running_workflow_runs(
+        self,
+        workspace_id: str,
+        application_ids: Collection[str] | None = None,
+    ) -> int:
         """fleet 합계용 — 종결(SUCCEEDED/FAILED) 전 상태의 워크플로 run 수."""
+        if application_ids is not None and not application_ids:
+            return 0
         table = WorkflowRun.__table__
         statement = select(func.count()).where(
             table.c.workspace_id == workspace_id,
             table.c.status.not_in(TERMINAL_WORKFLOW_STATUSES),
         )
+        if application_ids is not None:
+            statement = statement.where(
+                table.c.application_id.in_(tuple(sorted(application_ids)))
+            )
         with self.connection() as conn:
             return int(conn.execute(statement).scalar() or 0)
 

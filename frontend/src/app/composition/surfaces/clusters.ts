@@ -1,11 +1,8 @@
 import type { ComponentType } from "react";
-import {
-  connectCluster,
-  getClusterConnectionStatus,
-  getCommandStatus,
-  reissueClusterConnectCommand,
-  unregisterCluster,
-} from "../../../api";
+import { connectCluster, reissueClusterConnectCommand } from "../../../api/cluster-connect";
+import { getClusterConnectionStatus } from "../../../api/cluster-connection";
+import { unregisterCluster } from "../../../api/clusters";
+import { getCommandStatus } from "../../../api/metrics";
 import { createClustersAdapter } from "../../../features/clusters/createClustersAdapter";
 import type { ClusterDisconnectPort } from "../../../features/clusters/clustersContract";
 import { createClustersSurface } from "../../../pages/clusters/createClustersSurface";

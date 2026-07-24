@@ -64,6 +64,7 @@ SERVICE_LOCAL_MODULES = (
     "queries",
     "queries.payloads",
     "queries.registry",
+    "telemetry_registry",
     "span",
     "span.base",
     "span.otel",

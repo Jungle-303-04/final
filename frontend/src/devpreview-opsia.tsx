@@ -14,7 +14,6 @@ import { statusLabel, reasonLabel } from "./devpreview/statusLabel";
 import { useNarrowViewport } from "./devpreview/useNarrowViewport";
 import { useDevpreviewContracts, type DevpreviewCluster } from "./devpreview/contracts";
 import { isActiveIncidentCluster } from "./devpreview/rcaIssuesFeed";
-import { useFleetSummaries } from "./devpreview/fleetSummaryFeed";
 import { useClusterSummaries, type ClusterSummaryView } from "./devpreview/clusterSummaryFeed";
 import { NodeAliasTitle } from "./devpreview/NodeAliasTitle";
 import { useNodeAliases, type NodeAliasView } from "./devpreview/nodeAliasesFeed";
@@ -460,14 +459,14 @@ const compactMenuStyle: React.CSSProperties = {
   fontWeight: 600, cursor: "pointer",
 };
 
-export function HomeClustersWidget({ onOpen, onSettings, onDisconnect, pending = [] }: {
+export function HomeClustersWidget({ summaries, onOpen, onSettings, onDisconnect, pending = [] }: {
+  summaries: Readonly<Record<string, ClusterSummaryView>>;
   onOpen: (clusterId: string) => void;
   onSettings?: (clusterId: string) => void;
   onDisconnect?: (clusterId: string) => void;
   pending?: string[];
 }) {
   const { clusters } = useDevpreviewContracts();
-  const summaries = useFleetSummaries(clusters.map((cluster) => cluster.id));
   return (
     <div data-home-clusters="compact" style={{ flex: 1, minHeight: 0, overflowY: "auto", overscrollBehavior: "contain", scrollbarGutter: "stable" }}>
       {clusters.map((cluster) => (
@@ -851,7 +850,10 @@ export function nodesWithSummaryMetrics(
   }
 
   const summaryByName = new Map(summary.nodes.map((node) => [node.name, node]));
-  return Array.from(summaryByName.values(), (node) => {
+  const names = new Set([...topologyByName.keys(), ...summaryByName.keys()]);
+  return Array.from(names, (name) => {
+    const node = summaryByName.get(name);
+    if (node === undefined) return topologyByName.get(name)!;
     const topologyNode = topologyByName.get(node.name);
     return {
       name: node.name,

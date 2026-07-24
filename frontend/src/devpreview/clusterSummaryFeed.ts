@@ -2,16 +2,19 @@ import { useMemo, useState } from "react";
 
 import { getClusterNodesSummary } from "../api/cluster-summary";
 import type { ClusterNodesSummary } from "../api/cluster-summary-schemas";
+import {
+  liveClusterResourceObservationSchema,
+  type LiveClusterResourceObservation,
+} from "../api/live-schemas";
 import { useDevpreviewContracts } from "./contracts";
 import { useLiveStreamView, type LiveStreamViewState } from "./liveStreamFeed";
 import { useBoundedPoll } from "./useBoundedPoll";
 
-// 실시간 cadence: 화면이 보일 때만 visible cluster의 node summary를 재조회한다.
-// bounded(초 단위)이며 60Hz가 아니고, 백그라운드 탭에서는 요청하지 않는다.
-// 1초 주기 — 카드 수치가 관측 도착 즉시 반영되고, 표시 계층의 0.5초 보간
-// (useSmoothedValue)과 맞물려 스텝 점프 없이 움직인다. in-flight dedupe 가
-// 있어 응답이 1초보다 느려도 요청이 중첩되지 않는다.
-const SUMMARY_REFRESH_MS = 1_000;
+// WebSocket이 실측 cluster_metrics를 보내는 동안 REST는 정합성 확인용이다. 소켓이
+// 없거나 재연결 중일 때만 5초 fallback을 사용하고, 정상 관측 중에는 60초 reconcile로
+// 낮춘다. 화면 숨김·in-flight dedupe·abort는 useBoundedPoll이 보장한다.
+export const CLUSTER_SUMMARY_FALLBACK_MS = 5_000;
+export const CLUSTER_SUMMARY_RECONCILE_MS = 60_000;
 
 // UI-PHASE2-001 §5.2: a typed live adapter for the Home/cluster cards. Node
 // readiness and usage come from each cluster's canonical node-summary contract.
@@ -117,12 +120,18 @@ export function useClusterSummaries(
     return { workspaceId, clusterId: ids[0] };
   }, [ids, workspaceId]);
   const live = useLiveStreamView(liveSubscription);
+  const refreshMs = liveSubscription !== null
+    && live.status === "connected"
+    && live.observed
+    && !live.stale
+    ? CLUSTER_SUMMARY_RECONCILE_MS
+    : CLUSTER_SUMMARY_FALLBACK_MS;
   // 공통 bounded-poll: 화면이 보일 때만 visible cluster의 노드 요약을 병렬 조회한다.
   // in-flight dedupe·backpressure로 중복 요청 0, 스코프 변경 시 abort로 stale overwrite 0.
   // 재조회 중 직전 요약 값은 유지하고 한 번의 setSummaries로 전체를 commit한다.
   useBoundedPoll({
     scopeKey: key,
-    intervalMs: SUMMARY_REFRESH_MS,
+    intervalMs: refreshMs,
     load: (signal) => Promise.all(ids.map(async (id) => {
       try {
         const detail = await getClusterNodesSummary(id, signal);
@@ -162,13 +171,18 @@ export function applyLiveClusterSummaries(
     ]));
   }
   const podFacts = livePodFacts(live.resources, clusterIds);
+  const metricFacts = liveClusterResourceFacts(live.resources, clusterIds);
   let changed = false;
   const next = { ...current };
 
   for (const clusterId of clusterIds) {
-    const summary = current[clusterId];
-    if (summary === undefined) continue;
     const liveSummary = live.summaries[clusterId];
+    const metrics = metricFacts.get(clusterId);
+    const currentSummary = current[clusterId];
+    if (currentSummary === undefined && liveSummary === undefined && metrics === undefined) continue;
+    const summary = currentSummary?.status === "ready"
+      ? currentSummary
+      : emptyObservedSummary(metrics);
     // A newly connected or partially projected stream can emit a zero summary
     // before any pod identities arrive. That is not authoritative evidence that
     // the cluster is empty: replacing the REST node summary here made real
@@ -183,20 +197,29 @@ export function applyLiveClusterSummaries(
       && candidateFacts.observed === liveSummary.pods_total
       ? candidateFacts
       : undefined;
-    const nodes = facts === undefined
-      ? summary.nodes
-      : summary.nodes.map((node) => ({
-          ...node,
-          podsRunning: facts.runningByNode.get(node.name) ?? 0,
-        }));
+    const nodes = mergeLiveNodes(summary.nodes, metrics, facts);
+    const metricsFresh = metrics !== undefined && !metrics.stale;
+    const statusFresh = metrics !== undefined && !metrics.status_stale;
     const projected: ClusterSummaryView = {
       ...summary,
+      status: summary.status === "unavailable" && metrics === undefined && liveSummary === undefined
+        ? "unavailable"
+        : "ready",
+      health: statusFresh ? metrics.status : summary.health,
+      cpuPct: metricsFresh && metrics.cpu_pct !== null ? metrics.cpu_pct : summary.cpuPct,
+      memPct: metricsFresh && metrics.mem_pct !== null ? metrics.mem_pct : summary.memPct,
       podsRunning: facts?.running ?? summary.podsRunning,
       podsTotal: shouldRetainRestPodTotal(summary, liveSummary?.pods_total, facts)
         ? summary.podsTotal
         : liveSummary?.pods_total ?? summary.podsTotal,
+      nodesReady: statusFresh && metrics.collection_complete
+        ? metrics.nodes_ready
+        : summary.nodesReady,
+      nodesTotal: statusFresh && metrics.collection_complete
+        ? metrics.nodes_total
+        : summary.nodesTotal,
       nodes,
-      stale: live.stale,
+      stale: live.stale || metrics?.stale === true || metrics?.status_stale === true,
       restartDelta: liveSummary?.restart_delta ?? summary.restartDelta ?? null,
     };
     next[clusterId] = projected;
@@ -204,6 +227,67 @@ export function applyLiveClusterSummaries(
   }
 
   return changed ? next : current as Record<string, ClusterSummaryView>;
+}
+
+function emptyObservedSummary(
+  metrics: LiveClusterResourceObservation | undefined,
+): ClusterSummaryView {
+  return {
+    status: metrics === undefined ? "unavailable" : "ready",
+    health: metrics !== undefined && !metrics.status_stale ? metrics.status : null,
+    cpuPct: metrics !== undefined && !metrics.stale ? metrics.cpu_pct : null,
+    memPct: metrics !== undefined && !metrics.stale ? metrics.mem_pct : null,
+    podsRunning: null,
+    podsTotal: null,
+    nodesReady: metrics?.collection_complete ? metrics.nodes_ready : null,
+    nodesTotal: metrics?.collection_complete ? metrics.nodes_total : null,
+    openIncidents: null,
+    nodes: [],
+    stale: metrics?.stale === true || metrics?.status_stale === true,
+  };
+}
+
+function mergeLiveNodes(
+  nodes: readonly ClusterNodeSummaryView[],
+  metrics: LiveClusterResourceObservation | undefined,
+  podFacts: LivePodFacts | undefined,
+): ClusterNodeSummaryView[] {
+  const metricsByName = new Map(metrics?.nodes.map((node) => [node.name, node]) ?? []);
+  const restByName = new Map(nodes.map((node) => [node.name, node]));
+  const names = new Set([...restByName.keys(), ...metricsByName.keys()]);
+  return Array.from(names, (name) => {
+    const rest = restByName.get(name);
+    const liveNode = metricsByName.get(name);
+    const metricFresh = liveNode !== undefined && !liveNode.stale;
+    const statusFresh = liveNode !== undefined && !liveNode.status_stale;
+    return {
+      name,
+      ready: statusFresh ? liveNode.status === "ready" : rest?.ready ?? false,
+      health: statusFresh ? liveNode.status : rest?.health ?? "unknown",
+      cpuPct: metricFresh && liveNode.cpu_pct !== null ? liveNode.cpu_pct : rest?.cpuPct ?? null,
+      memPct: metricFresh && liveNode.mem_pct !== null ? liveNode.mem_pct : rest?.memPct ?? null,
+      podsRunning: podFacts?.runningByNode.get(name) ?? rest?.podsRunning ?? 0,
+      // The live cluster metric contract does not observe pod capacity,
+      // restarts, or conditions. Preserve REST facts; never synthesize them.
+      podsCapacity: rest?.podsCapacity ?? 0,
+      restartsRecent: rest?.restartsRecent ?? 0,
+      conditions: rest?.conditions ?? [],
+    };
+  });
+}
+
+export function liveClusterResourceFacts(
+  resources: Readonly<Record<string, unknown>>,
+  clusterIds: readonly string[],
+): Map<string, LiveClusterResourceObservation> {
+  const wanted = new Set(clusterIds);
+  const result = new Map<string, LiveClusterResourceObservation>();
+  for (const value of Object.values(resources)) {
+    const parsed = liveClusterResourceObservationSchema.safeParse(value);
+    if (!parsed.success || !wanted.has(parsed.data.cluster_id)) continue;
+    result.set(parsed.data.cluster_id, parsed.data);
+  }
+  return result;
 }
 
 function shouldRetainRestPodTotal(

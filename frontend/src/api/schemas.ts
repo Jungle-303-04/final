@@ -59,12 +59,20 @@ export const fleetTotalsSchema = z.strictObject({
   open_incidents: integerSchema,
   pending_approvals: integerSchema,
   running_workflows: integerSchema,
-  dead_letters: integerSchema,
+  dead_letters: integerSchema.nullable(),
 });
 
 export const fleetSummarySchema = z.strictObject({
   clusters: z.array(fleetClusterSummarySchema),
   totals: fleetTotalsSchema,
+});
+
+export const fleetSummaryStreamFrameSchema = z.strictObject({
+  cursor: z.string().min(1),
+  revision: z.string().regex(/^[0-9a-f]{64}$/u),
+  generated_at: z.string().datetime({ offset: true }),
+  refresh_after_ms: z.number().int().min(5_000).max(10_000),
+  summary: fleetSummarySchema,
 });
 
 export const rcaTimelineItemSchema = z.strictObject({
@@ -136,6 +144,7 @@ export type FleetHealth = z.infer<typeof fleetHealthSchema>;
 export type FleetClusterSummary = z.infer<typeof fleetClusterSummarySchema>;
 export type FleetTotals = z.infer<typeof fleetTotalsSchema>;
 export type FleetSummary = z.infer<typeof fleetSummarySchema>;
+export type FleetSummaryStreamFrame = z.infer<typeof fleetSummaryStreamFrameSchema>;
 export type RcaTimelineItem = z.infer<typeof rcaTimelineItemSchema>;
 export type RcaTimeline = z.infer<typeof rcaTimelineSchema>;
 export type RcaIssueItem = z.infer<typeof rcaIssueItemSchema>;

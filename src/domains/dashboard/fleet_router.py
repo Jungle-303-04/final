@@ -19,8 +19,9 @@ health 판정 규칙(결정적, 단위 테스트로 고정):
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Collection
 from datetime import UTC, datetime
 from typing import Any
 
@@ -41,6 +42,7 @@ from domains.dashboard.ready_stream import (
     DashboardReadySnapshot,
     dashboard_ready_heartbeat_seconds,
     dashboard_ready_reconnect_after_ms,
+    fleet_summary_push_interval_seconds,
 )
 from domains.gitops.overview_projection import project_gitops_overview
 from domains.gitops.overview_query import parse_gitops_overview_filters
@@ -49,6 +51,7 @@ from domains.identity.dependencies import (
     require_cluster_access,
     require_session,
     resolve_allowed_application_ids,
+    resolve_allowed_cluster_ids,
 )
 from domains.inventory.certificate_expiry import certificate_expiry_summary
 from domains.inventory.observed_metrics import (
@@ -57,7 +60,7 @@ from domains.inventory.observed_metrics import (
     inventory_usage_pct,
     usage_pct,
 )
-from domains.inventory_filter.cursor import FilterCursorCodec, authorization_revision
+from domains.inventory_filter.cursor import CursorScope, FilterCursorCodec, authorization_revision
 from domains.inventory_filter.graph import build_resource_graph
 from domains.inventory_filter.query import filter_fingerprint, parse_resource_filters
 from domains.target.cluster_visibility import is_blocked_test_cluster
@@ -82,6 +85,7 @@ from packages.contracts.gateway.responses import (
     ClusterWorkloadHealthItem,
     FleetClusterSummaryItem,
     FleetSummaryResponse,
+    FleetSummaryStreamFrame,
     FleetTotals,
     HomeCustomResourceCount,
     HomeCustomResourceSummary,
@@ -93,7 +97,7 @@ from packages.contracts.gateway.responses import (
     PodSummaryItem,
 )
 from packages.contracts.gitops.overview import GitOpsOverviewCoverage, GitOpsOverviewResponse
-from packages.contracts.identity import DEFAULT_WORKSPACE_ID, AccessResourceType, Permission
+from packages.contracts.identity import DEFAULT_WORKSPACE_ID, Permission, ServiceRole
 from packages.contracts.parity import ClusterScope
 from packages.runtime.dependencies import get_dashboard_ready_fanout, get_db
 
@@ -122,6 +126,9 @@ DASHBOARD_READY_CURSOR_UNAVAILABLE = "dashboard ready cursor is unavailable"
 DASHBOARD_READY_CURSOR_INVALID = "dashboard ready cursor is invalid"
 DASHBOARD_READY_STREAM_UNAVAILABLE = "dashboard ready stream is unavailable"
 DASHBOARD_READY_REPLAY_LIMIT = 100
+FLEET_STREAM_CURSOR_SURFACE = "fleet-summary-stream"
+FLEET_STREAM_FILTER_FINGERPRINT = hashlib.sha256(b"workspace-fleet").hexdigest()
+FLEET_STREAM_COALESCE_SECONDS = 0.25
 OBSERVABILITY_SYSTEM_NAMESPACES = {
     "cert-manager",
     "kube-node-lease",
@@ -152,14 +159,265 @@ async def fleet_summary(
 ) -> FleetSummaryResponse:
     """워크스페이스 fleet 롤업 — 세션 사용자가 읽을 수 있는 클러스터만 포함."""
     workspace_id = _workspace_id(current)
-    allowed_cluster_ids = await asyncio.to_thread(
-        db.accessible_resource_ids,
-        current.user_id,
+    allowed_cluster_ids, allowed_application_ids = await asyncio.gather(
+        _accessible_fleet_cluster_ids(db, current, workspace_id),
+        _accessible_fleet_application_ids(db, current, workspace_id),
+    )
+    return await asyncio.to_thread(
+        build_fleet_summary,
+        db,
         workspace_id,
-        AccessResourceType.CLUSTER.value,
+        allowed_cluster_ids,
+        allowed_application_ids,
+        include_platform_totals=_can_observe_platform_totals(current),
+    )
+
+
+@router.get(gateway_routes.FLEET_SUMMARY_EVENTS_PATH)
+async def stream_fleet_summary_events(
+    request: Request,
+    last_event_id: str | None = Header(default=None, alias="Last-Event-ID"),
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+    dashboard_ready_fanout: Any = Depends(get_dashboard_ready_fanout),
+) -> StreamingResponse:
+    """Push the complete authorized fleet projection over one workspace SSE.
+
+    The stream is latest-state, not an append-only activity feed. Every
+    reconnect starts with a complete current projection, so a disconnected
+    browser cannot permanently miss a fleet transition. Process-local commit
+    wake-ups accelerate delivery; the bounded periodic emission also covers
+    cross-replica commits, authorization changes, and fanout outages.
+    """
+
+    workspace_id = _workspace_id(current)
+    cursor_codec = _dashboard_ready_cursor_codec(request)
+    # Last-Event-ID never grants access and is not required to reconstruct
+    # state. Verify a supplied token when possible, then always send a fresh
+    # complete projection under the current authorization scope.
+    if last_event_id:
+        try:
+            cursor_codec.inspect(last_event_id)
+        except ValueError:
+            pass
+    return StreamingResponse(
+        _fleet_summary_sse_body(
+            db=db,
+            current=current,
+            workspace_id=workspace_id,
+            fanout=dashboard_ready_fanout,
+            cursor_codec=cursor_codec,
+            refresh_seconds=fleet_summary_push_interval_seconds(),
+            reconnect_after_ms=dashboard_ready_reconnect_after_ms(),
+        ),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-store",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+async def _fleet_summary_sse_body(
+    *,
+    db: Any,
+    current: Any,
+    workspace_id: str,
+    fanout: Any,
+    cursor_codec: FilterCursorCodec,
+    refresh_seconds: float,
+    reconnect_after_ms: int,
+) -> AsyncIterator[str]:
+    subscriptions: dict[str, Any] = {}
+    subscribe = getattr(fanout, "subscribe", None)
+    try:
+        while True:
+            allowed_cluster_ids, allowed_application_ids = await asyncio.gather(
+                _accessible_fleet_cluster_ids(db, current, workspace_id),
+                _accessible_fleet_application_ids(db, current, workspace_id),
+            )
+            await _sync_fleet_stream_subscriptions(
+                subscriptions,
+                subscribe=subscribe,
+                workspace_id=workspace_id,
+                allowed_cluster_ids=allowed_cluster_ids,
+            )
+            summary = await asyncio.to_thread(
+                build_fleet_summary,
+                db,
+                workspace_id,
+                allowed_cluster_ids,
+                allowed_application_ids,
+                include_platform_totals=_can_observe_platform_totals(current),
+            )
+            yield _fleet_summary_sse_frame(
+                summary=summary,
+                current=current,
+                workspace_id=workspace_id,
+                allowed_cluster_ids=allowed_cluster_ids,
+                cursor_codec=cursor_codec,
+                refresh_seconds=refresh_seconds,
+                reconnect_after_ms=reconnect_after_ms,
+            )
+            await _wait_for_fleet_stream_refresh(
+                tuple(subscriptions.values()),
+                timeout=refresh_seconds,
+            )
+    finally:
+        await _close_fleet_stream_subscriptions(subscriptions)
+
+
+async def _accessible_fleet_cluster_ids(
+    db: Any,
+    current: Any,
+    workspace_id: str,
+) -> tuple[str, ...]:
+    values = await asyncio.to_thread(
+        resolve_allowed_cluster_ids,
+        db,
+        current,
+        workspace_id,
         Permission.CLUSTER_READ.value,
     )
-    return await asyncio.to_thread(build_fleet_summary, db, workspace_id, allowed_cluster_ids)
+    return tuple(sorted(values))
+
+
+async def _accessible_fleet_application_ids(
+    db: Any,
+    current: Any,
+    workspace_id: str,
+) -> tuple[str, ...]:
+    values = await asyncio.to_thread(
+        resolve_allowed_application_ids,
+        db,
+        current,
+        workspace_id,
+        Permission.APPLICATION_READ.value,
+    )
+    return tuple(sorted(values))
+
+
+def _can_observe_platform_totals(current: Any) -> bool:
+    return ServiceRole.SERVICE_ADMIN.value in tuple(getattr(current, "roles", ()) or ())
+
+
+async def _sync_fleet_stream_subscriptions(
+    subscriptions: dict[str, Any],
+    *,
+    subscribe: Any,
+    workspace_id: str,
+    allowed_cluster_ids: tuple[str, ...],
+) -> None:
+    desired = set(allowed_cluster_ids)
+    for cluster_id in tuple(subscriptions):
+        if cluster_id in desired:
+            continue
+        subscription = subscriptions.pop(cluster_id)
+        await subscription.close()
+    if not callable(subscribe):
+        return
+    for cluster_id in allowed_cluster_ids:
+        if cluster_id in subscriptions:
+            continue
+        try:
+            subscriptions[cluster_id] = await subscribe(workspace_id, cluster_id)
+        except DashboardReadyFanoutClosed:
+            return
+
+
+async def _wait_for_fleet_stream_refresh(
+    subscriptions: tuple[Any, ...],
+    *,
+    timeout: float,
+) -> None:
+    if not subscriptions:
+        await asyncio.sleep(timeout)
+        return
+    tasks = [asyncio.create_task(subscription.next()) for subscription in subscriptions]
+    try:
+        done, pending = await asyncio.wait(
+            tasks,
+            timeout=timeout,
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+        if done:
+            # Multiple clusters often commit one collection cycle together.
+            # Consume that short burst before rebuilding the workspace rollup.
+            await asyncio.sleep(FLEET_STREAM_COALESCE_SECONDS)
+        for task in pending:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+    finally:
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+
+
+async def _close_fleet_stream_subscriptions(subscriptions: dict[str, Any]) -> None:
+    values = tuple(subscriptions.values())
+    subscriptions.clear()
+    await asyncio.gather(
+        *(subscription.close() for subscription in values),
+        return_exceptions=True,
+    )
+
+
+def _fleet_summary_sse_frame(
+    *,
+    summary: FleetSummaryResponse,
+    current: Any,
+    workspace_id: str,
+    allowed_cluster_ids: tuple[str, ...],
+    cursor_codec: FilterCursorCodec,
+    refresh_seconds: float,
+    reconnect_after_ms: int,
+) -> str:
+    generated_at = datetime.now(UTC)
+    summary_payload = summary.model_dump(mode="json")
+    revision = hashlib.sha256(
+        json.dumps(
+            summary_payload,
+            ensure_ascii=True,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode()
+    ).hexdigest()
+    cursor_scope = CursorScope(
+        workspace_id=workspace_id,
+        user_id=str(current.user_id),
+        authorization_revision=authorization_revision(
+            user_id=str(current.user_id),
+            workspace_id=workspace_id,
+            roles=tuple(str(role) for role in (getattr(current, "roles", ()) or ())),
+            allowed_cluster_ids=allowed_cluster_ids,
+            allowed_application_ids=(),
+        ),
+        surface=FLEET_STREAM_CURSOR_SURFACE,
+        filter_fingerprint=FLEET_STREAM_FILTER_FINGERPRINT,
+        snapshot_revision=0,
+        facet_query=None,
+    )
+    cursor = cursor_codec.encode(
+        cursor_scope,
+        position={
+            "revision": revision,
+            "generated_at": generated_at.isoformat(),
+        },
+    )
+    frame = FleetSummaryStreamFrame(
+        cursor=cursor,
+        revision=revision,
+        generated_at=generated_at,
+        refresh_after_ms=int(refresh_seconds * 1_000),
+        summary=summary,
+    )
+    payload = json.dumps(
+        frame.model_dump(mode="json"),
+        ensure_ascii=True,
+        separators=(",", ":"),
+    )
+    return f"id: {cursor}\nevent: fleet_summary\nretry: {reconnect_after_ms}\ndata: {payload}\n\n"
 
 
 @router.get(gateway_routes.CLUSTER_SUMMARY_PATH, response_model=ClusterSummaryDetailResponse)
@@ -480,7 +738,10 @@ async def node_pods_summary(
 def build_fleet_summary(
     db: Any,
     workspace_id: str,
-    allowed_cluster_ids: set[str] | None,
+    allowed_cluster_ids: Collection[str] | None,
+    allowed_application_ids: Collection[str] | None,
+    *,
+    include_platform_totals: bool = False,
 ) -> FleetSummaryResponse:
     registrations = [
         cluster
@@ -529,10 +790,16 @@ def build_fleet_summary(
         stale=health_counts[HEALTH_STALE],
         unknown=health_counts[HEALTH_UNKNOWN],
         open_incidents=sum(item.open_incidents for item in items),
-        pending_approvals=int(db.count_open_workflow_approvals(workspace_id)),
-        running_workflows=int(db.count_running_workflow_runs(workspace_id)),
-        # dead letter 는 워크스페이스 컬럼이 없는 플랫폼 전역 큐 — 개수만 노출(내용은 admin 전용).
-        dead_letters=int(db.open_dead_letter_count()),
+        pending_approvals=int(
+            db.count_open_workflow_approvals(workspace_id, allowed_application_ids)
+        ),
+        running_workflows=int(
+            db.count_running_workflow_runs(workspace_id, allowed_application_ids)
+        ),
+        # Dead letters have no workspace column. Only an explicitly authorized
+        # platform observer may read the global count; everyone else receives
+        # an honest unobserved value rather than a synthetic zero.
+        dead_letters=int(db.open_dead_letter_count()) if include_platform_totals else None,
     )
     return FleetSummaryResponse(clusters=items, totals=totals)
 

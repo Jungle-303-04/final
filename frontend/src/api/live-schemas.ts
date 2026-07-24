@@ -1,5 +1,16 @@
 import { z } from "zod";
 
+import { liveMetricSourceSchema } from "./live-resource-schemas";
+
+export {
+  liveClusterResourceObservationSchema,
+  liveNodeResourceObservationSchema,
+} from "./live-resource-schemas";
+export type {
+  LiveClusterResourceObservation,
+  LiveNodeResourceObservation,
+} from "./live-resource-schemas";
+
 const nonNegativeIntegerSchema = z.number().int().nonnegative();
 const openObjectSchema = z.record(z.string(), z.unknown());
 
@@ -21,12 +32,7 @@ export const hotPodSchema = z.strictObject({
 });
 
 export const liveMetricsMetadataSchema = z.strictObject({
-  source: z.enum([
-    "kubelet_stats_summary",
-    "metrics_server_fallback",
-    "mixed",
-    "unavailable",
-  ]),
+  source: liveMetricSourceSchema,
   actual_interval_seconds: z.number().finite().nonnegative().nullable(),
   degraded_reason: z.string().min(1).nullable(),
 });

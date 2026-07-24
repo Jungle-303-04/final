@@ -88,6 +88,8 @@ export interface ApplicationView {
 export interface ApplicationsFeed {
   status: DeployFeedStatus;
   items: ApplicationView[];
+  /** The last authorized snapshot is retained after a refresh failure. */
+  stale: boolean;
 }
 
 function toApplicationView(record: Application, index: number): ApplicationView {
@@ -114,26 +116,43 @@ function toApplicationView(record: Application, index: number): ApplicationView 
  * Reads the live Application list. An empty list is an honest "관측된
  * 애플리케이션 없음"; a load failure is an honest `unavailable`.
  */
-export function useApplications(refreshKey: unknown = null): ApplicationsFeed {
-  const [feed, setFeed] = useState<ApplicationsFeed>({ status: "loading", items: [] });
+export function useApplications(
+  refreshKey: unknown = null,
+  enabled = true,
+): ApplicationsFeed {
+  const [feed, setFeed] = useState<ApplicationsFeed>({
+    status: "loading",
+    items: [],
+    stale: false,
+  });
   // 진행 중 배포가 관측되면 폴링을 가속한다 — 상태는 항상 서버 관측값에서만 파생.
   const active = feed.items.some((item) =>
     (item.deliveryStatus !== null && ACTIVE_DELIVERY_STATUSES.has(item.deliveryStatus))
     || (item.lifecycleStatus !== null && ACTIVE_DELIVERY_STATUSES.has(item.lifecycleStatus)));
-  const { revision } = useVisibleRefreshClock(true, active ? DEPLOY_LIST_ACTIVE_POLL_MS : DEPLOY_LIST_POLL_MS);
+  const { revision } = useVisibleRefreshClock(
+    enabled,
+    active ? DEPLOY_LIST_ACTIVE_POLL_MS : DEPLOY_LIST_POLL_MS,
+  );
   useEffect(() => {
+    if (!enabled) return undefined;
     const controller = new AbortController();
     void listApplications({ signal: controller.signal })
       .then((response) => {
         if (controller.signal.aborted) return;
-        setFeed({ status: "ready", items: response.applications.map(toApplicationView) });
+        setFeed({
+          status: "ready",
+          items: response.applications.map(toApplicationView),
+          stale: false,
+        });
       })
       .catch((cause: unknown) => {
         if (controller.signal.aborted || isAbortError(cause)) return;
-        setFeed({ status: "unavailable", items: [] });
+        setFeed((previous) => previous.status === "ready"
+          ? { ...previous, stale: true }
+          : { status: "unavailable", items: [], stale: false });
       });
     return () => controller.abort();
-  }, [refreshKey, revision]);
+  }, [enabled, refreshKey, revision]);
   return feed;
 }
 
@@ -213,11 +232,10 @@ export function useApplicationRuns(
   );
   const applicationKey = applications.map(({ id, workflowRunId }) => `${id}:${workflowRunId ?? ""}`).join("|");
   useEffect(() => {
-    const controller = new AbortController();
     if (applications.length === 0) {
-      setFeed({ status: "ready", items: [] });
-      return () => controller.abort();
+      return undefined;
     }
+    const controller = new AbortController();
     // 재조회·범위 변경 중에는 마지막 관측 값을 유지한다(stale-while-revalidate) —
     // 초기 상태가 이미 loading이므로 여기서 동기 setState로 되돌리지 않는다.
     void Promise.allSettled(applications.map(async (application) => {
@@ -240,7 +258,7 @@ export function useApplicationRuns(
     // applicationKey is a stable serialization of the server-owned identities.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [applicationKey, refreshKey, revision]);
-  return feed;
+  return applications.length === 0 ? { status: "ready", items: [] } : feed;
 }
 
 // ── helm releases ────────────────────────────────────────────────────────────

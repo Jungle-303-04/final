@@ -6,6 +6,7 @@ import type {
   TrafficVerdict,
 } from "../api/traffic-overview-schemas";
 import { serviceKeyOf } from "./relationTopologyFeed";
+import { useVisibleRefreshClock } from "../shared/data/useVisibleRefreshClock";
 
 // UI-PHASE2-001 TOP-03 · DEMO_WIRING_PLAN §3.4/§6 (traffic route conflict):
 // telemetry for the service-topology surface comes ONLY from
@@ -40,6 +41,7 @@ const LOADING: TrafficTelemetryView = {
   reasonCodes: [],
   observedAt: null,
 };
+export const TRAFFIC_REFRESH_MS = 10_000;
 
 export function pairKey(sourceKey: string, targetKey: string): string {
   return `${sourceKey}>>${targetKey}`;
@@ -111,6 +113,7 @@ export function useTrafficTelemetry(
 ): TrafficTelemetryView {
   const [view, setView] = useState<TrafficTelemetryView>(LOADING);
   const key = clusterIds.join(",");
+  const { revision } = useVisibleRefreshClock(key !== "", TRAFFIC_REFRESH_MS);
   useEffect(() => {
     const ids = key ? key.split(",") : [];
     const controller = new AbortController();
@@ -127,7 +130,7 @@ export function useTrafficTelemetry(
         setView((prev) => ({ ...prev, status: "error" }));
       });
     return () => controller.abort();
-  }, [key]);
+  }, [key, revision]);
   return view;
 }
 

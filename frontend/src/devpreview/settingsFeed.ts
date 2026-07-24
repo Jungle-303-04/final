@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { listClusters } from "../api/clusters";
 import {
   getBrowserRefreshPolicies,
   getSettingsAccessProfile,
@@ -216,19 +215,18 @@ function toAccessView(profile: SettingsAccessProfileResponse): SettingsAccessVie
  * cluster is registered yet, this is an honest "ready with no cluster" state,
  * not a fabricated permission set.
  */
-export function useSettingsAccess(): SettingsAccessView {
+export function useSettingsAccess(clusterId: string | null): SettingsAccessView {
   const [view, setView] = useState<SettingsAccessView>(INITIAL_ACCESS);
   useEffect(() => {
     const controller = new AbortController();
     const signal = controller.signal;
+    if (clusterId === null) {
+      void Promise.resolve().then(() => {
+        if (!signal.aborted) setView({ ...INITIAL_ACCESS, status: "ready" });
+      });
+      return () => controller.abort();
+    }
     void (async () => {
-      const clusters = await listClusters({}, signal);
-      if (signal.aborted) return;
-      const clusterId = clusters.clusters[0]?.cluster_id ?? null;
-      if (clusterId === null) {
-        setView({ ...INITIAL_ACCESS, status: "ready" });
-        return;
-      }
       const profile = await getSettingsAccessProfile({ clusterId }, signal);
       if (signal.aborted) return;
       setView(toAccessView(profile));
@@ -237,6 +235,6 @@ export function useSettingsAccess(): SettingsAccessView {
       setView({ ...INITIAL_ACCESS, status: "unavailable" });
     });
     return () => controller.abort();
-  }, []);
+  }, [clusterId]);
   return view;
 }

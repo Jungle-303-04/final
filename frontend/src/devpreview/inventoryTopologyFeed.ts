@@ -76,7 +76,8 @@ interface TopologyChannel {
 // p95 can exceed 25 s on the live management cluster, so a shorter poll period
 // overlaps queries and recreates lock pressure. Live websocket deltas animate
 // independently; this snapshot is the one-minute reconciliation safety net.
-const CACHE_TTL_MS = 60_000;
+export const PHYSICAL_TOPOLOGY_RECONCILE_MS = 60_000;
+const CACHE_TTL_MS = PHYSICAL_TOPOLOGY_RECONCILE_MS;
 const PARTIAL_CACHE_TTL_MS = 60_000;
 const ERROR_CACHE_TTL_MS = 30_000;
 const STRICT_MODE_GRACE_MS = 50;

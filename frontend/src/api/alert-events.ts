@@ -25,6 +25,17 @@ export interface AlertEventListOptions {
   signal?: AbortSignal;
 }
 
+export type AlertStreamLifecycleState =
+  | "connecting"
+  | "connected"
+  | "closed"
+  | "failed";
+
+export interface AlertEventStreamSubscription {
+  signal?: AbortSignal;
+  onLifecycle?: (state: AlertStreamLifecycleState) => void;
+}
+
 export function listAlertEvents(options: AlertEventListOptions = {}): Promise<AlertEvent[]> {
   const params = new URLSearchParams();
   if (options.from) params.set("from", options.from);
@@ -41,36 +52,45 @@ export function listAlertEvents(options: AlertEventListOptions = {}): Promise<Al
 }
 
 export async function* subscribeAlertEvents(
-  signal?: AbortSignal,
+  subscription: AlertEventStreamSubscription = {},
 ): AsyncIterable<AlertEvent> {
-  const response = await apiStreamResponse(ALERT_EVENTS_STREAM_PATH, SSE_MEDIA_TYPE, signal);
-  if (!response.headers.get("content-type")?.toLowerCase().startsWith(SSE_MEDIA_TYPE)) {
-    throw new ApiError("invalid-payload", "Alert stream did not use text/event-stream.");
-  }
-  if (!response.body) {
-    throw new ApiError("invalid-payload", "Alert stream body was unavailable.");
-  }
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
+  const { onLifecycle, signal } = subscription;
+  onLifecycle?.("connecting");
   try {
-    while (true) {
-      const result = await reader.read();
-      buffer += decoder.decode(result.value, { stream: !result.done });
-      const parsed = parseSseFrames(buffer);
-      buffer = parsed.remainder;
-      for (const frame of parsed.frames) {
-        if (frame.event !== "alert") continue;
-        try {
-          yield alertEventSchema.parse(JSON.parse(frame.data));
-        } catch (cause) {
-          throw new ApiError("invalid-payload", "Alert stream event was invalid.", { cause });
-        }
-      }
-      if (result.done) break;
+    const response = await apiStreamResponse(ALERT_EVENTS_STREAM_PATH, SSE_MEDIA_TYPE, signal);
+    if (!response.headers.get("content-type")?.toLowerCase().startsWith(SSE_MEDIA_TYPE)) {
+      throw new ApiError("invalid-payload", "Alert stream did not use text/event-stream.");
     }
-  } finally {
-    reader.releaseLock();
+    if (!response.body) {
+      throw new ApiError("invalid-payload", "Alert stream body was unavailable.");
+    }
+    onLifecycle?.("connected");
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    try {
+      while (true) {
+        const result = await reader.read();
+        buffer += decoder.decode(result.value, { stream: !result.done });
+        const parsed = parseSseFrames(buffer);
+        buffer = parsed.remainder;
+        for (const frame of parsed.frames) {
+          if (frame.event !== "alert") continue;
+          try {
+            yield alertEventSchema.parse(JSON.parse(frame.data));
+          } catch (cause) {
+            throw new ApiError("invalid-payload", "Alert stream event was invalid.", { cause });
+          }
+        }
+        if (result.done) break;
+      }
+      onLifecycle?.("closed");
+    } finally {
+      reader.releaseLock();
+    }
+  } catch (cause) {
+    onLifecycle?.("failed");
+    throw cause;
   }
 }
 
