@@ -67,6 +67,8 @@ export function LiveResourceManifestEditor({
   const [failureRemediation, setFailureRemediation] = useState<ResourceManifestRemediation>("none");
   const [sourceConflictNotice, setSourceConflictNotice] = useState<string | null>(null);
   const [sourceRefreshRequired, setSourceRefreshRequired] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [draftSaved, setDraftSaved] = useState(false);
   const controller = useRef<AbortController | null>(null);
 
   const load = async (selectedApplicationId?: string | null) => {
@@ -83,12 +85,14 @@ export function LiveResourceManifestEditor({
     setEmergencyApproval(null);
     setApplyReceipt(null);
     setApplyStatus(null);
+    setEditing(false);
     try {
       const loaded = await getResourceManifestSource(resourceId, selectedApplicationId, next.signal);
       if (next.signal.aborted) return;
       setSource(loaded);
       setApplicationId(loaded.selected?.application_id ?? selectedApplicationId ?? "");
-      setYaml(loaded.content ?? "");
+      setYaml(restoreManifestDraft(resourceId, loaded));
+      setDraftSaved(false);
       setPhase("ready");
     } catch (cause) {
       if (next.signal.aborted) return;
@@ -101,6 +105,7 @@ export function LiveResourceManifestEditor({
   useEffect(() => {
     controller.current?.abort();
     if (!resourceId) return;
+    setEditing(false);
     const next = new AbortController();
     controller.current = next;
     void (async () => {
@@ -109,7 +114,8 @@ export function LiveResourceManifestEditor({
         if (next.signal.aborted) return;
         setSource(loaded);
         setApplicationId(loaded.selected?.application_id ?? "");
-        setYaml(loaded.content ?? "");
+        setYaml(restoreManifestDraft(resourceId, loaded));
+        setDraftSaved(false);
         setPreview(null);
         setApproval(null);
         setEmergencyApproval(null);
@@ -166,10 +172,11 @@ export function LiveResourceManifestEditor({
       }
     : null;
   const busy = phase === "loading" || phase === "previewing" || phase === "submitting";
-  // 편집 가능한 Git 원본이 열렸는지 부모에게 통지(패널 자동 확장 트리거).
-  const editable = Boolean(
+  const canEdit = Boolean(
     source && source.status === "available" && source.selected && source.content,
   );
+  // 사용자가 편집을 명시적으로 시작했을 때만 부모 패널을 확장한다.
+  const editable = canEdit && editing;
   useEffect(() => {
     onEditableChange?.(editable);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 콜백 아이덴티티가 아니라 editable 변화에만 반응
@@ -184,6 +191,16 @@ export function LiveResourceManifestEditor({
     setEmergencyApproval(null);
     setApplyReceipt(null);
     setApplyStatus(null);
+  };
+
+  const saveDraft = () => {
+    if (!source?.source_sha256 || !source.selected) return;
+    window.localStorage.setItem(manifestDraftKey(resourceId), JSON.stringify({
+      applicationId: source.selected.application_id,
+      sourceSha256: source.source_sha256,
+      yaml,
+    }));
+    setDraftSaved(true);
   };
 
   const refreshLatestSourcePreservingYaml = async () => {
@@ -320,13 +337,13 @@ export function LiveResourceManifestEditor({
   };
 
   if (!resourceId && resolving) {
-    return <ManifestNotice title="YAML 정체성 확인 중">서버가 발급한 inventory key를 정확한 리소스 정체성으로 조회하고 있습니다.</ManifestNotice>;
+    return <ManifestLoadingNotice title="YAML 정체성 확인 중">서버가 발급한 inventory key를 정확한 리소스 정체성으로 조회하고 있습니다.</ManifestLoadingNotice>;
   }
   if (!resourceId) {
     return <ManifestNotice tone="warn" title="YAML 정체성 확인 불가">이 행에는 서버가 발급한 inventory key가 없습니다.</ManifestNotice>;
   }
   if (phase === "loading" || (!sourceIsCurrent && phase !== "failed")) {
-    return <ManifestNotice title="YAML 소스 확인 중">Git에 고정된 실제 매니페스트와 편집 권한을 조회하고 있습니다.</ManifestNotice>;
+    return <ManifestLoadingNotice title="YAML 소스 확인 중">Git에 고정된 실제 매니페스트와 편집 권한을 조회하고 있습니다.</ManifestLoadingNotice>;
   }
   if (phase === "failed" && !source) {
     const title = failureRemediation === "reauthenticate"
@@ -379,7 +396,14 @@ export function LiveResourceManifestEditor({
     const remediation = resourceManifestSourceRemediation(source?.reason ?? null);
     return (
       <div style={{ padding: "18px 0", display: "grid", gap: 10 }}>
-        {source && <LiveManifestPanel source={source} />}
+        {source && (
+          <LiveManifestPanel
+            source={source}
+            action={onConnectRepository ? (
+              <ActionButton disabled={false} onClick={onConnectRepository}>편집</ActionButton>
+            ) : undefined}
+          />
+        )}
         <ManifestNotice tone={remediation === "connect-repository" ? "neutral" : "warn"}
           title={remediation === "request-access" ? "YAML 접근 권한이 없습니다" : "Git에서 배포된 리소스가 아닙니다"}>
           {remediation === "connect-repository"
@@ -405,20 +429,20 @@ export function LiveResourceManifestEditor({
     );
   }
 
-  // 확장(wide) 모드: 좌 = 편집 열, 우 = 관측·diff 열(sticky). 좁은 모드: 기존 세로 흐름 유지.
+  if (!editing) {
+    return (
+      <div style={{ padding: "16px 0 24px" }}>
+        <LiveManifestPanel
+          source={source}
+          action={<ActionButton primary disabled={false} onClick={() => setEditing(true)}>편집</ActionButton>}
+        />
+      </div>
+    );
+  }
+
   const diffView = preview?.diff ? (
     <DiffCodeView value={preview.diff} ariaLabel="변경 diff 미리보기" maxHeight={wide ? 460 : 280} />
   ) : null;
-  const observeColumn = (
-    <div style={{ display: "grid", gap: 12, minWidth: 0, ...(wide ? { position: "sticky", top: 12 } : {}) }}>
-      <LiveManifestPanel source={source} />
-      {wide && (diffView ?? (
-        <div style={{ border: `1px dashed ${UI.line}`, borderRadius: 12, padding: "18px 16px", color: UI.ink3, fontSize: TYPE.label, textAlign: "center" }}>
-          왼쪽에서 수정 후 "변경 검증·미리보기"를 누르면 여기 diff가 표시됩니다.
-        </div>
-      ))}
-    </div>
-  );
   const editColumn = (
     <div style={{ display: "grid", gap: 12, minWidth: 0 }}>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
@@ -436,18 +460,20 @@ export function LiveResourceManifestEditor({
         <span style={{ marginLeft: "auto", fontFamily: MONO, color: UI.ink3 }}>commit {source.base_sha?.slice(0, 12)}</span>
       </div>
       <textarea aria-label="Git YAML 원본 편집기" value={yaml} disabled={busy || !!approval || !!emergencyApproval || !!applyReceipt}
-        onChange={(event) => { setYaml(event.currentTarget.value); setPreview(null); setConfirmed(false); setSourceConflictNotice(null); }} spellCheck={false}
+        onChange={(event) => { setYaml(event.currentTarget.value); setPreview(null); setConfirmed(false); setSourceConflictNotice(null); setDraftSaved(false); }} spellCheck={false}
         style={{ width: "100%", minHeight: wide ? 480 : 360, resize: "vertical", boxSizing: "border-box", border: `1px solid ${UI.line}`, borderRadius: 12, padding: 14, background: "#0d1117", color: "#e6edf3", fontFamily: MONO, fontSize: TYPE.code, lineHeight: 1.6, outline: "none" }} />
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+        <ActionButton primary disabled={busy || !editInput} onClick={saveDraft}>저장</ActionButton>
         <ActionButton disabled={busy || sourceRefreshRequired} onClick={() => void runPreview()}>
           {phase === "previewing" ? "검증 중…" : "변경 검증·미리보기"}
         </ActionButton>
+        {draftSaved && <Pill tone="ok">임시 저장됨</Pill>}
         {preview && <Pill tone={preview.valid ? "ok" : "warn"}>{preview.valid ? "서버 검증 통과" : "YAML 오류"}</Pill>}
         {preview?.valid && <Pill tone={preview.apply_availability === "available" ? "ok" : "warn"}>
           {preview.apply_availability === "available" ? "즉시 적용 가능" : "Safe PR만 가능"}
         </Pill>}
       </div>
-      {!wide && diffView}
+      {diffView}
       {preview?.errors.map((item) => <ManifestNotice key={item} tone="error" title="검증 오류">{item}</ManifestNotice>)}
       {preview?.warnings.map((item) => <ManifestNotice key={item} tone="warn" title="검토 필요">{item}</ManifestNotice>)}
       {preview?.apply_reason_codes.map((item) => <ManifestNotice key={item} tone="warn" title="즉시 적용 제한">{reasonLabel(item)}</ManifestNotice>)}
@@ -528,30 +554,7 @@ export function LiveResourceManifestEditor({
     </div>
   );
 
-  return (
-    <div
-      style={{
-        padding: "16px 0 24px",
-        display: "grid",
-        gap: 12,
-        ...(wide
-          ? { gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", columnGap: 20, alignItems: "start" }
-          : {}),
-      }}
-    >
-      {wide ? (
-        <>
-          {editColumn}
-          {observeColumn}
-        </>
-      ) : (
-        <>
-          {observeColumn}
-          {editColumn}
-        </>
-      )}
-    </div>
-  );
+  return <div style={{ padding: "16px 0 24px" }}>{editColumn}</div>;
 }
 
 function commandStatusLabel(status: CommandStatus["status"]): string {
@@ -577,12 +580,18 @@ function commandResultSummary(command: CommandStatus): string {
     .join(" · ") || "에이전트의 실제 적용 결과를 기다리고 있습니다.";
 }
 
-function LiveManifestPanel({ source }: { source: ResourceManifestSourceEndpoint }) {
+function LiveManifestPanel({ source, action }: {
+  source: ResourceManifestSourceEndpoint;
+  action?: React.ReactNode;
+}) {
   return (
     <section aria-label="Live YAML 읽기 전용" style={{ display: "grid", gap: 8 }}>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
         <b style={{ color: UI.ink, fontSize: TYPE.body }}>Live YAML · 읽기 전용</b>
-        {source.live_observed_at && <span style={{ color: UI.ink3, fontVariantNumeric: "tabular-nums", fontSize: TYPE.caption }}>관측 {source.live_observed_at}</span>}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+          {source.live_observed_at && <span style={{ color: UI.ink3, fontVariantNumeric: "tabular-nums", fontSize: TYPE.caption }}>관측 {source.live_observed_at}</span>}
+          {action}
+        </div>
       </div>
       {source.live_yaml ? (
         <YamlCodeView value={source.live_yaml} ariaLabel="Live YAML" maxHeight={320} />
@@ -591,6 +600,48 @@ function LiveManifestPanel({ source }: { source: ResourceManifestSourceEndpoint 
       )}
     </section>
   );
+}
+
+function ManifestLoadingNotice({ title, children }: { title: string; children: React.ReactNode }) {
+  const palette = TINT.blue;
+  return (
+    <div role="status" style={{ border: `1px solid ${palette.bd}`, background: palette.bg, borderRadius: 10, padding: "10px 12px", color: UI.ink2, fontSize: TYPE.label, lineHeight: 1.5 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, color: palette.fg, fontWeight: 700, marginBottom: 2 }}>
+        <svg role="progressbar" aria-label={`${title} 진행 상태`} width="16" height="16" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="3" opacity=".25" />
+          <path d="M12 3a9 9 0 0 1 9 9" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round">
+            <animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur=".8s" repeatCount="indefinite" />
+          </path>
+        </svg>
+        <span>{title}</span>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function manifestDraftKey(resourceId: string): string {
+  return `opsia:resource-manifest-draft:${resourceId}`;
+}
+
+function restoreManifestDraft(resourceId: string, source: ResourceManifestSourceEndpoint): string {
+  if (!source.content || !source.source_sha256 || !source.selected) return source.content ?? "";
+  try {
+    const raw = window.localStorage.getItem(manifestDraftKey(resourceId));
+    if (!raw) return source.content;
+    const draft = JSON.parse(raw) as {
+      applicationId?: unknown;
+      sourceSha256?: unknown;
+      yaml?: unknown;
+    };
+    return draft.applicationId === source.selected.application_id
+      && draft.sourceSha256 === source.source_sha256
+      && typeof draft.yaml === "string"
+      ? draft.yaml
+      : source.content;
+  } catch {
+    return source.content;
+  }
 }
 
 function ManifestNotice({ title, tone = "neutral", children }: { title: string; tone?: "neutral" | "ok" | "warn" | "error"; children: React.ReactNode }) {

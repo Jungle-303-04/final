@@ -100,6 +100,7 @@ afterEach(() => {
 
 beforeEach(() => {
   for (const mock of Object.values(manifestApi)) mock.mockReset();
+  window.localStorage.clear();
 });
 
 describe("LiveResourceManifestEditor stale source recovery", () => {
@@ -113,6 +114,9 @@ describe("LiveResourceManifestEditor stale source recovery", () => {
 
     render(<LiveResourceManifestEditor resourceId="resource-1" />);
 
+    expect(await screen.findByRole("region", { name: "Live YAML 읽기 전용" })).not.toBeNull();
+    expect(screen.queryByRole("textbox", { name: "Git YAML 원본 편집기" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "편집" }));
     const editor = await screen.findByRole("textbox", { name: "Git YAML 원본 편집기" });
     fireEvent.change(editor, { target: { value: EDITED_YAML } });
     fireEvent.click(screen.getByRole("button", { name: "변경 검증·미리보기" }));
@@ -153,6 +157,7 @@ describe("LiveResourceManifestEditor stale source recovery", () => {
 
     render(<LiveResourceManifestEditor resourceId="resource-1" />);
 
+    fireEvent.click(await screen.findByRole("button", { name: "편집" }));
     const editor = await screen.findByRole("textbox", { name: "Git YAML 원본 편집기" });
     fireEvent.change(editor, { target: { value: EDITED_YAML } });
     fireEvent.click(screen.getByRole("button", { name: "변경 검증·미리보기" }));
@@ -171,6 +176,57 @@ describe("LiveResourceManifestEditor stale source recovery", () => {
     expect(screen.queryByText("Safe PR 요청 접수")).toBeNull();
     expect((screen.getByRole("textbox", { name: "Git YAML 원본 편집기" }) as HTMLTextAreaElement).value)
       .toBe(EDITED_YAML);
+  });
+});
+
+describe("LiveResourceManifestEditor read-only entry", () => {
+  it("shows a loading progress bar while the YAML source is being resolved", () => {
+    manifestApi.getSource.mockReturnValue(new Promise(() => undefined));
+
+    render(<LiveResourceManifestEditor resourceId="resource-1" />);
+
+    expect(screen.getByText("YAML 소스 확인 중")).not.toBeNull();
+    expect(screen.getByRole("progressbar", { name: "YAML 소스 확인 중 진행 상태" })).not.toBeNull();
+  });
+
+  it("shows only the editor after edit and restores a saved draft", async () => {
+    manifestApi.getSource.mockResolvedValue(source(1));
+    const first = render(<LiveResourceManifestEditor resourceId="resource-1" />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "편집" }));
+    const editor = await screen.findByRole("textbox", { name: "Git YAML 원본 편집기" });
+    expect(screen.queryByRole("region", { name: "Live YAML 읽기 전용" })).toBeNull();
+    fireEvent.change(editor, { target: { value: EDITED_YAML } });
+    fireEvent.click(screen.getByRole("button", { name: "저장" }));
+    expect(screen.getByText("임시 저장됨")).not.toBeNull();
+
+    first.unmount();
+    render(<LiveResourceManifestEditor resourceId="resource-1" />);
+    fireEvent.click(await screen.findByRole("button", { name: "편집" }));
+
+    expect((await screen.findByRole("textbox", { name: "Git YAML 원본 편집기" }) as HTMLTextAreaElement).value)
+      .toBe(EDITED_YAML);
+  });
+
+  it("opens the editor and reports editability only after the edit button is clicked", async () => {
+    manifestApi.getSource.mockResolvedValueOnce(source(1));
+    const onEditableChange = vi.fn();
+
+    render(
+      <LiveResourceManifestEditor
+        resourceId="resource-1"
+        onEditableChange={onEditableChange}
+      />,
+    );
+
+    expect(await screen.findByRole("region", { name: "Live YAML 읽기 전용" })).not.toBeNull();
+    expect(screen.queryByRole("textbox", { name: "Git YAML 원본 편집기" })).toBeNull();
+    expect(onEditableChange).toHaveBeenLastCalledWith(false);
+
+    fireEvent.click(screen.getByRole("button", { name: "편집" }));
+
+    expect(await screen.findByRole("textbox", { name: "Git YAML 원본 편집기" })).not.toBeNull();
+    expect(onEditableChange).toHaveBeenLastCalledWith(true);
   });
 });
 
