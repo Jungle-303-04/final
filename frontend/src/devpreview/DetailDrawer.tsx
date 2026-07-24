@@ -7,12 +7,20 @@ import {
   type RefObject,
 } from "react";
 import { motion, useReducedMotion } from "motion/react";
-import { Maximize2, Minimize2, X } from "lucide-react";
 
-import { BLUE, DUR, PRESENT_SCALE, TYPE, UI, blueA, inkA } from "./theme";
-
-const DEFAULT_WIDTH = 560;
-const MIN_WIDTH = 460;
+import {
+  SIDE_PANEL_DEFAULT_WIDTH,
+  SIDE_PANEL_ENTER_TRANSITION,
+  SIDE_PANEL_EXIT_TRANSITION,
+  SIDE_PANEL_MIN_WIDTH,
+  SIDE_PANEL_SURFACE_STYLE,
+  SIDE_PANEL_WIDTH_TRANSITION,
+  SidePanelResizeHandle,
+  SidePanelWindowControls,
+  clampSidePanelWidth,
+  sidePanelWidthFromKeyboard,
+} from "./SidePanelShell";
+import { BLUE, DUR, PRESENT_SCALE, TYPE, UI, inkA } from "./theme";
 
 export type DetailDrawerTab<T extends string> = {
   id: T;
@@ -128,14 +136,14 @@ export function DetailDrawer({
   );
   const closeRef = useRef(onClose);
   const dragCleanupRef = useRef<() => void>(() => undefined);
-  const [width, setWidth] = useState(DEFAULT_WIDTH);
+  const [width, setWidth] = useState(SIDE_PANEL_DEFAULT_WIDTH);
   const [dragging, setDragging] = useState(false);
   const full = expanded || forceExpanded;
   const measuredViewportWidth =
     viewportWidth
     ?? (typeof document !== "undefined"
       ? document.documentElement.clientWidth / PRESENT_SCALE
-      : DEFAULT_WIDTH);
+      : SIDE_PANEL_DEFAULT_WIDTH);
   const availableWidth = Math.max(
     0,
     measuredViewportWidth - leftInset - rightInset,
@@ -204,10 +212,7 @@ export function DetailDrawer({
       const nextWidth =
         cssViewportWidth - rightInset - pointerEvent.clientX / PRESENT_SCALE;
       setWidth(
-        Math.min(
-          maxWidth,
-          Math.max(Math.min(MIN_WIDTH, maxWidth), nextWidth),
-        ),
+        clampSidePanelWidth(nextWidth, SIDE_PANEL_MIN_WIDTH, maxWidth),
       );
     };
     const cleanup = () => {
@@ -222,24 +227,23 @@ export function DetailDrawer({
     window.addEventListener("pointerup", cleanup);
   };
   const setClampedWidth = (nextWidth: number) => {
-    const minimum = Math.min(MIN_WIDTH, availableWidth);
-    setWidth(Math.min(availableWidth, Math.max(minimum, nextWidth)));
+    setWidth(clampSidePanelWidth(
+      nextWidth,
+      SIDE_PANEL_MIN_WIDTH,
+      availableWidth,
+    ));
   };
   const onEdgeKeyDown = (event: React.KeyboardEvent) => {
-    const step = event.shiftKey ? 40 : 16;
-    if (event.key === "ArrowLeft") {
-      event.preventDefault();
-      setClampedWidth(width + step);
-    } else if (event.key === "ArrowRight") {
-      event.preventDefault();
-      setClampedWidth(width - step);
-    } else if (event.key === "Home") {
-      event.preventDefault();
-      setClampedWidth(availableWidth);
-    } else if (event.key === "End") {
-      event.preventDefault();
-      setClampedWidth(MIN_WIDTH);
-    }
+    const nextWidth = sidePanelWidthFromKeyboard({
+      currentWidth: width,
+      key: event.key,
+      maximumWidth: availableWidth,
+      minimumWidth: SIDE_PANEL_MIN_WIDTH,
+      shiftKey: event.shiftKey,
+    });
+    if (nextWidth === null) return;
+    event.preventDefault();
+    setClampedWidth(nextWidth);
   };
 
   return (
@@ -278,18 +282,16 @@ export function DetailDrawer({
             : {
                 x: 24,
                 opacity: 0,
-                transition: {
-                  duration: 0.14,
-                  ease: [0.4, 0, 1, 1],
-                },
+                transition: SIDE_PANEL_EXIT_TRANSITION,
               }
         }
         transition={
           reduceMotion
             ? { duration: 0 }
-            : { type: "spring", bounce: 0.06, visualDuration: 0.36 }
+            : SIDE_PANEL_ENTER_TRANSITION
         }
         style={{
+          ...SIDE_PANEL_SURFACE_STYLE,
           position: "fixed",
           top: topInset,
           right: rightInset,
@@ -297,43 +299,21 @@ export function DetailDrawer({
           width: renderedWidth,
           maxWidth: availableWidth,
           boxSizing: "border-box",
-          display: "flex",
-          flexDirection: "column",
-          overflow: "hidden",
-          background: UI.card,
-          borderLeft: `1px solid ${UI.line}`,
-          boxShadow: `-24px 0 60px -30px ${inkA(0.3)}`,
-          outline: "none",
           zIndex: 71,
           transition: dragging
             ? "none"
-            : "right .28s cubic-bezier(.32,.72,0,1), width .28s cubic-bezier(.32,.72,0,1), max-width .28s cubic-bezier(.32,.72,0,1)",
+            : SIDE_PANEL_WIDTH_TRANSITION,
         }}
       >
         {!full && (
-          <div
-            role="separator"
-            aria-orientation="vertical"
-            aria-label="상세 패널 폭 조절"
-            aria-valuemin={Math.round(Math.min(MIN_WIDTH, availableWidth))}
-            aria-valuemax={Math.round(availableWidth)}
-            aria-valuenow={Math.round(renderedWidth)}
-            tabIndex={0}
-            title="드래그하거나 방향키로 폭 조절"
+          <SidePanelResizeHandle
+            ariaLabel="상세 패널 폭 조절"
+            dragging={dragging}
+            minimumWidth={SIDE_PANEL_MIN_WIDTH}
+            maximumWidth={availableWidth}
+            value={renderedWidth}
             onPointerDown={onEdgeDown}
             onKeyDown={onEdgeKeyDown}
-            className="product-focusable"
-            style={{
-              position: "absolute",
-              left: -2,
-              top: 0,
-              bottom: 0,
-              width: 6,
-              cursor: "col-resize",
-              zIndex: 5,
-              background: dragging ? blueA(0.35) : "transparent",
-              transition: "background .15s",
-            }}
           />
         )}
 
@@ -346,76 +326,16 @@ export function DetailDrawer({
         >
           <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
             <div style={{ minWidth: 0, flex: 1 }}>{header}</div>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 6,
-                flexShrink: 0,
-              }}
-            >
-              {actions}
-              <button
-                type="button"
-                className="product-focusable product-control"
-                aria-label={
-                  forceExpanded
-                    ? forceExpandedLabel
-                    : full
-                      ? "상세 패널 축소"
-                      : "상세 패널 전체 화면"
-                }
-                title={
-                  forceExpanded
-                    ? forceExpandedLabel
-                    : full
-                      ? "패널로 축소"
-                      : "전체 화면"
-                }
-                disabled={forceExpanded}
-                onClick={() => onExpandedChange(!expanded)}
-                style={{
-                  width: 28,
-                  height: 28,
-                  padding: 0,
-                  borderRadius: 999,
-                  border: "none",
-                  background: inkA(0.06),
-                  color: UI.ink2,
-                  cursor: forceExpanded ? "not-allowed" : "pointer",
-                  display: "grid",
-                  placeItems: "center",
-                  lineHeight: 1,
-                }}
-              >
-                {full ? (
-                  <Minimize2 size={14} strokeWidth={2.2} />
-                ) : (
-                  <Maximize2 size={14} strokeWidth={2.2} />
-                )}
-              </button>
-              <button
-                type="button"
-                className="product-focusable product-control"
-                aria-label="상세 패널 닫기"
-                onClick={onClose}
-                style={{
-                  width: 28,
-                  height: 28,
-                  padding: 0,
-                  borderRadius: 999,
-                  border: "none",
-                  background: inkA(0.06),
-                  color: UI.ink2,
-                  cursor: "pointer",
-                  display: "grid",
-                  placeItems: "center",
-                  lineHeight: 1,
-                }}
-              >
-                <X size={15} strokeWidth={2.2} />
-              </button>
-            </div>
+            <SidePanelWindowControls
+              actions={actions}
+              closeLabel="상세 패널 닫기"
+              expanded={full}
+              expandedDisabled={forceExpanded}
+              expandedDisabledLabel={forceExpandedLabel}
+              onClose={onClose}
+              onExpandedChange={onExpandedChange}
+              panelLabel="상세 패널"
+            />
           </div>
           {navigation}
         </div>

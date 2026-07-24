@@ -46,6 +46,8 @@ const STATUS_KO: Record<string, string> = {
   imagepullbackoff: "이미지 수신 실패",
   errimagepull: "이미지 수신 실패",
   containercreating: "컨테이너 생성 중",
+  containersnotready: "컨테이너 준비 안 됨",
+  containersready: "컨테이너 준비",
   // 이벤트/인시던트
   incident_resolved: "인시던트 해결",
   incident_open: "인시던트 발생",
