@@ -27,10 +27,11 @@ from domains.rca.report_narrative import (
 )
 from domains.rca.report_projection import rca_report_projection
 from packages.contracts.event_bus.interfaces import JsonObject
+from packages.contracts.event_bus.processing import EventProcessingStatus
 from packages.contracts.event_bus.subjects import EventSubject
 from packages.events.envelope import event
 from packages.storage.engine import DatabaseConnection, iso_or_none
-from packages.storage.schema import EventModel
+from packages.storage.schema import EventModel, EventProcessing
 
 RECOVERY_PLAN_STATUS_SELECTION_REQUESTED = "selection_requested"
 RECOVERY_PLAN_STATUS_SELECTED = "selected"
@@ -74,6 +75,10 @@ ALERTMANAGER_TERMINAL_TIMELINE_STATUSES = frozenset(
         "incident_resolved",
         "incident_expired",
     }
+)
+ALERTMANAGER_IN_FLIGHT_PROCESSING_STATUSES = (
+    EventProcessingStatus.PROCESSING,
+    EventProcessingStatus.RETRYING,
 )
 
 
@@ -154,6 +159,7 @@ class RcaRepository(DatabaseConnection):
         plans = RecoveryPlanRecord.__table__
         claims = IncidentSignalClaim.__table__
         events = EventModel.__table__
+        processing = EventProcessing.__table__
         with self.connection() as conn:
             latest_status = conn.execute(
                 select(timeline.c.status)
@@ -226,10 +232,29 @@ class RcaRepository(DatabaseConnection):
                 )
                 .limit(1)
             ).scalar_one_or_none()
+            if origin_exists is None:
+                return ALERTMANAGER_EVIDENCE_ORPHAN
+
+            in_flight_exists = conn.execute(
+                select(processing.c.event_id)
+                .where(
+                    processing.c.event_id == event_id,
+                    processing.c.status.in_(ALERTMANAGER_IN_FLIGHT_PROCESSING_STATUSES),
+                )
+                .limit(1)
+            ).scalar_one_or_none()
+            if in_flight_exists is not None:
+                return ALERTMANAGER_EVIDENCE_PENDING
+
+            processed_exists = conn.execute(
+                select(processing.c.event_id)
+                .where(processing.c.event_id == event_id)
+                .limit(1)
+            ).scalar_one_or_none()
             return (
-                ALERTMANAGER_EVIDENCE_PENDING
-                if origin_exists is not None
-                else ALERTMANAGER_EVIDENCE_ORPHAN
+                ALERTMANAGER_EVIDENCE_ORPHAN
+                if processed_exists is not None
+                else ALERTMANAGER_EVIDENCE_PENDING
             )
 
     def save_evidence(

@@ -56,7 +56,18 @@ def repository_with(
         ((None, "verification_pending"), ALERTMANAGER_EVIDENCE_ACTIVE),
         ((None, None, 7), ALERTMANAGER_EVIDENCE_ACTIVE),
         ((None, None, None, 9), ALERTMANAGER_EVIDENCE_ACTIVE),
-        ((None, None, None, None, "event-1"), ALERTMANAGER_EVIDENCE_PENDING),
+        (
+            (None, None, None, None, "event-1", "event-1"),
+            ALERTMANAGER_EVIDENCE_PENDING,
+        ),
+        (
+            (None, None, None, None, "event-1", None, "event-1"),
+            ALERTMANAGER_EVIDENCE_ORPHAN,
+        ),
+        (
+            (None, None, None, None, "event-1", None, None),
+            ALERTMANAGER_EVIDENCE_PENDING,
+        ),
         ((None, None, None, None, None), ALERTMANAGER_EVIDENCE_ORPHAN),
     ),
 )
