@@ -43,6 +43,41 @@ def test_declared_list_members_still_detect_real_drift() -> None:
     assert classify_field_change(desired_ports, live_ports, desired_ports) == "drift"
 
 
+def test_unobserved_unchanged_resource_does_not_block_unrelated_git_change(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("GITOPS_REQUIRE_APPROVED_SNAPSHOT", "1")
+    service = load_service("gitops/diff-worker")
+    data = {"feature": "enabled"}
+    rendered = RenderedManifest(
+        api_version="v1",
+        kind="ConfigMap",
+        metadata=RenderedMetadata(name="settings", namespace="sandbox"),
+        spec=RenderedSpec(replicas=1, image=""),
+        manifest={
+            "apiVersion": "v1",
+            "kind": "ConfigMap",
+            "metadata": {"name": "settings", "namespace": "sandbox"},
+            "data": data,
+        },
+        declared_fields=["data"],
+        managed_fields=["data"],
+        last_approved_snapshot={"data": data},
+    )
+
+    diff = service.build_desired_diff(
+        ManifestRenderedBody(rendered_manifest=rendered, environment="production"),
+        "resource-not-inspected",
+        actual_manifest=None,
+        inventory_manifest_supported=True,
+    )
+
+    assert diff.basis["live_source"] == "inventory_resource_missing"
+    assert diff.changes == []
+    assert diff.status == "no_change"
+    assert diff.has_changes is False
+
+
 def rendered_deployment(*, desired_replicas: int) -> RenderedManifest:
     image = "registry.example/api:v2"
     return RenderedManifest(

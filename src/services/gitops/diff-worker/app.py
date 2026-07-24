@@ -135,6 +135,19 @@ def build_desired_diff(
         managed_fields=policy.managed_fields,
         ignored_fields=policy.ignored_fields,
     )
+    if (
+        live.source == "inventory_resource_missing"
+        and old_desired.source == "last_approved_snapshot"
+    ):
+        # A resource absent from the inventory projection is unobserved, not
+        # proof that every unchanged declared field drifted.  Keep real Git
+        # changes actionable and let the drift reconciler handle independent
+        # resource-absence checks.
+        changes = [
+            change
+            for change in changes
+            if change.get("old_desired") != change.get("new_desired")
+        ]
     changes.extend(
         build_adoption_required_changes(
             live=live.fields,
