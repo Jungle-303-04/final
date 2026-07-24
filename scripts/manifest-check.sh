@@ -102,5 +102,29 @@ test -s "${TARGET_OBJECTS}"
 uv run python "${ROOT_DIR}/scripts/verify_dev_auth_bypass.py" rendered \
   --manifest "${MANAGEMENT_MANIFEST}"
 
+EXPECTED_ALEMBIC_HEAD="$(
+  cd "${ROOT_DIR}"
+  PYTHONPATH="${ROOT_DIR}/src" uv run alembic heads | awk '{print $1}'
+)"
+for migration_manifest in \
+  "${ROOT_DIR}/deploy/management/migration-job.yaml" \
+  "${ROOT_DIR}/deploy/management/admin-bootstrap-job.yaml"
+do
+  configured_head="$(
+    awk '
+      $0 ~ /^[[:space:]]*- name: MIGRATION_EXPECTED_HEAD[[:space:]]*$/ {
+        getline
+        sub(/^[[:space:]]*value:[[:space:]]*"?/, "")
+        sub(/"[[:space:]]*$/, "")
+        print
+      }
+    ' "${migration_manifest}"
+  )"
+  if [[ "${configured_head}" != "${EXPECTED_ALEMBIC_HEAD}" ]]; then
+    echo "${migration_manifest}: MIGRATION_EXPECTED_HEAD=${configured_head:-<missing>} must equal ${EXPECTED_ALEMBIC_HEAD}" >&2
+    exit 1
+  fi
+done
+
 echo "management manifest objects: $(wc -l < "${MANAGEMENT_OBJECTS}" | tr -d ' ')"
 echo "target manifest objects: $(wc -l < "${TARGET_OBJECTS}" | tr -d ' ')"
