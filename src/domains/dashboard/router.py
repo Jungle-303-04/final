@@ -558,6 +558,7 @@ def timeline_item(row: JsonObject) -> RcaTimelineItem:
 
 def issue_item(row: JsonObject) -> RcaIssueItem:
     data = {key: row.get(key) for key in RcaIssueItem.model_fields}
+    data["recovery_reason_code"] = _recovery_reason_code(row)
     _apply_rca_report_summary(data, row)
     data["supporting_evidence"] = data.get("supporting_evidence") or []
     data["missing_evidence"] = data.get("missing_evidence") or []
@@ -607,8 +608,20 @@ def _string_list_or_none(value: object) -> list[str] | None:
     return [item for item in value if isinstance(item, str) and item]
 
 
+def _recovery_reason_code(row: JsonObject) -> str | None:
+    projected = row.get("recovery_reason_code")
+    if isinstance(projected, str) and projected.strip():
+        return projected.strip()
+    payload = row.get("payload")
+    if not isinstance(payload, dict):
+        return None
+    value = payload.get("reason_code")
+    return value.strip() if isinstance(value, str) and value.strip() else None
+
+
 def queue_issue_item(row: JsonObject) -> RcaIssueQueueItem:
     data = {key: row.get(key) for key in RcaIssueQueueItem.model_fields}
+    data["recovery_reason_code"] = _recovery_reason_code(row)
     _apply_rca_report_summary(data, row)
     data["supporting_evidence"] = data.get("supporting_evidence") or []
     data["missing_evidence"] = data.get("missing_evidence") or []

@@ -59,6 +59,13 @@ class DatabaseGitOpsAuthorityReadPort(GitOpsAuthorityReadPort):
         evidence = dict(evidence) if isinstance(evidence, Mapping) else {}
         if not isinstance(exact, Mapping):
             identity = identity_from_rca_evidence(evidence)
+            if not identity:
+                # A malformed embedded identity must not be bypassed. Only an
+                # RCA bundle with no GitOps identity may use the durable current
+                # binding + approved snapshot read model.
+                if rca_evidence_has_gitops_identity(evidence):
+                    return None
+                identity = await self._load_approved_snapshot_identity(query)
         if not identity_matches_query(identity, query):
             return None
 
@@ -162,6 +169,70 @@ class DatabaseGitOpsAuthorityReadPort(GitOpsAuthorityReadPort):
             evidence=evidence,
         )
 
+    async def _load_approved_snapshot_identity(
+        self,
+        query: GitOpsAuthorityQuery,
+    ) -> dict[str, object]:
+        """Resolve one exact current GitOps source without relying on a recent change.
+
+        Resource pressure incidents often have no deployment immediately before
+        the incident. The active binding and last approved resource snapshot are
+        still durable authority, so use them only when exactly one binding owns
+        the queried workload and its snapshot identity is complete.
+        """
+
+        list_targets = getattr(self.db, "list_active_github_poll_targets", None)
+        get_snapshot = getattr(self.db, "get_last_approved_resource_snapshot", None)
+        if not callable(list_targets) or not callable(get_snapshot):
+            return {}
+        raw_targets = await list_targets(workspace_id=query.workspace_id, limit=1000)
+        if not isinstance(raw_targets, list):
+            return {}
+
+        identities: list[dict[str, object]] = []
+        for raw_target in raw_targets:
+            if not isinstance(raw_target, Mapping):
+                continue
+            target = dict(raw_target)
+            if (
+                text(target, "workspace_id") != query.workspace_id
+                or text(target, "cluster_id") != query.cluster_id
+            ):
+                continue
+            binding_id = text(target, "binding_id")
+            if not binding_id:
+                continue
+            snapshot = await get_snapshot(
+                query.workspace_id,
+                binding_id,
+                query.cluster_id,
+                query.namespace,
+                f"{query.resource_kind}/{query.resource_name}",
+            )
+            if not isinstance(snapshot, Mapping):
+                continue
+            snapshot = dict(snapshot)
+            if not approved_snapshot_matches_query(snapshot, query, binding_id):
+                continue
+            identity = {
+                "workspace_id": query.workspace_id,
+                "repository_id": target.get("repository_id"),
+                "binding_id": binding_id,
+                "application_id": target.get("application_id"),
+                "workflow_run_id": snapshot.get("workflow_run_id"),
+                "environment": target.get("environment"),
+                "cluster_id": query.cluster_id,
+                "commit_sha": snapshot.get("commit_sha"),
+                "manifest_path": target.get("manifest_path"),
+                "repo_ref": target.get("repo_ref"),
+                "branch": target.get("branch"),
+                "namespace": query.namespace,
+                "resource": f"{query.resource_kind}/{query.resource_name}",
+            }
+            if identity_matches_query(identity, query):
+                identities.append(identity)
+        return identities[0] if len(identities) == 1 else {}
+
 
 def completed_resource_diff_matches_identity(
     record: Mapping[str, object],
@@ -225,6 +296,34 @@ def identity_from_rca_evidence(payload: Mapping[str, object]) -> dict[str, objec
         "resource": f"{resource_kind}/{resource_name}",
         "namespace": gitops.get("namespace"),
     }
+
+
+def rca_evidence_has_gitops_identity(payload: Mapping[str, object]) -> bool:
+    metadata = mapping(payload.get("metadata"))
+    change_context = mapping(metadata.get("change_context"))
+    return bool(mapping(change_context.get("gitops")))
+
+
+def approved_snapshot_matches_query(
+    snapshot: Mapping[str, object],
+    query: GitOpsAuthorityQuery,
+    binding_id: str,
+) -> bool:
+    body = mapping(snapshot.get("snapshot"))
+    resource_kind, separator, resource_name = text(body, "resource").partition("/")
+    return bool(
+        text(snapshot, "workspace_id") == query.workspace_id
+        and text(snapshot, "binding_id") == binding_id
+        and text(snapshot, "cluster_id") == query.cluster_id
+        and text(snapshot, "namespace") == query.namespace
+        and text(snapshot, "resource_kind").casefold() == query.resource_kind.casefold()
+        and text(snapshot, "resource_name") == query.resource_name
+        and separator
+        and resource_kind.casefold() == query.resource_kind.casefold()
+        and resource_name == query.resource_name
+        and text(body, "namespace") == query.namespace
+        and all(text(snapshot, key) for key in ("workflow_run_id", "commit_sha"))
+    )
 
 
 def rca_target_lineage_is_consistent(

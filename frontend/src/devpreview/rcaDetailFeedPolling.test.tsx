@@ -33,6 +33,7 @@ const rawIssue = {
   action_route: "draft_pr",
   pr_url: null,
   error_reason: null,
+  recovery_reason_code: null,
   updated_at: "2026-07-23T22:38:09Z",
 };
 

@@ -259,6 +259,7 @@ class RcaIssueItem(RcaTimelineItem):
     recommended_action_summary: str | None = None
     evidence_summary: str | None = None
     evidence_bundle_summary: str | None = None
+    recovery_reason_code: str | None = None
 
     @model_validator(mode="after")
     def validate_severity_projection(self) -> Self:

@@ -111,6 +111,7 @@ export const rcaIssueItemSchema = rcaTimelineItemSchema.extend({
   recommended_action_summary: z.string().nullable(),
   evidence_summary: z.string().nullable(),
   evidence_bundle_summary: z.string().nullable(),
+  recovery_reason_code: z.string().nullable().optional().default(null),
 }).superRefine((item, context) => {
   if (
     item.severity_availability === "available"

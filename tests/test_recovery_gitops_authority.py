@@ -531,6 +531,51 @@ class AuthorityDb:
             "source_manifest_sha256": "sha256:" + "b" * 64,
         }
 
+    async def list_active_github_poll_targets(
+        self,
+        workspace_id: str,
+        *,
+        limit: int,
+    ) -> list[dict[str, object]]:
+        return [
+            {
+                "workspace_id": workspace_id,
+                "application_id": "app-1",
+                "repository_id": "repo-1",
+                "repo_ref": "org/repo",
+                "branch": "dev",
+                "binding_id": "binding-1",
+                "environment": "sandbox",
+                "cluster_id": "cluster-1",
+                "manifest_path": "deploy/app.yaml",
+            }
+        ]
+
+    async def get_last_approved_resource_snapshot(
+        self,
+        workspace_id: str,
+        binding_id: str,
+        cluster_id: str,
+        namespace: str,
+        resource: str,
+    ) -> dict[str, object]:
+        kind, name = resource.split("/", 1)
+        return {
+            "workspace_id": workspace_id,
+            "binding_id": binding_id,
+            "cluster_id": cluster_id,
+            "namespace": namespace,
+            "resource_kind": kind.casefold(),
+            "resource_name": name,
+            "workflow_run_id": "run-1",
+            "commit_sha": "a" * 40,
+            "snapshot": {
+                "resource": resource,
+                "namespace": namespace,
+                "fields": {"spec.replicas": 1},
+            },
+        }
+
 
 def query(kind: str = "Deployment", name: str = "checkout") -> GitOpsAuthorityQuery:
     return GitOpsAuthorityQuery(
@@ -556,6 +601,34 @@ def test_authority_uses_rca_bundle_identity_when_exact_correlation_is_absent() -
     assert authority is not None
     assert authority.resource == "Deployment/checkout"
     assert db.calls == ["gitops_change_context", "rca_bundle"]
+
+
+def test_authority_uses_current_approved_snapshot_when_incident_has_no_recent_change() -> None:
+    db = AuthorityDb(evidence={"metadata": {}})
+
+    authority = load_authority(db, query())
+
+    assert authority is not None
+    assert authority.binding_id == "binding-1"
+    assert authority.manifest_path == "deploy/app.yaml"
+    assert authority.resource == "Deployment/checkout"
+
+
+def test_authority_rejects_ambiguous_current_approved_snapshot_bindings() -> None:
+    db = AuthorityDb(evidence={"metadata": {}})
+    list_targets = db.list_active_github_poll_targets
+
+    async def ambiguous_targets(
+        workspace_id: str,
+        *,
+        limit: int,
+    ) -> list[dict[str, object]]:
+        first = (await list_targets(workspace_id, limit=limit))[0]
+        return [first, {**first, "binding_id": "binding-2"}]
+
+    db.list_active_github_poll_targets = ambiguous_targets  # type: ignore[method-assign]
+
+    assert load_authority(db, query()) is None
 
 
 def test_authority_uses_exact_resource_diff_not_singleton_workflow_step() -> None:

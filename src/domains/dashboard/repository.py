@@ -236,6 +236,7 @@ def _rca_timeline_response_columns(*, include_issue_severity: bool = False) -> t
         table.c.command_id,
         table.c.pr_url,
         table.c.error_reason,
+        table.c.payload["reason_code"].astext.label("recovery_reason_code"),
         table.c.updated_at,
     )
     if include_issue_severity:

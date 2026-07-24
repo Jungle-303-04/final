@@ -19,6 +19,14 @@ export interface RecoveryProgressState {
   latestEvent: AuditTimelineItem | null;
 }
 
+export interface RecoveryProgressOverride {
+  actionRoute: string | null;
+  selectionPending: boolean;
+  selectionAccepted: boolean;
+  selectionFailed: boolean;
+  reasonCode: string | null;
+}
+
 function lifecycleObject(value: unknown): Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
@@ -42,6 +50,13 @@ export function recoveryDisplayedStep(progress: RecoveryProgressState): number {
   if (progress.phase === "waiting") return 0;
   if (progress.phase === "completed") return 5;
   return Math.min(5, progress.step + 1);
+}
+
+/** Aligns the continuous bar with the center of each of the five stage markers. */
+export function recoveryProgressPercent(progress: RecoveryProgressState): number {
+  const displayedStep = recoveryDisplayedStep(progress);
+  if (displayedStep === 0) return 0;
+  return 10 + (displayedStep - 1) * 20;
 }
 
 export function withCreatedPullRequest(
@@ -141,6 +156,7 @@ export function recoveryProgressState({
   selectionPending = false,
   selectionAccepted = false,
   selectionFailed = false,
+  reasonCode,
 }: {
   status?: string | null;
   currentSubject?: string | null;
@@ -150,16 +166,21 @@ export function recoveryProgressState({
   selectionPending?: boolean;
   selectionAccepted?: boolean;
   selectionFailed?: boolean;
+  reasonCode?: string | null;
 }): RecoveryProgressState {
   const normalizedStatus = normalize(status);
   const planStatus = normalize(plan?.status);
   const effectiveStatus = planStatus || normalizedStatus;
   const normalizedSubject = normalize(currentSubject);
   const normalizedRoute = normalize(actionRoute);
+  const normalizedReasonCode = normalize(reasonCode);
   const currentAudit = currentRecoveryAttemptAudit(audit);
   const latestEvent = currentAudit[0] ?? null;
   const subjects = currentAudit.map((event) => normalize(event.subject));
-  const hasRetryableBlocker = currentAudit.some(isRetryableRecoveryBlocker);
+  const hasRetryableBlocker = (
+    RETRYABLE_BLOCKER_CODES.has(normalizedReasonCode)
+    || currentAudit.some(isRetryableRecoveryBlocker)
+  );
 
   if (
     (

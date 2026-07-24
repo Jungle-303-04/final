@@ -26,6 +26,7 @@ def test_issue_scan_does_not_probe_reports_for_every_candidate_row() -> None:
     assert "rca_reports" not in sql
     assert "rca_issue_report_summary" not in sql
     assert "rca_timeline.payload" in sql
+    assert "reason_code" in sql
 
 
 def test_filtered_issue_scan_does_not_probe_reports_before_page_limit() -> None:
@@ -166,6 +167,27 @@ def test_issue_item_uses_timeline_payload_copy_when_report_does_not_exist() -> N
     assert item.recommended_action_summary == "대상 워크로드 재시작"
     assert item.evidence_summary == "Kubernetes 상태와 로그가 후보를 지지합니다."
     assert item.evidence_bundle_summary == "5개 provider 수집이 완료됐습니다."
+
+
+def test_issue_item_projects_latest_recovery_blocker_reason() -> None:
+    item = issue_item(
+        {
+            "workspace_id": "default",
+            "correlation_id": "correlation-blocked",
+            "cluster_id": "target-1",
+            "incident_id": "incident-blocked",
+            "current_subject": "rca.action_required",
+            "status": "action_required",
+            "supporting_evidence": [],
+            "missing_evidence": [],
+            "issue_severity": "warning",
+            "severity_availability": "available",
+            "severity_reason_code": None,
+            "recovery_reason_code": "gitops_authority_unavailable",
+        }
+    )
+
+    assert item.recovery_reason_code == "gitops_authority_unavailable"
 
 
 def test_issue_item_uses_completed_report_evidence_when_timeline_is_stale() -> None:

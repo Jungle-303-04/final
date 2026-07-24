@@ -14,6 +14,7 @@ import {
 import { HomeClustersWidget, OpsiaMap } from "./devpreview-opsia";
 import { DASHBOARD_WIDGET_GRID_CLASS, DASHBOARD_WIDGET_GRID_ITEM_CLASS, WidgetFrame, RatioBar, Donut, RankList, MultiLine, MiniTimeline, dashboardWidgetGridStyle, dashboardWidgetItemStyle, type DashboardWidgetSpan } from "./devpreview/widgets";
 import { DeploySurface, IssuesSurface, TimelineSurface, ChecksSurface, CostSurface, SettingsSurface, AlertsSurface, AiHistorySurface, IssueDetail, type RcaIncident } from "./devpreview-surfaces";
+import type { RecoveryProgressOverride } from "./devpreview/recoveryProgress";
 import { AiPanel, type RecoveryReviewState } from "./devpreview-ai";
 import type { AiRecoveryHandoff } from "./features/ai-assistant/aiRecoveryHandoff";
 import { isSafePrRoute } from "./devpreview/recoveryRoute";
@@ -1931,7 +1932,7 @@ function App() {
   const selectedNamespace = ns === "모든 네임스페이스" ? null : ns;
   const [meOpen, setMeOpen] = useState(false); // 계정 메뉴 (헤더 맨 오른쪽, D20)
   const [detail, setDetail] = useState<{ kind: Kind; row: Row } | null>(null);
-  const [recoverySelectionRoutes, setRecoverySelectionRoutes] = useState<ReadonlyMap<string, string>>(() => new Map());
+  const [recoveryProgressOverrides, setRecoveryProgressOverrides] = useState<ReadonlyMap<string, RecoveryProgressOverride>>(() => new Map());
   const [navCollapsed, setNavCollapsed] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const [aiMounted, setAiMounted] = useState(false);
@@ -2727,7 +2728,7 @@ function App() {
           onOpenIssues={() => setSurface("issues")} onAskAi={showAi} onAddRepo={() => setConnectModal("repo")}
           topInset={topH} leftInset={navCollapsed ? 60 : 208} rightInset={aiOpen ? aiW : 0} />
       ) : surface === "issues" ? (
-        <IssuesSurface incidentClusterIds={incidentClusterIds} recoverySelectionRoutes={recoverySelectionRoutes} sessionRules={notes.filter((n) => n.icon === "rule").map((n) => n.body.split(" · ")[0])} onOpenRef={openRef} onOpenRca={setRcaIncident} />
+        <IssuesSurface incidentClusterIds={incidentClusterIds} recoveryProgressOverrides={recoveryProgressOverrides} sessionRules={notes.filter((n) => n.icon === "rule").map((n) => n.body.split(" · ")[0])} onOpenRef={openRef} onOpenRca={setRcaIncident} />
       ) : surface === "timeline" ? (
         <TimelineSurface onOpenRef={openRef} />
       ) : surface === "checks" ? (
@@ -3087,13 +3088,13 @@ function App() {
             openRef(k, n);
           }}
           onAskAi={openAi}
-          onRecoverySelected={(correlationId, route, source) => {
-            setRecoverySelectionRoutes((current) => {
+          onRecoverySelected={(correlationId, update, source) => {
+            setRecoveryProgressOverrides((current) => {
               const next = new Map(current);
-              next.set(correlationId, route);
+              next.set(correlationId, update);
               return next;
             });
-            if (source === "direct") {
+            if (source === "direct" && update.selectionAccepted) {
               setAiOpen(false);
               setAiMounted(false);
               setAiFull(false);

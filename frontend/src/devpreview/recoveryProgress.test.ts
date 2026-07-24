@@ -4,6 +4,7 @@ import type { RecoveryPlan } from "../api/recovery-schemas";
 import {
   currentRecoveryAttemptPrUrl,
   recoveryDisplayedStep,
+  recoveryProgressPercent,
   recoveryProgressState,
   withCreatedPullRequest,
 } from "./recoveryProgress";
@@ -134,6 +135,31 @@ describe("recoveryProgressState", () => {
       phase: "failed",
       label: "복구 실패",
       step: 2,
+    });
+  });
+
+  it("stops the bar at the center of the active stage marker", () => {
+    expect(recoveryProgressPercent(
+      recoveryProgressState({ status: "rca_completed" }),
+    )).toBe(0);
+    expect(recoveryProgressPercent(
+      recoveryProgressState({ status: "rca_completed", selectionAccepted: true }),
+    )).toBe(30);
+    expect(recoveryProgressPercent(
+      recoveryProgressState({ status: "incident_resolved" }),
+    )).toBe(90);
+  });
+
+  it("uses the projected blocker reason before the audit feed refreshes", () => {
+    expect(recoveryProgressState({
+      actionRoute: "safe_pr",
+      selectionAccepted: true,
+      reasonCode: "gitops_authority_unavailable",
+    })).toMatchObject({
+      phase: "blocked",
+      label: "추가 설정 필요",
+      step: 1,
+      tone: "failed",
     });
   });
 

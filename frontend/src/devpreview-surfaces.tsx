@@ -61,7 +61,7 @@ import { RepositoryStatusList } from "./devpreview/RepositoryStatusList";
 import { SegmentedControl } from "./devpreview/SegmentedControl";
 import { groupApplicationsByRepository } from "./devpreview/repositoryRegistry";
 import { selectScenarioRuns } from "./devpreview/scenarioGateSelection";
-import { currentRecoveryAttemptPrUrl, recoveryDisplayedStep, recoveryProgressState, withCreatedPullRequest, type RecoveryProgressState } from "./devpreview/recoveryProgress";
+import { currentRecoveryAttemptPrUrl, recoveryDisplayedStep, recoveryProgressPercent, recoveryProgressState, withCreatedPullRequest, type RecoveryProgressOverride, type RecoveryProgressState } from "./devpreview/recoveryProgress";
 import { issueAnalysisState } from "./devpreview/issueAnalysisState";
 import { canOpenRecoveryPlan, canStartRecoveryReview } from "./devpreview/recoveryAccess";
 import { pullRequestReference } from "./devpreview/pullRequestReference";
@@ -731,7 +731,7 @@ function RecoveryPlanProgress({ progress, prUrl = null }: { progress: RecoveryPr
       : progress.tone === "approval" ? HP.warn
         : BLUE;
   const displayedStep = recoveryDisplayedStep(progress);
-  const progressPercent = displayedStep * 20;
+  const progressPercent = recoveryProgressPercent(progress);
   const prReference = prUrl ? pullRequestReference(prUrl) : null;
   return (
     <section aria-live="polite" style={{ display: "grid", gap: SPACE.stack, border: `1px solid ${UI.line}`, borderRadius: RADIUS.card, background: UI.card, padding: SPACE.card, boxShadow: `0 6px 16px -10px ${inkA(0.26)}, 0 1px 3px ${inkA(0.06)}` }}>
@@ -1180,26 +1180,16 @@ function RecoveryAlternativeCandidate({
 
 function RecoveryPlanPanel({
   plan,
-  progress,
-  prUrl,
   selectedActionId,
   pendingActionId,
   selectionError,
-  retryPending,
-  retryError,
-  onRetry,
   onSelect,
   onOpenTarget,
 }: {
   plan: RecoveryPlan;
-  progress: RecoveryProgressState;
-  prUrl?: string | null;
   selectedActionId: string | null;
   pendingActionId: string | null;
   selectionError: string | null;
-  retryPending: boolean;
-  retryError: string | null;
-  onRetry: () => void;
   onSelect: (actionId: string) => void;
   onOpenTarget?: (() => void) | null;
 }) {
@@ -1207,18 +1197,6 @@ function RecoveryPlanPanel({
   const alternatives = plan.candidates.filter((candidate) => candidate.action_id !== recommended?.action_id);
   return (
     <div style={{ display: "grid", gap: 16 }}>
-      {(plan.selected_action_id || plan.lifecycle) && (
-        <>
-          <RecoveryPlanProgress progress={progress} prUrl={prUrl} />
-          <RecoveryLifecycleEvidence lifecycle={plan.lifecycle} />
-          <RecoveryRetryControl
-            visible={plan.status === "failed"}
-            pending={retryPending}
-            error={retryError}
-            onRetry={onRetry}
-          />
-        </>
-      )}
       {selectionError && <div role="alert" style={{ display: "flex", alignItems: "flex-start", gap: 7, border: `1px solid ${TINT.crit.bd}`, borderRadius: 8, background: TINT.crit.bg, color: TINT.crit.fg, padding: 11, fontSize: TYPE.caption, lineHeight: 1.45 }}><CircleAlert size={14} style={{ flexShrink: 0, marginTop: 1 }} />{selectionError}</div>}
       {recommended ? (
         <RcaCardSection title="권장 복구 조치">
@@ -1786,12 +1764,13 @@ function RcaAlternativeCandidate({
     </details>
   );
 }
-export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resourceKind, incidentId, currentSubject, updatedAt, prUrl: _prUrl, onClose, onOpenRef, onAskAi, onRecoverySelected, correlationId, status, severity, rootCause, confidence, supportingEvidence, missingEvidence, situationSummary, recommendedActionSummary, evidenceSummary, evidenceBundleSummary, topInset = 0, leftInset = 0, rightInset = 0 }: {
-  name: string; symptom: string; cluster: string; svc: string; ns: string; onClose: () => void; onOpenRef: (kind: string, n: string) => void; onAskAi: (request?: AiRecoveryHandoff) => void; onRecoverySelected?: (correlationId: string, route: string, source: "direct" | "ai") => void;
+export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resourceKind, incidentId, currentSubject, updatedAt, prUrl: _prUrl, onClose, onOpenRef, onAskAi, onRecoverySelected, correlationId, status, severity, rootCause, confidence, supportingEvidence, missingEvidence, situationSummary, recommendedActionSummary, evidenceSummary, evidenceBundleSummary, recoveryReasonCode, topInset = 0, leftInset = 0, rightInset = 0 }: {
+  name: string; symptom: string; cluster: string; svc: string; ns: string; onClose: () => void; onOpenRef: (kind: string, n: string) => void; onAskAi: (request?: AiRecoveryHandoff) => void; onRecoverySelected?: (correlationId: string, update: RecoveryProgressOverride, source: "direct" | "ai") => void;
   rawSymptom?: string | null; resourceKind?: string | null; incidentId?: string | null; currentSubject?: string | null; updatedAt?: string | null; prUrl?: string | null;
   correlationId?: string; status?: string; severity?: "critical" | "warning" | null;
   rootCause?: string | null; confidence?: number | null; supportingEvidence?: string[]; missingEvidence?: string[];
   situationSummary?: string | null; recommendedActionSummary?: string | null; evidenceSummary?: string | null; evidenceBundleSummary?: string | null;
+  recoveryReasonCode?: string | null;
   topInset?: number; leftInset?: number; rightInset?: number;
 }) {
   const [activeTab, setActiveTab] = useState<"detail" | "recovery">("detail");
@@ -1805,6 +1784,7 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
   const [recoverySelectionPendingId, setRecoverySelectionPendingId] = useState<string | null>(null);
   const [recoverySelectionAccepted, setRecoverySelectionAccepted] = useState(false);
   const [recoverySelectionError, setRecoverySelectionError] = useState<string | null>(null);
+  const [recoverySelectionErrorCode, setRecoverySelectionErrorCode] = useState<string | null>(null);
   const [recoveryRetryPending, setRecoveryRetryPending] = useState(false);
   const [recoveryRetryError, setRecoveryRetryError] = useState<string | null>(null);
   const [recoveryReviewActionId, setRecoveryReviewActionId] = useState<string | null>(null);
@@ -1912,6 +1892,7 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
     selectionPending: recoverySelectionPendingId !== null,
     selectionAccepted: recoverySelectionAccepted,
     selectionFailed: recoverySelectionError !== null,
+    reasonCode: recoverySelectionErrorCode ?? recoveryReasonCode,
   });
   useEffect(() => {
     if (
@@ -1974,19 +1955,42 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
     const selectedRoute = selectedCandidate?.route ?? recovery.plan.execution_route;
     setRecoverySelectionPendingId(actionId);
     setRecoverySelectionError(null);
+    setRecoverySelectionErrorCode(null);
+    onRecoverySelected?.(correlationId, {
+      actionRoute: selectedRoute,
+      selectionPending: true,
+      selectionAccepted: false,
+      selectionFailed: false,
+      reasonCode: null,
+    }, source);
     try {
       const receipt = await selectRecoveryAction(correlationId, recovery.plan.plan_id, actionId);
       if (!receipt.accepted) throw new Error("recovery selection was not accepted");
       setSelectedRecoveryActionId(actionId);
       setRecoverySelectionAccepted(true);
-      onRecoverySelected?.(correlationId, selectedRoute, source);
+      onRecoverySelected?.(correlationId, {
+        actionRoute: selectedRoute,
+        selectionPending: false,
+        selectionAccepted: true,
+        selectionFailed: false,
+        reasonCode: null,
+      }, source);
       return receipt;
     } catch (cause: unknown) {
+      const errorCode = isApiError(cause) ? cause.code : null;
+      setRecoverySelectionErrorCode(errorCode);
       setRecoverySelectionError(
         isApiError(cause)
           ? cause.detail ?? cause.message
           : "복구 조치를 선택하지 못했습니다. 권한과 현재 플랜 상태를 확인해 주세요.",
       );
+      onRecoverySelected?.(correlationId, {
+        actionRoute: selectedRoute,
+        selectionPending: false,
+        selectionAccepted: false,
+        selectionFailed: true,
+        reasonCode: errorCode,
+      }, source);
       if (source === "ai") throw cause;
       return null;
     } finally {
@@ -2305,14 +2309,9 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
               ) : (
                 <RecoveryPlanPanel
                   plan={recovery.plan}
-                  progress={displayedRecoveryProgress}
-                  prUrl={effectiveRecoveryPrUrl}
                   selectedActionId={effectiveSelectedActionId}
                   pendingActionId={recoverySelectionPendingId}
                   selectionError={recoverySelectionError}
-                  retryPending={recoveryRetryPending}
-                  retryError={recoveryRetryError}
-                  onRetry={() => void handleRecoveryRetry()}
                   onSelect={beginRecoveryReview}
                   onOpenTarget={recoveryTargetKind && recoveryTargetName ? () => onOpenRef(recoveryTargetKind, recoveryTargetName) : null}
                 />
@@ -2346,6 +2345,7 @@ export type RcaIncident = {
   recommendedActionSummary?: string | null;
   evidenceSummary?: string | null;
   evidenceBundleSummary?: string | null;
+  recoveryReasonCode?: string | null;
   prUrl?: string | null;
 };
 
@@ -2404,14 +2404,17 @@ function RecoveryProgress({ progress }: { progress: RecoveryProgressState }) {
   );
 }
 
-function IssueCard({ issue, recoverySelectionRoute, recoveryCompleted, onOpen, onOpenTarget }: { issue: RcaIssueDetailView; recoverySelectionRoute: string | null; recoveryCompleted: boolean; onOpen: () => void; onOpenTarget: (() => void) | null }) {
+function IssueCard({ issue, recoveryProgressOverride, recoveryCompleted, onOpen, onOpenTarget }: { issue: RcaIssueDetailView; recoveryProgressOverride: RecoveryProgressOverride | null; recoveryCompleted: boolean; onOpen: () => void; onOpenTarget: (() => void) | null }) {
   const [targetActive, setTargetActive] = useState(false);
   const state = issueAnalysisState({ ...issue, status: recoveryCompleted ? "resolved" : issue.status });
   const recovery = recoveryProgressState({
     status: recoveryCompleted ? "resolved" : issue.status,
     currentSubject: issue.currentSubject,
-    actionRoute: recoverySelectionRoute ?? issue.actionRoute,
-    selectionAccepted: recoverySelectionRoute !== null,
+    actionRoute: recoveryProgressOverride?.actionRoute ?? issue.actionRoute,
+    selectionPending: recoveryProgressOverride?.selectionPending ?? false,
+    selectionAccepted: recoveryProgressOverride?.selectionAccepted ?? false,
+    selectionFailed: recoveryProgressOverride?.selectionFailed ?? false,
+    reasonCode: recoveryProgressOverride?.reasonCode ?? issue.recoveryReasonCode,
   });
   const displayedRecovery = withCreatedPullRequest(recovery, issue.prUrl, "PR 검토 필요");
   const prReference = issue.prUrl ? pullRequestReference(issue.prUrl) : null;
@@ -2517,14 +2520,14 @@ function IssueCard({ issue, recoverySelectionRoute, recoveryCompleted, onOpen, o
   );
 }
 
-export function IssuesSurface({ incidentClusterIds, recoverySelectionRoutes = new Map<string, string>(), sessionRules: _sessionRules = [], onOpenRef, onOpenRca }: {
-  incidentClusterIds: readonly string[]; recoverySelectionRoutes?: ReadonlyMap<string, string>; sessionRules?: string[]; onOpenRef: (kind: string, name: string) => void; onOpenRca?: (i: RcaIncident) => void;
+export function IssuesSurface({ incidentClusterIds, recoveryProgressOverrides = new Map<string, RecoveryProgressOverride>(), sessionRules: _sessionRules = [], onOpenRef, onOpenRca }: {
+  incidentClusterIds: readonly string[]; recoveryProgressOverrides?: ReadonlyMap<string, RecoveryProgressOverride>; sessionRules?: string[]; onOpenRef: (kind: string, name: string) => void; onOpenRca?: (i: RcaIncident) => void;
 }) {
   const [tab, setTab] = useState("진행 중");
   const [severityFilter, setSeverityFilter] = useState<IssueSeverityFilter>("all");
   // 이슈 탭 — 실 RCA 이슈 큐(GET /api/dashboard/rca/issues, 홈 W2와 동일 소스).
   // 큐 항목이 관측 RCA 필드(원인/확신도/증거/AI 요약)를 이미 실어주므로 상세 드로어로 그대로 전달한다.
-  const issues = useRcaIssueDetails(incidentClusterIds, recoverySelectionRoutes.size > 0 ? 4000 : 0);
+  const issues = useRcaIssueDetails(incidentClusterIds, recoveryProgressOverrides.size > 0 ? 4000 : 0);
   const issueItems = issues.items;
   const activeIssues = issueItems.filter(isActiveRcaIssue);
   const resolvedIssues = issueItems.filter((issue) => !isActiveRcaIssue(issue));
@@ -2555,6 +2558,7 @@ export function IssuesSurface({ incidentClusterIds, recoverySelectionRoutes = ne
     recommendedActionSummary: iss.recommendedActionSummary,
     evidenceSummary: iss.evidenceSummary,
     evidenceBundleSummary: iss.evidenceBundleSummary,
+    recoveryReasonCode: iss.recoveryReasonCode,
     prUrl: iss.prUrl,
   });
   return (
@@ -2593,7 +2597,7 @@ export function IssuesSurface({ incidentClusterIds, recoverySelectionRoutes = ne
               <IssueCard
                 key={iss.correlationId}
                 issue={iss}
-                recoverySelectionRoute={recoverySelectionRoutes.get(iss.correlationId) ?? null}
+                recoveryProgressOverride={recoveryProgressOverrides.get(iss.correlationId) ?? null}
                 recoveryCompleted={!isActiveRcaIssue(iss)}
                 onOpen={() => setRca(iss)}
                 onOpenTarget={resourceKind && resourceName ? () => onOpenRef(resourceKind, resourceName) : null}
