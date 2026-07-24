@@ -883,9 +883,17 @@ async def on_approval_rejected(
 async def on_command_queued(
     evt: CommandQueuedForAgentBody, ctx: EventContext[WorkflowStore]
 ) -> AsyncIterator[EventBody]:
-    run = await ensure_run(
+    payload = gitops_payload(evt)
+    # Standalone resource-editor commands deliberately use workflow-shaped
+    # correlation fields without owning a GitOps WorkflowRun row. Follow-up
+    # command facts must never synthesize an application/run from the reduced
+    # agent-queue envelope; only an already persisted, identity-matching run
+    # may advance.
+    if not await workflow_run_identity_is_persisted(ctx, payload):
+        return
+    run = await transition_run(
         ctx,
-        gitops_payload(evt),
+        payload,
         WorkflowRunStatus.ROLLOUT_WAITING.value,
         WorkflowStepName.APPLY.value,
         "command queued for outbound agent",
