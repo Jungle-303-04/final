@@ -72,6 +72,10 @@ import {
   type GithubAppConfig,
 } from "./api/github-app";
 import { listApplications } from "./api/applications";
+import {
+  connectionFailurePresentation,
+  type ConnectionFailurePresentation,
+} from "./devpreview/connectErrors";
 import { useSession } from "./devpreview/sessionFeed";
 import "./styles/tokens.css";
 import "./styles/foundation.css";
@@ -784,10 +788,11 @@ function PreviewChip({ change, count }: { change: string; count: number }) {
   );
 }
 
-function RepoTargetStep({ source, context, onComplete }: {
+function RepoTargetStep({ source, context, onComplete, onReconnectCredential }: {
   source: RepoSource;
   context?: RepositoryConnectionContext;
   onComplete: (repo: string) => void;
+  onReconnectCredential: () => void;
 }) {
   const repoRef = source.normalizedRepo || source.repo.full;
   const repoSegments = repoRef.split("/");
@@ -803,7 +808,7 @@ function RepoTargetStep({ source, context, onComplete }: {
   const [clusters, setClusters] = useState<ClusterSummaryView[]>([]);
   const [clusterStatus, setClusterStatus] = useState<"loading" | "ready" | "error">("loading");
   const [submitStatus, setSubmitStatus] = useState<"idle" | "submitting" | "error">("idle");
-  const [failure, setFailure] = useState("");
+  const [failure, setFailure] = useState<ConnectionFailurePresentation | null>(null);
   // 리소스 소유권 겹침(다른 앱이 이미 관리 중) 감지 시 사용자 확인을 요구.
   const [conflict, setConflict] = useState<string | null>(null);
   const [manifests, setManifests] = useState<RepositoryManifestCandidateView[]>([]);
@@ -856,7 +861,7 @@ function RepoTargetStep({ source, context, onComplete }: {
       .catch((cause: unknown) => {
         if (controller.signal.aborted || isAbortError(cause)) return;
         setManifests([]);
-        setFailure(errorText(cause));
+        setFailure(connectionFailurePresentation(errorText(cause)));
         setManifestStatus("error");
       });
     return () => controller.abort();
@@ -868,7 +873,7 @@ function RepoTargetStep({ source, context, onComplete }: {
       setManifestStatus("loading");
       setManifests([]);
     }
-    setFailure("");
+    setFailure(null);
     setSubmitStatus("idle");
     // 대상·매니페스트가 바뀌면 이전 프리뷰는 무효 — 다시 계산하게 초기화.
     setPreview(null);
@@ -878,7 +883,7 @@ function RepoTargetStep({ source, context, onComplete }: {
   const loadPreview = async () => {
     if (!complete || previewStatus === "loading") return;
     setPreviewStatus("loading");
-    setFailure("");
+    setFailure(null);
     try {
       const candidate = manifests.find((item) => item.path === input.manifestPath);
       const result = await previewApplicationConnection({
@@ -893,14 +898,14 @@ function RepoTargetStep({ source, context, onComplete }: {
       setPreview(result);
       setPreviewStatus("ready");
     } catch (cause: unknown) {
-      setFailure(errorText(cause));
+      setFailure(connectionFailurePresentation(errorText(cause)));
       setPreviewStatus("error");
     }
   };
   const submit = async (allowConflicts = false) => {
     if (!complete || submitStatus === "submitting") return;
     setSubmitStatus("submitting");
-    setFailure("");
+    setFailure(null);
     if (!allowConflicts) setConflict(null);
     try {
       const candidate = manifests.find((item) => item.path === input.manifestPath);
@@ -937,7 +942,7 @@ function RepoTargetStep({ source, context, onComplete }: {
         setSubmitStatus("error");
         return;
       }
-      setFailure(errorText(cause));
+      setFailure(connectionFailurePresentation(errorText(cause)));
       setSubmitStatus("error");
     }
   };
@@ -1004,7 +1009,39 @@ function RepoTargetStep({ source, context, onComplete }: {
       {clusterStatus === "error" && <GapBanner>연결된 클러스터를 불러오지 못했습니다. 서버 연결을 확인한 뒤 다시 열어주세요.</GapBanner>}
       {clusterStatus === "ready" && clusters.length === 0 && <GapBanner>먼저 클러스터를 연결해야 저장소 배포 대상을 등록할 수 있습니다.</GapBanner>}
       {manifestStatus === "ready" && manifests.length === 0 && <GapBanner>선택한 브랜치에서 배포 가능한 Kubernetes 매니페스트를 찾지 못했습니다.</GapBanner>}
-      <FloatingToast message={failure || null} onDismiss={() => setFailure("")} />
+      <AnimatePresence mode="popLayout">
+        {failure?.kind === "repository_credential" && (
+          <motion.div
+            key="credential-recovery"
+            layout
+            {...REVEAL}
+            role="alert"
+            className="grid gap-3 err-bg"
+            style={{ borderRadius: 16, padding: "15px 18px" }}
+          >
+            <div className="flex items-start gap-3">
+              <AlertCircle className="mt-0.5 size-[18px] shrink-0 c-red" />
+              <div className="min-w-0">
+                <div className="text-body font-semibold c-ink">{failure.title}</div>
+                <div className="mt-1 text-label leading-[1.5] c-2">{failure.message}</div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={onReconnectCredential}
+              className="product-focusable product-control flex w-full items-center justify-center gap-2 rounded-[12px] border py-2.5 text-label font-semibold c-2"
+              style={{ borderColor: UI.line }}
+            >
+              <ArrowLeft className="size-4" />
+              {failure.actionLabel}
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      <FloatingToast
+        message={failure?.kind === "generic" ? failure.message : null}
+        onDismiss={() => setFailure(null)}
+      />
       <AnimatePresence mode="popLayout">
         {conflict && (
           <motion.div key="conflict" layout {...REVEAL} role="alert" className="grid gap-3 err-bg" style={{ borderRadius: 16, padding: "15px 18px" }}>
@@ -1094,7 +1131,15 @@ function RepoWizard({ providers, context, onClose, onComplete }: { providers: Cl
   const [source, setSource] = useState<RepoSource | null>(null);
   const el = {
     0: <RepoStep key="s0" providers={providers} onNext={(value) => { setSource(value); setStep(1); }} />,
-    1: source ? <RepoTargetStep key="s1" source={source} context={context} onComplete={() => setStep(2)} /> : null,
+    1: source ? (
+      <RepoTargetStep
+        key="s1"
+        source={source}
+        context={context}
+        onComplete={() => setStep(2)}
+        onReconnectCredential={() => setStep(0)}
+      />
+    ) : null,
     2: source ? <RepoDoneStep key="s2" repo={source.normalizedRepo} onDone={() => onComplete(source.normalizedRepo)} /> : null,
   }[step];
   return (<><ShellHeader icon={GitBranch} title="Git 저장소 연결" sub="Git 원문 검증 · 배포 대상 등록 · Safe PR 준비" onClose={onClose} onBack={step === 1 ? () => setStep(0) : undefined} /><Steps steps={REPO_STEPS} active={step} /><Body>{el}</Body></>);
