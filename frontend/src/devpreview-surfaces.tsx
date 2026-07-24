@@ -1822,7 +1822,11 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
   const report = latestReport.report;
   const recoveryAvailable = canOpenRecoveryPlan(rootCause, report, recovery.plan);
   const conf = typeof confidence === "number" && Number.isFinite(confidence) ? Math.round(confidence * 100) : null;
-  const analysisState = issueAnalysisState({ status, rootCause });
+  const analysisState = issueAnalysisState({
+    status,
+    rootCause,
+    analysisStatus: report?.analysis_status,
+  });
   const headerTone = analysisState.label === "해결됨" ? TINT.ok
     : severity === "warning" ? TINT.warn
       : severity === "critical" ? TINT.crit
@@ -2282,6 +2286,13 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
                 <div style={{ fontSize: TYPE.label, color: UI.ink3 }}>복구 플랜 없음</div>
               ) : recovery.status === "loading" ? (
                 <div style={{ fontSize: TYPE.label, color: UI.ink3 }}>복구 플랜 불러오는 중…</div>
+              ) : recovery.status === "pending" ? (
+                <div style={{ display: "grid", gap: 6 }}>
+                  <strong style={{ fontSize: TYPE.label, color: UI.heading }}>복구 플랜 생성 중</strong>
+                  <span style={{ fontSize: TYPE.caption, color: UI.ink3 }}>
+                    원인 분석 결과를 바탕으로 복구 후보를 만들고 있습니다. 잠시 후 자동으로 다시 확인합니다.
+                  </span>
+                </div>
               ) : recovery.status === "unavailable" || recovery.plan === null ? (
                 <div style={{ fontSize: TYPE.label, color: UI.ink3 }}>복구 플랜을 불러오지 못했습니다.</div>
               ) : recovery.plan.candidates.length === 0 ? (

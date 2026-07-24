@@ -24,6 +24,7 @@ def rca_report_projection(payload: JsonObject) -> JsonObject:
     detail = payload.get("rca_detail") if isinstance(payload.get("rca_detail"), dict) else {}
     narrative = normalize_rca_narrative(payload.get(RCA_NARRATIVE_PAYLOAD_KEY))
     return {
+        "analysis_status": _analysis_status(payload),
         "incident_id": incident.get("incident_id"),
         "cluster_id": incident.get("cluster_id"),
         "symptom": incident.get("symptom"),
@@ -66,6 +67,7 @@ def rca_report_summary(row: JsonObject) -> JsonObject:
         "id": row["id"],
         "workspace_id": row["workspace_id"],
         "correlation_id": row["correlation_id"],
+        "analysis_status": value("analysis_status", "completed"),
         "root_cause": row["root_cause"],
         "action": row["action"],
         "incident_id": value("incident_id"),
@@ -95,6 +97,11 @@ def rca_report_summary(row: JsonObject) -> JsonObject:
             value(RCA_NARRATIVE_PAYLOAD_KEY),
         ),
     }
+
+
+def _analysis_status(payload: JsonObject) -> str:
+    value = payload.get("analysis_status")
+    return "blocked" if value == "blocked" else "completed"
 
 
 def _narrative_status(value: Any, narrative: Any) -> str:

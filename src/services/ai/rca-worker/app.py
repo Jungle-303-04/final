@@ -5,7 +5,11 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncIterator
 
-from domains.rca.events import RcaCandidatesEvaluatedBody, RcaCompletedBody
+from domains.rca.events import (
+    RcaAnalysisBlockedBody,
+    RcaCandidatesEvaluatedBody,
+    RcaCompletedBody,
+)
 from domains.rca.report_narrative import (
     RCA_NARRATIVE_GENERATED,
     RCA_NARRATIVE_PAYLOAD_KEY,
@@ -56,6 +60,19 @@ async def on_candidates_evaluated(
             result.action,
             report_body,
         )
+    elif isinstance(result, RcaAnalysisBlockedBody):
+        # A blocked analysis is still a durable RCA outcome. Persist its ranked
+        # candidates and evidence trail so the issue detail can explain why the
+        # cause was not finalized and what evidence is still required.
+        report_body = result.to_body()
+        report_body["analysis_status"] = "blocked"
+        await ctx.db.save_rca_report(
+            ctx.correlation_id,
+            result.workspace_id,
+            "insufficient_evidence",
+            "추가 근거 수집 후 RCA 재분석",
+            report_body,
+        )
     yield result
 
 
@@ -65,6 +82,7 @@ async def enriched_report_body(
 ) -> JsonObject:
     """Best-effort narrative enrichment; deterministic RCA persistence always wins."""
     body = result.to_body()
+    body["analysis_status"] = "completed"
     fallback = deterministic_rca_narrative(result)
     if fallback is None:
         body[RCA_NARRATIVE_STATUS_KEY] = RCA_NARRATIVE_UNAVAILABLE

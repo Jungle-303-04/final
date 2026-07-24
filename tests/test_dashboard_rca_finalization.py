@@ -9,6 +9,7 @@ from domains.dashboard.repository import (
 )
 from domains.rca.models import RcaReport
 from domains.rca.repository import rca_report_storage_projection
+from domains.rca.report_projection import rca_report_projection, rca_report_summary
 from packages.contracts.event_bus.interfaces import EventEnvelope
 from packages.contracts.event_bus.subjects import EventSubject
 
@@ -48,6 +49,46 @@ def test_rca_report_storage_projection_drops_payload_only_first_seen_at() -> Non
 
     assert "first_seen_at" not in projection
     assert set(projection).issubset(set(RcaReport.__table__.c.keys()))
+
+
+def test_blocked_rca_report_keeps_analysis_status_in_payload_projection() -> None:
+    payload = {
+        "analysis_status": "blocked",
+        "evidence_ref": "object://evidence/blocked.json",
+        "rca_detail": {
+            "root_cause": "upstream_unavailable",
+            "selected_candidate_id": "upstream_unavailable",
+            "confidence": 0.75,
+            "supporting_evidence": ["logs:upstream_5xx"],
+            "missing_evidence": ["kubernetes:endpoints"],
+        },
+        "candidates": [{"candidate_id": "upstream_unavailable", "title": "Upstream 장애"}],
+        "evaluations": [
+            {
+                "candidate_id": "upstream_unavailable",
+                "score": 0.75,
+                "supporting_evidence": ["logs:upstream_5xx"],
+                "missing_evidence": ["kubernetes:endpoints"],
+            }
+        ],
+    }
+
+    projected = rca_report_projection(payload)
+    summary = rca_report_summary(
+        {
+            "id": 1,
+            "workspace_id": "default",
+            "correlation_id": "correlation-1",
+            "root_cause": "insufficient_evidence",
+            "action": "추가 근거 수집 후 RCA 재분석",
+            "payload": payload,
+            "created_at": None,
+        }
+    )
+
+    assert projected["analysis_status"] == "blocked"
+    assert projected["candidates"][0]["candidate_id"] == "upstream_unavailable"
+    assert summary["analysis_status"] == "blocked"
 
 
 def test_future_payload_only_projection_field_cannot_become_insert_kwarg(

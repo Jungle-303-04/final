@@ -95,6 +95,7 @@ export const rcaReportSchema = z.strictObject({
   id: z.number().int(),
   workspace_id: z.string().min(1),
   correlation_id: z.string().min(1),
+  analysis_status: z.enum(["completed", "blocked"]),
   root_cause: z.string(),
   action: z.string(),
   incident_id: nullableStringSchema,

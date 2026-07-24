@@ -7,6 +7,7 @@ import re
 from collections.abc import AsyncIterator, Mapping
 from dataclasses import replace
 
+from domains.command.events import CommandRejectedBody
 from domains.gitops.events import WorkflowRunCompletedBody, WorkflowRunFailedBody
 from domains.rca.events import (
     ClusterEvidenceReceivedBody,
@@ -1037,6 +1038,54 @@ async def on_recovery_safe_pr_failed(
             "source_event": evt.__subject__,
             "agent_safe": True,
             "retryable": True,
+        },
+    )
+
+
+@app.on(CommandRejectedBody)
+async def on_recovery_command_rejected(
+    evt: CommandRejectedBody,
+    ctx: EventContext[RecoveryPlanStore],
+) -> AsyncIterator[EventBody]:
+    workspace_id = text_value(evt.requested.get("workspace_id"))
+    if not workspace_id:
+        return
+    record = await ctx.db.get_recovery_plan_by_correlation(
+        ctx.correlation_id,
+        workspace_id,
+    )
+    if not isinstance(record, dict) or record.get("status") != RECOVERY_STATUS_SELECTED:
+        return
+    plan_id = text_value(record.get("plan_id"))
+    action_id = text_value(record.get("selected_action_id"))
+    if not plan_id or not action_id:
+        return
+    reopened = await ctx.db.reopen_recovery_plan_action(
+        plan_id,
+        workspace_id,
+        action_id,
+    )
+    if not reopened:
+        return
+    reason_code = text_value(evt.reason_code) or "command_rejected"
+    yield RcaFollowupRequiredBody(
+        reason_code=reason_code,
+        summary=evt.reason,
+        evidence_ref=text_value(record.get("evidence_ref")) or "unknown",
+        workspace_id=workspace_id,
+        severity=SEVERITY_WARNING,
+        next_actions=[
+            {
+                "action_type": "review_recovery_action",
+                "description": "거부 원인을 확인한 뒤 같은 조치를 다시 검토하거나 다른 복구 후보를 선택합니다.",
+            }
+        ],
+        diagnostics={
+            "plan_id": plan_id,
+            "action_id": action_id,
+            "source_event": evt.__subject__,
+            "agent_safe": True,
+            "retryable": False,
         },
     )
 

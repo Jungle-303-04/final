@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { getRecoveryPlanByCorrelation } from "../api/recovery";
+import { isApiError } from "../api/client";
 import type { RecoveryPlan } from "../api/recovery-schemas";
 import { getRemediationBundle } from "../api/rca-bundle";
 import type { RemediationBundleResponse } from "../api/rca-bundle-schemas";
@@ -141,7 +142,7 @@ export function useRcaIssueDetails(
     : { status: "loading", items: [] };
 }
 
-export type RecoveryPlanStatus = "idle" | "loading" | "ready" | "unavailable";
+export type RecoveryPlanStatus = "idle" | "loading" | "pending" | "ready" | "unavailable";
 
 export interface RecoveryPlanFeed {
   status: RecoveryPlanStatus;
@@ -149,7 +150,7 @@ export interface RecoveryPlanFeed {
 }
 
 export interface RemediationBundleFeed {
-  status: RecoveryPlanStatus;
+  status: Exclude<RecoveryPlanStatus, "pending">;
   bundle: RemediationBundleResponse | null;
 }
 
@@ -409,22 +410,31 @@ export function useRecoveryPlan(
     if (!correlationId) return;
     const controller = new AbortController();
     let timer: number | undefined;
+    const schedule = (delay: number) => {
+      timer = window.setTimeout(load, delay);
+    };
     const load = () => {
       void getRecoveryPlanByCorrelation(correlationId, { signal: controller.signal })
         .then((plan) => {
           if (controller.signal.aborted) return;
           setFeed({ status: "ready", plan });
+          if (pollMs > 0) schedule(pollMs);
         })
         .catch((cause: unknown) => {
           if (controller.signal.aborted || isAbortError(cause)) return;
+          if (isApiError(cause) && cause.status === 404) {
+            setFeed({ status: "pending", plan: null });
+            schedule(2000);
+            return;
+          }
           setFeed({ status: "unavailable", plan: null });
+          if (pollMs > 0) schedule(pollMs);
         });
     };
     load();
-    if (pollMs > 0) timer = window.setInterval(load, pollMs);
     return () => {
       controller.abort();
-      if (timer !== undefined) window.clearInterval(timer);
+      if (timer !== undefined) window.clearTimeout(timer);
     };
   }, [correlationId, pollMs]);
   return feed;

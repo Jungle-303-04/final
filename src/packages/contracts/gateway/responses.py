@@ -650,6 +650,7 @@ class RcaReportSummaryItem(StrictModel):
     id: int
     workspace_id: str
     correlation_id: str
+    analysis_status: Literal["completed", "blocked"] = "completed"
     root_cause: str
     action: str
     incident_id: str | None = None
