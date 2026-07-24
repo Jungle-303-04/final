@@ -218,7 +218,7 @@ export function LiveResourceManifestEditor({
     const poll = async () => {
       try {
         const timeline = await getAuditTimeline(manifestCorrelationId, {
-          limit: 50,
+          limit: 200,
           signal: abort.signal,
         });
         if (abort.signal.aborted) return;
@@ -366,6 +366,8 @@ export function LiveResourceManifestEditor({
     if (!editInput || !preview?.valid || reason.trim().length < 3) return;
     setPhase("submitting");
     setError(null);
+    setManifestPrUrl(null);
+    setManifestPrFailed(false);
     try {
       setApprovalDecision(null);
       setApprovalDecisionError(null);
