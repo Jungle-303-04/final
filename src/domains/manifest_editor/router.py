@@ -42,6 +42,7 @@ from domains.identity.dependencies import (
     require_resource_access,
     require_session,
 )
+from domains.manifest_editor.source_revision import SourceRevision, SourceRevisionCodec
 from domains.manifest_editor.validation import (
     MAX_DOCUMENTS,
     MAX_MANIFEST_BYTES,
@@ -59,6 +60,7 @@ from domains.scm.events import SafePrFilePatch, SafePrRequestedBody
 from domains.scm.pipeline import safe_pr_patch_sha256
 from packages.config.constants import Command, Sandbox
 from packages.config.control import control_namespace_allowed
+from packages.config.settings import env
 from packages.contracts.auth import Actor
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.requests import (
@@ -105,6 +107,8 @@ DIRECT_APPLY_NAMESPACE_UNRESOLVED = "namespace_unresolved"
 DIRECT_APPLY_NAMESPACE_DENIED = "namespace_not_allowed"
 DIRECT_APPLY_UNAVAILABLE = "Direct manifest apply is unavailable for this exact target."
 DIRECT_APPLY_PREVIEW_STALE = "The confirmed manifest differs from the validated preview."
+SOURCE_REVISION_INVALID = "The resolved Git source expired or changed. Reload before approving."
+SOURCE_REVISION_SIGNING_KEY_ENV = "FILTER_CURSOR_SIGNING_KEY"
 IDEMPOTENCY_KEY_REUSED = "idempotency_key_reused"
 IDEMPOTENCY_KEY_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$")
 CREATE_CAPABILITY_UNAVAILABLE = "resource_create_capability_unavailable"
@@ -190,13 +194,22 @@ async def get_resource_manifest_source(
             reason=safety_errors[0],
             **projection,
         )
+    source_digest = manifest_sha256(content)
     return ResourceManifestSourceResponse(
         resource_id=resource_id,
         status="available",
         choices=choices,
         selected=source_choice(source),
         base_sha=base_sha,
-        source_sha256=manifest_sha256(content),
+        source_sha256=source_digest,
+        source_revision_token=source_revision_token(
+            current=current,
+            context=context,
+            source=source,
+            resource_id=resource_id,
+            base_sha=base_sha,
+            source_sha256=source_digest,
+        ),
         content=content,
         **projection,
     )
@@ -220,6 +233,10 @@ async def preview_resource_manifest_edit(
         context,
         payload.application_id,
         fallback_service,
+        resource_id=resource_id,
+        base_sha=payload.base_sha,
+        source_sha256=payload.source_sha256,
+        source_revision_token=payload.source_revision_token,
     )
     base_sha, content = await read_pinned_source(db, current, source, fallback_service)
     ensure_source_is_current(payload.base_sha, payload.source_sha256, base_sha, content)
@@ -269,6 +286,10 @@ async def apply_resource_manifest_now(
         context,
         payload.application_id,
         fallback_service,
+        resource_id=resource_id,
+        base_sha=payload.base_sha,
+        source_sha256=payload.source_sha256,
+        source_revision_token=payload.source_revision_token,
     )
     base_sha, content = await read_pinned_source(db, current, source, fallback_service)
     ensure_source_is_current(payload.base_sha, payload.source_sha256, base_sha, content)
@@ -547,6 +568,10 @@ async def approve_resource_manifest_edit(
         context,
         payload.application_id,
         fallback_service,
+        resource_id=resource_id,
+        base_sha=payload.base_sha,
+        source_sha256=payload.source_sha256,
+        source_revision_token=payload.source_revision_token,
     )
     base_sha, content = await read_pinned_source(db, current, source, fallback_service)
     ensure_source_is_current(payload.base_sha, payload.source_sha256, base_sha, content)
@@ -1346,19 +1371,18 @@ async def exact_source(
     context: dict[str, Any],
     application_id: str,
     fallback: RepositoryDiscoveryService,
+    *,
+    resource_id: str,
+    base_sha: str,
+    source_sha256: str,
+    source_revision_token: str | None,
 ) -> dict[str, Any]:
     if context.get("edit_unavailable_reason") is not None:
         raise HTTPException(status_code=409, detail=str(context["edit_unavailable_reason"]))
     sources = authorized_sources(db, current, context, application_id=application_id)
     if len(sources) != 1:
         raise HTTPException(status_code=409, detail=SOURCE_NOT_FOUND)
-    source = await resolve_bound_editable_source(
-        db,
-        current,
-        sources[0],
-        context["identity"],
-        fallback,
-    )
+    bound_source = sources[0]
     require_resource_access(
         db,
         current,
@@ -1367,6 +1391,24 @@ async def exact_source(
         application_id,
         Permission.CONFIG_UPDATE.value,
     )
+    source = source_from_revision_token(
+        current=current,
+        context=context,
+        source=bound_source,
+        application_id=application_id,
+        resource_id=resource_id,
+        base_sha=base_sha,
+        source_sha256=source_sha256,
+        token=source_revision_token,
+    )
+    if source is None:
+        source = await resolve_bound_editable_source(
+            db,
+            current,
+            bound_source,
+            context["identity"],
+            fallback,
+        )
     if not editable_source(source):
         raise HTTPException(status_code=422, detail=UNSUPPORTED_SOURCE)
     return source
@@ -1443,6 +1485,7 @@ async def resolve_kustomize_edit_source(
         return source
     return {
         **source,
+        "binding_manifest_path": str(source["manifest_path"]),
         "manifest_path": matches[0],
         "source_type": "raw-yaml",
         "render_source_type": "kustomize",
@@ -1457,6 +1500,104 @@ def editable_source(source: dict[str, Any]) -> bool:
         and inferred == "raw-yaml"
         and str(source.get("manifest_path") or "").lower().endswith((".yaml", ".yml"))
     )
+
+
+def source_revision_codec() -> SourceRevisionCodec:
+    return SourceRevisionCodec(env(SOURCE_REVISION_SIGNING_KEY_ENV, "").strip())
+
+
+def source_revision_scope(
+    *,
+    current: Any,
+    context: Mapping[str, Any],
+    source: Mapping[str, Any],
+    application_id: str,
+    resource_id: str,
+    base_sha: str,
+    source_sha256: str,
+) -> SourceRevision:
+    return SourceRevision(
+        workspace_id=str(context["workspace_id"]),
+        user_id=str(current.user_id),
+        resource_id=resource_id,
+        application_id=application_id,
+        repository_ref=str(source["repo_ref"]),
+        branch=str(source["branch"]),
+        binding_manifest_path=str(
+            source.get("binding_manifest_path") or source["manifest_path"]
+        ),
+        resolved_manifest_path=str(source["manifest_path"]),
+        base_sha=base_sha,
+        source_sha256=source_sha256,
+    )
+
+
+def source_revision_token(
+    *,
+    current: Any,
+    context: Mapping[str, Any],
+    source: Mapping[str, Any],
+    resource_id: str,
+    base_sha: str,
+    source_sha256: str,
+) -> str:
+    return source_revision_codec().encode(
+        source_revision_scope(
+            current=current,
+            context=context,
+            source=source,
+            application_id=str(source["application_id"]),
+            resource_id=resource_id,
+            base_sha=base_sha,
+            source_sha256=source_sha256,
+        )
+    )
+
+
+def source_from_revision_token(
+    *,
+    current: Any,
+    context: Mapping[str, Any],
+    source: Mapping[str, Any],
+    application_id: str,
+    resource_id: str,
+    base_sha: str,
+    source_sha256: str,
+    token: str | None,
+) -> dict[str, Any] | None:
+    if token is None:
+        return None
+    try:
+        codec = source_revision_codec()
+        decoded = codec.inspect(token)
+        expected = source_revision_scope(
+            current=current,
+            context=context,
+            source={
+                **source,
+                "binding_manifest_path": str(source["manifest_path"]),
+                "manifest_path": decoded.resolved_manifest_path,
+            },
+            application_id=application_id,
+            resource_id=resource_id,
+            base_sha=base_sha,
+            source_sha256=source_sha256,
+        )
+        codec.decode(token, expected=expected)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "manifest_source_revision_invalid",
+                "detail": SOURCE_REVISION_INVALID,
+            },
+        ) from exc
+    return {
+        **source,
+        "binding_manifest_path": decoded.binding_manifest_path,
+        "manifest_path": decoded.resolved_manifest_path,
+        "source_type": "raw-yaml",
+    }
 
 
 def source_choice(source: dict[str, Any]) -> ResourceManifestSourceChoice:

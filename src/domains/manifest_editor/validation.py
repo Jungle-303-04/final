@@ -129,7 +129,7 @@ def validate_manifest_edit(
         desired_sha256=desired_digest,
         diff=rendered_diff if not errors else "",
         errors=tuple(dict.fromkeys(errors)),
-        warnings=("Review the exact diff and impact before choosing Safe PR or direct apply.",),
+        warnings=("Safe PR 또는 직접 적용을 선택하기 전에 변경 diff와 영향을 확인하세요.",),
     )
 
 

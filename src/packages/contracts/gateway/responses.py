@@ -1192,6 +1192,7 @@ class ResourceManifestSourceResponse(StrictModel):
     selected: ResourceManifestSourceChoice | None = None
     base_sha: str | None = None
     source_sha256: str | None = None
+    source_revision_token: str | None = None
     content: str | None = None
     reason: str | None = None
     live_yaml: str | None = None

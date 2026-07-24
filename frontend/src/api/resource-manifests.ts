@@ -15,6 +15,7 @@ export interface ResourceManifestEditInput {
   applicationId: string;
   baseSha: string;
   sourceSha256: string;
+  sourceRevisionToken?: string | null;
   editedYaml: string;
 }
 
@@ -103,6 +104,7 @@ function requestBody(input: ResourceManifestEditInput) {
     application_id: input.applicationId,
     base_sha: input.baseSha,
     source_sha256: input.sourceSha256,
+    source_revision_token: input.sourceRevisionToken ?? null,
     edited_yaml: input.editedYaml,
   };
 }

@@ -155,6 +155,7 @@ export function LiveResourceManifestEditor({
         applicationId,
         baseSha: source.base_sha,
         sourceSha256: source.source_sha256,
+        sourceRevisionToken: source.source_revision_token,
         editedYaml: yaml,
       }
     : null;
@@ -389,7 +390,7 @@ export function LiveResourceManifestEditor({
           {preview.apply_availability === "available" && (
             <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: TYPE.label, color: UI.ink2 }}>
               <input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.currentTarget.checked)} />
-              동일 Git artifact를 Safe PR로 먼저 기록한 뒤 owner controller에 직접 적용하며 drift/PR pending 상태가 남음을 확인합니다.
+              동일 Git artifact를 먼저 기록한 뒤 owner controller에 직접 적용하며 Git 동기화가 끝날 때까지 drift 상태가 남음을 확인합니다.
             </label>
           )}
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -433,7 +434,7 @@ export function LiveResourceManifestEditor({
           {approvalDecisionError && <div style={{ marginTop: 6 }}>결정 실패: {approvalDecisionError}</div>}
         </ManifestNotice>
       )}
-      {emergencyApproval && <ManifestNotice tone="warn" title="Git artifact 기록 · PR pending">승인 {emergencyApproval.approval_id} · 기준 commit {source.base_sha?.slice(0, 12)} · 클러스터 직접 적용 후 PR 병합 전까지 drift 상태로 추적합니다.</ManifestNotice>}
+      {emergencyApproval && <ManifestNotice tone="warn" title="Git artifact 기록 · 동기화 대기">승인 {emergencyApproval.approval_id} · 기준 commit {source.base_sha?.slice(0, 12)} · 클러스터 직접 적용 후 Git 감지·동기화가 끝날 때까지 drift 상태로 추적합니다.</ManifestNotice>}
       {applyReceipt && <ManifestNotice tone="ok" title="Owner controller 적용 명령 접수">명령 {applyReceipt.command_id} · 감사 이벤트 {applyReceipt.audit_event_id}</ManifestNotice>}
       {applyStatus && (
         <ManifestNotice

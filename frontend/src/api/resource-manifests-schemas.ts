@@ -18,6 +18,7 @@ export const resourceManifestSourceSchema = z.strictObject({
   selected: resourceManifestSourceChoiceSchema.nullable(),
   base_sha: z.string().nullable(),
   source_sha256: z.string().nullable(),
+  source_revision_token: z.string().nullable().optional().default(null),
   content: z.string().nullable(),
   reason: z.string().nullable(),
   // live/edit projection은 backend와 console의 순차 배포 호환 경계다. 구버전

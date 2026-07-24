@@ -150,6 +150,7 @@ class ResourceManifestPreviewRequest(StrictModel):
     application_id: str = Field(min_length=1, max_length=200)
     base_sha: str = Field(pattern=r"^[0-9a-f]{40,64}$")
     source_sha256: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    source_revision_token: str | None = Field(default=None, min_length=32, max_length=8192)
     edited_yaml: str = Field(min_length=1, max_length=MAX_RESOURCE_MANIFEST_BYTES)
 
 
