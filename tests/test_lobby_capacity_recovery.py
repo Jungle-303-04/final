@@ -586,7 +586,7 @@ def test_safe_pr_preflight_uses_serving_pod_during_protected_candidate_surge() -
     ]
 
 
-def test_safe_pr_preflight_blocks_when_pre_recovery_continuity_is_missing() -> None:
+def test_safe_pr_preflight_records_blocker_when_continuity_is_missing() -> None:
     prepared = asyncio.run(
         RecoveryActionPreflight(
             LobbyAuthorityPort(),
@@ -594,11 +594,14 @@ def test_safe_pr_preflight_blocks_when_pre_recovery_continuity_is_missing() -> N
         ).prepare(lobby_selection_event(), "correlation-lobby")
     )
 
-    assert isinstance(prepared, RcaActionRequiredBody)
-    assert prepared.reason_code == "pre_recovery_continuity_baseline_missing"
+    assert not isinstance(prepared, RcaActionRequiredBody)
+    assert "metadata:current_workload_snapshots" in prepared.draft.params[
+        "verification_blockers"
+    ]
+    assert prepared.draft.params["verification_merge_blocked"] is True
 
 
-def test_safe_pr_preflight_rejects_inconsistent_persisted_evidence_lineage() -> None:
+def test_safe_pr_preflight_records_blocker_for_inconsistent_lineage() -> None:
     prepared = asyncio.run(
         RecoveryActionPreflight(
             LobbyAuthorityPort(),
@@ -606,11 +609,13 @@ def test_safe_pr_preflight_rejects_inconsistent_persisted_evidence_lineage() -> 
         ).prepare(lobby_selection_event(), "correlation-lobby")
     )
 
-    assert isinstance(prepared, RcaActionRequiredBody)
-    assert prepared.reason_code == "pre_recovery_continuity_baseline_missing"
+    assert not isinstance(prepared, RcaActionRequiredBody)
+    assert "metrics:opsia_continuity_active_sessions" in prepared.draft.params[
+        "verification_blockers"
+    ]
 
 
-def test_safe_pr_preflight_blocks_if_any_opted_in_workload_is_unhealthy() -> None:
+def test_safe_pr_preflight_records_blocker_if_workload_is_unhealthy() -> None:
     prepared = asyncio.run(
         RecoveryActionPreflight(
             LobbyAuthorityPort(),
@@ -618,11 +623,13 @@ def test_safe_pr_preflight_blocks_if_any_opted_in_workload_is_unhealthy() -> Non
         ).prepare(lobby_selection_event(), "correlation-lobby")
     )
 
-    assert isinstance(prepared, RcaActionRequiredBody)
-    assert prepared.reason_code == "pre_recovery_continuity_baseline_missing"
+    assert not isinstance(prepared, RcaActionRequiredBody)
+    assert "metadata:current_workload_snapshots" in prepared.draft.params[
+        "verification_blockers"
+    ]
 
 
-def test_safe_pr_preflight_blocks_when_protected_pod_statuses_are_truncated() -> None:
+def test_safe_pr_preflight_records_blocker_when_statuses_are_truncated() -> None:
     prepared = asyncio.run(
         RecoveryActionPreflight(
             LobbyAuthorityPort(),
@@ -630,11 +637,13 @@ def test_safe_pr_preflight_blocks_when_protected_pod_statuses_are_truncated() ->
         ).prepare(lobby_selection_event(), "correlation-lobby")
     )
 
-    assert isinstance(prepared, RcaActionRequiredBody)
-    assert prepared.reason_code == "pre_recovery_continuity_baseline_missing"
+    assert not isinstance(prepared, RcaActionRequiredBody)
+    assert "metadata:current_workload_snapshots" in prepared.draft.params[
+        "verification_blockers"
+    ]
 
 
-def test_safe_pr_preflight_blocks_on_null_protected_workload_identity() -> None:
+def test_safe_pr_preflight_records_blocker_on_null_workload_identity() -> None:
     prepared = asyncio.run(
         RecoveryActionPreflight(
             LobbyAuthorityPort(),
@@ -642,11 +651,13 @@ def test_safe_pr_preflight_blocks_on_null_protected_workload_identity() -> None:
         ).prepare(lobby_selection_event(), "correlation-lobby")
     )
 
-    assert isinstance(prepared, RcaActionRequiredBody)
-    assert prepared.reason_code == "pre_recovery_continuity_baseline_missing"
+    assert not isinstance(prepared, RcaActionRequiredBody)
+    assert "metadata:current_workload_snapshots" in prepared.draft.params[
+        "verification_blockers"
+    ]
 
 
-def test_safe_pr_preflight_blocks_before_pr_when_exact_sli_baseline_is_missing() -> None:
+def test_safe_pr_preflight_records_blockers_when_sli_baseline_is_missing() -> None:
     prepared = asyncio.run(
         RecoveryActionPreflight(
             LobbyAuthorityPort(),
@@ -654,11 +665,16 @@ def test_safe_pr_preflight_blocks_before_pr_when_exact_sli_baseline_is_missing()
         ).prepare(lobby_selection_event(), "correlation-lobby")
     )
 
-    assert isinstance(prepared, RcaActionRequiredBody)
-    assert prepared.reason_code == "pre_recovery_sli_baseline_missing"
+    assert not isinstance(prepared, RcaActionRequiredBody)
+    assert "metrics:opsia_sli_failure_ratio" in prepared.draft.params[
+        "verification_blockers"
+    ]
+    assert "metrics:opsia_sli_request_rate" in prepared.draft.params[
+        "verification_blockers"
+    ]
 
 
-def test_safe_pr_preflight_blocks_before_pr_when_cadence_is_missing() -> None:
+def test_safe_pr_preflight_records_blocker_when_cadence_is_missing() -> None:
     prepared = asyncio.run(
         RecoveryActionPreflight(
             LobbyAuthorityPort(),
@@ -666,6 +682,7 @@ def test_safe_pr_preflight_blocks_before_pr_when_cadence_is_missing() -> None:
         ).prepare(lobby_selection_event(), "correlation-lobby")
     )
 
-    assert isinstance(prepared, RcaActionRequiredBody)
-    assert prepared.reason_code == "recovery_verification_prerequisites_missing"
-    assert prepared.missing_evidence == ["cluster:evidence_cadence"]
+    assert not isinstance(prepared, RcaActionRequiredBody)
+    assert prepared.draft.params["verification_blockers"] == [
+        "cluster:evidence_cadence"
+    ]

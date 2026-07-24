@@ -400,43 +400,19 @@ async def on_recovery_safe_pr_created(
         text_value(params.get("verification_contract"))
         == "protected_workload_continuity"
     )
+    # Preflight blockers are advisory. Re-evaluate from the latest persisted
+    # evidence when the PR is created so a newly collected baseline can unlock
+    # the lifecycle instead of leaving a stale blocker attached forever.
+    missing_prerequisites: list[str] = []
     if requires_protected_continuity and (
         not protected_baseline or not protected_session_baseline
     ):
-        reopened = await ctx.db.reopen_recovery_plan_action(
-            str(record["plan_id"]),
-            evt.workspace_id,
-            str(record.get("selected_action_id") or ""),
-        )
-        if not reopened:
-            return
-        yield RcaFollowupRequiredBody(
-            reason_code="pre_recovery_continuity_baseline_missing",
-            summary=(
-                "복구 전 활성 workload의 UID·Pod UID·시작 시각·재시작 횟수 "
-                "baseline 또는 active session series가 없어 무중단 복구를 검증할 수 없습니다."
-            ),
-            evidence_ref=str(record.get("evidence_ref") or "unknown"),
-            workspace_id=evt.workspace_id,
-            severity=SEVERITY_WARNING,
-            missing_evidence=[
+        missing_prerequisites.extend(
+            [
                 "metadata:current_workload_snapshots",
                 "metrics:opsia_continuity_active_sessions",
-            ],
-            next_actions=[
-                {
-                    "action_type": "collect_pre_recovery_continuity_baseline",
-                    "description": "복구 PR을 다시 만들기 전에 활성 workload identity를 수집합니다.",
-                }
-            ],
-            diagnostics={
-                "plan_id": record.get("plan_id"),
-                "action_id": record.get("selected_action_id"),
-                "pr_url": evt.pr_url,
-                "retryable": True,
-            },
+            ]
         )
-        return
     approved_alert_before = mapping(params.get("verification_alert_before"))
     if approved_alert_before:
         before = dict(approved_alert_before)
@@ -492,7 +468,6 @@ async def on_recovery_safe_pr_created(
         evidence_cadence_seconds = nonnegative_int(
             registration_settings.get("evidence_interval_seconds")
         )
-    missing_prerequisites: list[str] = []
     if failure_ratio_before is None:
         missing_prerequisites.append("metrics:opsia_sli_failure_ratio")
     if not failure_ratio_identity:
@@ -510,38 +485,7 @@ async def on_recovery_safe_pr_created(
         missing_prerequisites.append("gitops:approved_change_contract")
     if evidence_cadence_seconds is None or evidence_cadence_seconds <= 0:
         missing_prerequisites.append("cluster:evidence_cadence")
-    if missing_prerequisites:
-        reopened = await ctx.db.reopen_recovery_plan_action(
-            str(record["plan_id"]),
-            evt.workspace_id,
-            str(record.get("selected_action_id") or ""),
-        )
-        if not reopened:
-            return
-        yield RcaFollowupRequiredBody(
-            reason_code="recovery_verification_prerequisites_missing",
-            summary=(
-                "복구 완료 판정에 필요한 exact SLI·Alertmanager·GitOps·수집 주기 "
-                "baseline이 없어 PR lifecycle 추적을 시작하지 않았습니다."
-            ),
-            evidence_ref=str(record.get("evidence_ref") or "unknown"),
-            workspace_id=evt.workspace_id,
-            severity=SEVERITY_WARNING,
-            missing_evidence=missing_prerequisites,
-            next_actions=[
-                {
-                    "action_type": "collect_recovery_verification_prerequisites",
-                    "description": "누락 근거를 수집한 뒤 복구 조치를 다시 선택합니다.",
-                }
-            ],
-            diagnostics={
-                "plan_id": record.get("plan_id"),
-                "action_id": record.get("selected_action_id"),
-                "pr_url": evt.pr_url,
-                "retryable": True,
-            },
-        )
-        return
+    missing_prerequisites = sorted(set(missing_prerequisites))
     current_lifecycle = mapping(payload.get("lifecycle"))
     attempt = dict(mapping(current_lifecycle.get("attempt")))
     attempt_id = text_value(attempt.get("id"))
@@ -587,7 +531,12 @@ async def on_recovery_safe_pr_created(
             "protected_baseline": protected_baseline,
             "protected_session_baseline": protected_session_baseline,
             "target": target,
-            "status": "waiting_for_merge",
+            "status": (
+                "merge_blocked"
+                if missing_prerequisites
+                else "waiting_for_merge"
+            ),
+            "blockers": missing_prerequisites,
         },
         "authorization": {
             "target": target,

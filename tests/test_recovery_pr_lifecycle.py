@@ -14,7 +14,6 @@ from domains.gitops import router as gitops_router
 from domains.gitops.events import GitWebhookReceivedBody, WorkflowRunCompletedBody
 from domains.rca import router as rca_router
 from domains.rca.events import (
-    RcaFollowupRequiredBody,
     RecoveryPlan,
     RecoveryPrMergedBody,
     RecoveryPrTrackedBody,
@@ -487,7 +486,7 @@ class MissingCadenceSafePrDb(SafePrDb):
         return {"settings": {}}
 
 
-def test_pr_is_not_tracked_when_verification_prerequisite_is_missing() -> None:
+def test_pr_is_tracked_but_merge_blocked_when_prerequisite_is_missing() -> None:
     evt = created_pr()
     db = MissingCadenceSafePrDb(evt)
 
@@ -499,14 +498,17 @@ def test_pr_is_not_tracked_when_verification_prerequisite_is_missing() -> None:
     )
 
     assert len(emitted) == 1
-    assert isinstance(emitted[0], RcaFollowupRequiredBody)
-    assert (
-        emitted[0].reason_code
-        == "recovery_verification_prerequisites_missing"
-    )
-    assert emitted[0].missing_evidence == ["cluster:evidence_cadence"]
-    assert db.transitions == []
-    assert db.reopened is True
+    assert isinstance(emitted[0], RecoveryPrTrackedBody)
+    assert len(db.transitions) == 1
+    expected, status, lifecycle = db.transitions[0]
+    assert expected == ("selected",)
+    assert status == "pr_open"
+    assert lifecycle["pr"]["url"] == evt.pr_url
+    assert lifecycle["verification"]["status"] == "merge_blocked"
+    assert lifecycle["verification"]["blockers"] == [
+        "cluster:evidence_cadence"
+    ]
+    assert db.reopened is False
 
 
 def tracked_record(
@@ -735,6 +737,33 @@ def test_signed_exact_merge_moves_only_tracked_pr_to_deploy_pending(
     assert events.calls[1][0].commit_sha == MERGE_SHA
     assert events.calls[1][0].force is True
     assert events.calls[1][2] is not None
+
+
+def test_merge_does_not_start_deploy_while_verification_is_blocked(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db = MergeDb()
+    db.record["payload"]["lifecycle"]["verification"].update(
+        {
+            "status": "merge_blocked",
+            "blockers": ["metadata:current_workload_snapshots"],
+        }
+    )
+    events = Events()
+    monkeypatch.setenv("GITOPS_WEBHOOK_IMAGE", "demo/game-server:v2")
+
+    response = asyncio.run(
+        gitops_router.handle_tracked_recovery_pull_request(
+            payload=merged_webhook(),
+            db=db,
+            events=events,
+        )
+    )
+
+    assert response is not None
+    assert response.status_code == 409
+    assert db.transition is None
+    assert events.calls == []
 
 
 @pytest.mark.parametrize(

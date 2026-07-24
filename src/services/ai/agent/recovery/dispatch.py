@@ -272,6 +272,7 @@ class RecoveryActionPreflight:
             )
         draft = evt.selected.draft
         verification_params: JsonObject = {}
+        verification_blockers: list[str] = []
         expected_replicas: int | None = None
         if self.authority is not None:
             query = authority_query(evt, correlation_id)
@@ -307,18 +308,19 @@ class RecoveryActionPreflight:
             draft.params.get("verification_contract")
             == PROTECTED_WORKLOAD_CONTINUITY_CONTRACT
         ):
+            evidence: dict[str, object] = {}
             if self.evidence is None:
-                return authority_required_body(
-                    evt,
-                    "pre_recovery_continuity_baseline_missing",
-                    "복구 전 활성 workload continuity evidence reader가 준비되지 않았습니다.",
-                    ["metadata:current_workload_snapshots"],
+                verification_blockers.append(
+                    "metadata:current_workload_snapshots"
                 )
-            evidence = await self.evidence.get_evidence_payload(
-                evt.workspace_id,
-                correlation_id,
-                "rca_bundle",
-            )
+            else:
+                loaded_evidence = await self.evidence.get_evidence_payload(
+                    evt.workspace_id,
+                    correlation_id,
+                    "rca_bundle",
+                )
+                if isinstance(loaded_evidence, dict):
+                    evidence = loaded_evidence
             target = {
                 "cluster_id": str(
                     draft.params.get("cluster_id")
@@ -344,7 +346,7 @@ class RecoveryActionPreflight:
             }
             observed = (
                 protected_workloads(evidence, target)
-                if isinstance(evidence, dict)
+                if evidence
                 else None
             )
             baseline = protected_workload_baseline(observed or [])
@@ -353,34 +355,32 @@ class RecoveryActionPreflight:
                 or any(workload.get("healthy") is not True for workload in observed)
                 or len(baseline) != len(observed)
             ):
-                return authority_required_body(
-                    evt,
-                    "pre_recovery_continuity_baseline_missing",
-                    (
-                        "복구 전 활성 workload의 UID·Pod UID·시작 시각·재시작 "
-                        "횟수 baseline을 확보하지 못했습니다."
-                    ),
-                    ["metadata:current_workload_snapshots"],
+                verification_blockers.append(
+                    "metadata:current_workload_snapshots"
                 )
-            session_baseline = protected_active_session_series(
-                evidence,
-                baseline,
-                evidence_observed_at=trusted_evidence_window_start(
+                baseline = []
+            evidence_observed_at = (
+                trusted_evidence_window_start(
                     evidence,
                     expected_workspace_id=evt.workspace_id,
                     expected_cluster_id=target["cluster_id"],
-                ),
-                max_sample_age_seconds=CONTINUITY_SAMPLE_MAX_AGE_SECONDS,
+                )
+                if evidence
+                else None
+            )
+            session_baseline = (
+                protected_active_session_series(
+                    evidence,
+                    baseline,
+                    evidence_observed_at=evidence_observed_at,
+                    max_sample_age_seconds=CONTINUITY_SAMPLE_MAX_AGE_SECONDS,
+                )
+                if baseline and evidence_observed_at is not None
+                else []
             )
             if not session_baseline:
-                return authority_required_body(
-                    evt,
-                    "pre_recovery_continuity_baseline_missing",
-                    (
-                        "보호 workload별 active session metric의 exact "
-                        "continuity_id·Pod UID baseline을 확보하지 못했습니다."
-                    ),
-                    ["metrics:opsia_continuity_active_sessions"],
+                verification_blockers.append(
+                    "metrics:opsia_continuity_active_sessions"
                 )
             failure_ratio_before, failure_ratio_identity = metric_sample_with_identity(
                 evidence,
@@ -399,32 +399,33 @@ class RecoveryActionPreflight:
                 or request_rate_baseline <= 0
                 or request_rate_identity is None
             ):
-                return authority_required_body(
-                    evt,
-                    "pre_recovery_sli_baseline_missing",
-                    (
-                        "복구 전 exact failure-ratio/request-rate SLI series "
-                        "baseline을 확보하지 못했습니다."
-                    ),
+                verification_blockers.extend(
                     [
                         "metrics:opsia_sli_failure_ratio",
                         "metrics:opsia_sli_request_rate",
-                    ],
+                    ]
                 )
-            alerts = await self.evidence.list_alert_events(
-                evt.workspace_id,
-                rule_name=STANDARD_SLI_ALERT_NAME,
-                source="alertmanager",
-                incident_ids=tuple(
-                    sorted(
-                        {
-                            value
-                            for value in (correlation_id, evt.plan.incident_id)
-                            if value
-                        }
-                    )
-                ),
-                limit=10,
+            alerts = (
+                await self.evidence.list_alert_events(
+                    evt.workspace_id,
+                    rule_name=STANDARD_SLI_ALERT_NAME,
+                    source="alertmanager",
+                    incident_ids=tuple(
+                        sorted(
+                            {
+                                value
+                                for value in (
+                                    correlation_id,
+                                    evt.plan.incident_id,
+                                )
+                                if value
+                            }
+                        )
+                    ),
+                    limit=10,
+                )
+                if self.evidence is not None
+                else []
             )
             alert_before = before_alert_snapshot(
                 alerts,
@@ -434,9 +435,13 @@ class RecoveryActionPreflight:
                 expected_series_identity=failure_ratio_identity,
             )
             threshold = finite_float(alert_before.get("threshold"))
-            registration = await self.evidence.get_cluster_registration(
-                evt.workspace_id,
-                target["cluster_id"],
+            registration = (
+                await self.evidence.get_cluster_registration(
+                    evt.workspace_id,
+                    target["cluster_id"],
+                )
+                if self.evidence is not None
+                else None
             )
             settings = (
                 registration.get("settings")
@@ -447,22 +452,15 @@ class RecoveryActionPreflight:
             evidence_cadence_seconds = nonnegative_int(
                 settings.get("evidence_interval_seconds")
             )
-            missing_prerequisites: list[str] = []
             if alert_before.get("available") is not True or threshold is None:
-                missing_prerequisites.append("alertmanager:original_exact_alert")
+                verification_blockers.append(
+                    "alertmanager:original_exact_alert"
+                )
             if evidence_cadence_seconds is None or evidence_cadence_seconds <= 0:
-                missing_prerequisites.append("cluster:evidence_cadence")
+                verification_blockers.append("cluster:evidence_cadence")
             if expected_replicas is None:
-                missing_prerequisites.append("gitops:approved_replica_baseline")
-            if missing_prerequisites:
-                return authority_required_body(
-                    evt,
-                    "recovery_verification_prerequisites_missing",
-                    (
-                        "복구 PR 생성 전에 exact Alertmanager·GitOps·수집 주기 "
-                        "baseline을 확보하지 못했습니다."
-                    ),
-                    missing_prerequisites,
+                verification_blockers.append(
+                    "gitops:approved_replica_baseline"
                 )
             verification_params["protected_baseline"] = baseline
             verification_params["protected_session_baseline"] = session_baseline
@@ -483,6 +481,11 @@ class RecoveryActionPreflight:
                 evidence_cadence_seconds
             )
             verification_params["expected_replicas"] = expected_replicas
+            if verification_blockers:
+                verification_params["verification_blockers"] = sorted(
+                    set(verification_blockers)
+                )
+                verification_params["verification_merge_blocked"] = True
         return replace(
             evt.selected,
             draft=replace(
