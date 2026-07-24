@@ -66,6 +66,10 @@ export type ResourceManifestRemediation =
 const SOURCE_NOT_FOUND = "No exact GitOps source binding was found for this live resource.";
 const SOURCE_PERMISSION_REQUIRED = "manifest_source_permission_required";
 
+export function isResourceManifestSourceConflict(cause: unknown): boolean {
+  return isResourceManifestSourceStale(cause);
+}
+
 export function resourceManifestFailureRemediation(cause: unknown): ResourceManifestRemediation {
   if (!isApiError(cause)) return "retry";
   if (cause.kind === "unauthorized") return "reauthenticate";
