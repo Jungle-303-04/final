@@ -28,6 +28,7 @@ from services.ai.agent.pipeline import RcaCompletionPipeline
 from services.ai.agent.pipeline.rca_narrative import (
     RcaNarrativeWriter,
     deterministic_rca_narrative,
+    evidence_anchored_narrative,
 )
 
 app = App("rca-worker")
@@ -117,7 +118,10 @@ async def enriched_report_body(
             },
         )
         return body
-    body[RCA_NARRATIVE_PAYLOAD_KEY] = narrative
+    body[RCA_NARRATIVE_PAYLOAD_KEY] = evidence_anchored_narrative(
+        narrative,
+        fallback,
+    )
     body[RCA_NARRATIVE_STATUS_KEY] = RCA_NARRATIVE_GENERATED
     return body
 

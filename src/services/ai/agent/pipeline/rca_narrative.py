@@ -20,6 +20,11 @@ from services.ai.agent.causes.signals import (
 MAX_PROMPT_TEXT_LENGTH = 1000
 MAX_PROMPT_EVIDENCE_ITEMS = 20
 MAX_PROMPT_CANDIDATES = 5
+EVIDENCE_ANCHORED_NARRATIVE_FIELDS = (
+    "executive_summary",
+    "reasoning",
+    "recommended_action",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,6 +42,29 @@ class RcaNarrativeWriter:
         if narrative is None:
             raise ValueError("LLM RCA narrative did not match the bounded contract")
         return narrative
+
+
+def evidence_anchored_narrative(
+    generated: JsonObject,
+    fallback: JsonObject | None,
+) -> JsonObject:
+    """Keep cross-source attested conclusions authoritative over model prose.
+
+    The model may improve readability and operational context, but it must not
+    replace an evidence-derived cause, reasoning chain, or recovery direction
+    with a contradictory recommendation.
+    """
+
+    if fallback is None:
+        return generated
+    return {
+        **generated,
+        **{
+            field: fallback[field]
+            for field in EVIDENCE_ANCHORED_NARRATIVE_FIELDS
+            if field in fallback
+        },
+    }
 
 
 def build_rca_narrative_prompt(report: RcaCompletedBody) -> str:
@@ -241,7 +269,6 @@ def deterministic_rca_narrative(report: RcaCompletedBody) -> JsonObject | None:
         log_count = int(log["matched_count"])
         log_event = str(log["event"])
         rejection_reason = str(log["reason"])
-        action_route = _safe_text(report.action)
         deployment_changed_at = str(findings["deployment_changed_at"])
         failure_started_at = str(findings["failure_started_at"])
         return {
@@ -266,8 +293,8 @@ def deterministic_rca_narrative(report: RcaCompletedBody) -> JsonObject | None:
                 "제외했습니다."
             ),
             "recommended_action": (
-                f"복구 경로 {action_route}에서 해당 GitOps manifest의 {field_path}를 "
-                f"변경 전 값 {before}로 되돌리는 변경을 검토·병합하고, 같은 부하에서 "
+                f"해당 GitOps manifest의 {field_path}를 변경 전 값 {before}로 "
+                "되돌리는 복구 PR을 생성·검토·병합하고, 같은 부하에서 "
                 f"{service}/{sli} 실패율이 임계값 아래로 유지되는지 확인합니다."
             ),
             "recurrence_prevention": [

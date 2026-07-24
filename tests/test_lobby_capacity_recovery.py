@@ -192,6 +192,8 @@ class LobbyEvidencePort:
         include_active_workload: bool = True,
         tamper_metadata_lineage: bool = False,
         unhealthy_protected_workload: bool = False,
+        protected_candidate_surge: bool = False,
+        protected_statuses_truncated: bool = False,
         include_sli_metrics: bool = True,
         include_exact_alert: bool = True,
         evidence_cadence_seconds: int | None = 30,
@@ -200,6 +202,8 @@ class LobbyEvidencePort:
         self.include_active_workload = include_active_workload
         self.tamper_metadata_lineage = tamper_metadata_lineage
         self.unhealthy_protected_workload = unhealthy_protected_workload
+        self.protected_candidate_surge = protected_candidate_surge
+        self.protected_statuses_truncated = protected_statuses_truncated
         self.include_sli_metrics = include_sli_metrics
         self.include_exact_alert = include_exact_alert
         self.evidence_cadence_seconds = evidence_cadence_seconds
@@ -272,8 +276,7 @@ class LobbyEvidencePort:
         )
         workloads = []
         if self.include_active_workload:
-            workloads.append(
-                {
+            protected_workload = {
                     "workload": {
                         "kind": "Deployment",
                         "namespace": "target",
@@ -294,7 +297,12 @@ class LobbyEvidencePort:
                             0 if self.unhealthy_protected_workload else 1
                         ),
                         "unavailable_replicas": (
-                            1 if self.unhealthy_protected_workload else 0
+                            1
+                            if (
+                                self.unhealthy_protected_workload
+                                or self.protected_candidate_surge
+                            )
+                            else 0
                         ),
                     },
                     "deployment_labels": {
@@ -309,10 +317,25 @@ class LobbyEvidencePort:
                             "ready": True,
                             "restart_count": 0,
                             "start_time": "2026-07-24T00:00:00Z",
-                        }
+                        },
+                        *(
+                            [
+                                {
+                                    "uid": "arena-a-candidate-pod",
+                                    "ready": False,
+                                    "restart_count": 0,
+                                    "start_time": "2026-07-24T00:30:00Z",
+                                }
+                            ]
+                            if self.protected_candidate_surge
+                            else []
+                        ),
                     ],
                 }
-            )
+            if self.protected_statuses_truncated:
+                protected_workload["pod_statuses_truncated"] = True
+                protected_workload["pod_status_count"] = 11
+            workloads.append(protected_workload)
             workloads.append(
                 {
                     "workload": {
@@ -458,6 +481,28 @@ def test_safe_pr_preflight_snapshots_arbitrary_active_workload_identity() -> Non
     )
 
 
+def test_safe_pr_preflight_uses_serving_pod_during_protected_candidate_surge() -> None:
+    prepared = asyncio.run(
+        RecoveryActionPreflight(
+            LobbyAuthorityPort(),
+            LobbyEvidencePort(protected_candidate_surge=True),
+        ).prepare(lobby_selection_event(), "correlation-lobby")
+    )
+
+    assert not isinstance(prepared, RcaActionRequiredBody)
+    assert prepared.draft.params["protected_baseline"] == [
+        {
+            "kind": "Deployment",
+            "namespace": "target",
+            "name": "arena-a",
+            "uid": "arena-a-uid",
+            "pod_uids": ["arena-a-pod"],
+            "pod_start_times": ["2026-07-24T00:00:00Z"],
+            "restart_count": 0,
+        }
+    ]
+
+
 def test_safe_pr_preflight_blocks_when_pre_recovery_continuity_is_missing() -> None:
     prepared = asyncio.run(
         RecoveryActionPreflight(
@@ -487,6 +532,18 @@ def test_safe_pr_preflight_blocks_if_any_opted_in_workload_is_unhealthy() -> Non
         RecoveryActionPreflight(
             LobbyAuthorityPort(),
             LobbyEvidencePort(unhealthy_protected_workload=True),
+        ).prepare(lobby_selection_event(), "correlation-lobby")
+    )
+
+    assert isinstance(prepared, RcaActionRequiredBody)
+    assert prepared.reason_code == "pre_recovery_continuity_baseline_missing"
+
+
+def test_safe_pr_preflight_blocks_when_protected_pod_statuses_are_truncated() -> None:
+    prepared = asyncio.run(
+        RecoveryActionPreflight(
+            LobbyAuthorityPort(),
+            LobbyEvidencePort(protected_statuses_truncated=True),
         ).prepare(lobby_selection_event(), "correlation-lobby")
     )
 
