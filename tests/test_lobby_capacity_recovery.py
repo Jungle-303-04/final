@@ -481,6 +481,36 @@ def test_safe_pr_preflight_snapshots_arbitrary_active_workload_identity() -> Non
     )
 
 
+def test_safe_pr_preflight_accepts_same_exact_alert_after_resolution() -> None:
+    class ResolvedLobbyEvidencePort(LobbyEvidencePort):
+        async def list_alert_events(
+            self,
+            workspace_id: str,
+            *,
+            limit: int,
+        ):
+            alerts = await super().list_alert_events(
+                workspace_id,
+                limit=limit,
+            )
+            alerts[0]["status"] = "resolved"
+            alerts[0]["resolved_at"] = "2026-07-24T01:01:00Z"
+            return alerts
+
+    prepared = asyncio.run(
+        RecoveryActionPreflight(
+            LobbyAuthorityPort(),
+            ResolvedLobbyEvidencePort(),
+        ).prepare(lobby_selection_event(), "correlation-lobby")
+    )
+
+    assert not isinstance(prepared, RcaActionRequiredBody)
+    assert prepared.draft.params["verification_alert_before"][
+        "alert_event_id"
+    ] == "alert-lobby"
+    assert prepared.draft.params["verification_alert_before"]["threshold"] == 0.2
+
+
 def test_safe_pr_preflight_uses_serving_pod_during_protected_candidate_surge() -> None:
     prepared = asyncio.run(
         RecoveryActionPreflight(
