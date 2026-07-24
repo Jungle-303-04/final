@@ -153,10 +153,12 @@ rc=0
 
 if [[ "${1:-}" == "--range" ]]; then
   range="${2:?사용: $0 --range <git-range>}"
+  # GitHub의 merge commit 제목은 플랫폼이 생성하므로 팀 제목 형식을 적용할 수 없다.
+  # 병합된 실제 커밋은 그대로 검사하고, 합성 merge commit만 범위에서 제외한다.
   while IFS= read -r subject; do
     [[ -z "$subject" ]] && continue
     check_subject "$subject" || rc=1
-  done < <(git log --pretty=%s "$range")
+  done < <(git log --no-merges --pretty=%s "$range")
 else
   msg_file="${1:?사용: $0 <commit-msg-file> 또는 --range <range>}"
   subject="$(head -n1 "$msg_file")"
