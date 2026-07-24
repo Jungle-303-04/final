@@ -567,6 +567,7 @@ class AuthorityDb:
         return {
             **self.identity,
             "artifact_digest": self.digest,
+            "desired_manifest": self.desired,
             "source_type": "raw-yaml",
             "source_origin": "git_cache",
             "source_is_file": True,
@@ -613,6 +614,7 @@ class AuthorityDb:
             "resource_name": name,
             "workflow_run_id": "run-1",
             "commit_sha": "a" * 40,
+            "artifact_digest": self.digest,
             "snapshot": {
                 "resource": resource,
                 "namespace": namespace,
@@ -650,12 +652,19 @@ def test_authority_uses_rca_bundle_identity_when_exact_correlation_is_absent() -
 def test_authority_uses_current_approved_snapshot_when_incident_has_no_recent_change() -> None:
     db = AuthorityDb(evidence={"metadata": {}})
 
+    async def no_recent_diff(*args: object) -> None:
+        return None
+
+    db.get_completed_workload_resource_diff = no_recent_diff  # type: ignore[method-assign]
+
     authority = load_authority(db, query())
 
     assert authority is not None
     assert authority.binding_id == "binding-1"
     assert authority.manifest_path == "deploy/app.yaml"
     assert authority.resource == "Deployment/checkout"
+    assert authority.desired_manifest == db.desired
+    assert authority.changes == ()
 
 
 def test_authority_rejects_ambiguous_current_approved_snapshot_bindings() -> None:

@@ -90,18 +90,7 @@ class DatabaseGitOpsAuthorityReadPort(GitOpsAuthorityReadPort):
         )
         application = await self.db.get_application(query.workspace_id, application_id)
         binding = await self.db.get_deployment_binding(query.workspace_id, binding_id)
-        if not all(
-            isinstance(value, Mapping)
-            for value in (resource_diff, application, binding)
-        ):
-            return None
-        resource_diff = dict(resource_diff)
-        diff = mapping(resource_diff.get("diff_details"))
-        if not completed_resource_diff_matches_identity(
-            resource_diff,
-            identity,
-            query,
-        ):
+        if not all(isinstance(value, Mapping) for value in (application, binding)):
             return None
         application = dict(application)
         binding = dict(binding)
@@ -113,21 +102,52 @@ class DatabaseGitOpsAuthorityReadPort(GitOpsAuthorityReadPort):
         if not isinstance(repository, Mapping):
             return None
         repository = dict(repository)
-        basis = mapping(diff.get("basis"))
-        desired = mapping(diff.get("desired_manifest"))
-        resource = text(diff, "resource")
-        artifact_digest = text(basis, "artifact_digest")
+        if isinstance(resource_diff, Mapping):
+            resource_diff = dict(resource_diff)
+            diff = mapping(resource_diff.get("diff_details"))
+            if not completed_resource_diff_matches_identity(
+                resource_diff,
+                identity,
+                query,
+            ):
+                return None
+            basis = mapping(diff.get("basis"))
+            desired = mapping(diff.get("desired_manifest"))
+            resource = text(diff, "resource")
+            artifact_digest = text(basis, "artifact_digest")
+        elif text(identity, "authority_source") == "approved_snapshot":
+            resource = f"{query.resource_kind}/{query.resource_name}"
+            artifact_digest = text(identity, "artifact_digest")
+            diff = {}
+            desired = {}
+        else:
+            return None
+        if not artifact_digest:
+            return None
         provenance = await self.db.get_manifest_artifact_provenance(
             query.workspace_id,
             binding_id,
             commit_sha,
             manifest_path,
-            resource,
+            f"{query.resource_kind.casefold()}/{query.resource_name}",
             artifact_digest,
         )
         if not isinstance(provenance, Mapping):
             return None
         provenance = dict(provenance)
+        if not diff:
+            desired = mapping(provenance.get("desired_manifest"))
+            diff = {
+                **identity,
+                "namespace": query.namespace,
+                "resource": resource,
+                "desired_manifest": desired,
+                "basis": {
+                    "artifact_digest": artifact_digest,
+                    "old_desired_source": "last_approved_snapshot",
+                },
+                "changes": [],
+            }
         if not authority_rows_match(
             query,
             identity,
@@ -228,6 +248,8 @@ class DatabaseGitOpsAuthorityReadPort(GitOpsAuthorityReadPort):
                 "branch": target.get("branch"),
                 "namespace": query.namespace,
                 "resource": f"{query.resource_kind}/{query.resource_name}",
+                "artifact_digest": snapshot.get("artifact_digest"),
+                "authority_source": "approved_snapshot",
             }
             if identity_matches_query(identity, query):
                 identities.append(identity)
@@ -323,6 +345,7 @@ def approved_snapshot_matches_query(
         and resource_name == query.resource_name
         and text(body, "namespace") == query.namespace
         and all(text(snapshot, key) for key in ("workflow_run_id", "commit_sha"))
+        and bool(text(snapshot, "artifact_digest"))
     )
 
 

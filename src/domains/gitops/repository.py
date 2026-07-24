@@ -2254,6 +2254,9 @@ class RepoChangeRepository(GitOpsOverviewRepository):
         rendered = target.get("rendered_manifest")
         if not isinstance(rendered, dict) or rendered.get("artifact_digest") != artifact_digest:
             return None
+        desired_manifest = rendered.get("manifest")
+        if not isinstance(desired_manifest, dict) or not desired_manifest:
+            return None
 
         summaries = [row.get("source_summary") for row in rows]
         if any(not isinstance(summary, dict) for summary in summaries):
@@ -2294,6 +2297,7 @@ class RepoChangeRepository(GitOpsOverviewRepository):
             "artifact_manifest_path": expected_path,
             "artifact_digest": artifact_digest,
             "artifact_count": len(rows),
+            "desired_manifest": dict(desired_manifest),
         }
 
     def mark_watch_observed(
