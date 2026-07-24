@@ -4,6 +4,8 @@ import { getInventoryResourceDetail } from "../api/inventory";
 import type { InventoryResourceDetail } from "../api/inventory-schemas";
 import { podContainerSummary, type PodContainerView } from "./podContainerSummary";
 import { kindToResourceType } from "./inventoryResourcesFeed";
+import { KUBERNETES_KIND } from "./kubernetesKinds";
+import { conditionItemsFromSummary, type ResourceConditionItem } from "./resourceConditions";
 import {
   RESOURCE_DETAIL_EVENT_LIMIT,
   RESOURCE_DETAIL_RELATED_LIMIT,
@@ -22,6 +24,7 @@ export interface PodResourceSummaryView {
   serviceAccountName: string | null;
   containers: PodContainerView[];
   containerPortsComplete: boolean | null;
+  conditions: ResourceConditionItem[];
 }
 
 export interface PodResourceDetailView {
@@ -38,7 +41,7 @@ interface PodResourceDetailState {
   events: ResourceEventView[];
 }
 
-const POD_KIND = "Pod";
+const POD_KIND = KUBERNETES_KIND.pod;
 const POD_RESOURCE_TYPE = kindToResourceType(POD_KIND);
 const DETAIL_KEY_SEPARATOR = "\u0000";
 const POD_SUMMARY_KEYS = {
@@ -48,6 +51,7 @@ const POD_SUMMARY_KEYS = {
   serviceAccountName: "service_account_name",
 } as const;
 const EMPTY_CONTAINERS: PodContainerView[] = [];
+const EMPTY_CONDITIONS: ResourceConditionItem[] = [];
 const EMPTY_SUMMARY = {
   nodeName: null,
   podIp: null,
@@ -55,6 +59,7 @@ const EMPTY_SUMMARY = {
   serviceAccountName: null,
   containers: EMPTY_CONTAINERS,
   containerPortsComplete: null,
+  conditions: EMPTY_CONDITIONS,
 };
 const EMPTY_EVENTS: ResourceEventView[] = [];
 const NOOP = () => undefined;
@@ -88,6 +93,7 @@ function toSummary(detail: InventoryResourceDetail): Omit<PodResourceSummaryView
     serviceAccountName: text(summary[POD_SUMMARY_KEYS.serviceAccountName]),
     containers: containers.containers,
     containerPortsComplete: containers.containerPortsComplete,
+    conditions: conditionItemsFromSummary(summary),
   };
 }
 

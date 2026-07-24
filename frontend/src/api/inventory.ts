@@ -9,6 +9,9 @@ import { encodePathSegment, optionalQueryString, withQuery } from "./url";
 
 const HOME_INVENTORY_LIMIT = 1000;
 const RESOURCE_LIST_LIMIT = 200;
+// resource-detail endpoint validates related/event limits as positive integers.
+// Use the minimum when a caller only needs the primary resource projection.
+export const RESOURCE_DETAIL_MIN_LIMIT = 1;
 const RELATED_RESOURCE_LIMIT = 100;
 const RESOURCE_EVENT_LIMIT = 50;
 

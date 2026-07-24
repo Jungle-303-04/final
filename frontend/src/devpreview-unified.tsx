@@ -92,6 +92,12 @@ import { SegmentedControl } from "./devpreview/SegmentedControl";
 import { EventMessageText } from "./devpreview/EventMessageText";
 import { usePodResourceDetail } from "./devpreview/podResourceDetailFeed";
 import { PodContainerDetail } from "./devpreview/PodContainerDetail";
+import { ResourceConditionsPanel } from "./devpreview/ResourceConditionsPanel";
+import {
+  EMPTY_RESOURCE_CONDITIONS_VIEW,
+  useResourceConditions,
+  type ResourceConditionsView,
+} from "./devpreview/resourceConditionsFeed";
 import { useResourceEvents } from "./devpreview/resourceEventsFeed";
 import { useResourceIdentity } from "./devpreview/resourceIdentityFeed";
 import { getRepositoryConnectionStatus } from "./api/repository-connection";
@@ -961,6 +967,21 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
   const isWorkload = ["Deployment", "StatefulSet", "DaemonSet", "ReplicaSet", "Job", "CronJob"].includes(kind.id);
   const isPod = isPodKind;
   const wp = isWorkload || isPod;                 // 워크로드·파드 전용 섹션
+  const resourceConditions = useResourceConditions(
+    tab === "overview" && !isPodKind && isWorkload,
+    row.cluster != null && String(row.cluster) ? String(row.cluster) : null,
+    row.resource_type != null && String(row.resource_type) ? String(row.resource_type) : kindToResourceType(kind.id),
+    kind.id,
+    row.ns != null && String(row.ns) ? String(row.ns) : null,
+    name,
+  );
+  const podConditions = useMemo<ResourceConditionsView>(() => ({
+    ...EMPTY_RESOURCE_CONDITIONS_VIEW,
+    status: podResourceDetail.status,
+    primary: podResourceDetail.summary.conditions,
+    retry: podResourceDetail.retry,
+  }), [podResourceDetail.retry, podResourceDetail.status, podResourceDetail.summary.conditions]);
+  const conditionView = isPodKind ? podConditions : resourceConditions;
   // 합성 YAML은 만들지 않는다. 실제 인벤토리 key로 원본을 조회하고, 원본이 없는 리소스는
   // Git 바인딩 누락 상태를 명시해 잘못된 매니페스트를 편집·적용하지 않도록 한다.
 
@@ -1091,10 +1112,10 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
                 </Sec>
               )}
 
-              {/* 컨디션 (워크로드·파드) — 계약이 컨디션을 노출하지 않는다 */}
+              {/* 컨디션 (워크로드·파드) — resource-detail conditions와 ReplicaSet 관련 Pod fallback을 표시한다. */}
               {wp && (
               <Sec title="컨디션">
-                <Empty>컨디션 정보 없음</Empty>
+                <ResourceConditionsPanel kind={kind.id} view={conditionView} />
               </Sec>
               )}
 
