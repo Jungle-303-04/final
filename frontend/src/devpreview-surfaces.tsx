@@ -460,7 +460,8 @@ export function DeploySurface({ pendingRepos = [], repositoryFilter = null, onOp
   const [selectedRepository, setSelectedRepository] = useState<string | null>(repositoryFilter);
   const [expandedRepositories, setExpandedRepositories] = useState<string[]>(repositoryFilter ? [repositoryFilter] : []);
   useEffect(() => {
-    if (repositoryFilter) {
+    if (!repositoryFilter) return;
+    const timer = window.setTimeout(() => {
       setSelectedRepository(repositoryFilter);
       setExpandedRepositories((current) =>
         current.some((repositoryRef) => repositoryRef.toLowerCase() === repositoryFilter.toLowerCase())
@@ -468,7 +469,8 @@ export function DeploySurface({ pendingRepos = [], repositoryFilter = null, onOp
           : [...current, repositoryFilter],
       );
       setTab("GitOps");
-    }
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [repositoryFilter]);
   const [repositoryRefreshKey, setRepositoryRefreshKey] = useState(0);
   const appsFeed = useApplications(repositoryRefreshKey);
@@ -1779,7 +1781,7 @@ function RcaAlternativeCandidate({
     </details>
   );
 }
-export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resourceKind, incidentId, currentSubject, updatedAt, prUrl, onClose, onOpenRef, onAskAi, onRecoverySelected, correlationId, status, severity, rootCause, confidence, supportingEvidence, missingEvidence, situationSummary, recommendedActionSummary, evidenceSummary, evidenceBundleSummary, topInset = 0, leftInset = 0, rightInset = 0 }: {
+export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resourceKind, incidentId, currentSubject, updatedAt, prUrl: _prUrl, onClose, onOpenRef, onAskAi, onRecoverySelected, correlationId, status, severity, rootCause, confidence, supportingEvidence, missingEvidence, situationSummary, recommendedActionSummary, evidenceSummary, evidenceBundleSummary, topInset = 0, leftInset = 0, rightInset = 0 }: {
   name: string; symptom: string; cluster: string; svc: string; ns: string; onClose: () => void; onOpenRef: (kind: string, n: string) => void; onAskAi: (request?: AiRecoveryHandoff) => void; onRecoverySelected?: (correlationId: string, route: string, source: "direct" | "ai") => void;
   rawSymptom?: string | null; resourceKind?: string | null; incidentId?: string | null; currentSubject?: string | null; updatedAt?: string | null; prUrl?: string | null;
   correlationId?: string; status?: string; severity?: "critical" | "warning" | null;
@@ -1928,8 +1930,11 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
   ]);
   useEffect(() => {
     if (recovery.plan?.status === "failed") return;
-    setRecoveryRetryPending(false);
-    setRecoveryRetryError(null);
+    const timer = window.setTimeout(() => {
+      setRecoveryRetryPending(false);
+      setRecoveryRetryError(null);
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [recovery.plan?.status]);
   const effectiveRecoveryPrUrl = currentRecoveryAttemptPrUrl(recovery.plan);
   const displayedRecoveryProgress = withCreatedPullRequest(
