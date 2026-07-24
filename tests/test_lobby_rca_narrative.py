@@ -20,6 +20,7 @@ from services.ai.agent.pipeline.evidence_bundle import build_incident_evidence_b
 from services.ai.agent.pipeline.pipeline import RcaCompletionPipeline
 from services.ai.agent.pipeline.rca_narrative import (
     deterministic_rca_narrative,
+    evidence_anchored_narrative,
     sanitized_rca_narrative_input,
 )
 
@@ -817,6 +818,32 @@ def test_deterministic_narrative_renders_only_correlated_values_without_raw_leak
     )
     assert projected["narrative"]["executive_summary"] == narrative["executive_summary"]
     assert projected["supporting_evidence_refs"]
+
+
+def test_attested_narrative_keeps_recovery_pr_direction_over_model_contradiction() -> None:
+    fallback = {
+        "locale": "ko",
+        "executive_summary": "replica 감소와 실패 시점이 일치합니다.",
+        "impact": "실패율이 임계치를 초과했습니다.",
+        "reasoning": "배포·지표·로그가 같은 워크로드에서 일치합니다.",
+        "recommended_action": "이전 replica 값으로 복구 PR을 생성합니다.",
+        "recurrence_prevention": ["축소 전 부하 검증"],
+        "limitations": ["배포 후 재검증 필요"],
+    }
+    generated = {
+        **fallback,
+        "executive_summary": "모델 요약",
+        "reasoning": "모델 추론",
+        "recommended_action": "현재 상태를 유지합니다.",
+        "impact": "사람이 읽기 쉬운 영향 설명",
+    }
+
+    narrative = evidence_anchored_narrative(generated, fallback)
+
+    assert narrative["executive_summary"] == fallback["executive_summary"]
+    assert narrative["reasoning"] == fallback["reasoning"]
+    assert narrative["recommended_action"] == fallback["recommended_action"]
+    assert narrative["impact"] == "사람이 읽기 쉬운 영향 설명"
 
 
 def test_fallback_and_llm_input_render_observed_values_not_demo_constants() -> None:

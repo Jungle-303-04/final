@@ -321,6 +321,7 @@ def pod_status_snapshot(pod: JsonObject) -> JsonObject:
         {
             "name": meta.get("name"),
             "uid": meta.get("uid"),
+            "deletion_timestamp": meta.get("deletionTimestamp"),
             "phase": pod_status.get("phase"),
             "ready": pod_ready(pod_conditions),
             "restart_count": sum(

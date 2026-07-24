@@ -759,33 +759,52 @@ def protected_workloads(
         status = mapping(snapshot.get("deployment_status"))
         desired = nonnegative_int(status.get("desired_replicas"))
         ready = nonnegative_int(status.get("ready_replicas"))
-        updated = nonnegative_int(status.get("updated_replicas"))
         available = nonnegative_int(status.get("available_replicas"))
-        unavailable = nonnegative_int(status.get("unavailable_replicas"))
         pods = snapshot.get("pod_statuses")
-        pod_values = [pod for pod in pods if isinstance(pod, Mapping)] if isinstance(pods, list) else []
-        pod_ready = bool(pod_values) and all(pod.get("ready") is True for pod in pod_values)
+        pod_values = (
+            [pod for pod in pods if isinstance(pod, Mapping)]
+            if isinstance(pods, list)
+            else []
+        )
+        # A continuity-protected workload can intentionally retain its serving
+        # Pod while a rolling-update candidate is Pending or unready. The
+        # candidate is not carrying an active session and must not make the
+        # pre-recovery baseline disappear. Persist only the exact serving Pods;
+        # post-merge verification still requires those identities to remain.
+        serving_pods = [
+            pod
+            for pod in pod_values
+            if pod.get("ready") is True and not text(pod.get("deletion_timestamp"))
+        ]
         workloads.append(
             {
                 "kind": kind,
                 "namespace": namespace,
                 "name": name,
                 "uid": workload.get("uid"),
-                "pod_uids": sorted(text(pod.get("uid")) for pod in pod_values if text(pod.get("uid"))),
+                "pod_uids": sorted(
+                    text(pod.get("uid"))
+                    for pod in serving_pods
+                    if text(pod.get("uid"))
+                ),
                 "pod_start_times": sorted(
                     text(pod.get("start_time"))
-                    for pod in pod_values
+                    for pod in serving_pods
                     if text(pod.get("start_time"))
                 ),
                 "restart_count": sum(
-                    nonnegative_int(pod.get("restart_count")) or 0 for pod in pod_values
+                    nonnegative_int(pod.get("restart_count")) or 0
+                    for pod in serving_pods
                 ),
                 "healthy": bool(
                     desired is not None
                     and desired > 0
-                    and desired == ready == updated == available
-                    and unavailable == 0
-                    and pod_ready
+                    and ready is not None
+                    and ready >= desired
+                    and available is not None
+                    and available >= desired
+                    and len(serving_pods) >= desired
+                    and snapshot.get("pod_statuses_truncated") is not True
                 ),
             }
         )
