@@ -15,6 +15,7 @@ import {
   useAiConversations, useConversationDetail, useAiSuggestions,
 } from "./devpreview/aiFeed";
 import { getAuditTimeline } from "./api/audit-timeline";
+import { isApiError } from "./api/client";
 import { listRcaIssues } from "./api/rca-issues";
 import type {
   AiMessagePart, AiPageLink, AiResultPart, AiStepsPart, AiTextPart, AiTone, AiTurn,
@@ -499,10 +500,10 @@ function recoveryAcceptedMessage(route: string): string {
   }
   if (isSafePrRoute(route)) {
     return [
-      "✅ **복구 PR 생성 요청을 접수했습니다.**",
-      "선택한 변경사항으로 복구 PR을 준비하고 있습니다.",
+      "✅ **복구 PR 요청을 전달했습니다.**",
+      "저장소·배포 바인딩·승인 스냅샷을 검증하고 실제 PR 생성 결과를 확인하고 있습니다.",
       "---",
-      "PR이 생성되면 복구 플랜에 **Pull Request 열기** 링크가 표시됩니다. 링크에서 변경 내용을 검토하고 병합해 주세요.",
+      "검증에 실패하면 필요한 설정과 실제 사유를 표시합니다. PR이 생성된 경우에만 **Pull Request 열기** 링크가 나타납니다.",
     ].join("\n");
   }
   return [
@@ -510,6 +511,20 @@ function recoveryAcceptedMessage(route: string): string {
     "선택한 복구 조치를 처리할 준비가 완료되었습니다.",
     "---",
     "복구 플랜에서 처리 결과를 확인할 수 있습니다.",
+  ].join("\n");
+}
+
+function recoveryRejectedMessage(cause: unknown): string {
+  const detail = isApiError(cause)
+    ? cause.detail ?? cause.message
+    : cause instanceof Error && cause.message.trim()
+      ? cause.message
+      : "복구 요청을 처리하지 못했습니다.";
+  return [
+    "**복구 요청이 차단되었습니다.**",
+    detail,
+    "---",
+    "복구 플랜은 다시 선택할 수 있는 상태로 유지됩니다. 표시된 연결이나 권한을 보완한 뒤 재시도해 주세요.",
   ].join("\n");
 }
 
@@ -526,9 +541,11 @@ function recoveryOutcomeTurn(
       ? "- 이슈 상태가 **해결됨**으로 변경되었습니다."
       : notice.kind === "pull_request_created"
         ? "- PR 생성은 완료됐지만 아직 장애 해결이 확정된 것은 아닙니다."
-        : notice.kind === "execution_completed"
+      : notice.kind === "execution_completed"
           ? "- 복구 명령 실행은 완료됐으며 운영 상태 정상화를 계속 확인합니다."
-          : "- 복구 플랜에서 실패 원인을 확인한 뒤 다시 시도해 주세요.",
+          : notice.kind === "recovery_blocked"
+            ? "- PR 생성 단계는 시작되지 않았습니다. 안내된 GitOps 연결을 구성한 뒤 새 복구 플랜에서 다시 요청해 주세요."
+            : "- 복구 플랜에서 실패 원인을 확인한 뒤 다시 시도해 주세요.",
     request.validationChecks.length > 0 ? "" : null,
     request.validationChecks.length > 0 ? "**복구 플랜의 성공 조건**" : null,
     ...request.validationChecks.map((check) => `- ${check}`),
@@ -838,6 +855,11 @@ export function AiPanel({ onClose, onCancelRecovery, onRecoveryReviewStateChange
         }
       } catch (cause: unknown) {
         if (controller.signal.aborted || isAbort(cause)) return;
+        if (isApiError(cause) && cause.status === 404) {
+          stopped = true;
+          cancelRecoveryReview();
+          return;
+        }
       }
       if (!stopped && !controller.signal.aborted) {
         timer = window.setTimeout(poll, 4_000);
@@ -863,7 +885,7 @@ export function AiPanel({ onClose, onCancelRecovery, onRecoveryReviewStateChange
   };
 
   const newChat = () => { chatAbort.current?.abort(); alertDraft.current = null; setSelectedConversationId(null); setTurns([]); setError(null); setInput(""); setThinking(false); };
-  const cancelRecoveryReview = () => {
+  function cancelRecoveryReview(): void {
     chatAbort.current?.abort();
     alertDraft.current = null;
     lastRecoveryRequestId.current = null;
@@ -876,7 +898,7 @@ export function AiPanel({ onClose, onCancelRecovery, onRecoveryReviewStateChange
     setThinking(false);
     setRecoveryReviewState("idle");
     onCancelRecovery?.();
-  };
+  }
 
   // 저장된 대화의 이력 턴과 라이브 대화 턴을 같은 표면으로 렌더한다
   const renderTurn = (turn: AiTurn) => {
@@ -1019,8 +1041,7 @@ export function AiPanel({ onClose, onCancelRecovery, onRecoveryReviewStateChange
                     void Promise.all([recoveryRequest.execute(), minimumProgressTime])
                       .then(([receipt]) => {
                         if (!receipt?.accepted) {
-                          setRecoveryReviewState("error");
-                          return;
+                          throw new Error("복구 요청이 접수되지 않았습니다.");
                         }
                         setRecoveryExecution({ receipt, submittedAt });
                         idSeq.current += 1;
@@ -1036,6 +1057,21 @@ export function AiPanel({ onClose, onCancelRecovery, onRecoveryReviewStateChange
                         }]);
                         scrollToLatest();
                         setRecoveryReviewState("executed");
+                      })
+                      .catch((cause: unknown) => {
+                        idSeq.current += 1;
+                        setTurns((prev) => [...prev, {
+                          id: `a${idSeq.current}`,
+                          role: "assistant",
+                          collapsed: false,
+                          createdAt: now(),
+                          parts: [{
+                            kind: "text",
+                            markdown: recoveryRejectedMessage(cause),
+                          }],
+                        }]);
+                        scrollToLatest();
+                        setRecoveryReviewState("error");
                       });
                   }}
                   type="button">

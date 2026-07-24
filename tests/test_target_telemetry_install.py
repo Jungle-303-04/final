@@ -38,6 +38,10 @@ def test_target_registration_issues_receipt_then_installs_telemetry_before_agent
     assert "/integrations/prometheus" in register
     assert "clusterrole/cluster-agent-uninstall" in register
     assert "OTEL_TRACES_ENDPOINT" in register
+    assert 'TARGET_CLUSTER_ID="${TARGET_CLUSTER_ID}"' in register
+    assert 'WORKSPACE_ID="${WORKSPACE_ID}"' in register
+    assert 'MANAGEMENT_API_BASE_URL="${API_BASE_URL}"' in register
+    assert 'ALERTMANAGER_AGENT_TOKEN="${registration_agent_token}"' in register
 
 
 def test_aws_target_registration_keeps_telemetry_required_by_default() -> None:
@@ -83,6 +87,32 @@ def test_telemetry_installer_pins_and_verifies_every_provider() -> None:
     for source in (installer, powershell):
         assert "mem-ballast-size-mbs=0" in source
         assert "max_concurrent_queries: 4" in source
+        assert "OpsiaSliFailureRatioHigh" in source
+        assert "kyro-alertmanager-config" in source
+        assert "send_resolved" in source
+        assert "Bearer" in source
+        assert "api/v2/status" in source
+        for identity_label in (
+            "opsia_namespace",
+            "opsia_resource_kind",
+            "opsia_resource_name",
+            "opsia_service",
+            "opsia_sli",
+            "opsia_symptom",
+        ):
+            assert identity_label in source
+        assert "opsia_observed_value" in source
+        assert "opsia_threshold" in source
+        assert "rollout restart" in source
+
+    assert "umask 077" in installer
+    assert 'chmod 600 "${config_file}"' in installer
+    assert "trap cleanup EXIT" in installer
+    assert 'create secret generic "${ALERTMANAGER_CONFIG_SECRET}"' in installer
+    assert 'if [[ "${configured_count}" -eq 0 ]]' in installer
+    assert 'Protect-TemporaryPath $configFile "600"' in powershell
+    assert "Remove-Item -LiteralPath $assetDirectory" in powershell
+    assert "if ($configured.Count -eq 0)" in powershell
 
 
 def test_tempo_values_bound_ballast_blocks_queries_and_retention() -> None:
@@ -101,6 +131,152 @@ def test_tempo_values_bound_ballast_blocks_queries_and_retention() -> None:
     assert tempo["queryFrontend"]["search"]["concurrent_jobs"] == 32
 
 
+def test_prometheus_values_define_generic_application_sli_alert() -> None:
+    values = yaml.safe_load(
+        (ROOT / "deploy" / "target" / "prometheus.yaml").read_text(encoding="utf-8")
+    )
+    server = values["server"]
+    assert server["global"]["scrape_interval"] == "15s"
+    assert server["global"]["evaluation_interval"] == "15s"
+
+    rules = values["serverFiles"]["alerting_rules.yml"]["groups"][0]["rules"]
+    recording_rule = next(
+        item for item in rules if item.get("record") == "opsia_sli_failure_ratio"
+    )
+    recording_expr = recording_rule["expr"]
+    assert "opsia_sli_requests_total" in recording_expr
+    assert 'outcome="failure"' in recording_expr
+    assert recording_expr.count(
+        "sum by (namespace, resource_kind, resource_name, service, sli, symptom)"
+    ) == 2
+    assert "pod" not in recording_expr
+    assert "instance" not in recording_expr
+
+    rule = next(item for item in rules if item.get("alert") == "OpsiaSliFailureRatioHigh")
+    assert rule["alert"] == "OpsiaSliFailureRatioHigh"
+    assert "opsia_sli_failure_ratio{" in rule["expr"]
+    for required_label in (
+        "namespace",
+        "resource_kind",
+        "resource_name",
+        "service",
+        "sli",
+        "symptom",
+    ):
+        assert f'{required_label}!=""' in rule["expr"]
+    assert rule["expr"].strip().endswith("> 0.2")
+    assert rule["for"] == "20s"
+    assert rule["labels"]["opsia_symptom"] == "{{ $labels.symptom }}"
+    assert rule["labels"]["opsia_resource_kind"] == "{{ $labels.resource_kind }}"
+    assert rule["labels"]["opsia_resource_name"] == "{{ $labels.resource_name }}"
+    assert rule["labels"]["opsia_namespace"] == "{{ $labels.namespace }}"
+    assert rule["labels"]["opsia_service"] == "{{ $labels.service }}"
+    assert rule["labels"]["opsia_sli"] == "{{ $labels.sli }}"
+
+    rendered = (ROOT / "deploy" / "target" / "prometheus.yaml").read_text(encoding="utf-8")
+    assert "DemoGame" not in rendered
+    assert "find_game" not in rendered
+
+
+def test_prometheus_sli_recording_rule_collapses_two_pods_to_one_identity() -> None:
+    values = yaml.safe_load(
+        (ROOT / "deploy" / "target" / "prometheus.yaml").read_text(encoding="utf-8")
+    )
+    rules = values["serverFiles"]["alerting_rules.yml"]["groups"][0]["rules"]
+    expression = next(
+        item["expr"] for item in rules if item.get("record") == "opsia_sli_failure_ratio"
+    )
+    identity_labels = (
+        "namespace",
+        "resource_kind",
+        "resource_name",
+        "service",
+        "sli",
+        "symptom",
+    )
+    group_clause = f"sum by ({', '.join(identity_labels)})"
+
+    assert expression.count(group_clause) == 2
+    assert 'outcome="failure"' in expression
+    assert "pod" not in expression
+    assert "instance" not in expression
+
+    # Two Pods expose independent success/failure counter rates. The recording
+    # rule deliberately groups both numerator and denominator by only the six
+    # durable RCA labels, so rollout/scaling still produces one ratio series.
+    pod_rates = [
+        {
+            **dict.fromkeys(identity_labels, ""),
+            "namespace": "target",
+            "resource_kind": "Deployment",
+            "resource_name": "lobby",
+            "service": "lobby",
+            "sli": "admission",
+            "symptom": "admission_failure_rate",
+            "pod": "lobby-a",
+            "outcome": "success",
+            "rate": 80.0,
+        },
+        {
+            **dict.fromkeys(identity_labels, ""),
+            "namespace": "target",
+            "resource_kind": "Deployment",
+            "resource_name": "lobby",
+            "service": "lobby",
+            "sli": "admission",
+            "symptom": "admission_failure_rate",
+            "pod": "lobby-a",
+            "outcome": "failure",
+            "rate": 20.0,
+        },
+        {
+            **dict.fromkeys(identity_labels, ""),
+            "namespace": "target",
+            "resource_kind": "Deployment",
+            "resource_name": "lobby",
+            "service": "lobby",
+            "sli": "admission",
+            "symptom": "admission_failure_rate",
+            "pod": "lobby-b",
+            "outcome": "success",
+            "rate": 80.0,
+        },
+        {
+            **dict.fromkeys(identity_labels, ""),
+            "namespace": "target",
+            "resource_kind": "Deployment",
+            "resource_name": "lobby",
+            "service": "lobby",
+            "sli": "admission",
+            "symptom": "admission_failure_rate",
+            "pod": "lobby-b",
+            "outcome": "failure",
+            "rate": 20.0,
+        },
+    ]
+    grouped: dict[tuple[str, ...], dict[str, float]] = {}
+    for sample in pod_rates:
+        identity = tuple(str(sample[label]) for label in identity_labels)
+        totals = grouped.setdefault(identity, {"failure": 0.0, "total": 0.0})
+        totals["total"] += float(sample["rate"])
+        if sample["outcome"] == "failure":
+            totals["failure"] += float(sample["rate"])
+
+    assert len(grouped) == 1
+    assert next(iter(grouped.values())) == {"failure": 40.0, "total": 200.0}
+    assert next(iter(grouped.values()))["failure"] / next(iter(grouped.values()))["total"] == 0.2
+
+
+def test_telemetry_installers_verify_recording_and_alert_rules_from_runtime_api() -> None:
+    for source in (script("install-telemetry.sh"), script("install-telemetry.ps1")):
+        assert "api/v1/rules" in source
+        assert "opsia_sli_failure_ratio" in source
+        assert "opsia_sli_requests_total" in source
+        assert 'outcome="failure"' in source
+        assert "sumby(namespace,resource_kind,resource_name,service,sli,symptom)" in source
+        assert "OpsiaSliFailureRatioHigh" in source
+
+
 def test_ui_connect_command_installs_telemetry_before_agent_manifest() -> None:
     payload = TargetRegisterRequest(
         cluster_id="cluster-1",
@@ -113,6 +289,10 @@ def test_ui_connect_command_installs_telemetry_before_agent_manifest() -> None:
     manifest = command.index("/install/agent-token | kubectl apply")
     assert telemetry < manifest
     assert "TELEMETRY_ASSET_BASE_URL=" in command
+    assert "TARGET_CLUSTER_ID=cluster-1" in command
+    assert "WORKSPACE_ID=default" in command
+    assert "MANAGEMENT_API_BASE_URL=https://ops.example.test/api" in command
+    assert "ALERTMANAGER_AGENT_TOKEN=agent-token" in command
     assert "cluster-agent-uninstall" in command
     assert "kubectl config current-context" in command
 
@@ -129,7 +309,27 @@ def test_ui_powershell_connect_command_installs_telemetry_before_agent_manifest(
     manifest = command.index("/install/agent-token'")
     assert telemetry < manifest
     assert "-AssetBaseUrl" in command
+    assert "-ClusterId 'cluster-1'" in command
+    assert "-WorkspaceId 'default'" in command
+    assert "-ManagementApiBaseUrl 'https://ops.example.test/api'" in command
+    assert "-AgentToken $kyroAgentToken" in command
+    assert "Remove-Variable kyroAgentToken" in command
     assert "cluster-agent-uninstall" in command
+
+
+def test_connect_command_normalizes_management_api_base_for_telemetry() -> None:
+    payload = TargetRegisterRequest(
+        cluster_id="cluster-1",
+        workspace_id="workspace-1",
+        management_base_url="https://ops.example.test/",
+    )
+
+    shell = install_command_for(payload, "agent-token")
+    powershell = powershell_install_command_for(payload, "agent-token")
+
+    for command in (shell, powershell):
+        assert "https://ops.example.test/api" in command
+        assert "workspace-1" in command
 
 
 def test_management_agent_install_does_not_install_target_telemetry() -> None:

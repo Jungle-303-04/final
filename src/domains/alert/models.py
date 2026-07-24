@@ -127,6 +127,7 @@ class AlertEvent(Base):
     status: Mapped[str] = text_column()
     observed_value: Mapped[float | None] = mapped_column(Float(precision=53), nullable=True)
     threshold: Mapped[float | None] = mapped_column(Float(precision=53), nullable=True)
+    series_identity: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     evidence: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False)
     incident_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     acknowledged_at: Mapped[Any | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)

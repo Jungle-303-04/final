@@ -16,6 +16,8 @@ from urllib.parse import quote
 
 import httpx
 
+from domains.gitops.kustomize_edit_source import resolve_unique_kustomize_edit_source
+from domains.gitops.repository_discovery import MAX_MANIFEST_BYTES
 from domains.gitops.source_patch import (
     DeclaredScalarPatch,
     ManifestImagePatchPlan,
@@ -29,6 +31,7 @@ from domains.gitops.source_patch import (
     parse_scalar_patch_plan,
     scalar_patch_matches_manifest,
 )
+from domains.manifest_editor.validation import manifest_identity
 from domains.scm.events import SafePrRequestedBody
 from domains.scm.policy import (
     CHANGE_DOCUMENT_DIR,
@@ -50,6 +53,7 @@ from packages.contracts.remediation_source import (
     RemediationSourceContractError,
     parse_remediation_source_contract,
 )
+from packages.contracts.scm.provider import ScmPullRequestResult
 from packages.contracts.security import SecretRef, TokenVaultPort
 from packages.contracts.stores import PullRequestStore
 from packages.runtime.app import EventContext
@@ -132,6 +136,8 @@ MANIFEST_EDIT_AUTHORITY_MISMATCH_MESSAGE = (
 )
 UNSUPPORTED_REMEDIATION_SOURCE_MESSAGE = "remediation source patch unsupported"
 SAFE_PR_MANIFEST_EDIT_KIND = "safe_pr_manifest_edit"
+KUSTOMIZE_SOURCE_TYPE = "kustomize"
+MAX_KUSTOMIZE_TREE_ITEMS = 5000
 
 # 자격 증명 부재는 부팅 실패가 아니라 요청 시점 실패 — 워커는 뜨고,
 # 각 safe_pr.requested 는 safe_pr.failed 경로로 흐름.
@@ -146,6 +152,100 @@ MISSING_EXISTING_PR_MESSAGE = (
 
 LOGGER = get_logger(__name__)
 StructuredPatchPlan = ManifestImagePatchPlan | ManifestScalarPatchPlan
+
+
+class RemediationSourceContractMissing(RuntimeError):
+    """The optional repository-owned source declaration is absent."""
+
+
+class GithubKustomizeSnapshotClient:
+    """Commit-pinned, bounded adapter for the shared Kustomize graph resolver."""
+
+    def __init__(
+        self,
+        client: httpx.AsyncClient,
+        *,
+        context: dict[str, object] | None = None,
+    ) -> None:
+        self.client = client
+        self.context = context
+
+    async def tree_at_revision(
+        self,
+        repo_ref: str,
+        revision: str,
+    ) -> tuple[list[dict[str, object]], list[str]]:
+        commit = await self.client.get(f"/repos/{repo_ref}/git/commits/{revision}")
+        if self.context is not None:
+            log_provider_response("github.get_kustomize_commit", commit, self.context)
+        commit.raise_for_status()
+        commit_payload = commit.json()
+        tree = commit_payload.get("tree") if isinstance(commit_payload, Mapping) else None
+        tree_sha = str(tree.get("sha") or "") if isinstance(tree, Mapping) else ""
+        if not tree_sha:
+            raise RuntimeError(
+                f"{UNSUPPORTED_REMEDIATION_SOURCE_MESSAGE}: commit tree is missing"
+            )
+        response = await self.client.get(
+            f"/repos/{repo_ref}/git/trees/{tree_sha}",
+            params={"recursive": "1"},
+        )
+        if self.context is not None:
+            log_provider_response("github.get_kustomize_tree", response, self.context)
+        response.raise_for_status()
+        payload = response.json()
+        raw_tree = payload.get("tree") if isinstance(payload, Mapping) else None
+        if (
+            not isinstance(raw_tree, list)
+            or payload.get("truncated") is True
+            or len(raw_tree) > MAX_KUSTOMIZE_TREE_ITEMS
+        ):
+            raise RuntimeError(
+                f"{UNSUPPORTED_REMEDIATION_SOURCE_MESSAGE}: repository tree is incomplete"
+            )
+        return (
+            [dict(item) for item in raw_tree if isinstance(item, Mapping)],
+            [],
+        )
+
+    async def content(
+        self,
+        repo_ref: str,
+        revision: str,
+        path: str,
+    ) -> bytes:
+        response = await self.client.get(
+            contents_api_path(repo_ref, path),
+            params={"ref": revision},
+        )
+        if self.context is not None:
+            log_provider_response(
+                "github.get_kustomize_source",
+                response,
+                self.context,
+                path=path,
+            )
+        response.raise_for_status()
+        payload = response.json()
+        size = payload.get("size")
+        if (
+            payload.get("type") != "file"
+            or isinstance(size, bool)
+            or not isinstance(size, int)
+            or size < 0
+            or size > MAX_MANIFEST_BYTES
+            or payload.get("encoding") != "base64"
+            or not isinstance(payload.get("content"), str)
+        ):
+            raise RuntimeError(INVALID_SOURCE_RESPONSE_MESSAGE)
+        try:
+            encoded = "".join(payload["content"].split())
+            decoded = base64.b64decode(encoded, validate=True)
+        except ValueError as exc:
+            raise RuntimeError(INVALID_SOURCE_RESPONSE_MESSAGE) from exc
+        if len(decoded) != size or len(decoded) > MAX_MANIFEST_BYTES:
+            raise RuntimeError(INVALID_SOURCE_RESPONSE_MESSAGE)
+        return decoded
 
 
 def manifest_content_sha256(content: str) -> str:
@@ -294,6 +394,29 @@ def log_provider_response(
     level("github_provider_response", extra={CONTEXT_KEY: log_context})
 
 
+def pull_request_result(payload: Mapping[str, object]) -> ScmPullRequestResult:
+    """GitHub PR response의 immutable identity와 생성 직후 head를 보존."""
+
+    url = str(payload.get("html_url") or "").strip()
+    if not url:
+        raise RuntimeError("GitHub pull request response is missing html_url")
+    raw_number = payload.get("number")
+    number = (
+        int(raw_number)
+        if isinstance(raw_number, int) and not isinstance(raw_number, bool) and raw_number > 0
+        else None
+    )
+    head = payload.get("head")
+    head_mapping = head if isinstance(head, Mapping) else {}
+    return ScmPullRequestResult(
+        url=url,
+        number=number,
+        node_id=str(payload.get("node_id") or ""),
+        head_ref=str(head_mapping.get("ref") or ""),
+        head_sha=str(head_mapping.get("sha") or ""),
+    )
+
+
 class GithubScmProvider:
     """ScmProvider 구현 — GitHub REST API 호출로 PR html_url 을 반환함."""
 
@@ -307,7 +430,7 @@ class GithubScmProvider:
 
     async def create_pull_request(
         self, request: SafePrRequestedBody, ctx: EventContext[PullRequestStore]
-    ) -> str:
+    ) -> ScmPullRequestResult:
         preflight = DefaultSafePrPreflightPolicy().evaluate(request)
         if not preflight.allowed:
             raise ValueError(preflight.message)
@@ -330,6 +453,7 @@ class GithubScmProvider:
         LOGGER.info("github_provider_started", extra={CONTEXT_KEY: context})
         patch_plans = self.patch_plans(request)
         structured = any(plan is not None for plan in patch_plans)
+        structured_authority: Mapping[str, object] | None = None
         manifest_edit_authority: Mapping[str, object] | None = None
         if structured and (
             any(plan is None for plan in patch_plans)
@@ -337,7 +461,11 @@ class GithubScmProvider:
         ):
             raise RuntimeError(STALE_BASE_MESSAGE)
         if structured:
-            await self.validate_structured_patch_authority(request, patch_plans, ctx)
+            structured_authority = await self.validate_structured_patch_authority(
+                request,
+                patch_plans,
+                ctx,
+            )
         elif request.pr_kind == SAFE_PR_MANIFEST_EDIT_KIND:
             manifest_edit_authority = await self.validate_manifest_edit_approval(request, ctx)
 
@@ -358,11 +486,18 @@ class GithubScmProvider:
                 if expected_base_sha != base_sha:
                     raise RuntimeError(STALE_BASE_MESSAGE)
                 patch_contents = await self.materialize_patch_contents(
-                    client, repo, base_sha, request, patch_plans, context,
+                    client,
+                    repo,
+                    base_sha,
+                    request,
+                    patch_plans,
+                    context,
+                    authority=structured_authority,
                 )
                 await self.put_change_document(client, repo, base_branch, request, context)
                 await self.put_manifest_patches(client, repo, base_branch, patch_contents, context)
                 pr_url = await self.branch_head_commit_url(client, repo, base_branch, context)
+                result = ScmPullRequestResult(url=pr_url)
                 await notify_direct_commit(repo, base_branch)
             elif structured:
                 existing = await self.find_existing_pr(
@@ -383,9 +518,10 @@ class GithubScmProvider:
                         existing,
                         base_sha,
                         context,
+                        authority=structured_authority,
                     ):
                         raise RuntimeError(BRANCH_COLLISION_MESSAGE)
-                    pr_url = str(existing["html_url"])
+                    result = pull_request_result(existing)
                 else:
                     expected_base_sha = patch_plans[0].expected_base_sha if patch_plans[0] else ""
                     if expected_base_sha != base_sha:
@@ -397,6 +533,7 @@ class GithubScmProvider:
                         request,
                         patch_plans,
                         context,
+                        authority=structured_authority,
                     )
                     await self.ensure_branch(
                         client,
@@ -414,7 +551,7 @@ class GithubScmProvider:
                         patch_contents,
                         context,
                     )
-                    pr_url = await self.create_or_reuse_pr(
+                    result = await self.create_or_reuse_pr(
                         client, repo, branch, base_branch, request, context
                     )
             elif direct_commit:
@@ -424,6 +561,7 @@ class GithubScmProvider:
                 await self.put_change_document(client, repo, base_branch, request, context)
                 await self.put_manifest_patches(client, repo, base_branch, patch_contents, context)
                 pr_url = await self.branch_head_commit_url(client, repo, base_branch, context)
+                result = ScmPullRequestResult(url=pr_url)
                 await notify_direct_commit(repo, base_branch)
             else:
                 patch_contents = await self.materialize_patch_contents(
@@ -443,18 +581,18 @@ class GithubScmProvider:
                     patch_contents,
                     context,
                 )
-                pr_url = await self.create_or_reuse_pr(
+                result = await self.create_or_reuse_pr(
                     client, repo, branch, base_branch, request, context
                 )
 
         await ctx.db.save_pull_request(
-            ctx.correlation_id, pr_url, request.title, request.body, PR_STATUS_CREATED
+            ctx.correlation_id, result.url, request.title, request.body, PR_STATUS_CREATED
         )
         LOGGER.info(
             "github_provider_completed",
-            extra={CONTEXT_KEY: {**context, "pr_url": pr_url}},
+            extra={CONTEXT_KEY: {**context, "pr_url": result.url}},
         )
-        return pr_url
+        return result
 
     def github_token(self) -> str:
         token_ref = env(GITHUB_TOKEN_REF_ENV, GITHUB_TOKEN_ENV).strip() or GITHUB_TOKEN_ENV
@@ -553,6 +691,7 @@ class GithubScmProvider:
         context: dict[str, object] | None = None,
         *,
         declared_patches: list[DeclaredScalarPatch | None] | None = None,
+        authority: Mapping[str, object] | None = None,
     ) -> list[tuple[str, str]]:
         if len(patch_plans) != len(request.patches):
             raise RuntimeError("safe pr patch plan count does not match file patches")
@@ -562,6 +701,8 @@ class GithubScmProvider:
             base_sha,
             patch_plans,
             context,
+            request=request,
+            authority=authority,
         )
         if len(resolved) != len(patch_plans):
             raise RuntimeError("safe pr declared patch count does not match patch plans")
@@ -600,10 +741,29 @@ class GithubScmProvider:
         base_sha: str,
         patch_plans: list[StructuredPatchPlan | None],
         context: dict[str, object] | None = None,
+        *,
+        request: SafePrRequestedBody | None = None,
+        authority: Mapping[str, object] | None = None,
     ) -> list[DeclaredScalarPatch | None]:
         if not any(plan is not None for plan in patch_plans):
             return [None for _ in patch_plans]
-        contract = await self.remediation_source_contract(client, repo, base_sha, context)
+        try:
+            contract = await self.remediation_source_contract(
+                client,
+                repo,
+                base_sha,
+                context,
+            )
+        except RemediationSourceContractMissing:
+            return await self.resolve_kustomize_patches(
+                client,
+                repo,
+                base_sha,
+                patch_plans,
+                request=request,
+                authority=authority,
+                context=context,
+            )
         resolved: list[DeclaredScalarPatch | None] = []
         try:
             for plan in patch_plans:
@@ -615,6 +775,75 @@ class GithubScmProvider:
                     resolved.append(declared_image_patch(plan, contract))
         except ManifestSourcePatchError as exc:
             raise RuntimeError(str(exc)) from exc
+        return resolved
+
+    async def resolve_kustomize_patches(
+        self,
+        client: httpx.AsyncClient,
+        repo: str,
+        base_sha: str,
+        patch_plans: list[StructuredPatchPlan | None],
+        *,
+        request: SafePrRequestedBody | None,
+        authority: Mapping[str, object] | None,
+        context: dict[str, object] | None,
+    ) -> list[DeclaredScalarPatch | None]:
+        provenance = (
+            authority.get("provenance") if isinstance(authority, Mapping) else None
+        )
+        desired_manifest = (
+            authority.get("desired_manifest") if isinstance(authority, Mapping) else None
+        )
+        identity = (
+            manifest_identity(desired_manifest)
+            if isinstance(desired_manifest, Mapping)
+            else None
+        )
+        if (
+            request is None
+            or not isinstance(provenance, Mapping)
+            or str(provenance.get("source_type") or "") != KUSTOMIZE_SOURCE_TYPE
+            or str(provenance.get("manifest_path") or "") != request.manifest_path
+            or identity is None
+        ):
+            raise RuntimeError(
+                f"{UNSUPPORTED_REMEDIATION_SOURCE_MESSAGE}: contract is missing"
+            )
+        resolved_source = await resolve_unique_kustomize_edit_source(
+            GithubKustomizeSnapshotClient(client, context=context),
+            repo_ref=repo,
+            revision=base_sha,
+            binding_manifest_path=request.manifest_path,
+            selected_identity=identity,
+            protected_field_paths=tuple(
+                replacement.field_path
+                for plan in patch_plans
+                if isinstance(plan, ManifestScalarPatchPlan)
+                for replacement in plan.replacements
+            ),
+        )
+        if resolved_source is None:
+            raise RuntimeError(
+                f"{UNSUPPORTED_REMEDIATION_SOURCE_MESSAGE}: "
+                "Kustomize resource source is missing or ambiguous"
+            )
+        resolved: list[DeclaredScalarPatch | None] = []
+        for plan in patch_plans:
+            if plan is None:
+                resolved.append(None)
+                continue
+            if not isinstance(plan, ManifestScalarPatchPlan):
+                raise RuntimeError(
+                    f"{UNSUPPORTED_REMEDIATION_SOURCE_MESSAGE}: "
+                    "Kustomize image recovery requires a repository declaration"
+                )
+            resolved.append(
+                DeclaredScalarPatch(
+                    source_type=resolved_source.source_type,
+                    source_path=resolved_source.path,
+                    replacements=plan.replacements,
+                )
+            )
         return resolved
 
     async def remediation_source_contract(
@@ -636,7 +865,7 @@ class GithubScmProvider:
         except httpx.HTTPStatusError as exc:
             if exc.response.status_code != 404:
                 raise
-            raise RuntimeError(
+            raise RemediationSourceContractMissing(
                 f"{UNSUPPORTED_REMEDIATION_SOURCE_MESSAGE}: contract is missing"
             ) from exc
         except (RemediationSourceContractError, RuntimeError) as exc:
@@ -780,7 +1009,7 @@ class GithubScmProvider:
         request: SafePrRequestedBody,
         patch_plans: list[StructuredPatchPlan | None],
         ctx: EventContext[PullRequestStore],
-    ) -> None:
+    ) -> Mapping[str, object]:
         load_run = getattr(ctx.db, "get_workflow_run", None)
         load_diff = getattr(ctx.db, "get_workflow_step_details", None)
         load_provenance = getattr(ctx.db, "get_manifest_artifact_provenance", None)
@@ -854,6 +1083,10 @@ class GithubScmProvider:
             or not self.replacements_match_authority(plans[0], changes, desired_manifest)
         ):
             raise RuntimeError(AUTHORITY_MISMATCH_MESSAGE)
+        return {
+            "provenance": dict(provenance),
+            "desired_manifest": dict(desired_manifest),
+        }
 
     @staticmethod
     def replacements_match_authority(
@@ -933,7 +1166,7 @@ class GithubScmProvider:
         base_branch: str,
         request: SafePrRequestedBody,
         context: dict[str, object] | None = None,
-    ) -> str:
+    ) -> ScmPullRequestResult:
         response = await client.post(
             f"/repos/{repo}/pulls",
             json={
@@ -957,10 +1190,10 @@ class GithubScmProvider:
                 require_request_match=False,
             )
             if existing is not None:
-                return str(existing["html_url"])
+                return pull_request_result(existing)
             raise RuntimeError(MISSING_EXISTING_PR_MESSAGE)
         response.raise_for_status()
-        return str(response.json()["html_url"])
+        return pull_request_result(response.json())
 
     async def find_existing_pr(
         self,
@@ -1008,6 +1241,8 @@ class GithubScmProvider:
         pull: Mapping[str, object],
         current_base_sha: str,
         context: dict[str, object] | None = None,
+        *,
+        authority: Mapping[str, object] | None = None,
     ) -> bool:
         plans = [plan for plan in patch_plans if plan is not None]
         head = pull.get("head")
@@ -1023,6 +1258,8 @@ class GithubScmProvider:
             plan.expected_base_sha,
             patch_plans,
             context,
+            request=request,
+            authority=authority,
         )
         declared = [patch for patch in declared_patches if patch is not None]
         if len(declared) != 1:

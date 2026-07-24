@@ -666,7 +666,7 @@ def install_command_for(payload: TargetRegisterRequest, agent_token: str) -> str
     base 는 등록 payload 의 management_base_url(agent 가 접속하는 공개 게이트웨이 주소)
     그대로 사용 — 서버가 임의 호스트를 합성하지 않음.
     """
-    base = payload.management_base_url.strip().rstrip("/")
+    base = normalized_management_base_url(payload.management_base_url)
     if not base:
         return ""
     path = gateway_routes.INSTALL_MANIFEST_PATH.format(agent_token=agent_token)
@@ -680,6 +680,8 @@ def install_command_for(payload: TargetRegisterRequest, agent_token: str) -> str
         telemetry_asset_base_url=(
             telemetry_asset_base_url(base, agent_token) if telemetry_enabled else ""
         ),
+        telemetry_agent_token=agent_token if telemetry_enabled else "",
+        management_api_base_url=base if telemetry_enabled else "",
     )
 
 
@@ -707,6 +709,8 @@ def guarded_kubectl_apply_command(
     *,
     telemetry_script_url: str = "",
     telemetry_asset_base_url: str = "",
+    telemetry_agent_token: str = "",
+    management_api_base_url: str = "",
 ) -> str:
     """관측 스택을 먼저 준비하고 기존 에이전트 소유권을 안전하게 교체한다."""
     kubectl = "kubectl"
@@ -734,10 +738,19 @@ def guarded_kubectl_apply_command(
             f'curl -fsSL {shell_quote(telemetry_script_url)} -o "$telemetry_script"; '
             f"{target_context}"
             f'TARGET_CONTEXT="$target_context" TARGET_NAMESPACE={shell_quote(namespace)} '
+            f"TARGET_CLUSTER_ID={shell_quote(expected_cluster_id)} "
+            f"WORKSPACE_ID={shell_quote(payload.workspace_id)} "
+            f"MANAGEMENT_API_BASE_URL={shell_quote(management_api_base_url)} "
+            f"ALERTMANAGER_AGENT_TOKEN={shell_quote(telemetry_agent_token)} "
             f"TELEMETRY_ASSET_BASE_URL={shell_quote(telemetry_asset_base_url)} "
             'bash "$telemetry_script"; '
         )
-        if telemetry_script_url and telemetry_asset_base_url
+        if (
+            telemetry_script_url
+            and telemetry_asset_base_url
+            and telemetry_agent_token
+            and management_api_base_url
+        )
         else ""
     )
     wait_for_uninstall = (
@@ -765,7 +778,7 @@ def guarded_kubectl_apply_command(
 def kubectl_apply_command(
     payload: TargetRegisterRequest, agent_token: str, context: str = ""
 ) -> str:
-    base = payload.management_base_url.strip().rstrip("/")
+    base = normalized_management_base_url(payload.management_base_url)
     if not base:
         return ""
     path = gateway_routes.INSTALL_MANIFEST_PATH.format(agent_token=agent_token)
@@ -780,6 +793,8 @@ def kubectl_apply_command(
         telemetry_asset_base_url=(
             telemetry_asset_base_url(base, agent_token) if telemetry_enabled else ""
         ),
+        telemetry_agent_token=agent_token if telemetry_enabled else "",
+        management_api_base_url=base if telemetry_enabled else "",
     )
 
 
@@ -856,7 +871,7 @@ def bootstrap_command_for(payload: TargetRegisterRequest, agent_token: str) -> s
 
 
 def powershell_install_command_for(payload: TargetRegisterRequest, agent_token: str) -> str:
-    base = payload.management_base_url.strip().rstrip("/")
+    base = normalized_management_base_url(payload.management_base_url)
     if not base:
         return ""
     path = gateway_routes.INSTALL_MANIFEST_PATH.format(agent_token=agent_token)
@@ -868,10 +883,17 @@ def powershell_install_command_for(payload: TargetRegisterRequest, agent_token: 
     if payload.cluster_role != MANAGEMENT_CLUSTER_ROLE:
         script_url = telemetry_script_url(base, agent_token, "powershell").replace("'", "''")
         asset_base_url = telemetry_asset_base_url(base, agent_token).replace("'", "''")
+        workspace_id = payload.workspace_id.replace("'", "''")
+        management_api_base_url = base.replace("'", "''")
+        escaped_agent_token = agent_token.replace("'", "''")
         telemetry_block = (
             f"Invoke-WebRequest -UseBasicParsing -Uri '{script_url}' -OutFile $script; "
+            f"$kyroAgentToken='{escaped_agent_token}'; "
             f"& $script -TargetContext $context -TargetNamespace '{namespace}' "
-            f"-AssetBaseUrl '{asset_base_url}'; "
+            f"-AssetBaseUrl '{asset_base_url}' -ClusterId '{expected_cluster_id}' "
+            f"-WorkspaceId '{workspace_id}' "
+            f"-ManagementApiBaseUrl '{management_api_base_url}' "
+            "-AgentToken $kyroAgentToken; "
         )
         uninstall_wait_block = (
             "if (-not $existing) { for ($attempt=0; $attempt -lt 60; $attempt++) { "
@@ -896,7 +918,8 @@ def powershell_install_command_for(payload: TargetRegisterRequest, agent_token: 
         f"Invoke-WebRequest -UseBasicParsing -Uri '{manifest_url}' -OutFile $manifest; "
         "& kubectl apply -f $manifest; "
         "if ($LASTEXITCODE -ne 0) { throw 'manifest installation failed' } } "
-        "finally { Remove-Item -LiteralPath $script,$manifest -Force -ErrorAction SilentlyContinue }"
+        "finally { Remove-Item -LiteralPath $script,$manifest -Force -ErrorAction SilentlyContinue; "
+        "Remove-Variable kyroAgentToken -ErrorAction SilentlyContinue }"
     )
 
 

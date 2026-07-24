@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
+import type { RecoveryPlan } from "../api/recovery-schemas";
 import {
+  currentRecoveryAttemptPrUrl,
   recoveryDisplayedStep,
   recoveryProgressState,
   withCreatedPullRequest,
@@ -67,6 +69,42 @@ describe("recoveryProgressState", () => {
     });
   });
 
+  it("shows durable Safe PR lifecycle states without claiming completion", () => {
+    expect(recoveryProgressState({ status: "pr_open" })).toMatchObject({
+      phase: "approval",
+      label: "PR 검토 필요",
+    });
+    expect(recoveryProgressState({ status: "deploy_pending" })).toMatchObject({
+      phase: "executing",
+      label: "복구 배포 중",
+    });
+    expect(recoveryProgressState({ status: "verification_pending" })).toMatchObject({
+      phase: "verifying",
+      label: "안정화 검증 중",
+    });
+    expect(recoveryProgressState({ status: "failed" })).toMatchObject({
+      phase: "failed",
+      label: "복구 실패",
+    });
+  });
+
+  it("uses lifecycle events when a snapshot status has not refreshed yet", () => {
+    expect(recoveryProgressState({
+      audit: [{
+        event_id: "verification-started",
+        subject: "recovery.verification.started",
+        source: "rca-feedback-worker",
+        created_at: "2026-07-24T01:00:00Z",
+        causation_id: null,
+        journey_stage: "recovery",
+        payload_summary: {},
+      }],
+    })).toMatchObject({
+      phase: "verifying",
+      label: "안정화 검증 중",
+    });
+  });
+
   it("marks resolved incidents complete", () => {
     const progress = recoveryProgressState({ status: "incident_resolved" });
     expect(progress).toMatchObject({
@@ -82,6 +120,110 @@ describe("recoveryProgressState", () => {
       phase: "failed",
       label: "복구 실패",
       step: 2,
+    });
+  });
+
+  it("lets a backend authority blocker override the accepted selection", () => {
+    expect(recoveryProgressState({
+      actionRoute: "safe_pr",
+      selectionAccepted: true,
+      audit: [{
+        event_id: "blocked",
+        subject: "rca.action_required",
+        source: "dispatch-worker",
+        created_at: "2026-07-24T01:00:01Z",
+        causation_id: null,
+        journey_stage: "recovery",
+        payload_summary: {
+          reason_code: "gitops_authority_unavailable",
+          reason: "승인 snapshot·binding·repository 권위 context를 확보하지 못했습니다.",
+        },
+      }],
+    })).toMatchObject({
+      phase: "blocked",
+      label: "추가 설정 필요",
+      step: 1,
+      tone: "failed",
+    });
+  });
+
+  it("ignores a blocker from an older recovery attempt after a new selection", () => {
+    expect(recoveryProgressState({
+      actionRoute: "safe_pr",
+      selectionAccepted: true,
+      audit: [
+        {
+          event_id: "old-blocker",
+          subject: "rca.action_required",
+          source: "dispatch-worker",
+          created_at: "2026-07-24T01:00:00Z",
+          causation_id: null,
+          journey_stage: "recovery",
+          payload_summary: {
+            reason_code: "gitops_authority_unavailable",
+            reason: "old attempt failed",
+          },
+        },
+        {
+          event_id: "new-selection",
+          subject: "recovery.action_selected",
+          source: "api-gateway",
+          created_at: "2026-07-24T01:01:00Z",
+          causation_id: null,
+          journey_stage: "recovery",
+          payload_summary: {},
+        },
+      ],
+    })).toMatchObject({
+      phase: "submitting",
+      label: "PR 생성 요청됨",
+      latestEvent: { event_id: "new-selection" },
+    });
+  });
+
+  it("applies only a blocker emitted after the latest recovery selection", () => {
+    expect(recoveryProgressState({
+      actionRoute: "safe_pr",
+      selectionAccepted: true,
+      audit: [
+        {
+          event_id: "old-blocker",
+          subject: "rca.action_required",
+          source: "dispatch-worker",
+          created_at: "2026-07-24T01:00:00Z",
+          causation_id: null,
+          journey_stage: "recovery",
+          payload_summary: {
+            reason_code: "gitops_authority_unavailable",
+            reason: "old attempt failed",
+          },
+        },
+        {
+          event_id: "new-selection",
+          subject: "recovery.action_selected",
+          source: "api-gateway",
+          created_at: "2026-07-24T01:01:00Z",
+          causation_id: null,
+          journey_stage: "recovery",
+          payload_summary: {},
+        },
+        {
+          event_id: "new-blocker",
+          subject: "rca.action_required",
+          source: "dispatch-worker",
+          created_at: "2026-07-24T01:02:00Z",
+          causation_id: "new-selection",
+          journey_stage: "recovery",
+          payload_summary: {
+            reason_code: "gitops_authority_mismatch",
+            reason: "new attempt failed",
+          },
+        },
+      ],
+    })).toMatchObject({
+      phase: "blocked",
+      label: "추가 설정 필요",
+      latestEvent: { event_id: "new-blocker" },
     });
   });
 
@@ -146,5 +288,55 @@ describe("recoveryProgressState", () => {
       step: 3,
       tone: "approval",
     });
+  });
+
+  it("does not let an old PR URL overwrite deploy or stabilization truth", () => {
+    const deploying = recoveryProgressState({ status: "deploy_pending" });
+    expect(withCreatedPullRequest(
+      deploying,
+      "https://github.com/kyro/platform/pull/17",
+      "PR 생성됨",
+    )).toBe(deploying);
+  });
+});
+
+describe("currentRecoveryAttemptPrUrl", () => {
+  const planWithLifecycle = (
+    lifecycle: Record<string, unknown>,
+  ): RecoveryPlan => ({
+    lifecycle,
+  } as unknown as RecoveryPlan);
+  const plan = planWithLifecycle({
+      attempt: { id: "attempt-2", number: 2 },
+      pr: {
+        url: "https://github.com/kyro/platform/pull/22",
+        attempt_id: "attempt-2",
+      },
+  });
+
+  it("returns only the PR bound to the current attempt", () => {
+    expect(currentRecoveryAttemptPrUrl(plan)).toBe(
+      "https://github.com/kyro/platform/pull/22",
+    );
+  });
+
+  it("does not reuse a PR from an older attempt", () => {
+    expect(currentRecoveryAttemptPrUrl(
+      planWithLifecycle({
+        attempt: { id: "attempt-3", number: 3 },
+        pr: {
+          url: "https://github.com/kyro/platform/pull/22",
+          attempt_id: "attempt-2",
+        },
+      }),
+    )).toBeNull();
+  });
+
+  it("does not fall back to an unscoped legacy URL", () => {
+    expect(currentRecoveryAttemptPrUrl(
+      planWithLifecycle({
+        pr: { url: "https://github.com/kyro/platform/pull/17" },
+      }),
+    )).toBeNull();
   });
 });

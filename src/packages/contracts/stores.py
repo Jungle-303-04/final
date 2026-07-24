@@ -19,6 +19,19 @@ class RcaStore(Protocol):
         self, correlation_id: str, workspace_id: str, kind: str, body: JsonObject
     ) -> None: ...
 
+    async def upsert_rca_enriched_evidence_window(
+        self,
+        *,
+        evidence_key: str,
+        workspace_id: str,
+        cluster_id: str,
+        correlation_id: str,
+        window_start: str,
+        source_id: str,
+        agent_id: str | None,
+        payload: JsonObject,
+    ) -> bool: ...
+
     async def get_evidence_payload(
         self, workspace_id: str, correlation_id: str, kind: str
     ) -> JsonObject | None: ...
@@ -37,6 +50,30 @@ class RcaStore(Protocol):
     async def get_evidence_window(self, evidence_key: str) -> JsonObject | None: ...
 
     async def get_evidence_window_payload(self, evidence_key: str) -> JsonObject | None: ...
+
+    async def list_aligned_evidence_window_payloads(
+        self,
+        workspace_id: str,
+        cluster_id: str,
+        observed_at: str,
+        *,
+        exclude_source_id: str,
+        before_seconds: int = 600,
+        after_seconds: int = 60,
+        limit: int = 12,
+    ) -> list[JsonObject]: ...
+
+    async def list_aligned_alertmanager_window_payloads(
+        self,
+        workspace_id: str,
+        cluster_id: str,
+        observed_at: str,
+        *,
+        source_id: str,
+        before_seconds: int = 60,
+        after_seconds: int = 600,
+        limit: int = 12,
+    ) -> list[JsonObject]: ...
 
     async def save_rca_report(
         self,
@@ -77,6 +114,19 @@ class RcaBacklogStore(Protocol):
 
 
 class RecoveryPlanStore(Protocol):
+    async def get_cluster_registration(
+        self,
+        workspace_id: str,
+        cluster_id: str,
+    ) -> JsonObject | None: ...
+
+    async def get_evidence_payload(
+        self,
+        workspace_id: str,
+        correlation_id: str,
+        kind: str,
+    ) -> JsonObject | None: ...
+
     async def upsert_recovery_plan(
         self,
         correlation_id: str,
@@ -94,6 +144,76 @@ class RecoveryPlanStore(Protocol):
         workspace_id: str,
         plan: JsonObject,
     ) -> None: ...
+
+    async def reopen_recovery_plan_action(
+        self,
+        plan_id: str,
+        workspace_id: str,
+        action_id: str,
+    ) -> bool: ...
+
+    async def get_recovery_plan_by_correlation(
+        self,
+        correlation_id: str,
+        workspace_id: str,
+    ) -> JsonObject | None: ...
+
+    async def get_workflow_approval(
+        self,
+        approval_id: str,
+        workspace_id: str = "default",
+    ) -> JsonObject | None: ...
+
+    async def update_recovery_plan_lifecycle_if_status(
+        self,
+        plan_id: str,
+        workspace_id: str,
+        *,
+        expected_statuses: tuple[str, ...],
+        status: str,
+        lifecycle: JsonObject,
+        clear_selection: bool = False,
+    ) -> JsonObject | None: ...
+
+    async def get_recovery_plan_for_workflow(
+        self,
+        workspace_id: str,
+        workflow_run_id: str,
+        binding_id: str,
+        application_id: str,
+    ) -> JsonObject | None: ...
+
+    async def list_recovery_verification_plans(
+        self,
+        workspace_id: str,
+        cluster_id: str,
+        *,
+        limit: int = 100,
+    ) -> list[JsonObject]: ...
+
+    async def expire_recovery_verifications(
+        self,
+        *,
+        now: object | None = None,
+        limit: int = 100,
+    ) -> list[JsonObject]: ...
+
+    async def get_evidence_window_payload_for_workspace(
+        self,
+        workspace_id: str,
+        evidence_key: str,
+    ) -> JsonObject | None: ...
+
+    async def list_alert_events(
+        self,
+        workspace_id: str,
+        *,
+        limit: int = 100,
+    ) -> list[JsonObject]: ...
+
+    async def current_database_time(self) -> object: ...
+
+    async def get_workflow_run(self, workflow_run_id: str) -> JsonObject | None: ...
 
 
 class RepoChangeStore(Protocol):

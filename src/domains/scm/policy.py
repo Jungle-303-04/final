@@ -164,5 +164,9 @@ def safe_pr_failed_body(
         patch_sha256=request.patch_sha256,
         reason_code=result.reason_code,
         stage=stage,
-        details=result.details,
+        details={
+            **result.details,
+            "approval_ref": request.approval_ref,
+            "policy_decision_ref": request.policy_decision_ref,
+        },
     )

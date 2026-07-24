@@ -9,7 +9,7 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import cast, delete, func, or_, select, tuple_, update
+from sqlalchemy import and_, cast, delete, func, or_, select, tuple_, update
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
@@ -974,6 +974,147 @@ class TargetAgentRepository(DatabaseConnection):
         with self.connection() as conn:
             payload = conn.execute(statement).scalar_one_or_none()
         return payload if isinstance(payload, dict) else None
+
+    def upsert_rca_enriched_evidence_window(
+        self,
+        *,
+        evidence_key: str,
+        workspace_id: str,
+        cluster_id: str,
+        correlation_id: str,
+        window_start: str,
+        source_id: str,
+        agent_id: str | None,
+        payload: JsonObject,
+    ) -> bool:
+        """Persist the exact joined payload exposed by clickable RCA references."""
+
+        table = EvidenceWindow.__table__
+        insert = pg_insert(table).values(
+            evidence_key=evidence_key,
+            workspace_id=workspace_id,
+            cluster_id=cluster_id,
+            source_id=source_id,
+            window_start=window_start,
+            agent_id=agent_id,
+            event_id=f"derived:{correlation_id}",
+            correlation_id=correlation_id,
+            payload=payload,
+            updated_at=func.now(),
+        )
+        statement = (
+            insert.on_conflict_do_update(
+                index_elements=[table.c.evidence_key],
+                set_={
+                    "source_id": insert.excluded.source_id,
+                    "window_start": insert.excluded.window_start,
+                    "agent_id": insert.excluded.agent_id,
+                    "payload": insert.excluded.payload,
+                    "updated_at": func.now(),
+                },
+                where=and_(
+                    table.c.workspace_id == insert.excluded.workspace_id,
+                    table.c.cluster_id == insert.excluded.cluster_id,
+                    table.c.correlation_id == insert.excluded.correlation_id,
+                ),
+            )
+            .returning(table.c.evidence_key)
+        )
+        with self.connection() as conn:
+            saved_key = conn.execute(statement).scalar_one_or_none()
+        return saved_key == evidence_key
+
+    def list_aligned_evidence_window_payloads(
+        self,
+        workspace_id: str,
+        cluster_id: str,
+        observed_at: str,
+        *,
+        exclude_source_id: str,
+        before_seconds: int = 600,
+        after_seconds: int = 60,
+        limit: int = 12,
+    ) -> list[JsonObject]:
+        """Read bounded adjacent windows inside one exact tenant and cluster."""
+
+        try:
+            observed = datetime.fromisoformat(observed_at.replace("Z", "+00:00"))
+        except (TypeError, ValueError):
+            return []
+        if observed.tzinfo is None:
+            observed = observed.replace(tzinfo=UTC)
+        before = max(0, min(int(before_seconds), 3600))
+        after = max(0, min(int(after_seconds), 300))
+        max_rows = max(1, min(int(limit), 50))
+        table = EvidenceWindow.__table__
+        statement = (
+            select(
+                table.c.evidence_key,
+                table.c.source_id,
+                table.c.window_start,
+                table.c.agent_id,
+                table.c.payload,
+                table.c.updated_at,
+            )
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.cluster_id == cluster_id,
+                table.c.source_id != exclude_source_id,
+                table.c.agent_id.is_not(None),
+                table.c.updated_at >= observed - timedelta(seconds=before),
+                table.c.updated_at <= observed + timedelta(seconds=after),
+            )
+            .order_by(table.c.updated_at.desc(), table.c.evidence_key.desc())
+            .limit(max_rows)
+        )
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        return [dict(row) for row in rows if isinstance(row.get("payload"), dict)]
+
+    def list_aligned_alertmanager_window_payloads(
+        self,
+        workspace_id: str,
+        cluster_id: str,
+        observed_at: str,
+        *,
+        source_id: str,
+        before_seconds: int = 60,
+        after_seconds: int = 600,
+        limit: int = 12,
+    ) -> list[JsonObject]:
+        """Read adjacent Alertmanager windows for a later Agent evidence window."""
+
+        try:
+            observed = datetime.fromisoformat(observed_at.replace("Z", "+00:00"))
+        except (TypeError, ValueError):
+            return []
+        if observed.tzinfo is None:
+            observed = observed.replace(tzinfo=UTC)
+        before = max(0, min(int(before_seconds), 300))
+        after = max(0, min(int(after_seconds), 3600))
+        max_rows = max(1, min(int(limit), 50))
+        table = EvidenceWindow.__table__
+        statement = (
+            select(
+                table.c.evidence_key,
+                table.c.source_id,
+                table.c.window_start,
+                table.c.payload,
+                table.c.updated_at,
+            )
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.cluster_id == cluster_id,
+                table.c.source_id == source_id,
+                table.c.updated_at >= observed - timedelta(seconds=before),
+                table.c.updated_at <= observed + timedelta(seconds=after),
+            )
+            .order_by(table.c.updated_at.desc(), table.c.evidence_key.desc())
+            .limit(max_rows)
+        )
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        return [dict(row) for row in rows if isinstance(row.get("payload"), dict)]
 
     def get_evidence_window_payload_for_workspace(
         self, workspace_id: str, evidence_key: str

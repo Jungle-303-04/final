@@ -5,7 +5,7 @@ import {
   approveResourceManifestEdit,
   getCommandStatus,
   getResourceManifestSource,
-  isResourceManifestSourceStale,
+  isResourceManifestSourceConflict,
   manifestIdempotencyKey,
   previewResourceManifestEdit,
   resourceManifestFailureRemediation,
@@ -24,12 +24,6 @@ import { BLUE, HP, MONO, TINT, TYPE, UI, inkA } from "./theme";
 import { DiffCodeView, YamlCodeView } from "./YamlCodeView";
 
 type Phase = "loading" | "ready" | "previewing" | "submitting" | "failed";
-type SourceRefreshNotice = {
-  title: string;
-  tone: "neutral" | "warn";
-  message: string;
-};
-
 interface LiveResourceManifestEditorProps {
   resourceId: string;
   resolving?: boolean;
@@ -70,8 +64,9 @@ export function LiveResourceManifestEditor({
   const [applyReceipt, setApplyReceipt] = useState<ResourceManifestApplyEndpoint | null>(null);
   const [applyStatus, setApplyStatus] = useState<CommandStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [sourceRefreshNotice, setSourceRefreshNotice] = useState<SourceRefreshNotice | null>(null);
   const [failureRemediation, setFailureRemediation] = useState<ResourceManifestRemediation>("none");
+  const [sourceConflictNotice, setSourceConflictNotice] = useState<string | null>(null);
+  const [sourceRefreshRequired, setSourceRefreshRequired] = useState(false);
   const controller = useRef<AbortController | null>(null);
 
   const load = async (selectedApplicationId?: string | null) => {
@@ -80,8 +75,9 @@ export function LiveResourceManifestEditor({
     controller.current = next;
     setPhase("loading");
     setError(null);
-    setSourceRefreshNotice(null);
     setFailureRemediation("none");
+    setSourceConflictNotice(null);
+    setSourceRefreshRequired(false);
     setPreview(null);
     setApproval(null);
     setEmergencyApproval(null);
@@ -120,8 +116,9 @@ export function LiveResourceManifestEditor({
         setApplyReceipt(null);
         setApplyStatus(null);
         setError(null);
-        setSourceRefreshNotice(null);
         setFailureRemediation("none");
+        setSourceConflictNotice(null);
+        setSourceRefreshRequired(false);
         setPhase("ready");
       } catch (cause) {
         if (next.signal.aborted) return;
@@ -178,63 +175,77 @@ export function LiveResourceManifestEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 콜백 아이덴티티가 아니라 editable 변화에만 반응
   }, [editable]);
 
+  const invalidateSourceBoundState = () => {
+    setPreview(null);
+    setConfirmed(false);
+    setApproval(null);
+    setApprovalDecision(null);
+    setApprovalDecisionError(null);
+    setEmergencyApproval(null);
+    setApplyReceipt(null);
+    setApplyStatus(null);
+  };
+
+  const refreshLatestSourcePreservingYaml = async () => {
+    controller.current?.abort();
+    const next = new AbortController();
+    controller.current = next;
+    setSourceRefreshRequired(true);
+    setPhase("submitting");
+    setError(null);
+    setFailureRemediation("none");
+    try {
+      const loaded = await getResourceManifestSource(
+        resourceId,
+        applicationId || source?.selected?.application_id || null,
+        next.signal,
+      );
+      if (next.signal.aborted) return;
+      if (
+        loaded.status !== "available"
+        || loaded.selected === null
+        || loaded.base_sha === null
+        || loaded.source_sha256 === null
+        || loaded.content === null
+      ) {
+        throw new Error("최신 Git 원본을 편집 가능한 상태로 확인하지 못했습니다.");
+      }
+      setSource(loaded);
+      setApplicationId(loaded.selected.application_id);
+      setSourceRefreshRequired(false);
+      setSourceConflictNotice(
+        "Git 원본이 변경되어 최신 기준을 다시 불러왔습니다. 작성 중인 YAML은 보존했지만 이전 미리보기와 확인은 무효화했습니다. 변경 검증·미리보기를 다시 실행하고 확인한 뒤 요청하세요.",
+      );
+      setPhase("ready");
+    } catch (cause) {
+      if (next.signal.aborted) return;
+      setError(`최신 Git 원본을 다시 불러오지 못했습니다. ${resourceManifestFailureText(cause)}`);
+      setPhase("failed");
+    }
+  };
+
+  const recoverSourceConflict = async (cause: unknown): Promise<boolean> => {
+    if (!isResourceManifestSourceConflict(cause)) return false;
+    invalidateSourceBoundState();
+    setSourceConflictNotice(
+      "Git 원본이 편집 중 변경되었습니다. 작성 중인 YAML을 유지한 채 최신 기준을 다시 불러오고 있습니다.",
+    );
+    await refreshLatestSourcePreservingYaml();
+    return true;
+  };
+
   const runPreview = async () => {
     if (!editInput) return;
     setPhase("previewing");
     setError(null);
-    setSourceRefreshNotice(null);
     setApproval(null);
     setApplyReceipt(null);
     try {
       setPreview(await previewResourceManifestEdit(resourceId, editInput));
+      setSourceConflictNotice(null);
       setPhase("ready");
     } catch (cause) {
-      if (isResourceManifestSourceStale(cause)) {
-        try {
-          const loaded = await getResourceManifestSource(resourceId, applicationId);
-          if (
-            loaded.status !== "available"
-            || loaded.selected === null
-            || loaded.base_sha === null
-            || loaded.source_sha256 === null
-            || loaded.content === null
-          ) throw cause;
-
-          const manifestChanged = loaded.source_sha256 !== editInput.sourceSha256;
-          setSource(loaded);
-          setApplicationId(loaded.selected.application_id);
-          setPreview(null);
-          setConfirmed(false);
-
-          if (manifestChanged) {
-            setSourceRefreshNotice({
-              title: "Git 원본 변경 감지",
-              tone: "warn",
-              message: "편집 중인 YAML 파일도 변경되어 자동 재검증을 중단했습니다. 작성한 내용은 보존했습니다. 다시 검증하면 최신 Git 원본과의 diff를 확인할 수 있습니다.",
-            });
-          } else {
-            const refreshedInput = {
-              applicationId: loaded.selected.application_id,
-              baseSha: loaded.base_sha,
-              sourceSha256: loaded.source_sha256,
-              sourceRevisionToken: loaded.source_revision_token,
-              editedYaml: yaml,
-            };
-            setPreview(await previewResourceManifestEdit(resourceId, refreshedInput));
-            setSourceRefreshNotice({
-              title: "최신 Git 기준으로 재검증됨",
-              tone: "neutral",
-              message: "다른 파일의 변경으로 기준 commit만 이동했습니다. 작성한 YAML은 유지했고 최신 commit 기준 검증을 완료했습니다.",
-            });
-          }
-          setPhase("ready");
-          return;
-        } catch (refreshCause) {
-          setError(resourceManifestFailureText(refreshCause));
-          setPhase("failed");
-          return;
-        }
-      }
+      if (await recoverSourceConflict(cause)) return;
       setError(resourceManifestFailureText(cause));
       setPhase("failed");
     }
@@ -254,6 +265,7 @@ export function LiveResourceManifestEditor({
       }));
       setPhase("ready");
     } catch (cause) {
+      if (await recoverSourceConflict(cause)) return;
       setError(resourceManifestFailureText(cause));
       setPhase("failed");
     }
@@ -301,6 +313,7 @@ export function LiveResourceManifestEditor({
       }));
       setPhase("ready");
     } catch (cause) {
+      if (await recoverSourceConflict(cause)) return;
       setError(resourceManifestFailureText(cause));
       setPhase("failed");
     }
@@ -423,10 +436,10 @@ export function LiveResourceManifestEditor({
         <span style={{ marginLeft: "auto", fontFamily: MONO, color: UI.ink3 }}>commit {source.base_sha?.slice(0, 12)}</span>
       </div>
       <textarea aria-label="Git YAML 원본 편집기" value={yaml} disabled={busy || !!approval || !!emergencyApproval || !!applyReceipt}
-        onChange={(event) => { setYaml(event.currentTarget.value); setPreview(null); setConfirmed(false); setSourceRefreshNotice(null); }} spellCheck={false}
+        onChange={(event) => { setYaml(event.currentTarget.value); setPreview(null); setConfirmed(false); setSourceConflictNotice(null); }} spellCheck={false}
         style={{ width: "100%", minHeight: wide ? 480 : 360, resize: "vertical", boxSizing: "border-box", border: `1px solid ${UI.line}`, borderRadius: 12, padding: 14, background: "#0d1117", color: "#e6edf3", fontFamily: MONO, fontSize: TYPE.code, lineHeight: 1.6, outline: "none" }} />
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-        <ActionButton disabled={busy} onClick={() => void runPreview()}>
+        <ActionButton disabled={busy || sourceRefreshRequired} onClick={() => void runPreview()}>
           {phase === "previewing" ? "검증 중…" : "변경 검증·미리보기"}
         </ActionButton>
         {preview && <Pill tone={preview.valid ? "ok" : "warn"}>{preview.valid ? "서버 검증 통과" : "YAML 오류"}</Pill>}
@@ -438,9 +451,16 @@ export function LiveResourceManifestEditor({
       {preview?.errors.map((item) => <ManifestNotice key={item} tone="error" title="검증 오류">{item}</ManifestNotice>)}
       {preview?.warnings.map((item) => <ManifestNotice key={item} tone="warn" title="검토 필요">{item}</ManifestNotice>)}
       {preview?.apply_reason_codes.map((item) => <ManifestNotice key={item} tone="warn" title="즉시 적용 제한">{reasonLabel(item)}</ManifestNotice>)}
-      {sourceRefreshNotice && (
-        <ManifestNotice tone={sourceRefreshNotice.tone} title={sourceRefreshNotice.title}>
-          {sourceRefreshNotice.message}
+      {sourceConflictNotice && (
+        <ManifestNotice tone="warn" title="Git 원본 변경 감지">
+          {sourceConflictNotice}
+          {sourceRefreshRequired && phase === "failed" && (
+            <div style={{ marginTop: 8 }}>
+              <ActionButton disabled={false} onClick={() => void refreshLatestSourcePreservingYaml()}>
+                최신 Git 기준 다시 불러오기
+              </ActionButton>
+            </div>
+          )}
         </ManifestNotice>
       )}
       {error && <ManifestNotice tone="error" title="YAML 요청 실패">{error}</ManifestNotice>}

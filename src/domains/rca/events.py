@@ -19,6 +19,24 @@ from packages.contracts.gitops import (
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID
 
 MAX_EVIDENCE_EVENT_SUMMARY_BYTES = 2048
+RCA_ENRICHED_EVIDENCE_KEY_SEGMENT = "rca-enriched"
+
+
+def rca_enriched_evidence_key(
+    workspace_id: str,
+    cluster_id: str,
+    correlation_id: str,
+) -> str:
+    """Stable key for the exact server-enriched evidence payload used by RCA."""
+
+    return ":".join(
+        (
+            workspace_id,
+            cluster_id,
+            RCA_ENRICHED_EVIDENCE_KEY_SEGMENT,
+            correlation_id,
+        )
+    )
 
 
 @event(EventSubject.CLUSTER_EVIDENCE_RECEIVED)
@@ -542,6 +560,10 @@ class RecoveryPlan(EventBody):
     execution_route: str
     selection_required: bool
     candidates: list[RecoveryActionCandidate]
+    # Safe PR 생성→merge→exact binding deploy→5~10분 안정화 검증의 내구 상태.
+    # 기존 recovery_plans.payload JSONB에 additive하게 보존하므로 schema migration이
+    # 필요 없고, API는 이 서버 소유 상태만 읽어 UI에 표시한다.
+    lifecycle: JsonObject = field(default_factory=dict)
 
 
 @event(EventSubject.RECOVERY_PLANNED)
@@ -574,6 +596,117 @@ class RecoveryActionSelectedBody(EventBody):
     selected_by: str
     auto_selected: bool
     reason: str
+    workspace_id: str = DEFAULT_WORKSPACE_ID
+
+
+@event(EventSubject.RECOVERY_PR_TRACKED)
+@dataclass(frozen=True)
+class RecoveryPrTrackedBody(EventBody):
+    """recovery.pr.tracked — 실제 생성된 PR과 원 RCA/권위 identity를 연결."""
+
+    plan_id: str
+    incident_id: str
+    pr_url: str
+    repository_id: str
+    repo_ref: str
+    binding_id: str
+    application_id: str
+    base_branch: str
+    workspace_id: str = DEFAULT_WORKSPACE_ID
+
+
+@event(EventSubject.RECOVERY_PR_MERGED)
+@dataclass(frozen=True)
+class RecoveryPrMergedBody(EventBody):
+    """recovery.pr.merged — signed GitHub closed+merged webhook 확인 결과."""
+
+    plan_id: str
+    incident_id: str
+    pr_url: str
+    merge_commit_sha: str
+    repository_id: str
+    repo_ref: str
+    binding_id: str
+    application_id: str
+    workflow_run_id: str
+    cluster_id: str
+    workspace_id: str = DEFAULT_WORKSPACE_ID
+
+
+@event(EventSubject.RECOVERY_VERIFICATION_STARTED)
+@dataclass(frozen=True)
+class RecoveryVerificationStartedBody(EventBody):
+    """recovery.verification.started — exact deploy 성공 후 안정화 창 시작."""
+
+    plan_id: str
+    incident_id: str
+    workflow_run_id: str
+    started_at: str
+    deadline_at: str
+    expected: JsonObject
+    before: JsonObject
+    workspace_id: str = DEFAULT_WORKSPACE_ID
+
+
+@event(EventSubject.RECOVERY_VERIFICATION_UPDATED)
+@dataclass(frozen=True)
+class RecoveryVerificationUpdatedBody(EventBody):
+    """recovery.verification.updated — 최신 창 판정과 before/after 근거."""
+
+    plan_id: str
+    incident_id: str
+    status: str
+    reason_code: str
+    reason: str
+    evidence_ref: str
+    before: JsonObject
+    after: JsonObject
+    workspace_id: str = DEFAULT_WORKSPACE_ID
+
+
+@event(EventSubject.RECOVERY_VERIFICATION_FAILED)
+@dataclass(frozen=True)
+class RecoveryVerificationFailedBody(EventBody):
+    """recovery.verification.failed — 배포/검증 실패를 정직하게 기록."""
+
+    plan_id: str
+    incident_id: str
+    reason_code: str
+    reason: str
+    evidence_ref: str
+    before: JsonObject = field(default_factory=dict)
+    after: JsonObject = field(default_factory=dict)
+    workspace_id: str = DEFAULT_WORKSPACE_ID
+
+
+@event(EventSubject.RECOVERY_RETRY_REQUESTED)
+@dataclass(frozen=True)
+class RecoveryRetryRequestedBody(EventBody):
+    """recovery.retry.requested — failed stage를 동일 identity로 명시적 재시도."""
+
+    plan_id: str
+    incident_id: str
+    action_id: str
+    retry_stage: str
+    attempt: int
+    requested_by: str
+    reason: str
+    workflow_run_id: str | None = None
+    workspace_id: str = DEFAULT_WORKSPACE_ID
+
+
+@event(EventSubject.INCIDENT_RESOLVED)
+@dataclass(frozen=True)
+class IncidentResolvedBody(EventBody):
+    """incident.resolved — 안정화 검증을 통과한 장애만 종결."""
+
+    incident_id: str
+    cluster_id: str
+    reason: str
+    evidence_ref: str
+    recovery_plan_id: str
+    before: JsonObject
+    after: JsonObject
     workspace_id: str = DEFAULT_WORKSPACE_ID
 
 

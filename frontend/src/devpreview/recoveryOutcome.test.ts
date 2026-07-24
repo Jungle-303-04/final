@@ -121,4 +121,30 @@ describe("recoveryOutcomeNotices", () => {
       "대상 네임스페이스가 클러스터 연결 시 허용한 제어 범위 밖입니다. 클러스터 설정의 제어 네임스페이스를 확인해 주세요.",
     );
   });
+
+  it("reports an authority blocker instead of leaving PR creation pending", () => {
+    const notices = recoveryOutcomeNotices({
+      actionRoute: "safe_pr",
+      audit: [
+        event("selected", "recovery.action_selected", {}, "2026-07-24T01:00:00Z"),
+        event("blocked", "rca.action_required", {
+          reason_code: "gitops_authority_unavailable",
+          reason: "승인 snapshot·binding·repository 권위 context를 확보하지 못했습니다.",
+        }),
+      ],
+      issueStatus: "recovery_selected",
+      selectionEventId: "selected",
+      submittedAt: "2026-07-24T01:00:00Z",
+    });
+
+    expect(notices).toEqual([
+      expect.objectContaining({
+        kind: "recovery_blocked",
+        terminal: true,
+        title: "복구 PR 생성을 시작할 수 없습니다.",
+        summary: "저장소·배포 바인딩·승인 스냅샷 연결이 필요합니다.",
+        detail: "승인 snapshot·binding·repository 권위 context를 확보하지 못했습니다.",
+      }),
+    ]);
+  });
 });

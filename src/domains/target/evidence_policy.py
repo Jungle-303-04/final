@@ -50,6 +50,14 @@ STANDARD_EVIDENCE_PROFILE: EvidenceProfile = "standard"
 DEMO_EVIDENCE_PROFILE: EvidenceProfile = "demo"
 MANAGEMENT_EVIDENCE_PROFILE: EvidenceProfile = "management"
 EVIDENCE_PROVIDER_KEYS = ("kubernetes", "metrics", "logs", "traces", "metadata")
+STANDARD_SLI_FAILURE_RATIO_METRIC = "opsia_sli_failure_ratio"
+STANDARD_SLI_REQUEST_RATE_METRIC = "opsia_sli_request_rate"
+CONTINUITY_ACTIVE_SESSIONS_METRIC = "opsia_continuity_active_sessions"
+STANDARD_SLI_REQUIRED_MATCHERS = (
+    'namespace!=""',
+    'resource_kind!=""',
+    'resource_name!=""',
+)
 
 COST_NAMESPACE_HOURLY_QUERY = """sum by (namespace) (
   label_replace(avg_over_time(container_cpu_allocation{namespace!=""}[1h]), "namespace", "$1", "exported_namespace", "(.+)")
@@ -367,6 +375,65 @@ def evidence_provider_queries(
             query_scope="cluster",
         )
         queries = [
+            _query(
+                source="prometheus",
+                name=STANDARD_SLI_FAILURE_RATIO_METRIC,
+                description=(
+                    "Standard application admission/error SLI ratio scoped by exact "
+                    "Kubernetes workload identity."
+                ),
+                query=(
+                    'opsia_sli_failure_ratio{namespace!="",resource_kind!="",'
+                    'resource_name!=""}'
+                ),
+                provenance=_provenance(
+                    cluster_id=cluster_id,
+                    evidence_profile=evidence_profile,
+                    query_scope="cluster",
+                    required_matchers=STANDARD_SLI_REQUIRED_MATCHERS,
+                ),
+            ),
+            _query(
+                source="prometheus",
+                name=STANDARD_SLI_REQUEST_RATE_METRIC,
+                description=(
+                    "Standard application request throughput over one minute, retained "
+                    "with the same workload/SLI labels as the failure ratio."
+                ),
+                query=(
+                    "sum by (namespace, resource_kind, resource_name, service, sli, symptom) ("
+                    "rate(opsia_sli_requests_total{namespace!=\"\",resource_kind!=\"\","
+                    "resource_name!=\"\"}[1m]))"
+                ),
+                provenance=_provenance(
+                    cluster_id=cluster_id,
+                    evidence_profile=evidence_profile,
+                    query_scope="cluster",
+                    required_matchers=STANDARD_SLI_REQUIRED_MATCHERS,
+                ),
+            ),
+            _query(
+                source="prometheus",
+                name=CONTINUITY_ACTIVE_SESSIONS_METRIC,
+                description=(
+                    "Exact protected workload active-session continuity gauge. Raw "
+                    "series are retained so duplicate identities fail closed."
+                ),
+                query=(
+                    'opsia_continuity_active_sessions{namespace!="",'
+                    'resource_kind!="",resource_name!="",continuity_id!="",pod_uid!=""}'
+                ),
+                provenance=_provenance(
+                    cluster_id=cluster_id,
+                    evidence_profile=evidence_profile,
+                    query_scope="cluster",
+                    required_matchers=(
+                        *STANDARD_SLI_REQUIRED_MATCHERS,
+                        'continuity_id!=""',
+                        'pod_uid!=""',
+                    ),
+                ),
+            ),
             _namespace_query(
                 source="prometheus",
                 name="target_pod_info",
@@ -580,11 +647,11 @@ def evidence_provider_queries(
                     ),
                 ]
             )
-        covered = (
-            {"target", "sandbox", "color-turf"}
-            if evidence_profile == DEMO_EVIDENCE_PROFILE
-            else {"target"}
-        )
+        # Demo presets may add optimized queries, but configured control
+        # namespaces still need one unfiltered bounded stream. RCA applies the
+        # incident namespace/Pod/structured identity after collection, so the
+        # policy never encodes an application name, event name, or conclusion.
+        covered = {"target"}
         queries.extend(
             _control_namespace_log_queries(
                 control_namespaces,

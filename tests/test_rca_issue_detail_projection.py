@@ -61,6 +61,8 @@ def test_latest_report_summary_is_one_bounded_batch_without_internal_action() ->
     assert "executive_summary" in literal_sql
     assert "recommended_action" in literal_sql
     assert "evidence_bundle_summary" in literal_sql
+    assert "supporting_evidence" in literal_sql
+    assert "missing_evidence" in literal_sql
     assert "rca_issue_report_summary" in literal_sql
     assert "rca_reports.action" not in sql
     assert len(compiled.params["correlation_id_1"]) == MAX_RCA_REPORT_SUMMARY_BATCH
@@ -164,3 +166,36 @@ def test_issue_item_uses_timeline_payload_copy_when_report_does_not_exist() -> N
     assert item.recommended_action_summary == "대상 워크로드 재시작"
     assert item.evidence_summary == "Kubernetes 상태와 로그가 후보를 지지합니다."
     assert item.evidence_bundle_summary == "5개 provider 수집이 완료됐습니다."
+
+
+def test_issue_item_uses_completed_report_evidence_when_timeline_is_stale() -> None:
+    item = issue_item(
+        {
+            "workspace_id": "default",
+            "correlation_id": "correlation-oom",
+            "cluster_id": "target-1",
+            "incident_id": "incident-oom",
+            "current_subject": "approval.recommended",
+            "status": "approval_recommended",
+            "supporting_evidence": [],
+            "missing_evidence": ["signal:stale"],
+            "issue_severity": "warning",
+            "severity_availability": "available",
+            "severity_reason_code": None,
+            "rca_issue_report_summary": {
+                "supporting_evidence": [
+                    "kubernetes:cluster_resource_state",
+                    "logs:related_logs",
+                    "metrics:telemetry_metrics",
+                ],
+                "missing_evidence": [],
+            },
+        }
+    )
+
+    assert item.supporting_evidence == [
+        "kubernetes:cluster_resource_state",
+        "logs:related_logs",
+        "metrics:telemetry_metrics",
+    ]
+    assert item.missing_evidence == []

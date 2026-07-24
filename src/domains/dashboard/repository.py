@@ -90,6 +90,12 @@ RCA_TIMELINE_STATUS_BY_SUBJECT: dict[str, str] = {
     EventSubject.RECOVERY_PLANNED.value: "recovery_planned",
     EventSubject.RECOVERY_SELECTION_REQUESTED.value: "selection_required",
     EventSubject.RECOVERY_ACTION_SELECTED.value: "recovery_selected",
+    EventSubject.RECOVERY_PR_TRACKED.value: "pr_open",
+    EventSubject.RECOVERY_PR_MERGED.value: "deploy_pending",
+    EventSubject.RECOVERY_VERIFICATION_STARTED.value: "verification_pending",
+    EventSubject.RECOVERY_VERIFICATION_UPDATED.value: "verification_pending",
+    EventSubject.RECOVERY_VERIFICATION_FAILED.value: "failed",
+    EventSubject.INCIDENT_RESOLVED.value: "incident_resolved",
     EventSubject.APPROVAL_RECOMMENDED.value: "approval_recommended",
     EventSubject.COMMAND_REQUESTED.value: "command_requested",
     EventSubject.COMMAND_DISPATCHED.value: "command_dispatched",
@@ -133,6 +139,10 @@ OPEN_INCIDENT_STATUSES: tuple[str, ...] = (
     "pr_patch_prepared",
     "pr_diff_explained",
     "pr_ready_for_creation",
+    "pr_created",
+    "pr_open",
+    "deploy_pending",
+    "verification_pending",
 )
 DEFAULT_OPEN_INCIDENT_EXPIRE_DAYS = 3
 DEFAULT_OPEN_INCIDENT_EXPIRE_LIMIT = 500
@@ -318,6 +328,10 @@ def latest_rca_issue_report_summaries_statement(
             report.c.payload["rca_detail"]["evidence_summary"].astext,
             "evidence_bundle_summary",
             report.c.payload["rca_detail"]["evidence_bundle_summary"].astext,
+            "supporting_evidence",
+            report.c.supporting_evidence,
+            "missing_evidence",
+            report.c.missing_evidence,
         )
     ).label("rca_issue_report_summary")
     return (

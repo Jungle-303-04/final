@@ -3,8 +3,9 @@ from __future__ import annotations
 import hashlib
 import math
 import re
-from dataclasses import dataclass, field
-from typing import Any
+from collections.abc import Mapping
+from dataclasses import dataclass, field, replace
+from typing import Any, Protocol
 
 from domains.command.actions import command_action_for_recovery
 from domains.command.events import CommandRequestedBody
@@ -22,13 +23,24 @@ from domains.rca.events import (
     RecoveryActionSelectedBody,
     RecoveryPlan,
 )
+from domains.rca.recovery_verification import (
+    CONTINUITY_SAMPLE_MAX_AGE_SECONDS,
+    before_alert_snapshot,
+    finite_float,
+    metric_sample_with_identity,
+    nonnegative_int,
+    protected_active_session_series,
+    protected_workload_baseline,
+    protected_workloads,
+    trusted_evidence_window_start,
+)
 from domains.scm.events import (
     SAFE_PR_KIND_PATCH,
     SAFE_PR_KIND_REVIEW_DOC,
     SafePrFilePatch,
     SafePrRequestedBody,
 )
-from packages.config.constants import Command, GitHub, Sandbox, Target
+from packages.config.constants import Command, GitHub, Sandbox
 from packages.contracts.event_bus.bodies import EventBody, JsonObject
 from packages.contracts.gitops_authority import (
     GitOpsAuthorityContext,
@@ -36,6 +48,7 @@ from packages.contracts.gitops_authority import (
     GitOpsAuthorityReadPort,
 )
 from services.ai.agent.defaults import ActionRoutes
+from services.ai.agent.workload_target import resolved_target_from_metadata
 
 UNKNOWN_ROUTE_REASON = "선택된 복구 후보의 route를 처리할 수 없습니다."
 UNSUPPORTED_AUTO_ACTION_REASON = "자동 실행 대상 command action으로 변환할 수 없습니다."
@@ -153,6 +166,29 @@ DEFAULT_APPROVAL_REQUIRED_CONTEXT: JsonObject = {
     "next_action": "review_recovery_action",
 }
 SAFE_PR_TITLE_MAX_LENGTH = 120
+PROTECTED_WORKLOAD_CONTINUITY_CONTRACT = "protected_workload_continuity"
+
+
+class RecoveryEvidenceReadPort(Protocol):
+    async def get_evidence_payload(
+        self,
+        workspace_id: str,
+        correlation_id: str,
+        kind: str,
+    ) -> JsonObject | None: ...
+
+    async def get_cluster_registration(
+        self,
+        workspace_id: str,
+        cluster_id: str,
+    ) -> JsonObject | None: ...
+
+    async def list_alert_events(
+        self,
+        workspace_id: str,
+        *,
+        limit: int,
+    ) -> list[JsonObject]: ...
 
 
 @dataclass(frozen=True)
@@ -195,6 +231,247 @@ class RecoveryDispatcher:
             reason=f"{UNKNOWN_ROUTE_REASON}: {selected.route}",
             evidence_ref=evt.plan.evidence_ref,
             workspace_id=evt.workspace_id,
+        )
+
+
+@dataclass(frozen=True)
+class RecoveryActionPreflight:
+    """HTTP 선택 단계에서 worker와 같은 Safe PR 계약을 미리 검증한다."""
+
+    authority: GitOpsAuthorityReadPort | None
+    evidence: RecoveryEvidenceReadPort | None = None
+    routes: ActionRoutes = field(default_factory=ActionRoutes)
+
+    async def prepare(
+        self,
+        evt: RecoveryActionSelectedBody,
+        correlation_id: str,
+    ) -> RecoveryActionCandidate | RcaActionRequiredBody:
+        if evt.selected.route != self.routes.safe_pr:
+            return evt.selected
+        outcome = await dispatch_safe_pr_body(evt, self.authority, correlation_id)
+        if isinstance(outcome, RcaActionRequiredBody):
+            return outcome
+        if not isinstance(outcome, SafePrRequestedBody):
+            return authority_required_body(
+                evt,
+                "safe_pr_preflight_failed",
+                "Safe PR 사전 검증 결과를 해석할 수 없습니다.",
+                ["gitops_authority_context"],
+            )
+        draft = evt.selected.draft
+        verification_params: JsonObject = {}
+        expected_replicas: int | None = None
+        if (
+            evt.selected.draft.action_type == "replica_scale"
+            and self.authority is not None
+        ):
+            query = authority_query(evt, correlation_id)
+            resolved_authority = await self.authority.load_authority(query)
+            if (
+                resolved_authority is not None
+                and authority_matches_query(resolved_authority, query)
+            ):
+                replacements = scalar_replacements_for(
+                    evt.selected.draft.action_type,
+                    evt.selected,
+                    resolved_authority,
+                )
+                if (
+                    len(replacements) == 1
+                    and replacements[0].field_path == "spec.replicas"
+                    and isinstance(replacements[0].desired_value, int)
+                    and not isinstance(replacements[0].desired_value, bool)
+                    and replacements[0].desired_value > 0
+                ):
+                    expected_replicas = replacements[0].desired_value
+        if (
+            draft.params.get("verification_contract")
+            == PROTECTED_WORKLOAD_CONTINUITY_CONTRACT
+        ):
+            if self.evidence is None:
+                return authority_required_body(
+                    evt,
+                    "pre_recovery_continuity_baseline_missing",
+                    "복구 전 활성 workload continuity evidence reader가 준비되지 않았습니다.",
+                    ["metadata:current_workload_snapshots"],
+                )
+            evidence = await self.evidence.get_evidence_payload(
+                evt.workspace_id,
+                correlation_id,
+                "rca_bundle",
+            )
+            target = {
+                "cluster_id": str(
+                    draft.params.get("cluster_id")
+                    or draft.params.get("cluster")
+                    or evt.plan.target.get("cluster_id")
+                    or ""
+                ),
+                "namespace": str(
+                    draft.params.get("namespace")
+                    or evt.plan.target.get("namespace")
+                    or ""
+                ),
+                "resource_kind": str(
+                    draft.params.get("resource_kind")
+                    or evt.plan.target.get("resource_kind")
+                    or ""
+                ),
+                "resource_name": str(
+                    draft.params.get("resource_name")
+                    or evt.plan.target.get("resource_name")
+                    or ""
+                ),
+            }
+            observed = (
+                protected_workloads(evidence, target)
+                if isinstance(evidence, dict)
+                else None
+            )
+            baseline = protected_workload_baseline(observed or [])
+            if (
+                not observed
+                or any(workload.get("healthy") is not True for workload in observed)
+                or len(baseline) != len(observed)
+            ):
+                return authority_required_body(
+                    evt,
+                    "pre_recovery_continuity_baseline_missing",
+                    (
+                        "복구 전 활성 workload의 UID·Pod UID·시작 시각·재시작 "
+                        "횟수 baseline을 확보하지 못했습니다."
+                    ),
+                    ["metadata:current_workload_snapshots"],
+                )
+            session_baseline = protected_active_session_series(
+                evidence,
+                baseline,
+                evidence_observed_at=trusted_evidence_window_start(
+                    evidence,
+                    expected_workspace_id=evt.workspace_id,
+                    expected_cluster_id=target["cluster_id"],
+                ),
+                max_sample_age_seconds=CONTINUITY_SAMPLE_MAX_AGE_SECONDS,
+            )
+            if not session_baseline:
+                return authority_required_body(
+                    evt,
+                    "pre_recovery_continuity_baseline_missing",
+                    (
+                        "보호 workload별 active session metric의 exact "
+                        "continuity_id·Pod UID baseline을 확보하지 못했습니다."
+                    ),
+                    ["metrics:opsia_continuity_active_sessions"],
+                )
+            failure_ratio_before, failure_ratio_identity = metric_sample_with_identity(
+                evidence,
+                "opsia_sli_failure_ratio",
+                target,
+            )
+            request_rate_baseline, request_rate_identity = metric_sample_with_identity(
+                evidence,
+                "opsia_sli_request_rate",
+                target,
+            )
+            if (
+                failure_ratio_before is None
+                or failure_ratio_identity is None
+                or request_rate_baseline is None
+                or request_rate_baseline <= 0
+                or request_rate_identity is None
+            ):
+                return authority_required_body(
+                    evt,
+                    "pre_recovery_sli_baseline_missing",
+                    (
+                        "복구 전 exact failure-ratio/request-rate SLI series "
+                        "baseline을 확보하지 못했습니다."
+                    ),
+                    [
+                        "metrics:opsia_sli_failure_ratio",
+                        "metrics:opsia_sli_request_rate",
+                    ],
+                )
+            alerts = await self.evidence.list_alert_events(
+                evt.workspace_id,
+                limit=200,
+            )
+            alert_before = before_alert_snapshot(
+                alerts,
+                target=target,
+                correlation_id=correlation_id,
+                incident_id=evt.plan.incident_id,
+            )
+            threshold = finite_float(alert_before.get("threshold"))
+            registration = await self.evidence.get_cluster_registration(
+                evt.workspace_id,
+                target["cluster_id"],
+            )
+            settings = (
+                registration.get("settings")
+                if isinstance(registration, Mapping)
+                and isinstance(registration.get("settings"), Mapping)
+                else {}
+            )
+            evidence_cadence_seconds = nonnegative_int(
+                settings.get("evidence_interval_seconds")
+            )
+            missing_prerequisites: list[str] = []
+            if alert_before.get("available") is not True or threshold is None:
+                missing_prerequisites.append("alertmanager:original_exact_alert")
+            if evidence_cadence_seconds is None or evidence_cadence_seconds <= 0:
+                missing_prerequisites.append("cluster:evidence_cadence")
+            if expected_replicas is None:
+                missing_prerequisites.append("gitops:approved_replica_baseline")
+            if missing_prerequisites:
+                return authority_required_body(
+                    evt,
+                    "recovery_verification_prerequisites_missing",
+                    (
+                        "복구 PR 생성 전에 exact Alertmanager·GitOps·수집 주기 "
+                        "baseline을 확보하지 못했습니다."
+                    ),
+                    missing_prerequisites,
+                )
+            verification_params["protected_baseline"] = baseline
+            verification_params["protected_session_baseline"] = session_baseline
+            verification_params["verification_failure_ratio_before"] = (
+                failure_ratio_before
+            )
+            verification_params["verification_failure_ratio_metric_identity"] = (
+                failure_ratio_identity
+            )
+            verification_params["verification_request_rate_baseline"] = (
+                request_rate_baseline
+            )
+            verification_params["verification_request_rate_metric_identity"] = (
+                request_rate_identity
+            )
+            verification_params["verification_alert_before"] = alert_before
+            verification_params["verification_evidence_cadence_seconds"] = (
+                evidence_cadence_seconds
+            )
+            verification_params["expected_replicas"] = expected_replicas
+        return replace(
+            evt.selected,
+            draft=replace(
+                draft,
+                params={
+                    **draft.params,
+                    "workspace_id": outcome.workspace_id,
+                    "repository_id": outcome.repository_id,
+                    "binding_id": outcome.binding_id,
+                    "application_id": outcome.application_id,
+                    "workflow_run_id": outcome.workflow_run_id,
+                    "environment": outcome.environment,
+                    "manifest_path": outcome.manifest_path,
+                    "repo_ref": outcome.repo_ref,
+                    "base_branch": outcome.base_branch,
+                    "commit_sha": outcome.commit_sha,
+                    **verification_params,
+                },
+            ),
         )
 
 
@@ -242,6 +519,26 @@ def build_safe_pr_request_body(
     authority: GitOpsAuthorityContext | None = None,
 ) -> SafePrRequestedBody | RcaActionRequiredBody:
     draft = selected.draft
+    if authority is None:
+        return RcaActionRequiredBody(
+            reason="Safe PR 생성에 필요한 GitOps 권위 context가 없습니다.",
+            evidence_ref=plan.evidence_ref,
+            workspace_id=workspace_id,
+            reason_code="gitops_authority_unavailable",
+            missing_evidence=["gitops_authority_context"],
+            next_actions=[
+                {
+                    "action_type": "collect_gitops_authority",
+                    "reason": "repository·binding·manifest 권위를 먼저 확인해야 합니다.",
+                    "target": plan.target,
+                }
+            ],
+            diagnostics={
+                "plan_id": plan.plan_id,
+                "action_id": selected.action_id,
+                "route": selected.route,
+            },
+        )
     if not patches:
         return RcaActionRequiredBody(
             reason=f"{MISSING_SAFE_PR_PATCH_REASON}: {selected.title}",
@@ -267,44 +564,21 @@ def build_safe_pr_request_body(
         body=recovery_safe_pr_body(plan, selected),
         provider=GitHub.PROVIDER,
         patches=patches,
-        # 원설계 보존: 운영자 승인까지 끝난 복구는 직접 커밋으로 즉시 반영하고,
-        # high risk 변경만 PR 리뷰 게이트를 유지한다.
-        delivery="pull_request" if selected.risk_level == "high" else "direct_commit",
+        # ``safe_pr`` route는 이름과 사용자 계약 그대로 항상 리뷰 가능한 PR을
+        # 만든다. 승인 완료는 변경 제안 권한이지 base branch 직접 쓰기 권한이
+        # 아니다. 직접 커밋은 별도 route에서 명시적으로 요청해야 한다.
+        delivery="pull_request",
         pr_kind=safe_pr_kind(selected),
         workspace_id=workspace_id,
-        repository_id=(
-            authority.repository_id
-            if authority is not None
-            else target_value(plan, draft.params, "repository_id")
-        ),
-        binding_id=(
-            authority.binding_id
-            if authority is not None
-            else target_value(plan, draft.params, "binding_id")
-        ),
-        application_id=(
-            authority.application_id
-            if authority is not None
-            else target_value(plan, draft.params, "application_id")
-        ),
-        workflow_run_id=(
-            authority.workflow_run_id
-            if authority is not None
-            else target_value(plan, draft.params, "workflow_run_id")
-        ),
-        environment=(
-            authority.environment
-            if authority is not None
-            else target_value(plan, draft.params, "environment", Sandbox.NAMESPACE)
-        ),
-        manifest_path=(
-            authority.manifest_path
-            if authority is not None
-            else target_value(plan, draft.params, "manifest_path", "deploy/k8s")
-        ),
-        repo_ref=authority.repo_ref if authority is not None else "",
-        base_branch=authority.base_branch if authority is not None else "",
-        commit_sha=authority.commit_sha if authority is not None else "",
+        repository_id=authority.repository_id,
+        binding_id=authority.binding_id,
+        application_id=authority.application_id,
+        workflow_run_id=authority.workflow_run_id,
+        environment=authority.environment,
+        manifest_path=authority.manifest_path,
+        repo_ref=authority.repo_ref,
+        base_branch=authority.base_branch,
+        commit_sha=authority.commit_sha,
         approval_ref=as_optional_str(draft.params.get("approval_ref")),
         policy_decision_ref=as_optional_str(draft.params.get("policy_decision_ref")),
     )
@@ -421,20 +695,6 @@ async def dispatch_safe_pr_body(
     correlation_id: str,
 ) -> EventBody:
     selected = evt.selected
-    if selected.draft.action_type in REVIEW_DOC_ACTIONS:
-        return build_safe_pr_request_body(
-            evt.plan,
-            selected,
-            evt.workspace_id,
-            [fallback_recovery_patch(selected)],
-        )
-    if selected.draft.action_type not in AUTHORITY_PATCH_ACTIONS:
-        return authority_required_body(
-            evt,
-            "safe_pr_patch_unsupported",
-            f"지원하지 않는 recovery patch action입니다: {selected.draft.action_type}",
-            ["supported_patch_action"],
-        )
     if authority_port is None or not correlation_id:
         return authority_required_body(
             evt,
@@ -457,6 +717,21 @@ async def dispatch_safe_pr_body(
             "gitops_authority_mismatch",
             "조회된 GitOps 권위 context가 선택된 recovery target과 일치하지 않습니다.",
             ["matching_gitops_authority_context"],
+        )
+    if selected.draft.action_type in REVIEW_DOC_ACTIONS:
+        return build_safe_pr_request_body(
+            evt.plan,
+            selected,
+            evt.workspace_id,
+            [fallback_recovery_patch(selected)],
+            authority,
+        )
+    if selected.draft.action_type not in AUTHORITY_PATCH_ACTIONS:
+        return authority_required_body(
+            evt,
+            "safe_pr_patch_unsupported",
+            f"지원하지 않는 recovery patch action입니다: {selected.draft.action_type}",
+            ["supported_patch_action"],
         )
     try:
         patches = authority_safe_pr_patches(selected, authority)
@@ -484,14 +759,24 @@ def authority_query(
 ) -> GitOpsAuthorityQuery:
     target = evt.plan.target
     draft = evt.selected.draft
+    namespace = str(target.get("namespace") or draft.namespace)
+    resource_kind = str(target.get("resource_kind") or draft.resource_kind)
+    resource_name = str(target.get("resource_name") or draft.resource_name)
+    resolved = resolved_target_from_metadata(
+        namespace,
+        resource_kind,
+        resource_name,
+        target,
+        draft.params,
+    )
     return GitOpsAuthorityQuery(
         correlation_id=correlation_id,
         workspace_id=evt.workspace_id,
         incident_id=evt.plan.incident_id,
         cluster_id=str(target.get("cluster_id") or ""),
-        namespace=str(target.get("namespace") or draft.namespace),
-        resource_kind=str(target.get("resource_kind") or draft.resource_kind),
-        resource_name=str(target.get("resource_name") or draft.resource_name),
+        namespace=resolved.namespace,
+        resource_kind=resolved.resource_kind,
+        resource_name=resolved.resource_name,
     )
 
 
@@ -548,16 +833,6 @@ def authority_required_body(
     )
 
 
-def target_value(
-    plan: RecoveryPlan,
-    params: JsonObject,
-    key: str,
-    default: str = "",
-) -> str:
-    value = params.get(key) or plan.target.get(key) or default
-    return str(value or "")
-
-
 def build_command_request_body(
     plan: RecoveryPlan,
     selected: RecoveryActionCandidate,
@@ -569,19 +844,72 @@ def build_command_request_body(
     action = command_action_for(selected)
     if action is None:
         return None
-    workspace_id = str(plan.target.get("workspace_id") or draft.params.get("workspace_id"))
-    namespace = draft.namespace or Sandbox.NAMESPACE
-    command_target = command_target_name(draft.resource_kind, draft.resource_name, draft.params)
+    workspace_id = exact_nonempty_value(
+        plan.target.get("workspace_id"),
+        draft.params.get("workspace_id"),
+    )
+    cluster_id = exact_nonempty_value(
+        plan.target.get("cluster_id"),
+        draft.params.get("cluster_id"),
+    )
+    environment = exact_nonempty_value(
+        plan.target.get("environment"),
+        draft.params.get("environment"),
+    )
+    namespace = exact_nonempty_value(
+        plan.target.get("namespace"),
+        draft.namespace,
+        draft.params.get("namespace"),
+    )
+    resource_kind = exact_nonempty_value(
+        plan.target.get("resource_kind"),
+        draft.resource_kind,
+    )
+    resource_name = exact_nonempty_value(
+        plan.target.get("resource_name"),
+        draft.resource_name,
+    )
+    if not all(
+        (
+            workspace_id,
+            cluster_id,
+            environment,
+            namespace,
+            resource_kind,
+            resource_name,
+        )
+    ):
+        return None
+    resolved = resolved_target_from_metadata(
+        namespace,
+        resource_kind,
+        resource_name,
+        plan.target,
+        draft.params,
+    )
+    if not all((resolved.namespace, resolved.resource_kind, resolved.resource_name)):
+        return None
+    payload = command_payload_for(
+        action,
+        resolved.resource_name,
+        resolved.namespace,
+        draft.params,
+    )
+    if payload is None:
+        return None
     return CommandRequestedBody(
-        cluster_id=str(plan.target.get("cluster_id") or Target.DEFAULT_CLUSTER_ID),
+        cluster_id=cluster_id,
         action=action,
-        namespace=namespace,
+        namespace=resolved.namespace,
         reason=selected.description,
         diff=Diff(
             resource=command_diff_resource(
-                action, command_target, draft.resource_kind, draft.resource_name
+                action,
+                resolved.resource_name,
+                resolved.resource_kind,
+                resolved.resource_name,
             ),
-            namespace=namespace,
+            namespace=resolved.namespace,
             desired_image="",
             actual_image="",
             risk=Sandbox.RISK_TAG,
@@ -599,7 +927,7 @@ def build_command_request_body(
         application_id=str(draft.params.get("application_id") or ""),
         workflow_run_id=str(draft.params.get("workflow_run_id") or ""),
         binding_id=str(draft.params.get("binding_id") or ""),
-        environment=str(draft.params.get("environment") or "sandbox"),
+        environment=environment,
         requested_by=selected_by,
         approval_ref=as_optional_str(selected.draft.params.get("approval_ref")),
         policy_decision_ref=as_optional_str(selected.draft.params.get("policy_decision_ref")),
@@ -608,7 +936,7 @@ def build_command_request_body(
             "action_id": selected.action_id,
             "auto_selected": auto_selected,
         },
-        payload=command_payload_for(action, command_target, namespace, draft.params),
+        payload=payload,
     )
 
 
@@ -622,21 +950,28 @@ def command_payload_for(
     resource_name: str,
     namespace: str,
     params: JsonObject,
-) -> JsonObject:
+) -> JsonObject | None:
     if action != Command.KUBERNETES_DEPLOYMENT_SCALE_ACTION:
         return {}
     replicas = params.get("replicas")
-    if isinstance(replicas, bool):
-        replicas = None
-    try:
-        replica_count = int(replicas)
-    except (TypeError, ValueError):
-        replica_count = 3
+    if type(replicas) is not int or replicas <= 0:
+        return None
     return {
         "namespace": namespace,
         "name": resource_name,
-        "replicas": replica_count,
+        "replicas": replicas,
     }
+
+
+def exact_nonempty_value(*values: object) -> str:
+    """Resolve one authoritative scalar, rejecting missing or conflicting values."""
+
+    normalized = {
+        value.strip()
+        for value in values
+        if isinstance(value, str) and value.strip()
+    }
+    return next(iter(normalized)) if len(normalized) == 1 else ""
 
 
 def command_diff_resource(
@@ -735,10 +1070,13 @@ def scalar_replacements_for(
         replicas = nested_value(manifest, "spec", "replicas")
         if type(replicas) is not int or not 1 <= replicas < 10:
             return []
-        # 원복 우선: 권위 스냅샷 변경 이력에서 "축소 이전 승인 값"을 찾으면 그 값으로
-        # 되돌린다(설명 계약과 일치). 이력이 특정되지 않으면 +1 증설로 폴백 —
-        # 값은 전부 관측 이력에서만 나오며 합성하지 않는다.
+        # 원복 전략은 권위 스냅샷 변경 이력에서 "축소 이전 승인 값"이 하나로
+        # 특정될 때만 패치를 만든다. 이력이 없거나 모호한데 +1을 합성하면
+        # last_approved_snapshot이라는 사용자 계약을 위반한다.
         previous = previous_replicas_from_changes(authority, replicas)
+        strategy = first_str(selected.draft.params.get("strategy"))
+        if strategy == "last_approved_snapshot" and previous is None:
+            return []
         desired = previous if previous is not None else replicas + 1
         if desired == replicas or not 1 <= desired < 10:
             return []

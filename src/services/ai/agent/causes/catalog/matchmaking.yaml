@@ -1,33 +1,39 @@
 # RCA 원인 룰 카탈로그 — 매치메이킹/로비 입장 실패 계열.
-# 트리거: 대상 클러스터 Alertmanager 의 매치메이킹 실패율 알림
-# (예: demo-game DemoGameJoinStorm, expr find_game_fail_ratio > 0.2).
-# 판별: 알림 fact(alert_name)와 로비 로그의 거절 사유(find_game_rejected reason)로
+# 트리거: 대상 클러스터 Alertmanager 의 표준 애플리케이션 SLI 실패율 알림.
+# 판별: 표준 SLI 알림과 동일 식별자·시간 범위의 구조화 거절 이벤트로
 # "로비 처리 용량 포화 / 게임 룸 부족 / 룸 디렉터리 장애"를 구별한다.
 rules:
   - id: "matchmaking_join_failure"
-    symptoms: ["Matchmaking join failure", "DemoGameJoinStorm"]
+    symptoms: ["Matchmaking join failure", "admission_failure", "DemoGameJoinStorm"]
     required_sources: ["metrics"]
     candidates:
       - candidate_id: "lobby_capacity_saturation"
-        title: "로비(매치메이킹) 처리 용량 포화"
+        title: "로비 처리 용량 부족"
         description: >-
-          입장 요청이 로비 인스턴스의 초당 처리 한도를 넘어 거절되고 있을
-          가능성이 있습니다. 게임 룸과 게임 서버는 정상이지만 신규 입장만
-          실패하는 형태로 나타나며, 로비 replicas 축소 변경 또는 트래픽
-          급증과 겹칠 때 발생합니다.
+          입장 요청이 사건 대상 워크로드의 처리 한도를 넘어 거절되고 있을
+          가능성이 있습니다. 동일 워크로드의 replicas 축소 변경과 표준 SLI,
+          구조화 거절 로그가 시간상 일치할 때만 이 원인을 확정합니다.
         expected_evidence:
           - "metrics:telemetry_metrics"
+          - "logs:related_logs"
+          - "metadata:change_context"
         checks:
-          - "로비(api-server) 로그의 find_game_rejected reason=rate_limited 비율 확인"
-          - "매치메이킹 실패율 지표(find_game_fail_ratio)의 급등 시점 확인"
-          - "최근 배포에서 로비 Deployment replicas 축소 변경 여부 확인"
-          - "게임 룸 파드 상태·리소스가 정상(원인 아님)인지 교차 확인"
+          - "사건 대상 로그의 구조화 거절 reason과 SLI 식별자 일치 확인"
+          - "표준 입장 실패율 SLI의 급등 시점 확인"
+          - "동일 워크로드의 최근 spec.replicas 축소 변경 여부 확인"
         signals:
-          - id: "join_rejection_observed"
+          - id: "standard_sli_alert_identity_verified"
             any_of:
-              - fact: "alert_name=DemoGameJoinStorm"
-              - log_pattern: "find_game_rejected"
-              - log_pattern: "rate_limited"
+              - fact: "standard_sli_alert_identity=verified"
+          - id: "capacity_rejection_identity_verified"
+            any_of:
+              - fact: "structured_rejection_identity=verified:reason=rate_limited"
+              - fact: "structured_rejection_identity=verified:reason=capacity_exhausted"
+              - fact: "structured_rejection_identity=verified:reason=over_capacity"
+              - fact: "structured_rejection_identity=verified:reason=lobby_capacity_exceeded"
+          - id: "replica_reduction_time_aligned"
+            any_of:
+              - fact: "replica_reduction_time_aligned=verified"
       - candidate_id: "no_room_capacity"
         title: "입장 가능한 게임 룸 부족"
         description: >-
@@ -38,14 +44,14 @@ rules:
           - "metrics:telemetry_metrics"
           - "logs:related_logs"
         checks:
-          - "로비 로그의 find_game_rejected reason=no_room 확인"
+          - "사건 대상의 구조화 거절 로그 reason=no_room 확인"
           - "룸별 players/maxPlayers 와 joinLocked 상태 확인"
           - "게임 룸 replicas 수와 실행 상태 확인"
         signals:
-          - id: "no_room_signal"
+          - id: "no_room_identity_verified"
             any_of:
-              - log_pattern: "no_room"
-              - log_pattern: "joinLocked"
+              - fact: "structured_rejection_identity=verified:reason=no_room"
+              - fact: "structured_rejection_identity=verified:reason=join_locked"
       - candidate_id: "room_directory_unavailable"
         title: "룸 디렉터리(오케스트레이터) 응답 실패"
         description: >-
@@ -55,11 +61,11 @@ rules:
           - "metrics:telemetry_metrics"
           - "logs:related_logs"
         checks:
-          - "로비 로그의 directory_unavailable / room_registry_unavailable 확인"
+          - "사건 대상의 구조화 거절 reason과 SLI 식별자 일치 확인"
           - "room-orchestrator 파드 Ready 상태와 재시작 확인"
-          - "로비 → 오케스트레이터 네트워크 경로 확인"
+          - "사건 대상 → 오케스트레이터 네트워크 경로 확인"
         signals:
-          - id: "directory_unavailable_signal"
+          - id: "directory_unavailable_identity_verified"
             any_of:
-              - log_pattern: "directory_unavailable"
-              - log_pattern: "room_registry_unavailable"
+              - fact: "structured_rejection_identity=verified:reason=directory_unavailable"
+              - fact: "structured_rejection_identity=verified:reason=room_registry_unavailable"

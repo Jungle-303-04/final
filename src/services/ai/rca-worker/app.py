@@ -21,7 +21,10 @@ from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.stores import RcaStore
 from packages.runtime.app import App, EventContext
 from services.ai.agent.pipeline import RcaCompletionPipeline
-from services.ai.agent.pipeline.rca_narrative import RcaNarrativeWriter
+from services.ai.agent.pipeline.rca_narrative import (
+    RcaNarrativeWriter,
+    deterministic_rca_narrative,
+)
 
 app = App("rca-worker")
 pipeline = RcaCompletionPipeline()
@@ -62,7 +65,12 @@ async def enriched_report_body(
 ) -> JsonObject:
     """Best-effort narrative enrichment; deterministic RCA persistence always wins."""
     body = result.to_body()
-    body[RCA_NARRATIVE_STATUS_KEY] = RCA_NARRATIVE_UNAVAILABLE
+    fallback = deterministic_rca_narrative(result)
+    if fallback is None:
+        body[RCA_NARRATIVE_STATUS_KEY] = RCA_NARRATIVE_UNAVAILABLE
+    else:
+        body[RCA_NARRATIVE_PAYLOAD_KEY] = fallback
+        body[RCA_NARRATIVE_STATUS_KEY] = RCA_NARRATIVE_GENERATED
     try:
         if describe_llm_client(llm_client).get("provider") == PROVIDER_UNCONFIGURED:
             return body

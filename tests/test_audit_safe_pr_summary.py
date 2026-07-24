@@ -52,3 +52,15 @@ def test_command_rejection_summary_keeps_stable_reason_code() -> None:
         "reason_code": "control_namespace_not_allowed",
         "reason": "backend wording can change independently",
     }
+
+
+def test_recovery_blocker_summary_keeps_machine_reason_code() -> None:
+    summary = summarize_payload(
+        "rca.action_required",
+        {
+            "reason_code": "gitops_authority_unavailable",
+            "reason": "승인 snapshot·binding·repository 권위 context를 확보하지 못했습니다.",
+        },
+    )
+
+    assert summary["reason_code"] == "gitops_authority_unavailable"

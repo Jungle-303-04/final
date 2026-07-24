@@ -14,6 +14,10 @@ require_env() {
 TARGET_CLUSTER="${TARGET_CLUSTER:-}"
 TARGET_CONTEXT="${TARGET_CONTEXT:-${TARGET_CLUSTER}}"
 TARGET_NAMESPACE="${TARGET_NAMESPACE:-target}"
+TARGET_CLUSTER_ID="${TARGET_CLUSTER_ID:-}"
+WORKSPACE_ID="${WORKSPACE_ID:-}"
+MANAGEMENT_API_BASE_URL="${MANAGEMENT_API_BASE_URL:-}"
+ALERTMANAGER_AGENT_TOKEN="${ALERTMANAGER_AGENT_TOKEN:-}"
 
 PROMETHEUS_RELEASE="${PROMETHEUS_RELEASE:-prometheus}"
 LOKI_RELEASE="${LOKI_RELEASE:-loki}"
@@ -32,6 +36,26 @@ TARGET_MINIO_MANIFEST="${TARGET_MINIO_MANIFEST:-${ROOT_DIR}/deploy/target/minio.
 TELEMETRY_ASSET_BASE_URL="${TELEMETRY_ASSET_BASE_URL:-}"
 MINIO_ROOT_USER="${MINIO_ROOT_USER:-minioadmin}"
 MINIO_ROOT_PASSWORD="${MINIO_ROOT_PASSWORD:-}"
+ALERTMANAGER_CONFIG_SECRET="${ALERTMANAGER_CONFIG_SECRET:-kyro-alertmanager-config}"
+PROMETHEUS_SLI_ALERT_NAME="${PROMETHEUS_SLI_ALERT_NAME:-OpsiaSliFailureRatioHigh}"
+TELEMETRY_TEMP_DIR=""
+PROMETHEUS_DYNAMIC_VALUES=""
+ALERTMANAGER_WEBHOOK_URL=""
+
+cleanup() {
+  if [[ -n "${TELEMETRY_TEMP_DIR}" && -d "${TELEMETRY_TEMP_DIR}" ]]; then
+    rm -rf -- "${TELEMETRY_TEMP_DIR}"
+  fi
+}
+
+trap cleanup EXIT
+
+ensure_telemetry_temp_dir() {
+  if [[ -z "${TELEMETRY_TEMP_DIR}" ]]; then
+    TELEMETRY_TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/kyro-telemetry.XXXXXX")"
+    chmod 700 "${TELEMETRY_TEMP_DIR}"
+  fi
+}
 
 need() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -149,6 +173,380 @@ require_tempo_runtime_bounds() {
   done
 }
 
+configure_alertmanager_webhook() {
+  local configured_count=0
+  local config_file
+  local value
+
+  for value in \
+    "${TARGET_CLUSTER_ID}" \
+    "${WORKSPACE_ID}" \
+    "${MANAGEMENT_API_BASE_URL}" \
+    "${ALERTMANAGER_AGENT_TOKEN}"; do
+    if [[ -n "${value}" ]]; then
+      configured_count=$((configured_count + 1))
+    fi
+  done
+  if [[ "${configured_count}" -eq 0 ]]; then
+    return
+  fi
+  if [[ "${configured_count}" -ne 4 ]]; then
+    echo "Alertmanager webhook requires TARGET_CLUSTER_ID, WORKSPACE_ID, MANAGEMENT_API_BASE_URL, and ALERTMANAGER_AGENT_TOKEN" >&2
+    return 1
+  fi
+
+  MANAGEMENT_API_BASE_URL="${MANAGEMENT_API_BASE_URL%/}"
+  ALERTMANAGER_WEBHOOK_URL="$(
+    MANAGEMENT_API_BASE_URL="${MANAGEMENT_API_BASE_URL}" \
+    TARGET_CLUSTER_ID="${TARGET_CLUSTER_ID}" \
+    WORKSPACE_ID="${WORKSPACE_ID}" \
+    python3 - <<'PY'
+import os
+from urllib.parse import urlencode, urlsplit
+
+base = os.environ["MANAGEMENT_API_BASE_URL"]
+parsed = urlsplit(base)
+if (
+    parsed.scheme not in {"http", "https"}
+    or not parsed.hostname
+    or parsed.username is not None
+    or parsed.password is not None
+    or parsed.query
+    or parsed.fragment
+    or parsed.path != "/api"
+):
+    raise SystemExit("MANAGEMENT_API_BASE_URL must be a normalized http(s) URL ending in /api")
+query = urlencode(
+    {
+        "cluster_id": os.environ["TARGET_CLUSTER_ID"],
+        "workspace_id": os.environ["WORKSPACE_ID"],
+    }
+)
+print(f"{base}/webhooks/alertmanager?{query}")
+PY
+  )"
+
+  ensure_telemetry_temp_dir
+  config_file="${TELEMETRY_TEMP_DIR}/alertmanager.json"
+  (
+    umask 077
+    ALERTMANAGER_WEBHOOK_URL="${ALERTMANAGER_WEBHOOK_URL}" \
+    ALERTMANAGER_AGENT_TOKEN="${ALERTMANAGER_AGENT_TOKEN}" \
+    python3 - <<'PY' > "${config_file}"
+import json
+import os
+
+json.dump(
+    {
+        "global": {"resolve_timeout": "5m"},
+        "route": {
+            "receiver": "kyro-rca",
+            "group_by": [
+                "alertname",
+                "opsia_namespace",
+                "opsia_resource_kind",
+                "opsia_resource_name",
+                "opsia_service",
+                "opsia_sli",
+                "opsia_symptom",
+            ],
+            "group_wait": "5s",
+            "group_interval": "15s",
+            "repeat_interval": "5m",
+        },
+        "receivers": [
+            {
+                "name": "kyro-rca",
+                "webhook_configs": [
+                    {
+                        "url": os.environ["ALERTMANAGER_WEBHOOK_URL"],
+                        "send_resolved": True,
+                        "http_config": {
+                            "authorization": {
+                                "type": "Bearer",
+                                "credentials": os.environ["ALERTMANAGER_AGENT_TOKEN"],
+                            }
+                        },
+                    }
+                ],
+            }
+        ],
+    },
+    fp=__import__("sys").stdout,
+    separators=(",", ":"),
+)
+PY
+  )
+  chmod 600 "${config_file}"
+
+  echo "==> configuring authenticated Alertmanager delivery to the management API"
+  kubectl --context "${TARGET_CONTEXT}" -n "${TARGET_NAMESPACE}" \
+    create secret generic "${ALERTMANAGER_CONFIG_SECRET}" \
+    --from-file="alertmanager.yml=${config_file}" \
+    --dry-run=client -o yaml \
+    | kubectl --context "${TARGET_CONTEXT}" -n "${TARGET_NAMESPACE}" apply -f -
+
+  PROMETHEUS_DYNAMIC_VALUES="${TELEMETRY_TEMP_DIR}/prometheus-alertmanager-values.yaml"
+  (
+    umask 077
+    printf '%s\n' \
+      "alertmanager:" \
+      "  config:" \
+      "    enabled: false" \
+      "  extraSecretMounts:" \
+      "    - name: kyro-alertmanager-config" \
+      "      mountPath: /etc/alertmanager/alertmanager.yml" \
+      "      subPath: alertmanager.yml" \
+      "      secretName: ${ALERTMANAGER_CONFIG_SECRET}" \
+      "      readOnly: true" \
+      > "${PROMETHEUS_DYNAMIC_VALUES}"
+  )
+  chmod 600 "${PROMETHEUS_DYNAMIC_VALUES}"
+}
+
+require_prometheus_sli_rule_loaded() {
+  local rules_json
+
+  for _ in $(seq 1 30); do
+    rules_json="$(
+      kubectl --context "${TARGET_CONTEXT}" \
+        get --raw="/api/v1/namespaces/${TARGET_NAMESPACE}/services/http:prometheus:http/proxy/api/v1/rules" \
+        2>/dev/null || true
+    )"
+    if PROMETHEUS_RULES_JSON="${rules_json}" \
+      PROMETHEUS_SLI_ALERT_NAME="${PROMETHEUS_SLI_ALERT_NAME}" \
+      python3 - <<'PY'
+import json
+import os
+import re
+
+try:
+    body = json.loads(os.environ["PROMETHEUS_RULES_JSON"])
+except (KeyError, json.JSONDecodeError):
+    raise SystemExit(1)
+if body.get("status") != "success":
+    raise SystemExit(1)
+expected = os.environ["PROMETHEUS_SLI_ALERT_NAME"]
+rules = (
+    rule
+    for group in body.get("data", {}).get("groups", [])
+    for rule in group.get("rules", [])
+)
+rules = list(rules)
+record_query = next(
+    (
+        str(rule.get("query") or "")
+        for rule in rules
+        if rule.get("name") == "opsia_sli_failure_ratio"
+    ),
+    "",
+)
+normalized_record_query = re.sub(r"\s+", "", record_query)
+six_label_sum = "sumby(namespace,resource_kind,resource_name,service,sli,symptom)"
+recording_rule_valid = (
+    "opsia_sli_requests_total" in normalized_record_query
+    and 'outcome="failure"' in normalized_record_query
+    and normalized_record_query.count(six_label_sum) == 2
+    and "pod" not in normalized_record_query
+    and "instance" not in normalized_record_query
+)
+required_query_parts = (
+    'namespace!=""',
+    'resource_kind!=""',
+    'resource_name!=""',
+    'service!=""',
+    'sli!=""',
+    'symptom!=""',
+    "> 0.2",
+)
+required_labels = (
+    "opsia_namespace",
+    "opsia_resource_kind",
+    "opsia_resource_name",
+    "opsia_service",
+    "opsia_sli",
+    "opsia_symptom",
+)
+required_annotations = (
+    "opsia_observed_value",
+    "opsia_threshold",
+)
+alert_rule_valid = any(
+    rule.get("name") == expected
+    and all(part in str(rule.get("query") or "") for part in required_query_parts)
+    and all(str((rule.get("labels") or {}).get(key) or "").strip() for key in required_labels)
+    and all(
+        str((rule.get("annotations") or {}).get(key) or "").strip()
+        for key in required_annotations
+    )
+    for rule in rules
+)
+raise SystemExit(0 if recording_rule_valid and alert_rule_valid else 1)
+PY
+    then
+      return
+    fi
+    sleep 2
+  done
+  echo "Prometheus did not load SLI recording rule opsia_sli_failure_ratio and alert rule ${PROMETHEUS_SLI_ALERT_NAME}" >&2
+  return 1
+}
+
+restart_alertmanager_for_webhook_config() {
+  local statefulsets
+
+  if [[ -z "${ALERTMANAGER_WEBHOOK_URL}" ]]; then
+    return
+  fi
+  statefulsets="$(
+    kubectl --context "${TARGET_CONTEXT}" -n "${TARGET_NAMESPACE}" \
+      get statefulset \
+      -l "app.kubernetes.io/instance=${PROMETHEUS_RELEASE},app.kubernetes.io/name=alertmanager" \
+      -o name
+  )"
+  if [[ -z "${statefulsets}" ]]; then
+    echo "Alertmanager StatefulSet is missing" >&2
+    return 1
+  fi
+  while IFS= read -r statefulset; do
+    # Secret subPath mounts are refreshed only on Pod recreation. Always restart
+    # after the idempotent Secret apply so token rotation cannot leave stale auth.
+    kubectl --context "${TARGET_CONTEXT}" -n "${TARGET_NAMESPACE}" \
+      rollout restart "${statefulset}"
+    kubectl --context "${TARGET_CONTEXT}" -n "${TARGET_NAMESPACE}" \
+      rollout status "${statefulset}" --timeout=180s
+  done <<< "${statefulsets}"
+}
+
+require_alertmanager_webhook_config() {
+  local runtime_status
+  local service_name
+  local statefulsets
+
+  if [[ -z "${ALERTMANAGER_WEBHOOK_URL}" ]]; then
+    return
+  fi
+
+  kubectl --context "${TARGET_CONTEXT}" -n "${TARGET_NAMESPACE}" \
+    get secret "${ALERTMANAGER_CONFIG_SECRET}" \
+    -o jsonpath='{.data.alertmanager\.yml}' \
+    | ALERTMANAGER_WEBHOOK_URL="${ALERTMANAGER_WEBHOOK_URL}" \
+      ALERTMANAGER_AGENT_TOKEN="${ALERTMANAGER_AGENT_TOKEN}" \
+      python3 -c '
+import base64, hmac, json, os, sys
+try:
+    config = json.loads(base64.b64decode(sys.stdin.read().strip()).decode())
+    hooks = next(
+        receiver["webhook_configs"]
+        for receiver in config["receivers"]
+        if receiver["name"] == "kyro-rca"
+    )
+    hook = hooks[0]
+    authorization = hook["http_config"]["authorization"]
+    valid = (
+        hook["url"] == os.environ["ALERTMANAGER_WEBHOOK_URL"]
+        and hook["send_resolved"] is True
+        and authorization["type"] == "Bearer"
+        and hmac.compare_digest(
+            authorization["credentials"],
+            os.environ["ALERTMANAGER_AGENT_TOKEN"],
+        )
+    )
+except (KeyError, ValueError, TypeError, StopIteration, json.JSONDecodeError):
+    valid = False
+raise SystemExit(0 if valid else 1)
+'
+
+  statefulsets="$(
+    kubectl --context "${TARGET_CONTEXT}" -n "${TARGET_NAMESPACE}" \
+      get statefulset \
+      -l "app.kubernetes.io/instance=${PROMETHEUS_RELEASE},app.kubernetes.io/name=alertmanager" \
+      -o json
+  )"
+ALERTMANAGER_STATEFULSETS="${statefulsets}" \
+  ALERTMANAGER_CONFIG_SECRET="${ALERTMANAGER_CONFIG_SECRET}" \
+  python3 - <<'PY'
+import json
+import os
+
+body = json.loads(os.environ["ALERTMANAGER_STATEFULSETS"])
+expected = os.environ["ALERTMANAGER_CONFIG_SECRET"]
+for item in body.get("items", []):
+    spec = item.get("spec", {}).get("template", {}).get("spec", {})
+    secret_volumes = {
+        volume.get("name")
+        for volume in spec.get("volumes", [])
+        if volume.get("secret", {}).get("secretName") == expected
+    }
+    config_mounts = [
+        mount
+        for container in spec.get("containers", [])
+        for mount in container.get("volumeMounts", [])
+        if mount.get("mountPath") == "/etc/alertmanager/alertmanager.yml"
+    ]
+    if (
+        len(config_mounts) == 1
+        and config_mounts[0].get("name") in secret_volumes
+        and config_mounts[0].get("readOnly") is True
+    ):
+        raise SystemExit(0)
+raise SystemExit(1)
+PY
+
+  service_name="$(
+    kubectl --context "${TARGET_CONTEXT}" -n "${TARGET_NAMESPACE}" \
+      get service \
+      -l "app.kubernetes.io/instance=${PROMETHEUS_RELEASE},app.kubernetes.io/name=alertmanager" \
+      -o jsonpath='{range .items[?(@.spec.clusterIP!="None")]}{.metadata.name}{"\n"}{end}'
+  )"
+  if [[ -z "${service_name}" ]]; then
+    echo "Alertmanager Service is missing" >&2
+    return 1
+  fi
+  for _ in $(seq 1 30); do
+    runtime_status="$(
+      kubectl --context "${TARGET_CONTEXT}" \
+        get --raw="/api/v1/namespaces/${TARGET_NAMESPACE}/services/http:${service_name}:http/proxy/api/v2/status" \
+        2>/dev/null || true
+    )"
+    if ALERTMANAGER_RUNTIME_STATUS="${runtime_status}" \
+      ALERTMANAGER_WEBHOOK_URL="${ALERTMANAGER_WEBHOOK_URL}" \
+      ALERTMANAGER_AGENT_TOKEN="${ALERTMANAGER_AGENT_TOKEN}" \
+      python3 - <<'PY'
+import hmac
+import json
+import os
+
+try:
+    status = json.loads(os.environ["ALERTMANAGER_RUNTIME_STATUS"])
+    config = json.loads(status["config"]["original"])
+    receiver = next(
+        item for item in config["receivers"] if item["name"] == "kyro-rca"
+    )
+    hook = receiver["webhook_configs"][0]
+    authorization = hook["http_config"]["authorization"]
+    valid = (
+        hook["url"] == os.environ["ALERTMANAGER_WEBHOOK_URL"]
+        and hook["send_resolved"] is True
+        and authorization["type"] == "Bearer"
+        and hmac.compare_digest(
+            authorization["credentials"],
+            os.environ["ALERTMANAGER_AGENT_TOKEN"],
+        )
+    )
+except (KeyError, ValueError, TypeError, StopIteration, json.JSONDecodeError):
+    valid = False
+raise SystemExit(0 if valid else 1)
+PY
+    then
+      return
+    fi
+    sleep 2
+  done
+  echo "Alertmanager runtime did not load the authenticated webhook config" >&2
+  return 1
+}
+
 existing_secret_value() {
   local secret_name="$1"
   local key="$2"
@@ -200,17 +598,16 @@ require_env TARGET_CONTEXT
 
 if [[ -n "${TELEMETRY_ASSET_BASE_URL}" ]]; then
   need curl
-  TELEMETRY_ASSET_DIR="$(mktemp -d "${TMPDIR:-/tmp}/kyro-telemetry.XXXXXX")"
-  trap 'rm -rf "${TELEMETRY_ASSET_DIR}"' EXIT
+  ensure_telemetry_temp_dir
   for asset in prometheus.yaml loki.yaml tempo.yaml opentelemetry.yaml minio.yaml; do
     curl -fsSL "${TELEMETRY_ASSET_BASE_URL%/}/${asset}" \
-      -o "${TELEMETRY_ASSET_DIR}/${asset}"
+      -o "${TELEMETRY_TEMP_DIR}/${asset}"
   done
-  PROMETHEUS_VALUES="${TELEMETRY_ASSET_DIR}/prometheus.yaml"
-  LOKI_VALUES="${TELEMETRY_ASSET_DIR}/loki.yaml"
-  TEMPO_VALUES="${TELEMETRY_ASSET_DIR}/tempo.yaml"
-  OTEL_VALUES="${TELEMETRY_ASSET_DIR}/opentelemetry.yaml"
-  TARGET_MINIO_MANIFEST="${TELEMETRY_ASSET_DIR}/minio.yaml"
+  PROMETHEUS_VALUES="${TELEMETRY_TEMP_DIR}/prometheus.yaml"
+  LOKI_VALUES="${TELEMETRY_TEMP_DIR}/loki.yaml"
+  TEMPO_VALUES="${TELEMETRY_TEMP_DIR}/tempo.yaml"
+  OTEL_VALUES="${TELEMETRY_TEMP_DIR}/opentelemetry.yaml"
+  TARGET_MINIO_MANIFEST="${TELEMETRY_TEMP_DIR}/minio.yaml"
 fi
 
 echo "==> ensuring target namespace exists: ${TARGET_NAMESPACE}"
@@ -218,6 +615,7 @@ kubectl --context "${TARGET_CONTEXT}" create namespace "${TARGET_NAMESPACE}" \
   --dry-run=client -o yaml \
   | kubectl --context "${TARGET_CONTEXT}" apply -f -
 
+configure_alertmanager_webhook
 ensure_target_minio
 
 echo "==> adding Helm repositories"
@@ -227,13 +625,18 @@ helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm
 helm repo update
 
 echo "==> installing Prometheus"
+prometheus_values_args=(--values "${PROMETHEUS_VALUES}")
+if [[ -n "${PROMETHEUS_DYNAMIC_VALUES}" ]]; then
+  prometheus_values_args+=(--values "${PROMETHEUS_DYNAMIC_VALUES}")
+fi
 helm upgrade --install "${PROMETHEUS_RELEASE}" prometheus-community/prometheus \
   --version "${PROMETHEUS_CHART_VERSION}" \
   --kube-context "${TARGET_CONTEXT}" \
   --namespace "${TARGET_NAMESPACE}" \
-  --values "${PROMETHEUS_VALUES}" \
+  "${prometheus_values_args[@]}" \
   --wait \
   --timeout 5m
+restart_alertmanager_for_webhook_config
 
 echo "==> installing Loki"
 helm upgrade --install "${LOKI_RELEASE}" grafana/loki \
@@ -283,6 +686,8 @@ require_release_workload "${TEMPO_RELEASE}"
 require_release_workload "${OTEL_RELEASE}"
 require_tempo_runtime_bounds
 require_service_endpoints prometheus
+require_prometheus_sli_rule_loaded
+require_alertmanager_webhook_config
 require_service_endpoints loki-gateway
 require_service_endpoints tempo
 require_service_endpoints opentelemetry-collector

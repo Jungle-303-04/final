@@ -291,6 +291,10 @@ class AlertRuleRepository(DatabaseConnection):
         """
         table = AlertEvent.__table__
         insert = pg_insert(table).values(**payload, updated_at=func.now())
+        resolved_is_terminal = (
+            (table.c.status == "resolved")
+            & (insert.excluded.status != "resolved")
+        )
         statement = insert.on_conflict_do_update(
             index_elements=[table.c.event_id],
             set_={
@@ -300,9 +304,33 @@ class AlertRuleRepository(DatabaseConnection):
                 "severity": insert.excluded.severity,
                 "subject_key": insert.excluded.subject_key,
                 "subject": insert.excluded.subject,
-                "resolved_at": insert.excluded.resolved_at,
-                "status": insert.excluded.status,
-                "evidence": insert.excluded.evidence,
+                # Alertmanager retries can arrive out of order.  A delayed
+                # ``firing`` notification must never resurrect an occurrence
+                # already durably marked resolved.
+                "resolved_at": case(
+                    (resolved_is_terminal, table.c.resolved_at),
+                    else_=insert.excluded.resolved_at,
+                ),
+                "status": case(
+                    (resolved_is_terminal, table.c.status),
+                    else_=insert.excluded.status,
+                ),
+                "observed_value": case(
+                    (resolved_is_terminal, table.c.observed_value),
+                    else_=insert.excluded.observed_value,
+                ),
+                "threshold": case(
+                    (resolved_is_terminal, table.c.threshold),
+                    else_=insert.excluded.threshold,
+                ),
+                "series_identity": func.coalesce(
+                    insert.excluded.series_identity,
+                    table.c.series_identity,
+                ),
+                "evidence": case(
+                    (resolved_is_terminal, table.c.evidence),
+                    else_=insert.excluded.evidence,
+                ),
                 "incident_id": func.coalesce(insert.excluded.incident_id, table.c.incident_id),
                 "updated_at": func.now(),
             },

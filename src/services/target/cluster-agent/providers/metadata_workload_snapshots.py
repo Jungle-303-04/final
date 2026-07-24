@@ -76,6 +76,8 @@ def current_workload_base_snapshot(
             "kind": K8S_KIND_DEPLOYMENT,
             "namespace": meta.get("namespace"),
             "name": meta.get("name"),
+            "uid": meta.get("uid"),
+            "generation": meta.get("generation"),
         },
         "deployment_labels": safe_metadata_labels(meta.get("labels")),
         "pod_template_labels": safe_metadata_labels(template_meta.get("labels")),
@@ -318,8 +320,13 @@ def pod_status_snapshot(pod: JsonObject) -> JsonObject:
     return compact_dict(
         {
             "name": meta.get("name"),
+            "uid": meta.get("uid"),
             "phase": pod_status.get("phase"),
             "ready": pod_ready(pod_conditions),
+            "restart_count": sum(
+                int(container.get("restartCount") or 0)
+                for container in list_items(pod_status.get("containerStatuses"))
+            ),
             "reason": pod_status.get("reason"),
             "message": pod_status.get("message"),
             "start_time": pod_status.get("startTime"),

@@ -1,5 +1,13 @@
-from domains.rca.events import HealingActionDraft, RecoveryActionCandidate, RecoveryPlan
+from domains.rca.events import (
+    HealingActionDraft,
+    RcaActionRequiredBody,
+    RecoveryActionCandidate,
+    RecoveryPlan,
+)
+from domains.scm.events import SafePrFilePatch, SafePrRequestedBody
+from packages.contracts.gitops_authority import GitOpsAuthorityContext
 from services.ai.agent.recovery.dispatch import (
+    build_safe_pr_request_body,
     recovery_safe_pr_body,
     recovery_safe_pr_title,
 )
@@ -59,6 +67,32 @@ def recovery_plan(candidate: RecoveryActionCandidate) -> RecoveryPlan:
     )
 
 
+def recovery_authority() -> GitOpsAuthorityContext:
+    return GitOpsAuthorityContext(
+        workspace_id="default",
+        repository_id="repo-1",
+        binding_id="binding-1",
+        application_id="app-1",
+        workflow_run_id="run-1",
+        environment="production",
+        cluster_id="cluster-1",
+        manifest_path="deploy/k8s/payment-api.yaml",
+        repo_ref="example/payments",
+        base_branch="main",
+        commit_sha="a" * 40,
+        source_type="raw-yaml",
+        source_manifest_sha256="sha256:" + "b" * 64,
+        resource="Deployment/payment-api",
+        desired_manifest={
+            "apiVersion": "apps/v1",
+            "kind": "Deployment",
+            "metadata": {"name": "payment-api", "namespace": "payments"},
+        },
+        changes=(),
+        evidence={},
+    )
+
+
 def test_recovery_safe_pr_title_is_korean_and_compact() -> None:
     candidate = recovery_candidate()
 
@@ -95,3 +129,42 @@ def test_recovery_safe_pr_title_collapses_whitespace_and_limits_length() -> None
     assert "\n" not in title
     assert len(title) <= 120
     assert title.endswith("…")
+
+
+def test_recovery_safe_pr_always_uses_pull_request_delivery() -> None:
+    patch = SafePrFilePatch(
+        path="deploy/k8s/payment-api.yaml",
+        content="apiVersion: apps/v1\nkind: Deployment\n",
+    )
+
+    for risk_level in ("low", "medium", "high"):
+        candidate = recovery_candidate(risk_level=risk_level)
+
+        request = build_safe_pr_request_body(
+            recovery_plan(candidate),
+            candidate,
+            "default",
+            [patch],
+            recovery_authority(),
+        )
+
+        assert isinstance(request, SafePrRequestedBody)
+        assert request.delivery == "pull_request"
+
+
+def test_recovery_safe_pr_requires_gitops_authority() -> None:
+    candidate = recovery_candidate()
+    patch = SafePrFilePatch(
+        path="deploy/k8s/payment-api.yaml",
+        content="apiVersion: apps/v1\nkind: Deployment\n",
+    )
+
+    request = build_safe_pr_request_body(
+        recovery_plan(candidate),
+        candidate,
+        "default",
+        [patch],
+    )
+
+    assert isinstance(request, RcaActionRequiredBody)
+    assert request.reason_code == "gitops_authority_unavailable"

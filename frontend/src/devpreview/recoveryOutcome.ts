@@ -1,4 +1,5 @@
 import type { AuditTimelineItem } from "../api/audit-timeline-schemas";
+import { isSafePrRoute } from "./recoveryRoute";
 
 const RESOLVED_ISSUE_STATUSES = new Set([
   "closed",
@@ -13,11 +14,16 @@ const FAILED_SUBJECTS = new Set([
   "workflow_run_failed",
   "workflow_failed",
 ]);
+const BLOCKED_SUBJECTS = new Set([
+  "rca_action_required",
+  "rca_followup_required",
+]);
 
 export type RecoveryOutcomeNoticeKind =
   | "pull_request_created"
   | "execution_completed"
   | "recovery_completed"
+  | "recovery_blocked"
   | "recovery_failed";
 
 export interface RecoveryOutcomeNotice {
@@ -46,6 +52,29 @@ export function recoveryOutcomeNotices({
 }): RecoveryOutcomeNotice[] {
   const relevant = relevantAuditItems(audit, selectionEventId, submittedAt);
   const notices: RecoveryOutcomeNotice[] = [];
+  const blocked = findLast(
+    relevant,
+    (item) => normalize(item.subject) === "rca_action_required",
+  ) ?? findLast(
+    relevant,
+    (item) => BLOCKED_SUBJECTS.has(normalize(item.subject)),
+  );
+  if (blocked) {
+    const reasonCode = summaryString(blocked, "reason_code");
+    notices.push({
+      key: blocked.event_id,
+      kind: "recovery_blocked",
+      terminal: true,
+      tone: "critical",
+      title: isSafePrRoute(actionRoute)
+        ? "복구 PR 생성을 시작할 수 없습니다."
+        : "복구 조치를 시작할 수 없습니다.",
+      summary: blockerSummary(reasonCode),
+      detail: summaryString(blocked, "reason") ?? summaryString(blocked, "summary"),
+      prUrl: null,
+    });
+    return notices;
+  }
   const failed = findLast(relevant, (item) => FAILED_SUBJECTS.has(normalize(item.subject)));
   if (failed) {
     notices.push({
@@ -159,6 +188,16 @@ function failureDetail(item: AuditTimelineItem): string | null {
     return "대상 네임스페이스가 클러스터 연결 시 허용한 제어 범위 밖입니다. 클러스터 설정의 제어 네임스페이스를 확인해 주세요.";
   }
   return reason;
+}
+
+function blockerSummary(reasonCode: string | null): string {
+  if (reasonCode === "gitops_authority_unavailable") {
+    return "저장소·배포 바인딩·승인 스냅샷 연결이 필요합니다.";
+  }
+  if (reasonCode === "gitops_authority_mismatch") {
+    return "복구 대상과 GitOps 배포 정보가 일치하지 않습니다.";
+  }
+  return "복구 조치를 진행하기 위한 추가 설정이나 근거가 필요합니다.";
 }
 
 function summaryString(item: AuditTimelineItem, key: string): string | null {

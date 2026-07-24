@@ -2,20 +2,48 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+import hashlib
+import re
+from collections.abc import AsyncIterator, Mapping
 from dataclasses import replace
 
+from domains.gitops.events import WorkflowRunCompletedBody, WorkflowRunFailedBody
 from domains.rca.events import (
+    ClusterEvidenceReceivedBody,
+    IncidentResolvedBody,
     RcaActionRequiredBody,
     RcaAiFallbackRequestedBody,
     RcaAnalysisBlockedBody,
     RcaCompletedBody,
     RcaFollowupRequiredBody,
     RecoveryPlannedBody,
+    RecoveryPrMergedBody,
+    RecoveryPrTrackedBody,
+    RecoveryVerificationFailedBody,
+    RecoveryVerificationStartedBody,
+    RecoveryVerificationUpdatedBody,
 )
+from domains.rca.recovery_verification import (
+    DEFAULT_MAXIMUM_SECONDS,
+    DEFAULT_MINIMUM_SECONDS,
+    before_alert_snapshot,
+    evaluate_recovery_evidence,
+    finite_float,
+    mapping,
+    metric_identity,
+    metric_sample_with_identity,
+    normalized_utc,
+    protected_workloads,
+    recovery_target,
+    verification_deadline,
+)
+from domains.scm.events import SafePrCreatedBody, SafePrFailedBody
+from packages.config.settings import env
 from packages.contracts.event_bus.bodies import EventBody, JsonObject
 from packages.contracts.event_bus.bodies.platform import PipelineContractFailedBody
-from packages.runtime.app import App
+from packages.contracts.stores import RecoveryPlanStore
+from packages.runtime.app import App, EventContext
+from services.ai.agent.defaults import ActionRoutes
 from services.ai.agent.recovery.engine import RecoveryPlanner
 
 app = App("rca-feedback-worker")
@@ -40,6 +68,9 @@ FOLLOWUP_SUMMARIES = {
     "gitops_authority_mismatch": "Safe PR 대상과 GitOps 권위 context가 일치하지 않아 운영자 확인이 필요합니다.",
     "safe_pr_patch_missing": "Safe PR에 적용할 구체적인 manifest patch가 없어 운영자 조치가 필요합니다.",
     "safe_pr_patch_unsupported": "선택한 복구 조치를 현재 Safe PR patch로 변환할 수 없습니다.",
+    "recovery_verification_prerequisites_missing": (
+        "복구 완료 판정에 필요한 사전 근거가 없어 Safe PR 추적을 중단했습니다."
+    ),
 }
 MISSING_EVIDENCE_LABELS = {
     "kubernetes": "Kubernetes 상태 근거",
@@ -63,8 +94,62 @@ MISSING_EVIDENCE_LABELS = {
     "supported_patch_action": "지원 가능한 Safe PR patch action",
     "manifest_patch": "구체적인 manifest patch",
 }
+RETRYABLE_RECOVERY_REASON_CODES = frozenset(
+    {
+        "gitops_authority_unavailable",
+        "gitops_authority_mismatch",
+        "safe_pr_patch_missing",
+        "safe_pr_patch_unsupported",
+        "safe_pr_preflight_failed",
+        "safe_pr_preflight_unavailable",
+        "pre_recovery_continuity_baseline_missing",
+        "pre_recovery_sli_baseline_missing",
+        "recovery_verification_prerequisites_missing",
+    }
+)
+RECOVERY_VERIFICATION_MIN_SECONDS_ENV = "RECOVERY_VERIFICATION_MIN_SECONDS"
+RECOVERY_VERIFICATION_MAX_SECONDS_ENV = "RECOVERY_VERIFICATION_MAX_SECONDS"
+RECOVERY_LOAD_TOLERANCE_RATIO_ENV = "RECOVERY_LOAD_TOLERANCE_RATIO"
+RECOVERY_STATUS_SELECTED = "selected"
+RECOVERY_STATUS_PR_OPEN = "pr_open"
+RECOVERY_STATUS_DEPLOY_PENDING = "deploy_pending"
+RECOVERY_STATUS_VERIFICATION_PENDING = "verification_pending"
+RECOVERY_STATUS_COMPLETED = "completed"
+RECOVERY_STATUS_FAILED = "failed"
+SAFE_PR_ROUTE = ActionRoutes().safe_pr
+GITHUB_SHA_RE = re.compile(r"^[0-9a-f]{40,64}$")
 
 planner = RecoveryPlanner()
+
+
+def verification_window_seconds() -> tuple[int, int]:
+    minimum = _bounded_env_seconds(
+        RECOVERY_VERIFICATION_MIN_SECONDS_ENV,
+        DEFAULT_MINIMUM_SECONDS,
+        lower=DEFAULT_MINIMUM_SECONDS,
+        upper=DEFAULT_MAXIMUM_SECONDS,
+    )
+    maximum = _bounded_env_seconds(
+        RECOVERY_VERIFICATION_MAX_SECONDS_ENV,
+        DEFAULT_MAXIMUM_SECONDS,
+        lower=minimum,
+        upper=DEFAULT_MAXIMUM_SECONDS,
+    )
+    return minimum, maximum
+
+
+def _bounded_env_seconds(
+    name: str,
+    default: int,
+    *,
+    lower: int,
+    upper: int,
+) -> int:
+    try:
+        value = int(env(name, str(default)))
+    except (TypeError, ValueError):
+        value = default
+    return max(lower, min(value, upper))
 
 
 def followup_summary(reason_code: str, fallback: str) -> str:
@@ -189,8 +274,718 @@ def blocked_recovery_plan(evt: RcaAnalysisBlockedBody) -> RecoveryPlannedBody | 
     return replace(plan_event, draft=candidates[0].draft, plan=plan)
 
 
+@app.on(SafePrCreatedBody)
+async def on_recovery_safe_pr_created(
+    evt: SafePrCreatedBody,
+    ctx: EventContext[RecoveryPlanStore],
+) -> AsyncIterator[EventBody]:
+    """Bind only a complete GitHub PR identity to the selected recovery."""
+
+    record = await ctx.db.get_recovery_plan_by_correlation(
+        ctx.correlation_id,
+        evt.workspace_id,
+    )
+    if not isinstance(record, dict) or record.get("status") != RECOVERY_STATUS_SELECTED:
+        return
+    payload = mapping(record.get("payload"))
+    selected = selected_recovery_candidate(record)
+    if not selected or text_value(selected.get("route")) != SAFE_PR_ROUTE:
+        return
+    params = selected_candidate_params(
+        await recovery_approval_record(ctx, record, evt.workspace_id)
+    )
+    identity_error = safe_pr_identity_error(evt, params)
+    if identity_error is not None:
+        reopened = await ctx.db.reopen_recovery_plan_action(
+            str(record["plan_id"]),
+            evt.workspace_id,
+            str(record.get("selected_action_id") or ""),
+        )
+        if not reopened:
+            return
+        yield RcaFollowupRequiredBody(
+            reason_code="safe_pr_identity_incomplete",
+            summary=identity_error,
+            evidence_ref=str(record.get("evidence_ref") or "unknown"),
+            workspace_id=evt.workspace_id,
+            severity=SEVERITY_WARNING,
+            next_actions=[
+                {
+                    "action_type": "recreate_safe_pr",
+                    "description": "GitHub PR immutable identity를 다시 확보한 뒤 복구 PR을 재생성합니다.",
+                }
+            ],
+            diagnostics={
+                "plan_id": record.get("plan_id"),
+                "action_id": record.get("selected_action_id"),
+                "pr_url": evt.pr_url,
+                "retryable": True,
+            },
+        )
+        return
+
+    now = normalized_utc(await ctx.db.current_database_time())
+    target = selected_recovery_target(payload, selected)
+    original_evidence = await ctx.db.get_evidence_payload(
+        evt.workspace_id,
+        ctx.correlation_id,
+        "rca_bundle",
+    )
+    original_evidence = (
+        original_evidence if isinstance(original_evidence, dict) else {}
+    )
+    collected_failure_ratio, collected_failure_ratio_identity = (
+        metric_sample_with_identity(
+            original_evidence,
+            "opsia_sli_failure_ratio",
+            target,
+        )
+    )
+    collected_request_rate, collected_request_rate_identity = (
+        metric_sample_with_identity(
+            original_evidence,
+            "opsia_sli_request_rate",
+            target,
+        )
+    )
+    failure_ratio_before = finite_float(
+        params.get("verification_failure_ratio_before")
+    )
+    if failure_ratio_before is None:
+        failure_ratio_before = collected_failure_ratio
+    approved_failure_ratio_identity = mapping(
+        params.get("verification_failure_ratio_metric_identity")
+    )
+    failure_ratio_identity = (
+        metric_identity(approved_failure_ratio_identity)
+        if approved_failure_ratio_identity
+        else collected_failure_ratio_identity
+    )
+    request_rate_baseline = finite_float(
+        params.get("verification_request_rate_baseline")
+    )
+    if request_rate_baseline is None:
+        request_rate_baseline = collected_request_rate
+    approved_request_rate_identity = mapping(
+        params.get("verification_request_rate_metric_identity")
+    )
+    request_rate_identity = (
+        metric_identity(approved_request_rate_identity)
+        if approved_request_rate_identity
+        else collected_request_rate_identity
+    )
+    load_tolerance_ratio = bounded_ratio(
+        env(RECOVERY_LOAD_TOLERANCE_RATIO_ENV, "0.2"),
+        default=0.2,
+    )
+    protected_before = protected_workloads(original_evidence, target) or []
+    approved_protected_baseline = params.get("protected_baseline")
+    protected_baseline = (
+        [dict(item) for item in approved_protected_baseline if isinstance(item, Mapping)]
+        if isinstance(approved_protected_baseline, list)
+        else []
+    )
+    approved_session_baseline = params.get("protected_session_baseline")
+    protected_session_baseline = (
+        [dict(item) for item in approved_session_baseline if isinstance(item, Mapping)]
+        if isinstance(approved_session_baseline, list)
+        else []
+    )
+    requires_protected_continuity = (
+        text_value(params.get("verification_contract"))
+        == "protected_workload_continuity"
+    )
+    if requires_protected_continuity and (
+        not protected_baseline or not protected_session_baseline
+    ):
+        reopened = await ctx.db.reopen_recovery_plan_action(
+            str(record["plan_id"]),
+            evt.workspace_id,
+            str(record.get("selected_action_id") or ""),
+        )
+        if not reopened:
+            return
+        yield RcaFollowupRequiredBody(
+            reason_code="pre_recovery_continuity_baseline_missing",
+            summary=(
+                "복구 전 활성 workload의 UID·Pod UID·시작 시각·재시작 횟수 "
+                "baseline 또는 active session series가 없어 무중단 복구를 검증할 수 없습니다."
+            ),
+            evidence_ref=str(record.get("evidence_ref") or "unknown"),
+            workspace_id=evt.workspace_id,
+            severity=SEVERITY_WARNING,
+            missing_evidence=[
+                "metadata:current_workload_snapshots",
+                "metrics:opsia_continuity_active_sessions",
+            ],
+            next_actions=[
+                {
+                    "action_type": "collect_pre_recovery_continuity_baseline",
+                    "description": "복구 PR을 다시 만들기 전에 활성 workload identity를 수집합니다.",
+                }
+            ],
+            diagnostics={
+                "plan_id": record.get("plan_id"),
+                "action_id": record.get("selected_action_id"),
+                "pr_url": evt.pr_url,
+                "retryable": True,
+            },
+        )
+        return
+    approved_alert_before = mapping(params.get("verification_alert_before"))
+    if approved_alert_before:
+        before = dict(approved_alert_before)
+    else:
+        alerts = await ctx.db.list_alert_events(evt.workspace_id, limit=200)
+        before = before_alert_snapshot(
+            alerts,
+            target=target,
+            correlation_id=ctx.correlation_id,
+            incident_id=str(record.get("incident_id") or ""),
+        )
+    before.update(
+        {
+            "captured_at": now.isoformat(),
+            "failure_ratio": failure_ratio_before,
+            "request_rate": request_rate_baseline,
+            "metrics_evidence_ref": original_evidence.get("object_ref"),
+            "protected_workloads": protected_before,
+            "protected_active_sessions": protected_session_baseline,
+        }
+    )
+    minimum_seconds, maximum_seconds = verification_window_seconds()
+    expected_replicas = nonnegative_int(params.get("expected_replicas"))
+    evidence_cadence_seconds = nonnegative_int(
+        params.get("verification_evidence_cadence_seconds")
+    )
+    if evidence_cadence_seconds is None:
+        registration = await ctx.db.get_cluster_registration(
+            evt.workspace_id,
+            target.get("cluster_id", ""),
+        )
+        registration_settings = mapping(
+            registration.get("settings") if isinstance(registration, Mapping) else None
+        )
+        evidence_cadence_seconds = nonnegative_int(
+            registration_settings.get("evidence_interval_seconds")
+        )
+    missing_prerequisites: list[str] = []
+    if failure_ratio_before is None:
+        missing_prerequisites.append("metrics:opsia_sli_failure_ratio")
+    if not failure_ratio_identity:
+        missing_prerequisites.append("metrics:opsia_sli_failure_ratio_identity")
+    if request_rate_baseline is None or request_rate_baseline <= 0:
+        missing_prerequisites.append("metrics:opsia_sli_request_rate")
+    if not request_rate_identity:
+        missing_prerequisites.append("metrics:opsia_sli_request_rate_identity")
+    threshold = finite_float(before.get("threshold"))
+    if before.get("available") is not True or threshold is None:
+        missing_prerequisites.append("alertmanager:original_exact_alert")
+    if expected_replicas is None:
+        missing_prerequisites.append("gitops:approved_replica_baseline")
+    if evidence_cadence_seconds is None or evidence_cadence_seconds <= 0:
+        missing_prerequisites.append("cluster:evidence_cadence")
+    if missing_prerequisites:
+        reopened = await ctx.db.reopen_recovery_plan_action(
+            str(record["plan_id"]),
+            evt.workspace_id,
+            str(record.get("selected_action_id") or ""),
+        )
+        if not reopened:
+            return
+        yield RcaFollowupRequiredBody(
+            reason_code="recovery_verification_prerequisites_missing",
+            summary=(
+                "복구 완료 판정에 필요한 exact SLI·Alertmanager·GitOps·수집 주기 "
+                "baseline이 없어 PR lifecycle 추적을 시작하지 않았습니다."
+            ),
+            evidence_ref=str(record.get("evidence_ref") or "unknown"),
+            workspace_id=evt.workspace_id,
+            severity=SEVERITY_WARNING,
+            missing_evidence=missing_prerequisites,
+            next_actions=[
+                {
+                    "action_type": "collect_recovery_verification_prerequisites",
+                    "description": "누락 근거를 수집한 뒤 복구 조치를 다시 선택합니다.",
+                }
+            ],
+            diagnostics={
+                "plan_id": record.get("plan_id"),
+                "action_id": record.get("selected_action_id"),
+                "pr_url": evt.pr_url,
+                "retryable": True,
+            },
+        )
+        return
+    current_lifecycle = mapping(payload.get("lifecycle"))
+    attempt = dict(mapping(current_lifecycle.get("attempt")))
+    attempt_id = text_value(attempt.get("id"))
+    pr_lifecycle: JsonObject = {
+        "url": evt.pr_url,
+        "number": evt.pr_number,
+        "node_id": evt.pr_node_id,
+        "head_ref": evt.head_ref,
+        "head_sha": evt.head_sha,
+        "repo_ref": evt.repo_ref,
+        "repository_id": evt.repository_id,
+        "binding_id": evt.binding_id,
+        "application_id": evt.application_id,
+        "base_branch": evt.base_branch,
+        "manifest_path": evt.manifest_path,
+        "environment": evt.environment,
+        "cluster_id": target.get("cluster_id"),
+        "patch_sha256": evt.patch_sha256,
+        "tracked_at": now.isoformat(),
+    }
+    if attempt_id:
+        pr_lifecycle["attempt_id"] = attempt_id
+    lifecycle: JsonObject = {
+        "phase": RECOVERY_STATUS_PR_OPEN,
+        "attempt": attempt,
+        "pr": pr_lifecycle,
+        "verification": {
+            "minimum_seconds": minimum_seconds,
+            "maximum_seconds": maximum_seconds,
+            "expected": {
+                "failure_ratio_max": threshold,
+                "request_rate_baseline": request_rate_baseline,
+                "request_rate_tolerance_ratio": load_tolerance_ratio,
+                "replicas": expected_replicas,
+                "failure_ratio_metric_identity": failure_ratio_identity,
+                "request_rate_metric_identity": request_rate_identity,
+                "evidence_cadence_seconds": evidence_cadence_seconds,
+                "protected_workloads": (
+                    len(protected_baseline) if requires_protected_continuity else 0
+                ),
+            },
+            "before": before,
+            "protected_baseline": protected_baseline,
+            "protected_session_baseline": protected_session_baseline,
+            "target": target,
+            "status": "waiting_for_merge",
+        },
+    }
+    saved = await ctx.db.update_recovery_plan_lifecycle_if_status(
+        str(record["plan_id"]),
+        evt.workspace_id,
+        expected_statuses=(RECOVERY_STATUS_SELECTED,),
+        status=RECOVERY_STATUS_PR_OPEN,
+        lifecycle=lifecycle,
+    )
+    if saved is None:
+        return
+    yield RecoveryPrTrackedBody(
+        plan_id=str(record["plan_id"]),
+        incident_id=str(record["incident_id"]),
+        pr_url=evt.pr_url,
+        repository_id=evt.repository_id,
+        repo_ref=evt.repo_ref,
+        binding_id=evt.binding_id,
+        application_id=evt.application_id,
+        base_branch=evt.base_branch,
+        workspace_id=evt.workspace_id,
+    )
+
+
+@app.on(WorkflowRunCompletedBody)
+async def on_recovery_deploy_completed(
+    evt: WorkflowRunCompletedBody,
+    ctx: EventContext[RecoveryPlanStore],
+) -> AsyncIterator[EventBody]:
+    started = await start_recovery_verification(
+        ctx=ctx,
+        workspace_id=evt.workspace_id,
+        workflow_run_id=evt.workflow_run_id,
+        binding_id=evt.binding_id,
+        application_id=evt.application_id,
+    )
+    if started is not None:
+        yield started
+
+
+@app.on(RecoveryPrMergedBody)
+async def on_recovery_pr_merged(
+    evt: RecoveryPrMergedBody,
+    ctx: EventContext[RecoveryPlanStore],
+) -> AsyncIterator[EventBody]:
+    """Reconcile a workflow that may have succeeded before the PR webhook.
+
+    GitHub can deliver the base-branch push before ``pull_request.closed``.
+    The deterministic workflow may therefore already be terminal when the
+    recovery enters ``deploy_pending``.  Reading the persisted run here makes
+    both webhook orders converge without relying on a duplicate completion
+    event.
+    """
+
+    started = await start_recovery_verification(
+        ctx=ctx,
+        workspace_id=evt.workspace_id,
+        workflow_run_id=evt.workflow_run_id,
+        binding_id=evt.binding_id,
+        application_id=evt.application_id,
+    )
+    if started is not None:
+        yield started
+
+
+async def start_recovery_verification(
+    *,
+    ctx: EventContext[RecoveryPlanStore],
+    workspace_id: str,
+    workflow_run_id: str,
+    binding_id: str,
+    application_id: str,
+) -> RecoveryVerificationStartedBody | None:
+    record = await ctx.db.get_recovery_plan_for_workflow(
+        workspace_id,
+        workflow_run_id,
+        binding_id,
+        application_id,
+    )
+    if not isinstance(record, dict) or record.get("status") != RECOVERY_STATUS_DEPLOY_PENDING:
+        return None
+    payload = mapping(record.get("payload"))
+    lifecycle = dict(mapping(payload.get("lifecycle")))
+    merge = mapping(lifecycle.get("merge"))
+    workflow = await ctx.db.get_workflow_run(workflow_run_id)
+    if (
+        not isinstance(workflow, dict)
+        or text_value(merge.get("workflow_run_id")) != workflow_run_id
+        or text_value(merge.get("binding_id")) != binding_id
+        or text_value(merge.get("application_id")) != application_id
+        or text_value(merge.get("merge_commit_sha"))
+        != text_value(workflow.get("commit_sha"))
+        or text_value(merge.get("cluster_id")) != text_value(workflow.get("cluster_id"))
+        or text_value(workflow.get("workspace_id")) != workspace_id
+        or text_value(workflow.get("binding_id")) != binding_id
+        or text_value(workflow.get("application_id")) != application_id
+        or text_value(workflow.get("status")) != "succeeded"
+    ):
+        return None
+    now = normalized_utc(await ctx.db.current_database_time())
+    verification = dict(mapping(lifecycle.get("verification")))
+    maximum_seconds = int(
+        verification.get("maximum_seconds") or DEFAULT_MAXIMUM_SECONDS
+    )
+    verification.update(
+        {
+            "status": RECOVERY_STATUS_VERIFICATION_PENDING,
+            "started_at": now.isoformat(),
+            "deadline_at": verification_deadline(now, maximum_seconds).isoformat(),
+            "healthy_since": None,
+            "last_reason_code": "waiting_for_post_deploy_evidence",
+            "last_reason": "배포 성공 후 첫 정상화 evidence 창을 기다립니다.",
+        }
+    )
+    lifecycle.update(
+        {
+            "phase": RECOVERY_STATUS_VERIFICATION_PENDING,
+            "verification": verification,
+        }
+    )
+    saved = await ctx.db.update_recovery_plan_lifecycle_if_status(
+        str(record["plan_id"]),
+        workspace_id,
+        expected_statuses=(RECOVERY_STATUS_DEPLOY_PENDING,),
+        status=RECOVERY_STATUS_VERIFICATION_PENDING,
+        lifecycle=lifecycle,
+    )
+    if saved is None:
+        return None
+    return RecoveryVerificationStartedBody(
+        plan_id=str(record["plan_id"]),
+        incident_id=str(record["incident_id"]),
+        workflow_run_id=workflow_run_id,
+        started_at=verification["started_at"],
+        deadline_at=verification["deadline_at"],
+        expected=dict(mapping(verification.get("expected"))),
+        before=dict(mapping(verification.get("before"))),
+        workspace_id=workspace_id,
+    )
+
+
+@app.on(WorkflowRunFailedBody)
+async def on_recovery_deploy_failed(
+    evt: WorkflowRunFailedBody,
+    ctx: EventContext[RecoveryPlanStore],
+) -> AsyncIterator[EventBody]:
+    record = await ctx.db.get_recovery_plan_for_workflow(
+        evt.workspace_id,
+        evt.workflow_run_id,
+        evt.binding_id,
+        evt.application_id,
+    )
+    if not isinstance(record, dict) or record.get("status") != RECOVERY_STATUS_DEPLOY_PENDING:
+        return
+    payload = mapping(record.get("payload"))
+    lifecycle = dict(mapping(payload.get("lifecycle")))
+    lifecycle["phase"] = RECOVERY_STATUS_FAILED
+    lifecycle["failure"] = {
+        "reason_code": "recovery_deploy_failed",
+        "reason": evt.reason,
+        "workflow_run_id": evt.workflow_run_id,
+    }
+    saved = await ctx.db.update_recovery_plan_lifecycle_if_status(
+        str(record["plan_id"]),
+        evt.workspace_id,
+        expected_statuses=(RECOVERY_STATUS_DEPLOY_PENDING,),
+        status=RECOVERY_STATUS_FAILED,
+        lifecycle=lifecycle,
+    )
+    if saved is None:
+        return
+    verification = mapping(lifecycle.get("verification"))
+    yield RecoveryVerificationFailedBody(
+        plan_id=str(record["plan_id"]),
+        incident_id=str(record["incident_id"]),
+        reason_code="recovery_deploy_failed",
+        reason=evt.reason,
+        evidence_ref=str(record.get("evidence_ref") or "unknown"),
+        before=dict(mapping(verification.get("before"))),
+        workspace_id=evt.workspace_id,
+    )
+
+
+@app.on(ClusterEvidenceReceivedBody)
+async def on_recovery_verification_evidence(
+    evt: ClusterEvidenceReceivedBody,
+    ctx: EventContext[RecoveryPlanStore],
+) -> AsyncIterator[EventBody]:
+    if not evt.evidence_key:
+        return
+    evidence = await ctx.db.get_evidence_window_payload_for_workspace(
+        evt.workspace_id,
+        evt.evidence_key,
+    )
+    if not isinstance(evidence, dict):
+        return
+    records = await ctx.db.list_recovery_verification_plans(
+        evt.workspace_id,
+        evt.cluster_id,
+        limit=100,
+    )
+    if not records:
+        return
+    alerts = await ctx.db.list_alert_events(evt.workspace_id, limit=500)
+    now = normalized_utc(await ctx.db.current_database_time())
+    for record in records:
+        payload = mapping(record.get("payload"))
+        lifecycle = dict(mapping(payload.get("lifecycle")))
+        decision = evaluate_recovery_evidence(
+            plan_payload=payload,
+            lifecycle=lifecycle,
+            evidence=evidence,
+            alerts=alerts,
+            now=now,
+        )
+        verification = dict(mapping(lifecycle.get("verification")))
+        verification.update(
+            {
+                "status": decision.status,
+                "healthy_since": decision.healthy_since,
+                "last_healthy_observed_at": decision.last_healthy_observed_at,
+                "distinct_evidence_count": decision.distinct_evidence_count,
+                "last_evidence_key": decision.last_evidence_key,
+                "last_reason_code": decision.reason_code,
+                "last_reason": decision.reason,
+                "after": decision.after,
+            }
+        )
+        current_session_samples = decision.after.get("protected_active_sessions")
+        if isinstance(current_session_samples, list):
+            verification["last_session_samples"] = [
+                dict(item)
+                for item in current_session_samples
+                if isinstance(item, Mapping)
+            ]
+        lifecycle["verification"] = verification
+        target_status = (
+            RECOVERY_STATUS_COMPLETED
+            if decision.status == "completed"
+            else RECOVERY_STATUS_FAILED
+            if decision.status == "failed"
+            else RECOVERY_STATUS_VERIFICATION_PENDING
+        )
+        lifecycle["phase"] = target_status
+        saved = await ctx.db.update_recovery_plan_lifecycle_if_status(
+            str(record["plan_id"]),
+            evt.workspace_id,
+            expected_statuses=(RECOVERY_STATUS_VERIFICATION_PENDING,),
+            status=target_status,
+            lifecycle=lifecycle,
+        )
+        if saved is None:
+            continue
+        before = dict(mapping(verification.get("before")))
+        yield RecoveryVerificationUpdatedBody(
+            plan_id=str(record["plan_id"]),
+            incident_id=str(record["incident_id"]),
+            status=decision.status,
+            reason_code=decision.reason_code,
+            reason=decision.reason,
+            evidence_ref=evt.evidence_key,
+            before=before,
+            after=decision.after,
+            workspace_id=evt.workspace_id,
+        )
+        if decision.status == "failed":
+            yield RecoveryVerificationFailedBody(
+                plan_id=str(record["plan_id"]),
+                incident_id=str(record["incident_id"]),
+                reason_code=decision.reason_code,
+                reason=decision.reason,
+                evidence_ref=evt.evidence_key,
+                before=before,
+                after=decision.after,
+                workspace_id=evt.workspace_id,
+            )
+        elif decision.status == "completed":
+            target = dict(mapping(verification.get("target"))) or recovery_target(payload)
+            yield IncidentResolvedBody(
+                incident_id=str(record["incident_id"]),
+                cluster_id=target["cluster_id"],
+                reason=decision.reason,
+                evidence_ref=evt.evidence_key,
+                recovery_plan_id=str(record["plan_id"]),
+                before=before,
+                after=decision.after,
+                workspace_id=evt.workspace_id,
+            )
+
+
+def selected_recovery_candidate(record: JsonObject) -> JsonObject:
+    payload = mapping(record.get("payload"))
+    candidates = payload.get("candidates")
+    selected_action_id = text_value(record.get("selected_action_id"))
+    if not isinstance(candidates, list) or not selected_action_id:
+        return {}
+    matches = [
+        dict(candidate)
+        for candidate in candidates
+        if isinstance(candidate, dict)
+        and text_value(candidate.get("action_id")) == selected_action_id
+    ]
+    return matches[0] if len(matches) == 1 else {}
+
+
+def recovery_approval_identity(plan_id: str, action_id: str) -> str:
+    digest = hashlib.sha256(f"{plan_id}|{action_id}|recovery-action".encode()).hexdigest()[:32]
+    return f"approval-{digest}"
+
+
+async def recovery_approval_record(
+    ctx: EventContext[RecoveryPlanStore],
+    record: JsonObject,
+    workspace_id: str,
+) -> JsonObject:
+    plan_id = text_value(record.get("plan_id"))
+    action_id = text_value(record.get("selected_action_id"))
+    if not plan_id or not action_id:
+        return {}
+    approval = await ctx.db.get_workflow_approval(
+        recovery_approval_identity(plan_id, action_id),
+        workspace_id,
+    )
+    return approval if isinstance(approval, dict) else {}
+
+
+def selected_candidate_params(approval: Mapping[str, object]) -> JsonObject:
+    details = mapping(approval.get("details"))
+    selected = mapping(details.get("selected_candidate"))
+    draft = mapping(selected.get("draft"))
+    return dict(mapping(draft.get("params")))
+
+
+def selected_recovery_target(
+    payload: Mapping[str, object],
+    selected: Mapping[str, object],
+) -> dict[str, str]:
+    """Resolve the workload from the action the operator actually selected."""
+
+    target = mapping(payload.get("target"))
+    draft = mapping(selected.get("draft"))
+    params = mapping(draft.get("params"))
+    return {
+        "cluster_id": text_value(
+            params.get("cluster_id")
+            or draft.get("cluster_id")
+            or target.get("cluster_id")
+        ),
+        "namespace": text_value(
+            params.get("namespace")
+            or draft.get("namespace")
+            or target.get("namespace")
+        ),
+        "resource_kind": text_value(
+            params.get("resource_kind")
+            or draft.get("resource_kind")
+            or target.get("resource_kind")
+        ),
+        "resource_name": text_value(
+            params.get("resource_name")
+            or draft.get("resource_name")
+            or target.get("resource_name")
+        ),
+    }
+
+
+def safe_pr_identity_error(
+    evt: SafePrCreatedBody,
+    params: Mapping[str, object],
+) -> str | None:
+    if (
+        evt.mode != "github_rest"
+        or not evt.pr_url.startswith("https://")
+        or evt.pr_number is None
+        or evt.pr_number <= 0
+        or not evt.pr_node_id
+        or not evt.head_ref
+        or not GITHUB_SHA_RE.fullmatch(evt.head_sha)
+    ):
+        return "생성된 PR의 number/node/head SHA가 없어 merge를 안전하게 추적할 수 없습니다."
+    expected = {
+        "repository_id": evt.repository_id,
+        "binding_id": evt.binding_id,
+        "application_id": evt.application_id,
+        "repo_ref": evt.repo_ref,
+        "base_branch": evt.base_branch,
+        "commit_sha": evt.commit_sha,
+    }
+    if any(text_value(params.get(key)) != value for key, value in expected.items()):
+        return "생성된 PR identity가 승인된 GitOps 권위 context와 일치하지 않습니다."
+    return None
+
+
+def nonnegative_int(value: object) -> int | None:
+    if isinstance(value, bool):
+        return None
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed >= 0 else None
+
+
+def bounded_ratio(value: object, *, default: float) -> float:
+    parsed = finite_float(value)
+    if parsed is None:
+        return default
+    return max(0.0, min(parsed, 0.5))
+
+
 @app.on(RcaActionRequiredBody)
-async def on_rca_action_required(evt: RcaActionRequiredBody) -> AsyncIterator[EventBody]:
+async def on_rca_action_required(
+    evt: RcaActionRequiredBody,
+    ctx: EventContext[RecoveryPlanStore],
+) -> AsyncIterator[EventBody]:
+    if evt.reason_code in RETRYABLE_RECOVERY_REASON_CODES:
+        allowed = await reopen_recovery_selection(
+            ctx,
+            evt.workspace_id,
+            evt.diagnostics,
+        )
+        if not allowed:
+            return
     yield RcaFollowupRequiredBody(
         reason_code=evt.reason_code,
         summary=followup_summary(evt.reason_code, evt.reason),
@@ -205,6 +1000,107 @@ async def on_rca_action_required(evt: RcaActionRequiredBody) -> AsyncIterator[Ev
             "agent_safe": True,
         },
     )
+
+
+@app.on(SafePrFailedBody)
+async def on_recovery_safe_pr_failed(
+    evt: SafePrFailedBody,
+    ctx: EventContext[RecoveryPlanStore],
+) -> AsyncIterator[EventBody]:
+    identity = await failed_safe_pr_recovery_identity(evt, ctx)
+    if identity is None:
+        return
+    plan_id, action_id = identity
+    reopened = await ctx.db.reopen_recovery_plan_action(
+        plan_id,
+        evt.workspace_id,
+        action_id,
+    )
+    if not reopened:
+        return
+    yield RcaFollowupRequiredBody(
+        reason_code=evt.reason_code,
+        summary=followup_summary(evt.reason_code, evt.reason),
+        evidence_ref=str(evt.details.get("evidence_ref") or "unknown"),
+        workspace_id=evt.workspace_id,
+        severity=SEVERITY_WARNING,
+        next_actions=[
+            {
+                "action_type": "retry_recovery_action",
+                "description": "차단 원인을 해결한 뒤 같은 복구 후보를 다시 선택합니다.",
+            }
+        ],
+        diagnostics={
+            **evt.details,
+            "plan_id": plan_id,
+            "action_id": action_id,
+            "source_event": evt.__subject__,
+            "agent_safe": True,
+            "retryable": True,
+        },
+    )
+
+
+async def failed_safe_pr_recovery_identity(
+    evt: SafePrFailedBody,
+    ctx: EventContext[RecoveryPlanStore],
+) -> tuple[str, str] | None:
+    approval_ref = evt.details.get("approval_ref")
+    if isinstance(approval_ref, str) and approval_ref.strip():
+        approval = await ctx.db.get_workflow_approval(
+            approval_ref.strip(),
+            evt.workspace_id,
+        )
+        if isinstance(approval, dict):
+            approval_details = approval.get("details")
+            if isinstance(approval_details, dict):
+                plan_id = text_value(approval_details.get("recovery_plan_id"))
+                action_id = text_value(approval_details.get("recovery_action_id"))
+                if plan_id and action_id:
+                    return plan_id, action_id
+    record = await ctx.db.get_recovery_plan_by_correlation(
+        ctx.correlation_id,
+        evt.workspace_id,
+    )
+    if not isinstance(record, dict) or record.get("status") != "selected":
+        return None
+    plan_id = text_value(record.get("plan_id"))
+    action_id = text_value(record.get("selected_action_id"))
+    if not plan_id or not action_id:
+        return None
+    return plan_id, action_id
+
+
+async def reopen_recovery_selection(
+    ctx: EventContext[RecoveryPlanStore],
+    workspace_id: str,
+    diagnostics: JsonObject,
+) -> bool:
+    plan_id = text_value(diagnostics.get("plan_id"))
+    action_id = text_value(diagnostics.get("action_id"))
+    if not plan_id or not action_id:
+        return True
+    reopened = await ctx.db.reopen_recovery_plan_action(
+        plan_id,
+        workspace_id,
+        action_id,
+    )
+    if reopened:
+        return True
+    record = await ctx.db.get_recovery_plan_by_correlation(
+        ctx.correlation_id,
+        workspace_id,
+    )
+    return bool(
+        isinstance(record, dict)
+        and text_value(record.get("plan_id")) == plan_id
+        and record.get("status") == "selection_requested"
+        and record.get("selected_action_id") is None
+    )
+
+
+def text_value(value: object) -> str:
+    return value.strip() if isinstance(value, str) else ""
 
 
 @app.on(PipelineContractFailedBody)

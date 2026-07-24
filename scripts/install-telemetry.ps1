@@ -2,10 +2,18 @@ param(
   [string]$TargetContext = "",
   [string]$TargetNamespace = "target",
   [Parameter(Mandatory = $true)]
-  [string]$AssetBaseUrl
+  [string]$AssetBaseUrl,
+  [string]$ClusterId = "",
+  [string]$WorkspaceId = "",
+  [string]$ManagementApiBaseUrl = "",
+  [string]$AgentToken = ""
 )
 
 $ErrorActionPreference = "Stop"
+$AlertmanagerConfigSecret = "kyro-alertmanager-config"
+$PrometheusSliAlertName = "OpsiaSliFailureRatioHigh"
+$AlertmanagerWebhookUrl = ""
+$PrometheusDynamicValues = ""
 
 function Require-Command([string]$Name) {
   if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) {
@@ -89,6 +97,347 @@ function Require-TempoRuntimeBounds {
   }
 }
 
+function Protect-TemporaryPath([string]$Path, [string]$Mode) {
+  # Windows user temp inherits its per-user ACL. Unix PowerShell needs an
+  # explicit mode because this directory can temporarily hold a Bearer token.
+  if (Get-Command chmod -ErrorAction SilentlyContinue) {
+    & chmod $Mode $Path
+    if ($LASTEXITCODE -ne 0) {
+      throw "unable to protect temporary telemetry path"
+    }
+  }
+}
+
+function Get-AlertmanagerWebhookUrl {
+  $base = $ManagementApiBaseUrl.TrimEnd("/")
+  try {
+    $uri = [Uri]$base
+  }
+  catch {
+    throw "ManagementApiBaseUrl must be a normalized http(s) URL ending in /api"
+  }
+  if (
+    -not $uri.IsAbsoluteUri -or
+    $uri.Scheme -notin @("http", "https") -or
+    -not $uri.Host -or
+    $uri.UserInfo -or
+    $uri.Query -or
+    $uri.Fragment -or
+    $uri.AbsolutePath -ne "/api"
+  ) {
+    throw "ManagementApiBaseUrl must be a normalized http(s) URL ending in /api"
+  }
+  $cluster = [Uri]::EscapeDataString($ClusterId)
+  $workspace = [Uri]::EscapeDataString($WorkspaceId)
+  return "$base/webhooks/alertmanager?cluster_id=$cluster&workspace_id=$workspace"
+}
+
+function Configure-AlertmanagerWebhook([string]$Directory) {
+  $configured = @($ClusterId, $WorkspaceId, $ManagementApiBaseUrl, $AgentToken) |
+    Where-Object { $_ }
+  if ($configured.Count -eq 0) {
+    return
+  }
+  if ($configured.Count -ne 4) {
+    throw "Alertmanager webhook requires ClusterId, WorkspaceId, ManagementApiBaseUrl, and AgentToken"
+  }
+
+  $script:AlertmanagerWebhookUrl = Get-AlertmanagerWebhookUrl
+  $configFile = Join-Path $Directory "alertmanager.json"
+  $config = [ordered]@{
+    global = [ordered]@{ resolve_timeout = "5m" }
+    route = [ordered]@{
+      receiver = "kyro-rca"
+      group_by = @(
+        "alertname",
+        "opsia_namespace",
+        "opsia_resource_kind",
+        "opsia_resource_name",
+        "opsia_service",
+        "opsia_sli",
+        "opsia_symptom"
+      )
+      group_wait = "5s"
+      group_interval = "15s"
+      repeat_interval = "5m"
+    }
+    receivers = @(
+      [ordered]@{
+        name = "kyro-rca"
+        webhook_configs = @(
+          [ordered]@{
+            url = $script:AlertmanagerWebhookUrl
+            send_resolved = $true
+            http_config = [ordered]@{
+              authorization = [ordered]@{
+                type = "Bearer"
+                credentials = $AgentToken
+              }
+            }
+          }
+        )
+      }
+    )
+  }
+  $utf8 = New-Object Text.UTF8Encoding($false)
+  [IO.File]::WriteAllText($configFile, ($config | ConvertTo-Json -Depth 12 -Compress), $utf8)
+  Protect-TemporaryPath $configFile "600"
+
+  Write-Host "configuring authenticated Alertmanager delivery to the management API"
+  Invoke-Native {
+    & kubectl --context $TargetContext -n $TargetNamespace `
+      create secret generic $AlertmanagerConfigSecret `
+      "--from-file=alertmanager.yml=$configFile" `
+      --dry-run=client -o yaml |
+      & kubectl --context $TargetContext -n $TargetNamespace apply -f -
+  } "Alertmanager webhook secret installation failed"
+
+  $script:PrometheusDynamicValues = Join-Path $Directory "prometheus-alertmanager-values.yaml"
+  $values = @"
+alertmanager:
+  config:
+    enabled: false
+  extraSecretMounts:
+    - name: kyro-alertmanager-config
+      mountPath: /etc/alertmanager/alertmanager.yml
+      subPath: alertmanager.yml
+      secretName: $AlertmanagerConfigSecret
+      readOnly: true
+"@
+  [IO.File]::WriteAllText($script:PrometheusDynamicValues, $values, $utf8)
+  Protect-TemporaryPath $script:PrometheusDynamicValues "600"
+}
+
+function Require-PrometheusSliRuleLoaded {
+  $path = (
+    "/api/v1/namespaces/$TargetNamespace/services/" +
+    "http:prometheus:http/proxy/api/v1/rules"
+  )
+  for ($attempt = 0; $attempt -lt 30; $attempt++) {
+    $raw = & kubectl --context $TargetContext get "--raw=$path" 2>$null
+    if ($LASTEXITCODE -eq 0 -and $raw) {
+      try {
+        $body = ($raw -join "`n") | ConvertFrom-Json
+        $requiredQueryParts = @(
+          'namespace!=""',
+          'resource_kind!=""',
+          'resource_name!=""',
+          'service!=""',
+          'sli!=""',
+          'symptom!=""',
+          "> 0.2"
+        )
+        $requiredLabels = @(
+          "opsia_namespace",
+          "opsia_resource_kind",
+          "opsia_resource_name",
+          "opsia_service",
+          "opsia_sli",
+          "opsia_symptom"
+        )
+        $requiredAnnotations = @(
+          "opsia_observed_value",
+          "opsia_threshold"
+        )
+        $allRules = @(
+          $body.data.groups |
+          ForEach-Object { $_.rules }
+        )
+        $recordingRules = @(
+          $allRules |
+          Where-Object { $_.name -eq "opsia_sli_failure_ratio" }
+        )
+        $recordingRuleLoaded = $false
+        foreach ($recordingRule in $recordingRules) {
+          $normalizedRecordQuery = ([string]$recordingRule.query) -replace '\s+', ''
+          $sixLabelSum = "sumby(namespace,resource_kind,resource_name,service,sli,symptom)"
+          if (
+            $normalizedRecordQuery.Contains("opsia_sli_requests_total") -and
+            $normalizedRecordQuery.Contains('outcome="failure"') -and
+            [regex]::Matches(
+              $normalizedRecordQuery,
+              [regex]::Escape($sixLabelSum)
+            ).Count -eq 2 -and
+            -not $normalizedRecordQuery.Contains("pod") -and
+            -not $normalizedRecordQuery.Contains("instance")
+          ) {
+            $recordingRuleLoaded = $true
+          }
+        }
+        $alertRules = @(
+          $allRules |
+          Where-Object {
+            $rule = $_
+            $rule.name -eq $PrometheusSliAlertName -and
+            @(
+              $requiredQueryParts |
+              Where-Object { -not ([string]$rule.query).Contains($_) }
+            ).Count -eq 0 -and
+            @(
+              $requiredLabels |
+              Where-Object {
+                $property = $rule.labels.PSObject.Properties[$_]
+                $null -eq $property -or [string]::IsNullOrWhiteSpace([string]$property.Value)
+              }
+            ).Count -eq 0 -and
+            @(
+              $requiredAnnotations |
+              Where-Object {
+                $property = $rule.annotations.PSObject.Properties[$_]
+                $null -eq $property -or [string]::IsNullOrWhiteSpace([string]$property.Value)
+              }
+            ).Count -eq 0
+          }
+        )
+        if (
+          $body.status -eq "success" -and
+          $recordingRuleLoaded -and
+          $alertRules.Count -gt 0
+        ) {
+          return
+        }
+      }
+      catch {
+        # Prometheus may still be starting or reloading its rule files.
+      }
+    }
+    Start-Sleep -Seconds 2
+  }
+  throw (
+    "Prometheus did not load SLI recording rule opsia_sli_failure_ratio " +
+    "and alert rule $PrometheusSliAlertName"
+  )
+}
+
+function Restart-AlertmanagerForWebhookConfig {
+  if (-not $script:AlertmanagerWebhookUrl) {
+    return
+  }
+  $statefulsets = & kubectl --context $TargetContext -n $TargetNamespace `
+    get statefulset `
+    -l "app.kubernetes.io/instance=prometheus,app.kubernetes.io/name=alertmanager" `
+    -o name
+  if ($LASTEXITCODE -ne 0 -or -not $statefulsets) {
+    throw "Alertmanager StatefulSet is missing"
+  }
+  foreach ($statefulset in @($statefulsets)) {
+    # Secret subPath mounts only refresh on Pod recreation. Always restart so
+    # a reissued per-cluster token cannot leave Alertmanager using stale auth.
+    Invoke-Native {
+      & kubectl --context $TargetContext -n $TargetNamespace `
+        rollout restart $statefulset
+    } "Alertmanager restart failed"
+    Invoke-Native {
+      & kubectl --context $TargetContext -n $TargetNamespace `
+        rollout status $statefulset --timeout=180s
+    } "Alertmanager rollout failed"
+  }
+}
+
+function Require-AlertmanagerWebhookConfig {
+  if (-not $script:AlertmanagerWebhookUrl) {
+    return
+  }
+
+  $secret = & kubectl --context $TargetContext -n $TargetNamespace `
+    get secret $AlertmanagerConfigSecret -o json | ConvertFrom-Json
+  if ($LASTEXITCODE -ne 0) {
+    throw "Alertmanager webhook secret lookup failed"
+  }
+  $encoded = $secret.data."alertmanager.yml"
+  try {
+    $decoded = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($encoded))
+    $config = $decoded | ConvertFrom-Json
+    $receiver = @($config.receivers | Where-Object { $_.name -eq "kyro-rca" })
+    $hook = @($receiver[0].webhook_configs)[0]
+    if (
+      $receiver.Count -ne 1 -or
+      $hook.url -ne $script:AlertmanagerWebhookUrl -or
+      $hook.send_resolved -ne $true -or
+      $hook.http_config.authorization.type -ne "Bearer" -or
+      $hook.http_config.authorization.credentials -cne $AgentToken
+    ) {
+      throw "invalid Alertmanager webhook configuration"
+    }
+  }
+  catch {
+    throw "Alertmanager webhook configuration verification failed"
+  }
+
+  $statefulsets = & kubectl --context $TargetContext -n $TargetNamespace `
+    get statefulset `
+    -l "app.kubernetes.io/instance=prometheus,app.kubernetes.io/name=alertmanager" `
+    -o json | ConvertFrom-Json
+  if ($LASTEXITCODE -ne 0) {
+    throw "Alertmanager StatefulSet lookup failed"
+  }
+  $validMount = $false
+  foreach ($item in @($statefulsets.items)) {
+    $secretVolumes = @(
+      $item.spec.template.spec.volumes |
+      Where-Object { $_.secret.secretName -eq $AlertmanagerConfigSecret } |
+      ForEach-Object { $_.name }
+    )
+    $configMounts = @(
+      $item.spec.template.spec.containers |
+      ForEach-Object { $_.volumeMounts } |
+      Where-Object { $_.mountPath -eq "/etc/alertmanager/alertmanager.yml" }
+    )
+    if (
+      $configMounts.Count -eq 1 -and
+      $configMounts[0].name -in $secretVolumes -and
+      $configMounts[0].readOnly -eq $true
+    ) {
+      $validMount = $true
+    }
+  }
+  if (-not $validMount) {
+    throw "Alertmanager webhook secret must be the only read-only config mount"
+  }
+
+  $serviceName = (
+    & kubectl --context $TargetContext -n $TargetNamespace `
+      get service `
+      -l "app.kubernetes.io/instance=prometheus,app.kubernetes.io/name=alertmanager" `
+      -o 'jsonpath={range .items[?(@.spec.clusterIP!="None")]}{.metadata.name}{"\n"}{end}'
+  ).Trim()
+  if ($LASTEXITCODE -ne 0 -or -not $serviceName) {
+    throw "Alertmanager Service is missing"
+  }
+  $path = (
+    "/api/v1/namespaces/$TargetNamespace/services/" +
+    "http:${serviceName}:http/proxy/api/v2/status"
+  )
+  for ($attempt = 0; $attempt -lt 30; $attempt++) {
+    $raw = & kubectl --context $TargetContext get "--raw=$path" 2>$null
+    if ($LASTEXITCODE -eq 0 -and $raw) {
+      try {
+        $status = ($raw -join "`n") | ConvertFrom-Json
+        $runtimeConfig = $status.config.original | ConvertFrom-Json
+        $receiver = @(
+          $runtimeConfig.receivers |
+          Where-Object { $_.name -eq "kyro-rca" }
+        )
+        $hook = @($receiver[0].webhook_configs)[0]
+        if (
+          $receiver.Count -eq 1 -and
+          $hook.url -eq $script:AlertmanagerWebhookUrl -and
+          $hook.send_resolved -eq $true -and
+          $hook.http_config.authorization.type -eq "Bearer" -and
+          $hook.http_config.authorization.credentials -ceq $AgentToken
+        ) {
+          return
+        }
+      }
+      catch {
+        # Alertmanager may still be starting after the mandatory token reload.
+      }
+    }
+    Start-Sleep -Seconds 2
+  }
+  throw "Alertmanager runtime did not load the authenticated webhook config"
+}
+
 function New-RandomHex {
   $bytes = New-Object byte[] 32
   $generator = New-Object Security.Cryptography.RNGCryptoServiceProvider
@@ -113,6 +462,7 @@ if (-not $TargetContext) {
 
 $assetDirectory = Join-Path ([IO.Path]::GetTempPath()) ("kyro-telemetry-" + [guid]::NewGuid())
 New-Item -ItemType Directory -Path $assetDirectory | Out-Null
+Protect-TemporaryPath $assetDirectory "700"
 try {
   $assets = @("prometheus.yaml", "loki.yaml", "tempo.yaml", "opentelemetry.yaml", "minio.yaml")
   foreach ($asset in $assets) {
@@ -126,6 +476,8 @@ try {
       --dry-run=client -o yaml |
       & kubectl --context $TargetContext apply -f -
   } "target namespace creation failed"
+
+  Configure-AlertmanagerWebhook $assetDirectory
 
   $minioPassword = ""
   $encodedPassword = & kubectl --context $TargetContext -n $TargetNamespace `
@@ -182,19 +534,31 @@ try {
   )
   foreach ($release in $releases) {
     $name, $chart, $version, $values = $release
+    $helmArguments = @(
+      "upgrade", "--install", $name, $chart,
+      "--version", $version,
+      "--kube-context", $TargetContext,
+      "--namespace", $TargetNamespace,
+      "--values", (Join-Path $assetDirectory $values)
+    )
+    if ($name -eq "prometheus" -and $script:PrometheusDynamicValues) {
+      $helmArguments += @("--values", $script:PrometheusDynamicValues)
+    }
+    $helmArguments += @("--wait", "--timeout", "5m")
     Invoke-Native {
-      & helm upgrade --install $name $chart `
-        --version $version `
-        --kube-context $TargetContext `
-        --namespace $TargetNamespace `
-        --values (Join-Path $assetDirectory $values) `
-        --wait --timeout 5m
+      & helm @helmArguments
     } "$name installation failed"
     Require-ReleaseWorkload $name
+    if ($name -eq "prometheus") {
+      Restart-AlertmanagerForWebhookConfig
+    }
   }
 
   Require-TempoRuntimeBounds
-  foreach ($service in @("prometheus", "loki-gateway", "tempo", "opentelemetry-collector")) {
+  Wait-ServiceEndpoints "prometheus"
+  Require-PrometheusSliRuleLoaded
+  Require-AlertmanagerWebhookConfig
+  foreach ($service in @("loki-gateway", "tempo", "opentelemetry-collector")) {
     Wait-ServiceEndpoints $service
   }
 
