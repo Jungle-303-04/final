@@ -75,6 +75,7 @@ PATCH_COMMIT_MESSAGE_PREFIX = "Apply manifest patch"
 INVALID_REPO_REF_MESSAGE = "safe pr repo_ref must be an owner/repo GitHub repository path"
 INVALID_BRANCH_REF_MESSAGE = "safe pr branch must be a safe GitHub branch ref"
 STALE_BASE_MESSAGE = "safe pr base branch no longer matches the approved commit"
+STALE_TARGET_MESSAGE = "safe pr target manifest no longer matches the approved value"
 
 # Safe PR 전달 방식 — 환경설정으로 선택한다(하드코딩 금지).
 #   pull_request(기본): 브랜치 + PR 을 열어 사람이 머지한다(리뷰 게이트).
@@ -524,11 +525,10 @@ class GithubScmProvider:
                     result = pull_request_result(existing)
                 else:
                     expected_base_sha = patch_plans[0].expected_base_sha if patch_plans[0] else ""
-                    if expected_base_sha != base_sha:
-                        raise RuntimeError(STALE_BASE_MESSAGE)
-                    patch_contents = await self.materialize_patch_contents(
+                    patch_contents = await self.validate_structured_base_advance(
                         client,
                         repo,
+                        expected_base_sha,
                         base_sha,
                         request,
                         patch_plans,
@@ -733,6 +733,107 @@ class GithubScmProvider:
             except ManifestSourcePatchError as exc:
                 raise RuntimeError(str(exc)) from exc
         return contents
+
+    async def validate_structured_base_advance(
+        self,
+        client: httpx.AsyncClient,
+        repo: str,
+        approved_base_sha: str,
+        current_base_sha: str,
+        request: SafePrRequestedBody,
+        patch_plans: list[StructuredPatchPlan | None],
+        context: dict[str, object] | None = None,
+        *,
+        authority: Mapping[str, object] | None = None,
+    ) -> list[tuple[str, str]]:
+        """Allow an advanced base only when the approved target is still unchanged.
+
+        Before creating a recovery branch from the current base, validate that the
+        base is a descendant of the approved commit, resolves the same
+        repository-owned source, and still contains every approved
+        ``currentValue``.  This is field-level optimistic concurrency: unrelated
+        repository changes are preserved, while target drift fails closed.
+        """
+
+        if current_base_sha == approved_base_sha:
+            return await self.materialize_patch_contents(
+                client,
+                repo,
+                current_base_sha,
+                request,
+                patch_plans,
+                context,
+                authority=authority,
+            )
+        response = await client.get(
+            f"/repos/{repo}/compare/{approved_base_sha}...{current_base_sha}"
+        )
+        if context is not None:
+            log_provider_response("github.compare_current_base", response, context)
+        response.raise_for_status()
+        comparison = response.json()
+        merge_base = (
+            comparison.get("merge_base_commit")
+            if isinstance(comparison, Mapping)
+            else None
+        )
+        if (
+            not isinstance(comparison, Mapping)
+            or comparison.get("status") != "ahead"
+            or not isinstance(merge_base, Mapping)
+            or merge_base.get("sha") != approved_base_sha
+        ):
+            raise RuntimeError(STALE_BASE_MESSAGE)
+
+        try:
+            approved_declared = await self.resolve_declared_patches(
+                client,
+                repo,
+                approved_base_sha,
+                patch_plans,
+                context,
+                request=request,
+                authority=authority,
+            )
+            current_declared = await self.resolve_declared_patches(
+                client,
+                repo,
+                current_base_sha,
+                patch_plans,
+                context,
+                request=request,
+                authority=authority,
+            )
+            if (
+                len(approved_declared) != len(patch_plans)
+                or current_declared != approved_declared
+                or any(
+                    plan is not None and declared is None
+                    for plan, declared in zip(
+                        patch_plans,
+                        current_declared,
+                        strict=True,
+                    )
+                )
+            ):
+                raise RuntimeError(STALE_TARGET_MESSAGE)
+            # Materialization parses the current source and verifies each selected
+            # scalar still equals the approval's currentValue without rewriting
+            # unrelated fields.
+            return await self.materialize_patch_contents(
+                client,
+                repo,
+                current_base_sha,
+                request,
+                patch_plans,
+                context,
+                declared_patches=current_declared,
+                authority=authority,
+            )
+        except RuntimeError as exc:
+            if str(exc) == STALE_TARGET_MESSAGE:
+                raise
+            raise RuntimeError(STALE_TARGET_MESSAGE) from exc
 
     async def resolve_declared_patches(
         self,
@@ -1366,58 +1467,7 @@ class GithubScmProvider:
         plan = plans[0]
         if not re.fullmatch(r"[0-9a-f]{40,64}", head_sha):
             return False
-        declared_patches = await self.resolve_declared_patches(
-            client,
-            repo,
-            plan.expected_base_sha,
-            patch_plans,
-            context,
-            request=request,
-            authority=authority,
-        )
-        declared = [patch for patch in declared_patches if patch is not None]
-        if len(declared) != 1:
-            return False
-        target_path = declared[0].source_path
-        if current_base_sha != plan.expected_base_sha:
-            base_response = await client.get(
-                f"/repos/{repo}/compare/{plan.expected_base_sha}...{current_base_sha}"
-            )
-            if context is not None:
-                log_provider_response("github.compare_current_base", base_response, context)
-            base_response.raise_for_status()
-            base_comparison = base_response.json()
-            base_merge = (
-                base_comparison.get("merge_base_commit")
-                if isinstance(base_comparison, Mapping)
-                else None
-            )
-            base_files = (
-                base_comparison.get("files") if isinstance(base_comparison, Mapping) else None
-            )
-            protected_paths = {
-                change_document_path(request),
-                REMEDIATION_SOURCE_CONTRACT_PATH,
-                plan.manifest_path,
-                target_path,
-            }
-            changed_base_paths = {
-                str(value)
-                for item in base_files or []
-                if isinstance(item, Mapping)
-                for value in (item.get("filename"), item.get("previous_filename"))
-                if value
-            }
-            if (
-                not isinstance(base_merge, Mapping)
-                or base_merge.get("sha") != plan.expected_base_sha
-                or base_comparison.get("status") not in {"ahead", "identical"}
-                or not isinstance(base_files, list)
-                or len(base_files) >= 300
-                or changed_base_paths.intersection(protected_paths)
-            ):
-                return False
-        response = await client.get(f"/repos/{repo}/compare/{plan.expected_base_sha}...{head_sha}")
+        response = await client.get(f"/repos/{repo}/compare/{current_base_sha}...{head_sha}")
         if context is not None:
             log_provider_response("github.compare_existing_pr", response, context)
         response.raise_for_status()
@@ -1426,6 +1476,36 @@ class GithubScmProvider:
         merge_base = (
             comparison.get("merge_base_commit") if isinstance(comparison, Mapping) else None
         )
+        pr_base_sha = str(merge_base.get("sha") or "") if isinstance(merge_base, Mapping) else ""
+        if not re.fullmatch(r"[0-9a-f]{40,64}", pr_base_sha):
+            return False
+        try:
+            pr_base_contents = await self.validate_structured_base_advance(
+                client,
+                repo,
+                plan.expected_base_sha,
+                pr_base_sha,
+                request,
+                patch_plans,
+                context,
+                authority=authority,
+            )
+            if pr_base_sha != current_base_sha:
+                await self.validate_structured_base_advance(
+                    client,
+                    repo,
+                    pr_base_sha,
+                    current_base_sha,
+                    request,
+                    patch_plans,
+                    context,
+                    authority=authority,
+                )
+        except RuntimeError:
+            return False
+        if len(pr_base_contents) != 1:
+            return False
+        target_path = pr_base_contents[0][0]
         expected_paths = {change_document_path(request), target_path}
         file_by_name = {
             str(item.get("filename") or ""): item
@@ -1437,8 +1517,7 @@ class GithubScmProvider:
         if (
             not isinstance(files, list)
             or not isinstance(merge_base, Mapping)
-            or merge_base.get("sha") != plan.expected_base_sha
-            or comparison.get("status") != "ahead"
+            or comparison.get("status") not in {"ahead", "diverged"}
             or set(file_by_name) != expected_paths
             or not isinstance(manifest_file, Mapping)
             or manifest_file.get("status") != "modified"
@@ -1447,17 +1526,6 @@ class GithubScmProvider:
             or change_file.get("status") not in {"added", "modified"}
             or change_file.get("previous_filename") is not None
         ):
-            return False
-        materialized = await self.materialize_patch_contents(
-            client,
-            repo,
-            plan.expected_base_sha,
-            request,
-            patch_plans,
-            context,
-            declared_patches=declared_patches,
-        )
-        if len(materialized) != 1 or materialized[0][0] != target_path:
             return False
         actual_manifest = await self.source_file_content(
             client,
@@ -1473,6 +1541,6 @@ class GithubScmProvider:
             change_document_path(request),
             context,
         )
-        return actual_manifest == materialized[0][1] and actual_change_document == change_document(
-            request
+        return actual_manifest == pr_base_contents[0][1] and actual_change_document == (
+            change_document(request)
         )
