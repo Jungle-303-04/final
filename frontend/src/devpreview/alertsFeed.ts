@@ -26,6 +26,7 @@ function isAbortError(error: unknown): boolean {
 
 export interface AlertEventView {
   eventId: string;
+  ruleId: string | null;
   ruleName: string | null;
   source: AlertEvent["source"];
   severity: AlertEvent["severity"];
@@ -35,7 +36,15 @@ export interface AlertEventView {
   kind: string;
   name: string;
   firedAt: string;
+  resolvedAt: string | null;
+  observedValue: number | null;
+  threshold: number | null;
+  evidence: AlertEvent["evidence"];
   incidentId: string | null;
+  acknowledgedAt: string | null;
+  acknowledgedBy: string | null;
+  promotedAt: string | null;
+  promotedBy: string | null;
 }
 
 export interface AlertEventsFeed {
@@ -61,6 +70,7 @@ export function isIncidentNotification(event: AlertEventView): boolean {
 function toEventView(event: AlertEvent): AlertEventView {
   return {
     eventId: event.event_id,
+    ruleId: event.rule_id,
     ruleName: event.rule_name,
     source: event.source,
     severity: event.severity,
@@ -70,7 +80,15 @@ function toEventView(event: AlertEvent): AlertEventView {
     kind: event.subject.kind,
     name: event.subject.name,
     firedAt: event.fired_at,
+    resolvedAt: event.resolved_at,
+    observedValue: event.observed_value,
+    threshold: event.threshold,
+    evidence: event.evidence,
     incidentId: event.incident_id,
+    acknowledgedAt: event.acknowledged_at,
+    acknowledgedBy: event.acknowledged_by,
+    promotedAt: event.promoted_at,
+    promotedBy: event.promoted_by,
   };
 }
 

@@ -231,7 +231,7 @@ export function MiniBars({ values, labels, currentIndex, tone = BLUE }: {
 
 // ── Donut — 도넛 + 값 범례 (P-14) ──
 const DONUT_COLORS = [BLUE, HP.ok, HP.warn, TINT.purple.fg, IDENT.teal, UI.ink3];
-export function Donut({ items, onPick }: { items: { label: string; value: number; pick?: boolean }[]; onPick?: (label: string) => void }) {
+export function Donut({ items, onPick }: { items: { label: string; value: number; pick?: boolean; color?: string }[]; onPick?: (label: string) => void }) {
   const total = items.reduce((s, x) => s + x.value, 0) || 1;
   const R = 34, C = 2 * Math.PI * R;
   const segments = items.map((it, i) => {
@@ -249,7 +249,7 @@ export function Donut({ items, onPick }: { items: { label: string; value: number
       <svg width={80} height={80} viewBox="0 0 88 88" style={{ display: "block", width: "100%", maxWidth: 80, height: "auto", minWidth: 0, transform: "rotate(-90deg)" }}>
         {segments.map(({ it, i, dash, off }) => {
           return <motion.circle key={it.label} cx={44} cy={44} r={R} fill="none" strokeWidth={11} strokeLinecap="round"
-            stroke={DONUT_COLORS[i % DONUT_COLORS.length]} initial={{ strokeDasharray: `0 ${C}` }} animate={{ strokeDasharray: dash }} transition={{ duration: DUR.draw, ease: "easeInOut", delay: i * 0.08 }} strokeDashoffset={off} />;
+            stroke={it.color ?? DONUT_COLORS[i % DONUT_COLORS.length]} initial={{ strokeDasharray: `0 ${C}` }} animate={{ strokeDasharray: dash }} transition={{ duration: DUR.draw, ease: "easeInOut", delay: i * 0.08 }} strokeDashoffset={off} />;
         })}
       </svg>
       <div style={{ display: "flex", flexDirection: "column", gap: 5, minWidth: 0, width: "100%" }}>
@@ -258,7 +258,7 @@ export function Donut({ items, onPick }: { items: { label: string; value: number
           return (
           <button key={it.label} onClick={pickable ? () => onPick!(it.label) : undefined} disabled={!pickable} className={pickable ? "rrow" : undefined}
             style={{ display: "flex", alignItems: "center", gap: 7, width: "100%", maxWidth: "100%", fontSize: TYPE.label, color: UI.ink2, border: "none", background: "transparent", padding: "1px 4px", borderRadius: 6, cursor: pickable ? "pointer" : "default", textAlign: "left", minWidth: 0 }}>
-            <span style={{ width: 8, height: 8, borderRadius: 999, background: DONUT_COLORS[i % DONUT_COLORS.length], flexShrink: 0 }} />
+            <span style={{ width: 8, height: 8, borderRadius: 999, background: it.color ?? DONUT_COLORS[i % DONUT_COLORS.length], flexShrink: 0 }} />
             <span title={it.label} style={{ flex: "1 1 auto", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.label}</span>
             <b style={{ width: 44, marginLeft: "auto", textAlign: "right", color: UI.ink, fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{it.value}</b>
             <span style={{ fontVariantNumeric: "tabular-nums", fontSize: TYPE.caption, color: UI.ink3, width: 38, textAlign: "right", flexShrink: 0 }}>{Math.round((it.value / total) * 100)}%</span>

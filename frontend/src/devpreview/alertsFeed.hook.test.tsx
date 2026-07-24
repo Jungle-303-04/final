@@ -57,6 +57,7 @@ describe("alert event transport state", () => {
     listAlertEvents
       .mockResolvedValueOnce([{
         event_id: "alert-a",
+        rule_id: "rule-a",
         rule_name: null,
         source: "opsia",
         severity: "warning",
@@ -68,7 +69,23 @@ describe("alert event transport state", () => {
           name: "pod-a",
         },
         fired_at: "2026-07-24T00:00:00Z",
+        resolved_at: null,
+        observed_value: 91,
+        threshold: 90,
+        evidence: [{
+          type: "metric",
+          metric: "cpu_usage",
+          observed_at: "2026-07-24T00:00:00Z",
+          subject: null,
+          value: 91,
+          summary: "CPU usage crossed the configured threshold",
+          link: null,
+        }],
         incident_id: null,
+        acknowledged_at: null,
+        acknowledged_by: null,
+        promoted_at: null,
+        promoted_by: null,
       }])
       .mockRejectedValueOnce(new Error("temporary refresh failure"));
     subscribeAlertEvents.mockImplementation(async function* (
@@ -87,6 +104,12 @@ describe("alert event transport state", () => {
     await waitFor(() => expect(result.current.transport).toBe("stale"));
     expect(result.current.status).toBe("ready");
     expect(result.current.items.map((item) => item.eventId)).toEqual(["alert-a"]);
+    expect(result.current.items[0]).toMatchObject({
+      ruleId: "rule-a",
+      observedValue: 91,
+      threshold: 90,
+      evidence: [expect.objectContaining({ metric: "cpu_usage", value: 91 })],
+    });
     unmount();
   });
 });

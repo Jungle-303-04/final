@@ -11,6 +11,7 @@ function alert(
 ): AlertEventView {
   return {
     eventId: "ale-inc-1",
+    ruleId: null,
     ruleName: "CrashLoopBackOff",
     source: "incident",
     severity: "high",
@@ -20,7 +21,15 @@ function alert(
     kind: "Pod",
     name: "demo-game-abc",
     firedAt: "2026-07-23T05:00:00Z",
+    resolvedAt: null,
+    observedValue: null,
+    threshold: null,
+    evidence: [],
     incidentId: "incident-1",
+    acknowledgedAt: null,
+    acknowledgedBy: null,
+    promotedAt: null,
+    promotedBy: null,
     ...changes,
   };
 }

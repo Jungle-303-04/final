@@ -1,7 +1,7 @@
 // ── 데모 서피스: 배포 · 이슈 · 타임라인 · 점검 · 비용 · 설정 (Master Spec 5.7~5.10) ──
 // 원칙: 모든 숫자는 실제 백엔드 계약(어댑터 훅) 파생 — 관측 안 된 값은 채우지 않는다(no backfill).
 // 시각은 공용 부품(KpiValue/MiniBars/RankList/MiniTimeline)과 셸 토큰만 사용. 제품 이식 시 D5 공용 표로 수렴한다.
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import {
   Rocket, Package, AlertTriangle, Bell, Clock, ShieldCheck, Coins,
@@ -45,6 +45,7 @@ import {
   useAlertRules,
   useAlertChannels,
   type AlertEventsFeed,
+  type AlertEventView,
 } from "./devpreview/alertsFeed";
 import { alertEventPresentation, alertSeverityTone, type AlertEventIcon, type AlertPresentationTone } from "./devpreview/alertEventPresentation";
 import {
@@ -460,10 +461,14 @@ function WorkflowEvidencePanel({ runs, repositoryRef, status, onRefresh, onOpenR
     </Card>
   );
 }
-export function DeploySurface({ applicationsFeed, onRefreshApplications, pendingRepos = [], repositoryFilter = null, onOpenRef, onOpenIssues, onAskAi, onAddRepo, topInset = 57, leftInset = 208, rightInset = 0 }: {
+export function DeploySurface({ applicationsFeed, onRefreshApplications, pendingRepos = [], repositoryFilter = null, applicationDetailId = null, onApplicationDetailClose, onOpenRef, onOpenIssues, onAskAi, onAddRepo, topInset = 57, leftInset = 208, rightInset = 0 }: {
   applicationsFeed: ApplicationsFeed;
   onRefreshApplications: () => void;
-  pendingRepos?: string[]; repositoryFilter?: string | null; onOpenRef: (kind: string, name: string) => void; onOpenIssues: () => void; onAskAi: () => void; onAddRepo: () => void;
+  pendingRepos?: string[];
+  repositoryFilter?: string | null;
+  applicationDetailId?: string | null;
+  onApplicationDetailClose?: () => void;
+  onOpenRef: (kind: string, name: string) => void; onOpenIssues: () => void; onAskAi: () => void; onAddRepo: () => void;
   /** 상세 패널 겹침 방지용 크롬 인셋 — unified DetailOverlay와 같은 계약. */
   topInset?: number; leftInset?: number; rightInset?: number;
 }) {
@@ -497,6 +502,20 @@ export function DeploySurface({ applicationsFeed, onRefreshApplications, pending
   const releaseFlow = useReleaseFlow(tab === "릴리스");
   const releaseActions = useReleaseActions(releaseFlow.refresh);
   const apps = appsFeed.items;
+  useEffect(() => {
+    if (applicationDetailId === null) return;
+    const application = apps.find((candidate) => candidate.id === applicationDetailId);
+    if (!application) return;
+    const timer = window.setTimeout(() => {
+      setTab("애플리케이션");
+      setDetail({
+        kind: "application",
+        applicationId: application.id,
+        name: application.name,
+      });
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [applicationDetailId, apps]);
   const repositoryGroups = useMemo(() => groupApplicationsByRepository(apps), [apps]);
   const connectedRepositoryKeys = useMemo(
     () => new Set(repositoryGroups.map((group) => group.repositoryRef.toLowerCase())),
@@ -722,7 +741,12 @@ export function DeploySurface({ applicationsFeed, onRefreshApplications, pending
     {detail !== null && (
       <DeployDetailHost target={detail} runs={workflowFeed.items}
         releasePlans={releaseFlow.plans} releaseRuns={releaseFlow.runs} releaseActions={releaseActions}
-        onClose={() => setDetail(null)}
+        onClose={() => {
+          const closingControlledApplication =
+            detail.kind === "application" && detail.applicationId === applicationDetailId;
+          setDetail(null);
+          if (closingControlledApplication) onApplicationDetailClose?.();
+        }}
         topInset={topInset} leftInset={leftInset} rightInset={rightInset} />
     )}
     </>
@@ -3030,12 +3054,123 @@ function AlertEventPill({ tone, label, icon: Icon, iconColor }: { tone: AlertPre
   );
 }
 
-export function AlertsSurface({ events, onOpenRef }: {
-  events: AlertEventsFeed;
+function AlertEventDetail({ event, onClose, onOpenRef, topInset, leftInset, rightInset }: {
+  event: AlertEventView;
+  onClose: () => void;
   onOpenRef: (kind: string, name: string) => void;
+  topInset: number;
+  leftInset: number;
+  rightInset: number;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const presentation = alertEventPresentation(event);
+  const detailSection = (title: string, children: ReactNode) => (
+    <section style={{ display: "grid", gap: 10, border: `1px solid ${UI.line}`, borderRadius: RADIUS.card, background: UI.card, padding: SPACE.card }}>
+      <h2 style={{ margin: 0, fontSize: TYPE.section, fontWeight: 700, color: UI.heading }}>{title}</h2>
+      {children}
+    </section>
+  );
+  const detailRows = (rows: Array<[string, ReactNode]>) => (
+    <dl style={{ display: "grid", gridTemplateColumns: "108px minmax(0, 1fr)", gap: "8px 12px", margin: 0, fontSize: TYPE.label, lineHeight: 1.5 }}>
+      {rows.map(([label, value]) => (
+        <Fragment key={label}>
+          <dt style={{ color: UI.ink3 }}>{label}</dt>
+          <dd style={{ minWidth: 0, margin: 0, color: UI.ink, overflowWrap: "anywhere" }}>{value}</dd>
+        </Fragment>
+      ))}
+    </dl>
+  );
+  return (
+    <DetailDrawer
+      ariaLabel={`${event.kind} ${event.name} 경보 상세`}
+      bodyStyle={{ display: "flex", flexDirection: "column", gap: SPACE.stack, padding: SPACE.card }}
+      expanded={expanded}
+      header={(
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+          <span style={{ width: 34, height: 34, borderRadius: 10, background: presentation.tone === "crit" ? critA(0.09) : presentation.tone === "warn" ? TINT.warn.bg : blueA(0.08), display: "grid", placeItems: "center", flexShrink: 0 }}>
+            <presentation.Icon size={17} style={{ color: presentation.color }} />
+          </span>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
+              <span style={{ fontSize: TYPE.section, fontWeight: 700, color: UI.ink }}>{event.kind} · {event.name}</span>
+              <Pill tone={alertSeverityTone(event.severity)} label={koLabel(event.severity)} />
+            </div>
+            <div style={{ marginTop: 3, fontFamily: MONO, fontSize: TYPE.caption, color: UI.ink3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {event.cluster}{event.namespace ? ` · ${event.namespace}` : ""}
+            </div>
+          </div>
+        </div>
+      )}
+      leftInset={leftInset}
+      onClose={onClose}
+      onExpandedChange={setExpanded}
+      rightInset={rightInset}
+      topInset={topInset}
+    >
+      {detailSection("경보 개요", detailRows([
+        ["상태", koLabel(event.status)],
+        ["소스", event.source],
+        ["규칙", event.ruleName ?? "관측 안 됨"],
+        ["규칙 ID", <span style={{ fontFamily: MONO }}>{event.ruleId ?? "—"}</span>],
+        ["발생", fromNow(event.firedAt)],
+        ["해결", fromNow(event.resolvedAt)],
+        ["인시던트", <span style={{ fontFamily: MONO }}>{event.incidentId ?? "연결 안 됨"}</span>],
+      ]))}
+      {detailSection("측정값", detailRows([
+        ["관측값", event.observedValue !== null ? String(event.observedValue) : "관측 안 됨"],
+        ["임계치", event.threshold !== null ? String(event.threshold) : "관측 안 됨"],
+      ]))}
+      {detailSection("처리 이력", detailRows([
+        ["확인", event.acknowledgedAt ? `${fromNow(event.acknowledgedAt)}${event.acknowledgedBy ? ` · ${event.acknowledgedBy}` : ""}` : "확인 기록 없음"],
+        ["승격", event.promotedAt ? `${fromNow(event.promotedAt)}${event.promotedBy ? ` · ${event.promotedBy}` : ""}` : "승격 기록 없음"],
+      ]))}
+      {detailSection("증거", event.evidence.length === 0 ? (
+        <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>관측된 증거 없음</span>
+      ) : (
+        <div style={{ display: "grid", gap: 8 }}>
+          {event.evidence.map((evidence, index) => (
+            <div key={`${evidence.type}-${index}`} style={{ display: "grid", gap: 5, border: `1px solid ${UI.line2}`, borderRadius: RADIUS.control, background: UI.bg2, padding: "9px 11px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ minWidth: 0, flex: 1, fontSize: TYPE.label, fontWeight: 600, color: UI.ink }}>{evidence.type}</span>
+                {evidence.observed_at && <span style={{ fontSize: TYPE.caption, color: UI.ink3 }}>{fromNow(evidence.observed_at)}</span>}
+              </div>
+              {(evidence.metric || evidence.value !== null) && (
+                <span style={{ fontFamily: MONO, fontSize: TYPE.caption, color: UI.ink2 }}>
+                  {[evidence.metric, evidence.value !== null ? String(evidence.value) : null].filter(Boolean).join(" · ")}
+                </span>
+              )}
+              {evidence.summary && <span style={{ fontSize: TYPE.label, color: UI.ink2, lineHeight: 1.5 }}>{evidence.summary}</span>}
+              {evidence.subject && (
+                <button type="button" className="product-focusable product-control" onClick={() => onOpenRef(evidence.subject!.kind, evidence.subject!.name)}
+                  style={{ justifySelf: "start", border: "none", background: "transparent", padding: 0, fontFamily: MONO, fontSize: TYPE.caption, color: BLUE, cursor: "pointer" }}>
+                  {evidence.subject.kind} · {evidence.subject.name} 열기
+                </button>
+              )}
+              {evidence.link && <span style={{ fontFamily: MONO, fontSize: TYPE.caption, color: UI.ink3, overflowWrap: "anywhere" }}>{evidence.link}</span>}
+            </div>
+          ))}
+        </div>
+      ))}
+      <button type="button" className="product-focusable product-action" onClick={() => onOpenRef(event.kind, event.name)}
+        style={{ alignSelf: "flex-start", border: "none", borderRadius: RADIUS.control, background: BLUE, color: UI.card, padding: "7px 12px", fontSize: TYPE.label, fontWeight: 600, cursor: "pointer" }}>
+        대상 리소스 상세 열기
+      </button>
+    </DetailDrawer>
+  );
+}
+
+export function AlertsSurface({ events, selectedEventId = null, onSelectedEventIdChange, onOpenRef, topInset = 57, leftInset = 208, rightInset = 0 }: {
+  events: AlertEventsFeed;
+  selectedEventId?: string | null;
+  onSelectedEventIdChange?: (eventId: string | null) => void;
+  onOpenRef: (kind: string, name: string) => void;
+  topInset?: number;
+  leftInset?: number;
+  rightInset?: number;
 }) {
   const rules = useAlertRules();
   const channels = useAlertChannels();
+  const selectedEvent = events.items.find((event) => event.eventId === selectedEventId) ?? null;
   const evCols: [string, string][] = [["심각도", "88px"], ["대상", "minmax(220px,1.8fr)"], ["규칙", "minmax(90px,0.8fr)"], ["상태", "80px"], ["발생", "minmax(70px,0.5fr)"]];
   const ruleCols: [string, string][] = [["규칙", "minmax(160px,1.5fr)"], ["조건", "minmax(140px,1.2fr)"], ["심각도", "minmax(80px,0.6fr)"], ["채널", "56px"], ["활성", "72px"]];
   const chCols: [string, string][] = [["채널", "minmax(160px,1.5fr)"], ["종류", "minmax(90px,0.8fr)"], ["최소 심각도", "minmax(90px,0.8fr)"], ["활성", "72px"]];
@@ -3066,7 +3201,7 @@ export function AlertsSurface({ events, onOpenRef }: {
           : events.items.map((n, i) => {
             const presentation = alertEventPresentation(n);
             return (
-              <TRow key={n.eventId} cols={evCols} i={i} onClick={() => onOpenRef(n.kind, n.name)} cells={[
+              <TRow key={n.eventId} cols={evCols} i={i} onClick={() => onSelectedEventIdChange?.(n.eventId)} cells={[
                 <AlertEventPill key="s" tone={presentation.tone} label={koLabel(n.severity)} icon={presentation.Icon} iconColor={presentation.color} />,
                 <span key="t" style={{ fontSize: TYPE.label, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{n.kind} · {n.name}{n.namespace ? ` · ${n.namespace}` : ""}</span>,
                 <Mono key="r" dim>{n.ruleName ?? "—"}</Mono>,
@@ -3107,6 +3242,16 @@ export function AlertsSurface({ events, onOpenRef }: {
             ]} />
           ))}
       </Card>
+      {selectedEvent && (
+        <AlertEventDetail
+          event={selectedEvent}
+          onClose={() => onSelectedEventIdChange?.(null)}
+          onOpenRef={onOpenRef}
+          topInset={topInset}
+          leftInset={leftInset}
+          rightInset={rightInset}
+        />
+      )}
     </Page>
   );
 }

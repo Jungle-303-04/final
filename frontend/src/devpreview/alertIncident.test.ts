@@ -13,6 +13,7 @@ import type { RcaIssueDetailView } from "./rcaDetailFeed";
 function alertEvent(overrides: Partial<AlertEventView> = {}): AlertEventView {
   return {
     eventId: "alert-1",
+    ruleId: null,
     ruleName: "Readiness probe response failure",
     source: "incident",
     severity: "medium",
@@ -22,7 +23,15 @@ function alertEvent(overrides: Partial<AlertEventView> = {}): AlertEventView {
     kind: "ReplicaSet",
     name: "game-room-abc",
     firedAt: "2026-07-23T22:37:09Z",
+    resolvedAt: null,
+    observedValue: null,
+    threshold: null,
+    evidence: [],
     incidentId: "incident-1",
+    acknowledgedAt: null,
+    acknowledgedBy: null,
+    promotedAt: null,
+    promotedBy: null,
     ...overrides,
   };
 }

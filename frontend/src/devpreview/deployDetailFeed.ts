@@ -1,8 +1,11 @@
 import { useEffect, useState } from "react";
 
-import { getApplicationDrift } from "../api/application-catalog";
-import type { ApplicationDriftEndpoint } from "../api/application-catalog-schemas";
-import { getApplication, listApplicationDeployments } from "../api/applications";
+import { getApplicationDrift, getApplicationOverview } from "../api/application-catalog";
+import type {
+  ApplicationDetailEndpointItem,
+  ApplicationDriftEndpoint,
+} from "../api/application-catalog-schemas";
+import { listApplicationDeployments } from "../api/applications";
 import { getChangeTimeline } from "../api/change-timeline";
 import type { ChangeTimelineEndpoint } from "../api/change-timeline-schemas";
 import { getGitOpsApplicationDetail } from "../api/gitops-application-detail";
@@ -31,8 +34,8 @@ export interface DetailSection<T> {
 }
 
 export interface ApplicationDetailFeed {
-  /** GET /api/applications/{id} — 원본 jsonMap (방어적으로 읽는다). */
-  record: DetailSection<Record<string, unknown>>;
+  /** GET /api/applications/{id} — 검증된 애플리케이션 개요·범위·활동·토폴로지. */
+  record: DetailSection<ApplicationDetailEndpointItem>;
   /** GET /api/applications/{id}/deployments — 환경 바인딩 목록. */
   deployments: DetailSection<Record<string, unknown>[]>;
   /** GET /api/gitops/applications/{id} — GitOps 스코프·소스·capability. */
@@ -72,7 +75,7 @@ export function useApplicationDetail(applicationId: string | null): ApplicationD
     if (applicationId === null) return;
     const controller = new AbortController();
     void Promise.allSettled([
-      getApplication(applicationId, controller.signal),
+      getApplicationOverview(applicationId, controller.signal),
       listApplicationDeployments(applicationId, { signal: controller.signal }),
       getGitOpsApplicationDetail(applicationId, controller.signal),
       getApplicationDrift(applicationId, controller.signal),

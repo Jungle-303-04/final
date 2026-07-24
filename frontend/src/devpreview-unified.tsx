@@ -94,6 +94,7 @@ import {
   alertEventOccurrenceKey,
   isIncidentNotification,
   useAlertEvents,
+  type AlertEventsFeed,
   type AlertEventView,
 } from "./devpreview/alertsFeed";
 import { alertEventPresentation, strongestAlertEventPresentation, type AlertEventIcon } from "./devpreview/alertEventPresentation";
@@ -139,6 +140,11 @@ import { operationalMessageLabel, reasonLabel, statusLabel, isCriticalStatus } f
 import { LiveResourceManifestEditor } from "./devpreview/resourceManifestEditor";
 import type { ResourceManifestSourceEndpoint } from "./devpreview/resourceManifestFeed";
 import { groupApplicationsByRepository } from "./devpreview/repositoryRegistry";
+import {
+  activeAlertRows,
+  applicationAttentionRows,
+  applicationHealthItems,
+} from "./devpreview/homeWidgetPresentation";
 import { podsForNode, useClusterTopology } from "./devpreview/inventoryTopologyFeed";
 import { UI, BLUE, BLUE2, HP, INTERACTION, TINT, MONO, TYPE, SOFT, SPRING, PRESENT_SCALE, DUR, RADIUS, SPACE, RESOURCE_LAYOUT, inkA, blueA, MARK, cardA, GLASS, critA } from "./devpreview/theme";
 import "./styles/tokens.css";
@@ -1711,7 +1717,7 @@ function GlobalNav({ collapsed, setCollapsed, surface, onSurface }: {
   );
 }
 
-// ── 홈 서피스 (D21: 고정 헤더 + 클러스터 섹션 + 위젯 보드 W2~W8) ─────────────
+// ── 홈 서피스 (D21: 고정 헤더 + 클러스터 섹션 + 위젯 보드) ──────────────────
 // 모든 숫자는 단일 인벤토리 파생. 위젯 배치는 localStorage 보존, 편집=숨김·추가·이동(제품은 dnd-kit 드래그).
 const W_DEFS: { id: string; title: string; info: string; defaultSpan: DashboardWidgetSpan }[] = [
   { id: "W1", title: "Clusters", info: "연결된 클러스터의 라이브 상태와 사용률을 한 행에서 비교", defaultSpan: 4 },
@@ -1722,6 +1728,10 @@ const W_DEFS: { id: string; title: string; info: string; defaultSpan: DashboardW
   { id: "W6", title: "장애·주의 리소스", info: "지금 주의가 필요한 리소스 상위 5 — 행 클릭 시 상세", defaultSpan: 2 },
   { id: "W7", title: "비용", info: "이번 달 클러스터 비용 요약 (증가는 주의 톤)", defaultSpan: 1 },
   { id: "W8", title: "최근 변경", info: "타임라인 최신 변경 5건의 미니 뷰", defaultSpan: 4 },
+  { id: "W9", title: "현재 경보", info: "전역 경보 피드에서 지금 발생 중인 최신 경보", defaultSpan: 2 },
+  { id: "W10", title: "운영 대기열", info: "승인 대기·실행 중 워크플로·처리 실패의 현재 합계", defaultSpan: 2 },
+  { id: "W11", title: "애플리케이션 상태", info: "배포 애플리케이션의 런타임 상태 분포", defaultSpan: 2 },
+  { id: "W12", title: "애플리케이션 상세", info: "주의가 필요한 애플리케이션 우선 목록 — 항목 클릭 시 실제 상세", defaultSpan: 2 },
 ];
 const BOARD_KEY = "opsia-demo-board-v2"; // v2: W5~W8 기본 노출(D21 위젯 보드 전체가 기본값)
 type BoardState = { order: string[]; hidden: string[]; spans: Record<string, DashboardWidgetSpan>; types: Record<string, string> };
@@ -1762,16 +1772,20 @@ const readBoard = (): BoardState => {
   return defaultBoard();
 };
 
-function HomeSurface({ workspaceId, applicationsFeed, namespaceFeed, clusterMeta, incidentClusterIds, onDrillCluster, onClusterSettings, onClusterDisconnect, onConnect, onAddRepo, onOpenPod: _onOpenPod, onPickNs, onWidgetDeepLink, onOpenIssues, pendingCl = [], pendingRepo = [] }: {
+function HomeSurface({ workspaceId, applicationsFeed, alertEvents, namespaceFeed, clusterMeta, incidentClusterIds, onDrillCluster, onClusterSettings, onClusterDisconnect, onConnect, onAddRepo, onOpenPod: _onOpenPod, onPickNs, onWidgetDeepLink, onOpenAlert, onOpenApplication, onOpenIssues, pendingCl = [], pendingRepo = [] }: {
   workspaceId: string | null;
   applicationsFeed: ApplicationsFeed;
+  alertEvents: AlertEventsFeed;
   namespaceFeed: InventoryNamespacesView;
   clusterMeta: Record<string, Record<string, number>>;
   incidentClusterIds: readonly string[];
   onDrillCluster: (clId: string) => void; onConnect: () => void; onAddRepo: () => void;
   onClusterSettings?: (clId: string) => void; onClusterDisconnect?: (clId: string) => void;
   onOpenPod: (name: string) => void; onPickNs: (ns: string) => void;
-  pendingCl?: string[]; pendingRepo?: string[]; onWidgetDeepLink?: (id: string) => void; onOpenIssues?: () => void;
+  pendingCl?: string[]; pendingRepo?: string[]; onWidgetDeepLink?: (id: string) => void;
+  onOpenAlert?: (eventId: string) => void;
+  onOpenApplication?: (applicationId: string) => void;
+  onOpenIssues?: () => void;
 }) {
   // 상단 요약 칩은 렌더 지점(아래 IIFE)에서 실 관측 이슈로 계산 — fixture 인벤토리 제거.
   const clusters = Object.keys(clusterMeta);
@@ -1785,7 +1799,7 @@ function HomeSurface({ workspaceId, applicationsFeed, namespaceFeed, clusterMeta
   // W2 이슈 위젯 — 실 RCA 이슈 큐(GET /api/dashboard/rca/issues). 빈 배열=관측된 이슈 없음.
   const issues = useRcaIssues(incidentClusterIds);
   // W7 비용 위젯 — 실 GET /api/cost/overview. 현 계약은 관측 unavailable(가격 backfill 금지).
-  const cost = useCostOverview();
+  const cost = useCostOverview(clusters);
 
   // priority 14: 좁은 화면(≤768px)에서 클러스터 카드·위젯 보드를 1열로, 상단 컨트롤을
   // 줄바꿈해 한글이 글자 단위로 세로 붕괴하지 않도록 한다.
@@ -1832,6 +1846,15 @@ function HomeSurface({ workspaceId, applicationsFeed, namespaceFeed, clusterMeta
   const changeTimeline = useChangeTimeline(workspaceId, clusters);
   // W3 저장소 동기화 — 실 GET /api/applications(배포/GitOps 상태).
   const apps = applicationsFeed;
+  const activeAlerts = useMemo(() => activeAlertRows(alertEvents.items), [alertEvents.items]);
+  const applicationHealth = useMemo(
+    () => applicationHealthItems(apps.items, { ok: HP.ok, warn: HP.warn, unknown: UI.ink3 }),
+    [apps.items],
+  );
+  const applicationAttention = useMemo(
+    () => applicationAttentionRows(apps.items),
+    [apps.items],
+  );
   // 렌더 순수성 — Date.now() 상대시각 금지. 이벤트의 절대 시각(월/일 HH:MM)만 표기.
   const clockTime = (ms: number) => {
     const d = new Date(ms);
@@ -1927,6 +1950,59 @@ function HomeSurface({ workspaceId, applicationsFeed, namespaceFeed, clusterMeta
             title: operationalMessageLabel(e.title),
           }))} />;
         }
+      case "W9":
+        if (alertEvents.status === "loading") return <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>불러오는 중…</span>;
+        if (alertEvents.status === "unavailable") return <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>경보를 불러오지 못했습니다</span>;
+        {
+          const content = activeAlerts.length
+            ? <RankList onPick={onOpenAlert} rows={activeAlerts} />
+            : <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>현재 발생 중인 경보가 없습니다</span>;
+          return alertEvents.transport === "stale"
+            ? <div style={{ display: "flex", flexDirection: "column", gap: 6 }}><span style={{ fontSize: TYPE.caption, color: TINT.warn.fg }}>최근 관측값 · 실시간 연결 재시도 중</span>{content}</div>
+            : content;
+        }
+      case "W10":
+        if (fleet.totalsObservation === "loading") return <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>불러오는 중…</span>;
+        if (!fleet.totals) return <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>운영 합계를 관측하지 못했습니다</span>;
+        {
+          const operations = fleetHeaderGroups(fleet.totals).operations;
+          return (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {fleet.totalsObservation === "stale" && <span style={{ fontSize: TYPE.caption, color: TINT.warn.fg }}>최근 관측값 · 재조회 대기</span>}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 7 }}>
+                {operations.map((metric) => {
+                  const warning = metric.key === "dead_letters" && metric.value > 0;
+                  return (
+                    <span key={metric.key} style={{ display: "flex", flexDirection: "column", gap: 3, minWidth: 0, border: `1px solid ${warning ? TINT.warn.bd : UI.line2}`, borderRadius: 9, background: warning ? TINT.warn.bg : UI.bg2, padding: "8px 10px" }}>
+                      <b style={{ fontSize: TYPE.section, color: warning ? TINT.warn.fg : UI.ink, fontVariantNumeric: "tabular-nums" }}>{metric.value}</b>
+                      <span style={{ fontSize: TYPE.caption, color: UI.ink3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{metric.label}</span>
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        }
+      case "W11":
+        if (apps.status === "loading") return <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>불러오는 중…</span>;
+        if (apps.status === "unavailable") return <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>애플리케이션을 불러오지 못했습니다</span>;
+        if (apps.items.length === 0) return <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>관측된 애플리케이션이 없습니다</span>;
+        return (
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 7, justifyContent: "center" }}>
+            {apps.stale && <span style={{ fontSize: TYPE.caption, color: TINT.warn.fg }}>최근 관측값 · 재조회 대기</span>}
+            <Donut items={applicationHealth} />
+          </div>
+        );
+      case "W12":
+        if (apps.status === "loading") return <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>불러오는 중…</span>;
+        if (apps.status === "unavailable") return <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>애플리케이션을 불러오지 못했습니다</span>;
+        if (applicationAttention.length === 0) return <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>관측된 애플리케이션이 없습니다</span>;
+        return (
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, minHeight: 0, flex: 1 }}>
+            {apps.stale && <span style={{ fontSize: TYPE.caption, color: TINT.warn.fg }}>최근 관측값 · 재조회 대기</span>}
+            <RankList rows={applicationAttention} onPick={onOpenApplication} />
+          </div>
+        );
       default: return null;
     }
   };
@@ -2119,6 +2195,8 @@ function App() {
   const [q, setQ] = useState(""); // 단일 검색 — 종류 인덱스와 표 행을 동시에 필터
   const [surface, setSurface] = useState<Surface>("home"); // 셸 내 서피스 전환 — 홈이 랜딩(D19)
   const [deployRepositoryFilter, setDeployRepositoryFilter] = useState<string | null>(null);
+  const [deployApplicationDetailId, setDeployApplicationDetailId] = useState<string | null>(null);
+  const [selectedAlertEventId, setSelectedAlertEventId] = useState<string | null>(null);
   const [scope, setScope] = useState<{ level: string; cluster?: string; node?: string }>({ level: "clusters" });
   const [ns, setNs] = useState("모든 네임스페이스");
   const [nsOpen, setNsOpen] = useState(false);
@@ -2649,6 +2727,8 @@ function App() {
         surface={surface} onSurface={(sf) => {
           setRcaIncident(null);
           setDetail(null);
+          setDeployApplicationDetailId(null);
+          setSelectedAlertEventId(null);
           setAiOpen(false);
           setSurface(sf);
           setBellOpen(false);
@@ -2947,7 +3027,10 @@ function App() {
         </div>
       ) : surface === "deploy" ? (
         <DeploySurface applicationsFeed={repositoryApplications} onRefreshApplications={() => setManifestRefreshKey((key) => key + 1)}
-          pendingRepos={pendingRepo} repositoryFilter={deployRepositoryFilter} onOpenRef={openRef}
+          pendingRepos={pendingRepo} repositoryFilter={deployRepositoryFilter}
+          applicationDetailId={deployApplicationDetailId}
+          onApplicationDetailClose={() => setDeployApplicationDetailId(null)}
+          onOpenRef={openRef}
           onOpenIssues={() => setSurface("issues")} onAskAi={showAi} onAddRepo={() => setConnectModal("repo")}
           topInset={topH} leftInset={navCollapsed ? 60 : 208} rightInset={aiOpen ? aiW : 0} />
       ) : surface === "issues" ? (
@@ -2963,14 +3046,25 @@ function App() {
       ) : surface === "cost" ? (
         <CostSurface onOpenRef={openRef} />
       ) : surface === "alerts" ? (
-        <AlertsSurface events={alertEvents} onOpenRef={openRef} />
+        <AlertsSurface
+          events={alertEvents}
+          selectedEventId={selectedAlertEventId}
+          onSelectedEventIdChange={setSelectedAlertEventId}
+          onOpenRef={(kind, name) => {
+            setSelectedAlertEventId(null);
+            openRef(kind, name);
+          }}
+          topInset={topH}
+          leftInset={navCollapsed ? 60 : 208}
+          rightInset={aiOpen ? aiW : 0}
+        />
       ) : surface === "ai" ? (
         <AiHistorySurface onOpenPanel={showAi} />
       ) : surface === "settings" ? (
         <SettingsSurface session={session} clusterId={clusterIds[0] ?? null} />
       ) : surface === "home" ? (
         /* 홈 — 위젯 보드 (D21). 카드 클릭=지도 드릴, 위젯 액션=전부 실 목적지 */
-        <HomeSurface workspaceId={workspaceIdentityId} applicationsFeed={repositoryApplications} namespaceFeed={nsFeed}
+        <HomeSurface workspaceId={workspaceIdentityId} applicationsFeed={repositoryApplications} alertEvents={alertEvents} namespaceFeed={nsFeed}
           clusterMeta={clusterMeta} incidentClusterIds={incidentClusterIds} pendingCl={visiblePendingCl} pendingRepo={pendingRepo}
           onWidgetDeepLink={(id) => {
             if (id === "W1") { setSurface("resources"); setResView("map"); }
@@ -2978,6 +3072,8 @@ function App() {
             else if (id === "W3") { setDeployRepositoryFilter(null); setSurface("deploy"); }
             else if (id === "W4" || id === "W8") setSurface("timeline");
             else if (id === "W7") setSurface("cost");
+            else if (id === "W9") setSurface("alerts");
+            else if (id === "W10" || id === "W11" || id === "W12") { setDeployRepositoryFilter(null); setSurface("deploy"); }
             else { setSurface("resources"); setResView("list"); setKindId("Pod"); }
           }}
           onDrillCluster={(cl) => { setDrillCl(cl); setSurface("resources"); setResView("map"); }}
@@ -2993,6 +3089,15 @@ function App() {
               return;
             }
             setListDisconnectClusterId(cl);
+          }}
+          onOpenAlert={(eventId) => {
+            setSelectedAlertEventId(eventId);
+            setSurface("alerts");
+          }}
+          onOpenApplication={(applicationId) => {
+            setDeployRepositoryFilter(null);
+            setDeployApplicationDetailId(applicationId);
+            setSurface("deploy");
           }}
           onOpenIssues={() => setSurface("issues")}
           onConnect={() => setConnectModal("cluster")}

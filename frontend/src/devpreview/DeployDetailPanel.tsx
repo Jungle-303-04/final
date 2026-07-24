@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
 import { GitBranch, ListChecks, Package, Rocket } from "lucide-react";
 
-import type { ApplicationDriftEndpoint } from "../api/application-catalog-schemas";
+import type {
+  ApplicationDetailEndpointItem,
+  ApplicationDriftEndpoint,
+} from "../api/application-catalog-schemas";
 import type { GitOpsApplicationDetailEndpoint } from "../api/gitops-application-detail-schemas";
 import { BLUE, ELEV, HP, MONO, RADIUS, SPACE, TINT, TYPE, UI, blueA, critA, inkA } from "./theme";
 import { DetailDrawer } from "./DetailDrawer";
@@ -203,19 +206,6 @@ function readText(record: Record<string, unknown> | null, key: string): string |
   return typeof value === "string" && value.trim() !== "" ? value : null;
 }
 
-function readTextList(record: Record<string, unknown> | null, key: string): string[] {
-  const value = record?.[key];
-  if (!Array.isArray(value)) return [];
-  return value.filter((item): item is string => typeof item === "string" && item.trim() !== "");
-}
-
-function readMap(record: Record<string, unknown> | null, key: string): Record<string, unknown> | null {
-  const value = record?.[key];
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
-}
-
 const GITOPS_REASON_KO: Record<string, string> = {
   binding_scope_unavailable: "배포 바인딩 범위가 아직 확인되지 않았습니다",
   multiple_target_scopes: "여러 대상 범위가 감지되어 단일 범위를 확정할 수 없습니다",
@@ -353,6 +343,196 @@ function ChangeEventsSection({ applicationId }: { applicationId: string }) {
   );
 }
 
+function completenessLabel(value: "exact" | "partial" | "unavailable"): string {
+  if (value === "exact") return "전체 관측";
+  if (value === "partial") return "부분 관측";
+  return "관측 안 됨";
+}
+
+const APPLICATION_DETAIL_LABELS: Record<string, string> = {
+  aligned: "일치",
+  conflict: "불일치",
+  unknown: "관측 안 됨",
+  paused: "일시정지",
+  deployment: "배포",
+  delivery: "배포",
+  incident: "인시던트",
+  change: "변경",
+};
+
+function applicationDetailLabel(value: string): string {
+  return APPLICATION_DETAIL_LABELS[value] ?? statusLabel(value);
+}
+
+function RuntimeEvidenceSection({ record }: { record: ApplicationDetailEndpointItem }) {
+  const runtime = record.runtime_readiness;
+  const deployment = record.current_deployment;
+  const batch = record.batch_runtime;
+  return (
+    <Section
+      title="런타임·현재 배포"
+      aside={<StatusPill tone={runtime.completeness === "exact" ? "ok" : runtime.completeness === "partial" ? "warn" : "gray"} label={completenessLabel(runtime.completeness)} />}
+    >
+      <KV label="런타임 상태">{statusView(runtime.status)}</KV>
+      <KV label="파드 준비">
+        {runtime.ready_pods !== null && runtime.total_pods !== null
+          ? `${runtime.ready_pods} / ${runtime.total_pods}`
+          : <span style={{ color: UI.ink3 }}>관측 안 됨</span>}
+      </KV>
+      <KV label="재시작">{runtime.restarts !== null ? `${runtime.restarts}회` : <span style={{ color: UI.ink3 }}>관측 안 됨</span>}</KV>
+      <KV label="버전" mono>{gapText(deployment?.version ?? null)}</KV>
+      <KV label="이미지" mono>{gapText(deployment?.image ?? null)}</KV>
+      <KV label="이미지 digest" mono>{gapText(deployment?.image_digest ?? null)}</KV>
+      <KV label="배포 커밋" mono>{gapText(deployment?.git_sha ?? null)}</KV>
+      <KV label="배포 시각">{fromNow(deployment?.deployed_at ?? null)}</KV>
+      <KV label="배포 실행자">{gapText(deployment?.deployed_by ?? null)}</KV>
+      <KV label="배치 런타임">
+        {batch.availability === "available"
+          ? (
+            <span>
+              {statusView(batch.status)}
+              <span style={{ marginLeft: 8, color: UI.ink3 }}>
+                실행 {batch.active_runs ?? "—"} · 실패 {batch.failed_runs ?? "—"} · 성공 {batch.succeeded_runs ?? "—"}
+              </span>
+            </span>
+          )
+          : <span style={{ color: UI.ink3 }}>관측 안 됨</span>}
+      </KV>
+    </Section>
+  );
+}
+
+function ResourceEvidenceSection({ record }: { record: ApplicationDetailEndpointItem }) {
+  const counts = record.resource_counts;
+  return (
+    <Section
+      title="리소스·운영 상태"
+      aside={<StatusPill tone={record.resource_counts_completeness === "exact" ? "ok" : record.resource_counts_completeness === "partial" ? "warn" : "gray"} label={completenessLabel(record.resource_counts_completeness)} />}
+    >
+      <KV label="리소스">
+        {counts === null
+          ? <span style={{ color: UI.ink3 }}>관측 안 됨</span>
+          : counts.length === 0
+            ? <span style={{ color: UI.ink3 }}>관측된 리소스 없음</span>
+            : counts.map((item) => `${item.kind} ${item.count}`).join(" · ")}
+      </KV>
+      <KV label="열린 인시던트">{record.open_incidents !== null ? `${record.open_incidents}건` : <span style={{ color: UI.ink3 }}>관측 안 됨</span>}</KV>
+      <KV label="드리프트">
+        {record.has_drift === null
+          ? <span style={{ color: UI.ink3 }}>판정 안 됨</span>
+          : record.has_drift
+            ? <span style={{ color: TINT.crit.fg }}>{record.drift_summary}</span>
+            : <span style={{ color: TINT.ok.fg }}>감지되지 않음</span>}
+      </KV>
+      <KV label="소스 정합성">
+        {record.source.conflict === null
+          ? <span style={{ color: UI.ink3 }}>관측 안 됨</span>
+          : applicationDetailLabel(record.source.conflict)}
+      </KV>
+    </Section>
+  );
+}
+
+function ApplicationScopeSection({ record }: { record: ApplicationDetailEndpointItem }) {
+  const scope = record.scope;
+  return (
+    <Section
+      title="배포 범위"
+      aside={<StatusPill tone={scope.completeness === "exact" ? "ok" : scope.completeness === "partial" ? "warn" : "gray"} label={completenessLabel(scope.completeness)} />}
+    >
+      {scope.instances.length === 0 ? (
+        <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>관측된 배포 인스턴스 없음</span>
+      ) : scope.instances.map((instance) => (
+        <div key={instance.id} style={{ border: `1px solid ${UI.line2}`, borderRadius: RADIUS.control, padding: "8px 10px", display: "flex", flexDirection: "column", gap: 5 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ minWidth: 0, flex: 1, fontSize: TYPE.label, fontWeight: 600, color: UI.ink }}>
+              {instance.environment} · {instance.scope.cluster_id}
+            </span>
+            {scope.selected_instance_id === instance.id && <StatusPill tone="info" label="선택됨" />}
+            {statusView(applicationDetailLabel(instance.status))}
+          </div>
+          <span style={{ fontFamily: MONO, fontSize: TYPE.caption, color: UI.ink3, overflowWrap: "anywhere" }}>
+            {instance.scope.namespaces.length > 0 ? instance.scope.namespaces.join(", ") : "네임스페이스 관측 안 됨"} · {statusLabel(instance.scope.freshness)}
+          </span>
+        </div>
+      ))}
+    </Section>
+  );
+}
+
+function ApplicationActivitySection({ record }: { record: ApplicationDetailEndpointItem }) {
+  const history = record.history.entries ?? [];
+  return (
+    <>
+      <Section title="최근 활동" aside={<span style={{ fontSize: TYPE.caption, color: UI.ink3 }}>{record.recent_activity.length}건</span>}>
+        {record.recent_activity.length === 0 ? (
+          <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>관측된 최근 활동 없음</span>
+        ) : record.recent_activity.map((activity) => (
+          <div key={activity.id} style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+            <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: 999, background: activity.type === "incident" ? HP.crit : activity.type === "deployment" ? BLUE : HP.warn, marginTop: 5, flexShrink: 0 }} />
+            <span style={{ minWidth: 0, flex: 1, fontSize: TYPE.label, color: UI.ink, lineHeight: 1.45 }}>
+              {gapText(activity.summary)}
+              <span style={{ display: "block", marginTop: 1, fontSize: TYPE.caption, color: UI.ink3 }}>{applicationDetailLabel(activity.type)} · {fromNow(activity.occurred_at)}</span>
+            </span>
+          </div>
+        ))}
+      </Section>
+      <Section
+        title="서버 배포·인시던트 이력"
+        aside={<StatusPill tone={record.history.completeness === "exact" ? "ok" : record.history.completeness === "partial" ? "warn" : "gray"} label={completenessLabel(record.history.completeness)} />}
+      >
+        {history.length === 0 ? (
+          <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>관측된 이력 없음</span>
+        ) : history.map((entry) => (
+          <div key={entry.id} style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+            <span style={{ minWidth: 0, flex: 1 }}>
+              <span style={{ display: "block", fontSize: TYPE.label, color: UI.ink }}>{gapText(entry.summary)}</span>
+              <span style={{ display: "block", marginTop: 1, fontSize: TYPE.caption, color: UI.ink3 }}>
+                {applicationDetailLabel(entry.type)} · {fromNow(entry.occurred_at)}
+              </span>
+            </span>
+            {statusView(entry.status)}
+          </div>
+        ))}
+      </Section>
+    </>
+  );
+}
+
+function ApplicationTopologySection({ record }: { record: ApplicationDetailEndpointItem }) {
+  const topology = record.topology;
+  const nodes = topology.nodes ?? [];
+  const edges = topology.edges ?? [];
+  return (
+    <Section
+      title="토폴로지·엔드포인트"
+      aside={<StatusPill tone={topology.completeness === "exact" ? "ok" : topology.completeness === "partial" ? "warn" : "gray"} label={completenessLabel(topology.completeness)} />}
+    >
+      <KV label="구성">{topology.availability === "available" ? `노드 ${nodes.length}개 · 연결 ${edges.length}개` : <span style={{ color: UI.ink3 }}>관측 안 됨</span>}</KV>
+      <KV label="엔드포인트">
+        {record.endpoints === null
+          ? <span style={{ color: UI.ink3 }}>관측 안 됨</span>
+          : record.endpoints.length === 0
+            ? <span style={{ color: UI.ink3 }}>관측된 엔드포인트 없음</span>
+            : record.endpoints.map((endpoint) => (
+              <a key={endpoint.id} href={endpoint.url} target="_blank" rel="noreferrer" style={{ display: "block", color: BLUE, textDecoration: "none", overflowWrap: "anywhere" }}>
+                {endpoint.kind} · {endpoint.name}
+              </a>
+            ))}
+      </KV>
+      {nodes.slice(0, 8).map((node) => (
+        <div key={node.id} style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+          <span style={{ minWidth: 0, flex: 1, fontFamily: MONO, fontSize: TYPE.caption, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {node.kind} · {[node.namespace, node.name].filter(Boolean).join("/")}
+          </span>
+          {statusView(node.health)}
+        </div>
+      ))}
+      {nodes.length > 8 && <span style={{ fontSize: TYPE.caption, color: UI.ink3 }}>최근 8개 표시 · {nodes.length - 8}개 더 있음</span>}
+    </Section>
+  );
+}
+
 export function ApplicationDetailPanel({ target, runs, onClose, insets }: {
   target: Extract<DeployDetailTarget, { kind: "application" }>;
   runs: ApplicationRunView[];
@@ -361,40 +541,50 @@ export function ApplicationDetailPanel({ target, runs, onClose, insets }: {
 }) {
   const detail = useApplicationDetail(target.applicationId);
   const record = detail.record.data;
-  const health = readMap(record, "health");
-  const delivery = readMap(record, "delivery");
-  const environments = readTextList(record, "environments");
   const applicationRuns = runs.filter((run) => run.applicationId === target.applicationId);
+  const deploymentBindings = detail.deployments.data ?? [];
+  const visibleDeploymentBindings = deploymentBindings.slice(0, 20);
 
   return (
-    <PanelShell icon={Package} title={readText(record, "name") ?? target.name} subtitle={target.applicationId} onClose={onClose} insets={insets}>
-      <Section title="개요" aside={statusView(readText(health, "status"))}>
+    <PanelShell icon={Package} title={record?.name ?? target.name} subtitle={target.applicationId} onClose={onClose} insets={insets}>
+      <Section title="개요" aside={statusView(record?.health.status ?? null)}>
         {detail.record.status !== "ready" ? (
           <SectionState status={detail.record.status} emptyLabel="애플리케이션을 불러오지 못했습니다." />
-        ) : (
+        ) : record !== null && (
           <>
-            <KV label="저장소" mono>{gapText(readText(record, "repository_ref"))}</KV>
-            <KV label="브랜치" mono>{gapText(readText(record, "default_branch"))}</KV>
-            <KV label="매니페스트" mono>{gapText(readText(record, "manifest_path"))}</KV>
-            <KV label="환경">{environments.length > 0 ? environments.join(", ") : <span style={{ color: UI.ink3 }}>—</span>}</KV>
-            <KV label="라이프사이클">{statusView(readText(record, "lifecycle_status"))}</KV>
-            <KV label="배포 상태">{statusView(readText(delivery, "status"))}</KV>
-            <KV label="배포 관측 시각">{fromNow(readText(delivery, "observed_at"))}</KV>
+            <KV label="저장소" mono>{gapText(record.repository_ref)}</KV>
+            <KV label="브랜치" mono>{gapText(record.default_branch)}</KV>
+            <KV label="매니페스트" mono>{gapText(record.manifest_path)}</KV>
+            <KV label="환경">{record.environments.length > 0 ? record.environments.join(", ") : <span style={{ color: UI.ink3 }}>—</span>}</KV>
+            <KV label="라이프사이클">{statusView(record.lifecycle_status)}</KV>
+            <KV label="배포 상태">{statusView(record.delivery.status)}</KV>
+            <KV label="워크플로우" mono>{gapText(record.delivery.workflow_run_id)}</KV>
+            <KV label="배포 관측 시각">{fromNow(record.delivery.observed_at)}</KV>
           </>
         )}
       </Section>
+      {record !== null && <RuntimeEvidenceSection record={record} />}
+      {record !== null && <ResourceEvidenceSection record={record} />}
+      {record !== null && <ApplicationScopeSection record={record} />}
+      {record !== null && <ApplicationTopologySection record={record} />}
+      {record !== null && <ApplicationActivitySection record={record} />}
       <ChangeEventsSection applicationId={target.applicationId} />
       <Section title="배포 바인딩" aside={detail.deployments.data && <span style={{ fontSize: TYPE.caption, color: UI.ink3 }}>{detail.deployments.data.length}개</span>}>
-        {detail.deployments.data === null || detail.deployments.data.length === 0 ? (
+        {deploymentBindings.length === 0 ? (
           <SectionState status={detail.deployments.status} emptyLabel="배포 바인딩을 불러오지 못했습니다." />
-        ) : detail.deployments.data.map((binding, index) => (
-          <div key={index} style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, borderBottom: index < (detail.deployments.data?.length ?? 0) - 1 ? `1px solid ${UI.line2}` : "none", paddingBottom: 6 }}>
+        ) : visibleDeploymentBindings.map((binding, index) => (
+          <div key={index} style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, borderBottom: index < visibleDeploymentBindings.length - 1 ? `1px solid ${UI.line2}` : "none", paddingBottom: 6 }}>
             <span style={{ minWidth: 0, flex: 1, fontFamily: MONO, fontSize: TYPE.label, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {[readText(binding, "environment"), readText(binding, "cluster_id"), readText(binding, "namespace")].filter(Boolean).join(" · ") || `바인딩 ${index + 1}`}
             </span>
             {statusView(readText(binding, "status"))}
           </div>
         ))}
+        {deploymentBindings.length > visibleDeploymentBindings.length && (
+          <span style={{ fontSize: TYPE.caption, color: UI.ink3 }}>
+            최근 20개 표시 · {deploymentBindings.length - visibleDeploymentBindings.length}개 더 있음
+          </span>
+        )}
       </Section>
       <Section title="워크플로우 실행" aside={<span style={{ fontSize: TYPE.caption, color: UI.ink3 }}>{applicationRuns.length}개</span>}>
         {applicationRuns.length === 0 ? (
