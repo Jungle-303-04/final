@@ -48,7 +48,7 @@ from domains.scm.events import SafePrCreatedBody, SafePrFailedBody
 from domains.target.events import ClusterDesiredStateChangedBody
 from domains.target.management_guard import is_management_registration
 from domains.timeline.repository import TimelineLedgerAppend
-from packages.config.constants import Sandbox, Target
+from packages.config.constants import CommandStatus, Sandbox, Target
 from packages.config.logs import get_logger
 from packages.contracts.event_bus.bodies import EventBody
 from packages.contracts.event_bus.interfaces import JsonObject
@@ -816,18 +816,20 @@ async def on_approval_granted(
         "approval granted; waiting for command execution",
         evt.details,
     )
-    if applying_run is None:
-        return
-    approval_step = await record_step(
-        ctx,
-        run,
-        WorkflowStepName.APPROVAL.value,
-        WorkflowStepStatus.SUCCEEDED.value,
-        evt.decision,
-        evt.details,
-    )
-    if approval_step is not None:
-        yield approval_step
+    # The run is commit-scoped while approvals are resource-scoped.  The first
+    # grant advances WAITING→APPLYING; later grants legitimately see an
+    # already-applying run and must still dispatch their own command.
+    if applying_run is not None:
+        approval_step = await record_step(
+            ctx,
+            run,
+            WorkflowStepName.APPROVAL.value,
+            WorkflowStepStatus.SUCCEEDED.value,
+            evt.decision,
+            evt.details,
+        )
+        if approval_step is not None:
+            yield approval_step
     command_payload = evt.details.get("command_requested")
     if isinstance(command_payload, Mapping):
         yield CommandRequestedBody.from_body(command_payload)
@@ -891,6 +893,7 @@ async def on_command_queued(
     # may advance.
     if not await workflow_run_identity_is_persisted(ctx, payload):
         return
+    await ctx.db.attach_workflow_command(str(payload["workflow_run_id"]), evt.command_id)
     run = await transition_run(
         ctx,
         payload,
@@ -901,7 +904,6 @@ async def on_command_queued(
     )
     if run is None:
         return
-    await ctx.db.attach_workflow_command(str(run["workflow_run_id"]), evt.command_id)
     step = await record_step(
         ctx,
         run,
@@ -958,15 +960,39 @@ async def on_command_completed(
     if identity is None:
         return
     run = normalize_payload(identity)
-    succeeded = command_result_succeeded(evt.result)
-    run_status = WorkflowRunStatus.SUCCEEDED.value if succeeded else WorkflowRunStatus.FAILED.value
+    progress = await ctx.db.get_workflow_command_progress(str(run["workflow_run_id"]))
+    progress_status = workflow_command_progress_status(progress)
+    if progress_status == "waiting":
+        return
+    succeeded = progress_status == "succeeded"
+    run_status = (
+        WorkflowRunStatus.SUCCEEDED.value if succeeded else WorkflowRunStatus.FAILED.value
+    )
     step_status = (
         WorkflowStepStatus.SUCCEEDED.value if succeeded else WorkflowStepStatus.FAILED.value
     )
-    message = str(evt.result.get("message") or evt.result.get("status") or "")
-    rollout_details = rollout_result_details(evt.command_id, evt.result)
+    rollout_details = aggregate_workflow_rollout_details(progress, evt.command_id)
+    message = (
+        "all approved resource commands completed"
+        if succeeded
+        else workflow_command_failure_message(progress, evt.result)
+    )
+    if succeeded:
+        recorded = await ctx.db.record_approved_workflow_snapshots(
+            str(run["workflow_run_id"])
+        )
+        expected = len(workflow_progress_commands(progress))
+        if recorded < expected:
+            succeeded = False
+            run_status = WorkflowRunStatus.FAILED.value
+            step_status = WorkflowStepStatus.FAILED.value
+            message = "approved resource snapshot persistence failed"
+            rollout_details["snapshot_error"] = {
+                "expected": expected,
+                "recorded": recorded,
+            }
     await ctx.db.attach_workflow_command(str(run["workflow_run_id"]), evt.command_id)
-    mutation = await ctx.db.update_workflow_run_for_command(
+    mutation = await ctx.db.update_workflow_run(
         {
             **run,
             "command_id": evt.command_id,
@@ -1025,6 +1051,119 @@ async def on_command_completed(
         environment=str(run["environment"]),
         details=rollout_details,
     )
+
+
+def workflow_progress_approvals(progress: Mapping[str, object]) -> list[Mapping[str, object]]:
+    raw = progress.get("approvals")
+    return [item for item in raw if isinstance(item, Mapping)] if isinstance(raw, list) else []
+
+
+def workflow_progress_commands(progress: Mapping[str, object]) -> list[Mapping[str, object]]:
+    raw = progress.get("commands")
+    return [item for item in raw if isinstance(item, Mapping)] if isinstance(raw, list) else []
+
+
+def workflow_command_progress_status(progress: Mapping[str, object]) -> str:
+    approvals = workflow_progress_approvals(progress)
+    commands = workflow_progress_commands(progress)
+    if approvals:
+        if any(str(item.get("status") or "") == ApprovalStatus.REJECTED.value for item in approvals):
+            return "failed"
+        if any(str(item.get("status") or "") != ApprovalStatus.GRANTED.value for item in approvals):
+            return "waiting"
+        granted_ids = {str(item.get("approval_id") or "") for item in approvals}
+        command_refs = {str(item.get("approval_ref") or "") for item in commands}
+        if not granted_ids.issubset(command_refs):
+            return "waiting"
+    if not commands:
+        return "waiting"
+    terminal_failures = {
+        CommandStatus.FAILED,
+        CommandStatus.CANCELLED,
+    }
+    if any(str(item.get("status") or "") in terminal_failures for item in commands):
+        return "failed"
+    if any(str(item.get("status") or "") != CommandStatus.COMPLETED for item in commands):
+        return "waiting"
+    if any(
+        not command_result_succeeded(
+            dict(item.get("result") or {}) if isinstance(item.get("result"), Mapping) else {}
+        )
+        for item in commands
+    ):
+        return "failed"
+    return "succeeded"
+
+
+def workflow_command_failure_message(
+    progress: Mapping[str, object], fallback_result: Mapping[str, object]
+) -> str:
+    for item in workflow_progress_commands(progress):
+        result = item.get("result")
+        if not isinstance(result, Mapping) or command_result_succeeded(dict(result)):
+            continue
+        return str(result.get("message") or result.get("status") or "command failed")
+    return str(
+        fallback_result.get("message")
+        or fallback_result.get("status")
+        or "command failed"
+    )
+
+
+def aggregate_workflow_rollout_details(
+    progress: Mapping[str, object], terminal_command_id: str
+) -> JsonObject:
+    commands = sorted(
+        workflow_progress_commands(progress),
+        key=lambda item: str(item.get("command_id") or ""),
+    )
+    command_ids = [str(item.get("command_id") or "") for item in commands]
+    resources: list[object] = []
+    failed_resources: list[object] = []
+    command_results: list[JsonObject] = []
+    rollouts: list[JsonObject] = []
+    for item in commands:
+        result = item.get("result")
+        body = dict(result) if isinstance(result, Mapping) else {}
+        details = rollout_result_details(str(item.get("command_id") or ""), body)
+        resources.extend(details["resources"])
+        failed_resources.extend(details["failed_resources"])
+        rollout = details["rollout"]
+        if isinstance(rollout, Mapping):
+            rollouts.append(dict(rollout))
+        command_results.append(
+            {
+                "command_id": str(item.get("command_id") or ""),
+                "approval_ref": str(item.get("approval_ref") or ""),
+                "status": str(item.get("status") or ""),
+                "result": body,
+            }
+        )
+    eligible = bool(commands) and all(
+        str(item.get("status") or "") == CommandStatus.COMPLETED
+        and isinstance(item.get("result"), Mapping)
+        and command_result_succeeded(dict(item["result"]))
+        for item in commands
+    )
+    aggregate_result: JsonObject = {
+        "status": CommandStatus.COMPLETED if eligible else CommandStatus.FAILED,
+        "applied": eligible,
+        "resources": resources,
+        "rollout": {
+            "ready": eligible and all(item.get("ready") is not False for item in rollouts),
+            "resources": rollouts,
+        },
+        "commands": command_results,
+    }
+    return {
+        "command_id": terminal_command_id,
+        "command_ids": command_ids,
+        "result": aggregate_result,
+        "resources": resources,
+        "failed_resources": failed_resources,
+        "rollout": aggregate_result["rollout"],
+        "commands": command_results,
+    }
 
 
 def rollout_result_details(command_id: str, result: JsonObject) -> JsonObject:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import BigInteger, ForeignKey, Text, UniqueConstraint
+from sqlalchemy import BigInteger, ForeignKey, Index, PrimaryKeyConstraint, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -125,6 +125,44 @@ class WorkflowRun(Base):
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     command_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     metadata_: Mapped[dict[str, Any]] = mapped_column("metadata", JSONB, nullable=False)
+    created_at: Mapped[Any] = created_at_column()
+    updated_at: Mapped[Any] = updated_at_column()
+
+
+class ApprovedResourceSnapshot(Base):
+    """Last successfully applied Git intent for one binding/resource identity."""
+
+    __tablename__ = "gitops_approved_resource_snapshots"
+    __table_args__ = (
+        PrimaryKeyConstraint(
+            "workspace_id",
+            "binding_id",
+            "cluster_id",
+            "namespace",
+            "resource_kind",
+            "resource_name",
+        ),
+        Index(
+            "ix_gitops_approved_snapshots_workflow",
+            "workspace_id",
+            "workflow_run_id",
+            "command_id",
+        ),
+    )
+
+    workspace_id: Mapped[str] = text_column()
+    binding_id: Mapped[str] = text_column()
+    cluster_id: Mapped[str] = text_column()
+    namespace: Mapped[str] = text_column()
+    resource_kind: Mapped[str] = text_column()
+    resource_name: Mapped[str] = text_column()
+    workflow_run_id: Mapped[str] = text_column()
+    command_id: Mapped[str] = text_column()
+    commit_sha: Mapped[str] = text_column()
+    artifact_digest: Mapped[str] = text_column()
+    managed_fields: Mapped[dict[str, Any]] = jsonb_column()
+    snapshot: Mapped[dict[str, Any]] = jsonb_column()
+    completed_at: Mapped[Any] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
     created_at: Mapped[Any] = created_at_column()
     updated_at: Mapped[Any] = updated_at_column()
 

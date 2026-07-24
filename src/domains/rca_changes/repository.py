@@ -8,6 +8,7 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from domains.audit.models import AuditLog
+from domains.command.models import AgentCommand
 from domains.dashboard.models import RcaTimeline
 from domains.gitops.models import DeploymentBinding, GitRepository, WorkflowRun, WorkflowRunStep
 from domains.rca_changes.models import WorkflowPrReference, WorkloadChange
@@ -166,6 +167,97 @@ class RcaChangesRepository(DatabaseConnection):
         with self.connection() as conn:
             row = conn.execute(statement).mappings().first()
         return dict(row) if row else None
+
+    def get_completed_workload_change_contexts(
+        self,
+        workspace_id: str,
+        workflow_run_id: str,
+        application_id: str,
+        binding_id: str,
+    ) -> list[JsonObject]:
+        """Return one authoritative change context per completed resource command."""
+
+        run = WorkflowRun.__table__
+        binding = DeploymentBinding.__table__
+        repository = GitRepository.__table__
+        command = AgentCommand.__table__
+        statement = (
+            select(
+                run.c.workspace_id,
+                run.c.workflow_run_id,
+                run.c.application_id,
+                run.c.binding_id,
+                run.c.cluster_id,
+                run.c.commit_sha,
+                run.c.metadata.label("run_metadata"),
+                binding.c.repository_id,
+                binding.c.namespace,
+                binding.c.manifest_path,
+                repository.c.repo_ref,
+                command.c.command_id,
+                command.c.result.label("command_result"),
+                command.c.payload.label("command_payload"),
+            )
+            .select_from(
+                run.join(
+                    binding,
+                    and_(
+                        binding.c.workspace_id == run.c.workspace_id,
+                        binding.c.binding_id == run.c.binding_id,
+                        binding.c.cluster_id == run.c.cluster_id,
+                        binding.c.environment == run.c.environment,
+                    ),
+                )
+                .join(
+                    repository,
+                    and_(
+                        repository.c.workspace_id == binding.c.workspace_id,
+                        repository.c.repository_id == binding.c.repository_id,
+                    ),
+                )
+                .join(
+                    command,
+                    command.c.payload["workflow_run_id"].astext == run.c.workflow_run_id,
+                )
+            )
+            .where(
+                run.c.workspace_id == workspace_id,
+                run.c.workflow_run_id == workflow_run_id,
+                run.c.application_id == application_id,
+                run.c.binding_id == binding_id,
+                run.c.status == WorkflowRunStatus.SUCCEEDED.value,
+                binding.c.status == DeploymentBindingStatus.ACTIVE.value,
+                repository.c.status == RepositoryStatus.ACTIVE.value,
+                command.c.workspace_id == workspace_id,
+                command.c.status == "completed",
+            )
+            .order_by(command.c.command_id)
+        )
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        contexts: list[JsonObject] = []
+        for row in rows:
+            item = dict(row)
+            payload = item.pop("command_payload", None)
+            payload_body = dict(payload) if isinstance(payload, dict) else {}
+            diff = payload_body.get("diff")
+            diff_details = dict(diff) if isinstance(diff, dict) else {}
+            diff_details.update(
+                {
+                    "workspace_id": str(item["workspace_id"]),
+                    "repository_id": str(item["repository_id"]),
+                    "binding_id": str(item["binding_id"]),
+                    "workflow_run_id": str(item["workflow_run_id"]),
+                    "cluster_id": str(item["cluster_id"]),
+                    "commit_sha": str(item["commit_sha"]),
+                    "manifest_path": str(item["manifest_path"]),
+                }
+            )
+            item["diff_details"] = diff_details
+            item["command_result"] = dict(item.get("command_result") or {})
+            item["run_metadata"] = dict(item.get("run_metadata") or {})
+            contexts.append(item)
+        return contexts
 
     def record_workload_change(self, row: JsonObject) -> None:
         change = WorkloadChange.__table__
@@ -411,7 +503,6 @@ class RcaChangesRepository(DatabaseConnection):
             return []
         change = WorkloadChange.__table__
         reference = WorkflowPrReference.__table__
-        diff_step = WorkflowRunStep.__table__.alias("evidence_diff_step")
         statement = (
             select(
                 change.c.event_id,
@@ -430,7 +521,7 @@ class RcaChangesRepository(DatabaseConnection):
                 change.c.resource_kind,
                 change.c.resource_name,
                 change.c.manifest_path,
-                diff_step.c.details.label("diff_details"),
+                change.c.diff_details,
             )
             .select_from(
                 change.outerjoin(
@@ -442,15 +533,6 @@ class RcaChangesRepository(DatabaseConnection):
                         reference.c.workflow_run_id == change.c.workflow_run_id,
                         reference.c.commit_sha == change.c.commit_sha,
                         reference.c.manifest_path == change.c.manifest_path,
-                    ),
-                ).outerjoin(
-                    diff_step,
-                    and_(
-                        diff_step.c.workspace_id == change.c.workspace_id,
-                        diff_step.c.workflow_run_id == change.c.workflow_run_id,
-                        diff_step.c.binding_id == change.c.binding_id,
-                        diff_step.c.name == WorkflowStepName.DIFF.value,
-                        diff_step.c.status == WorkflowStepStatus.SUCCEEDED.value,
                     ),
                 )
             )

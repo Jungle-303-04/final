@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from contextlib import nullcontext
 from typing import Any
 
@@ -11,9 +11,11 @@ from sqlalchemy import and_, bindparam, case, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from domains.command.models import AgentCommand
+from domains.gitops.diffing import snapshot_from_kubernetes_object
 from domains.gitops.models import (
     Application,
     Approval,
+    ApprovedResourceSnapshot,
     DeploymentBinding,
     GitRepository,
     GitWatchTarget,
@@ -28,7 +30,7 @@ from domains.gitops.repository_discovery import (
     RepositoryDiscoveryError,
     normalize_github_repo_ref,
 )
-from packages.config.constants import Target
+from packages.config.constants import CommandStatus, Target
 from packages.config.logs import get_logger
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.gitops import (
@@ -207,6 +209,75 @@ def watch_target_settings(payload: JsonObject) -> JsonObject:
     if source_type:
         settings["source_type"] = source_type
     return settings
+
+
+def prepare_approved_resource_snapshots(
+    workflow_run_id: str,
+    run_row: Mapping[str, object],
+    command_rows: Sequence[Mapping[str, object]],
+) -> tuple[int, list[JsonObject]] | None:
+    """Validate every applied command and prepare snapshots for supported kinds.
+
+    ``snapshot_from_kubernetes_object`` intentionally returns no managed fields
+    for kinds outside the current diff model (for example RBAC, PDB and Job).
+    Those commands are still part of a successfully applied workflow, so they
+    count as handled but do not create an empty snapshot row.
+    """
+
+    prepared: list[JsonObject] = []
+    for row in command_rows:
+        payload = row["payload"] if isinstance(row.get("payload"), Mapping) else {}
+        diff = payload.get("diff")
+        if not isinstance(diff, Mapping):
+            return None
+        desired_manifest = diff.get("desired_manifest")
+        if not isinstance(desired_manifest, Mapping) or not desired_manifest:
+            return None
+        desired = snapshot_from_kubernetes_object(
+            desired_manifest,
+            source="approved_command",
+        )
+        expected_resource = str(diff.get("resource") or "").casefold()
+        expected_namespace = str(diff.get("namespace") or "")
+        if (
+            desired.resource.casefold() != expected_resource
+            or desired.namespace != expected_namespace
+            or str(diff.get("workflow_run_id") or "") != workflow_run_id
+            or str(diff.get("workspace_id") or "") != str(run_row["workspace_id"])
+            or str(diff.get("binding_id") or "") != str(run_row["binding_id"])
+            or str(diff.get("cluster_id") or "") != str(run_row["cluster_id"])
+        ):
+            return None
+        if not desired.fields:
+            continue
+        kind, name = desired.resource.split("/", 1)
+        basis = diff.get("basis")
+        artifact_digest = (
+            str(basis.get("artifact_digest") or "") if isinstance(basis, Mapping) else ""
+        )
+        prepared.append(
+            {
+                "workspace_id": str(run_row["workspace_id"]),
+                "binding_id": str(run_row["binding_id"]),
+                "cluster_id": str(run_row["cluster_id"]),
+                "namespace": desired.namespace,
+                "resource_kind": kind,
+                "resource_name": name,
+                "workflow_run_id": workflow_run_id,
+                "command_id": str(row["command_id"]),
+                "commit_sha": str(run_row["commit_sha"]),
+                "artifact_digest": artifact_digest,
+                "managed_fields": {"paths": sorted(desired.fields)},
+                "snapshot": {
+                    "resource": desired.resource,
+                    "namespace": desired.namespace,
+                    "fields": desired.fields,
+                },
+                "completed_at": row.get("completed_at") or func.now(),
+                "updated_at": func.now(),
+            }
+        )
+    return len(command_rows), prepared
 
 
 class RepoChangeRepository(GitOpsOverviewRepository):
@@ -1691,6 +1762,213 @@ class RepoChangeRepository(GitOpsOverviewRepository):
         )
         with self.connection() as conn:
             conn.execute(statement)
+
+    def get_workflow_command_progress(self, workflow_run_id: str) -> JsonObject:
+        """Return every approval and durable agent command owned by one workflow.
+
+        A WorkflowRun is commit-scoped while approvals and commands are
+        resource-scoped.  Completion must therefore be derived from this full
+        set rather than from ``workflow_runs.command_id`` (a legacy display
+        pointer that can name only one command).
+        """
+
+        approval = Approval.__table__
+        command = AgentCommand.__table__
+        with self.connection() as conn:
+            approval_rows = (
+                conn.execute(
+                    select(
+                        approval.c.approval_id,
+                        approval.c.status,
+                        approval.c.details,
+                    )
+                    .where(approval.c.workflow_run_id == workflow_run_id)
+                    .order_by(approval.c.approval_id)
+                )
+                .mappings()
+                .all()
+            )
+            command_rows = (
+                conn.execute(
+                    select(
+                        command.c.command_id,
+                        command.c.status,
+                        command.c.payload,
+                        command.c.result,
+                        command.c.completed_at,
+                    )
+                    .where(command.c.payload["workflow_run_id"].astext == workflow_run_id)
+                    .order_by(command.c.command_id)
+                )
+                .mappings()
+                .all()
+            )
+        return {
+            "approvals": [
+                {
+                    "approval_id": str(row["approval_id"]),
+                    "status": str(row["status"]),
+                    "details": dict(row["details"] or {}),
+                }
+                for row in approval_rows
+            ],
+            "commands": [
+                {
+                    "command_id": str(row["command_id"]),
+                    "approval_ref": str((row["payload"] or {}).get("approval_ref") or ""),
+                    "status": str(row["status"]),
+                    "payload": dict(row["payload"] or {}),
+                    "result": dict(row["result"] or {}),
+                    "completed_at": iso_or_none(row["completed_at"]),
+                }
+                for row in command_rows
+            ],
+        }
+
+    def record_approved_workflow_snapshots(self, workflow_run_id: str) -> int:
+        """CAS-upsert supported resource snapshots after the workflow succeeded.
+
+        The binding policy is user configuration and may be replaced by a later
+        registration update, so runtime Git authority lives in its own table.
+        The completion timestamp guard prevents an older delayed workflow from
+        overwriting a newer approved resource state.  The return value counts
+        every validated command, including kinds for which managed-field
+        snapshots are not supported.  A successfully applied mixed manifest
+        must not fail merely because (for example) a PodDisruptionBudget has no
+        fields in the current GitOps diff model.
+        """
+
+        run = WorkflowRun.__table__
+        approval = Approval.__table__
+        command = AgentCommand.__table__
+        snapshot_table = ApprovedResourceSnapshot.__table__
+        with self.connection() as conn:
+            run_row = (
+                conn.execute(
+                    select(
+                        run.c.workflow_run_id,
+                        run.c.workspace_id,
+                        run.c.binding_id,
+                        run.c.cluster_id,
+                        run.c.commit_sha,
+                    )
+                    .where(run.c.workflow_run_id == workflow_run_id)
+                    .with_for_update()
+                )
+                .mappings()
+                .first()
+            )
+            if run_row is None:
+                return 0
+            approval_rows = (
+                conn.execute(
+                    select(approval.c.approval_id, approval.c.status).where(
+                        approval.c.workflow_run_id == workflow_run_id
+                    )
+                )
+                .mappings()
+                .all()
+            )
+            command_rows = (
+                conn.execute(
+                    select(
+                        command.c.command_id,
+                        command.c.status,
+                        command.c.payload,
+                        command.c.result,
+                        command.c.completed_at,
+                    ).where(command.c.payload["workflow_run_id"].astext == workflow_run_id)
+                )
+                .mappings()
+                .all()
+            )
+            granted = {
+                str(row["approval_id"])
+                for row in approval_rows
+                if str(row["status"]) == ApprovalStatus.GRANTED.value
+            }
+            if approval_rows and len(granted) != len(approval_rows):
+                return 0
+            command_approvals = {
+                str((row["payload"] or {}).get("approval_ref") or "") for row in command_rows
+            }
+            if granted and not granted.issubset(command_approvals):
+                return 0
+            if not command_rows or any(
+                str(row["status"]) != CommandStatus.COMPLETED
+                or not promotion_gate_from_command_result(dict(row["result"] or {}))["eligible"]
+                for row in command_rows
+            ):
+                return 0
+
+            prepared_result = prepare_approved_resource_snapshots(
+                workflow_run_id,
+                run_row,
+                command_rows,
+            )
+            if prepared_result is None:
+                return 0
+            handled, prepared = prepared_result
+            for values in prepared:
+                insert = pg_insert(snapshot_table).values(**values)
+                statement = insert.on_conflict_do_update(
+                    index_elements=[
+                        snapshot_table.c.workspace_id,
+                        snapshot_table.c.binding_id,
+                        snapshot_table.c.cluster_id,
+                        snapshot_table.c.namespace,
+                        snapshot_table.c.resource_kind,
+                        snapshot_table.c.resource_name,
+                    ],
+                    set_={
+                        "workflow_run_id": insert.excluded.workflow_run_id,
+                        "command_id": insert.excluded.command_id,
+                        "commit_sha": insert.excluded.commit_sha,
+                        "artifact_digest": insert.excluded.artifact_digest,
+                        "managed_fields": insert.excluded.managed_fields,
+                        "snapshot": insert.excluded.snapshot,
+                        "completed_at": insert.excluded.completed_at,
+                        "updated_at": func.now(),
+                    },
+                    where=snapshot_table.c.completed_at <= insert.excluded.completed_at,
+                )
+                conn.execute(statement)
+        return handled
+
+    def get_last_approved_resource_snapshot(
+        self,
+        workspace_id: str,
+        binding_id: str,
+        cluster_id: str,
+        namespace: str,
+        resource: str,
+    ) -> JsonObject | None:
+        normalized = resource.strip().casefold()
+        if "/" not in normalized:
+            return None
+        kind, name = normalized.split("/", 1)
+        table = ApprovedResourceSnapshot.__table__
+        statement = (
+            select(table)
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.binding_id == binding_id,
+                table.c.cluster_id == cluster_id,
+                table.c.namespace == namespace,
+                table.c.resource_kind == kind,
+                table.c.resource_name == name,
+            )
+            .limit(1)
+        )
+        with self.connection() as conn:
+            row = conn.execute(statement).mappings().first()
+        if row is None:
+            return None
+        result = row_dict(row)
+        result["managed_fields"] = dict(result.get("managed_fields") or {})
+        result["snapshot"] = dict(result.get("snapshot") or {})
+        result["completed_at"] = iso_or_none(result.get("completed_at"))
+        return result
 
     def update_workflow_run_for_command(self, payload: JsonObject) -> WorkflowMutation:
         command_id = str(payload["command_id"])

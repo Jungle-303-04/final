@@ -13,7 +13,7 @@ import json
 import subprocess
 from collections.abc import AsyncIterator, Mapping
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
@@ -22,7 +22,7 @@ from urllib import error, parse, request
 import yaml
 from repo_cache import GitRepoCache, GitRepoCacheError, extract_git_archive
 
-from domains.gitops.diffing import extract_declared_field_paths
+from domains.gitops.diffing import extract_declared_field_paths, resource_ref
 from domains.gitops.events import (
     GitChangedBody,
     ManifestInvalidBody,
@@ -885,6 +885,60 @@ def render_manifest_payload(payload: dict[str, Any]) -> RenderedManifest:
     )
 
 
+def with_approved_snapshot(
+    rendered: RenderedManifest,
+    record: Mapping[str, object] | None,
+) -> RenderedManifest:
+    """Attach only the exact binding/resource snapshot to a fresh render."""
+
+    if not isinstance(record, Mapping):
+        return rendered
+    raw_snapshot = record.get("snapshot")
+    snapshot = raw_snapshot if isinstance(raw_snapshot, Mapping) else record
+    expected_resource = resource_ref(rendered.kind, rendered.metadata.name)
+    if (
+        str(snapshot.get("resource") or "").casefold() != expected_resource
+        or str(snapshot.get("namespace") or "") != rendered.metadata.namespace
+    ):
+        return rendered
+    raw_fields = snapshot.get("fields")
+    if not isinstance(raw_fields, Mapping) or not raw_fields:
+        return rendered
+    fields = dict(raw_fields)
+    managed = record.get("managed_fields")
+    configured_paths = managed.get("paths") if isinstance(managed, Mapping) else None
+    paths = (
+        [str(path) for path in configured_paths if isinstance(path, str)]
+        if isinstance(configured_paths, list)
+        else list(fields)
+    )
+    if set(paths) != set(fields):
+        return rendered
+    return replace(
+        rendered,
+        managed_fields=sorted(paths),
+        last_approved_snapshot=fields,
+    )
+
+
+async def load_approved_snapshot(
+    evt: GitChangedBody,
+    rendered: RenderedManifest,
+    db: RepoChangeStore,
+) -> RenderedManifest:
+    reader = getattr(db, "get_last_approved_resource_snapshot", None)
+    if not callable(reader):
+        return rendered
+    record = await reader(
+        evt.workspace_id,
+        evt.binding_id,
+        evt.cluster_id,
+        rendered.metadata.namespace,
+        resource_ref(rendered.kind, rendered.metadata.name),
+    )
+    return with_approved_snapshot(rendered, record)
+
+
 def default_namespace_for_kind(kind: str) -> str:
     return Sandbox.NAMESPACE if kind in DEFAULT_NAMESPACED_KINDS else ""
 
@@ -1085,7 +1139,7 @@ async def on_git_changed(
     cached = await cached_rendered_manifests(evt, ctx.db, source_manifest_path)
     if cached:
         for item in cached:
-            rendered = item.rendered
+            rendered = await load_approved_snapshot(evt, item.rendered, ctx.db)
             await ctx.db.save_repo_change(
                 ctx.correlation_id,
                 evt.commit_sha,
@@ -1158,7 +1212,8 @@ async def on_git_changed(
         )
         return
 
-    for index, rendered in enumerate(result.rendered_manifests):
+    for index, source_rendered in enumerate(result.rendered_manifests):
+        rendered = await load_approved_snapshot(evt, source_rendered, ctx.db)
         await ctx.db.save_repo_change(
             ctx.correlation_id,
             evt.commit_sha,

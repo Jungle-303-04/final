@@ -8,7 +8,13 @@ from sqlalchemy import CheckConstraint, Index, PrimaryKeyConstraint, Text, Uniqu
 from sqlalchemy.dialects.postgresql import TIMESTAMP
 from sqlalchemy.orm import Mapped, mapped_column
 
-from packages.storage.base import Base, created_at_column, text_column, updated_at_column
+from packages.storage.base import (
+    Base,
+    created_at_column,
+    jsonb_column,
+    text_column,
+    updated_at_column,
+)
 
 
 class WorkloadChange(Base):
@@ -76,6 +82,7 @@ class WorkloadChange(Base):
     workflow_run_id: Mapped[str] = text_column()
     image_before: Mapped[str | None] = mapped_column(Text, nullable=True)
     image_after: Mapped[str | None] = mapped_column(Text, nullable=True)
+    diff_details: Mapped[dict[str, Any]] = jsonb_column()
     changed_at: Mapped[Any] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
     created_at: Mapped[Any] = created_at_column()
 

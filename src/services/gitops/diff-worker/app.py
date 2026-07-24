@@ -27,6 +27,7 @@ from domains.gitops.events import (
     ManifestRenderedBody,
     RenderedManifest,
 )
+from domains.gitops.live_projection import reconstruct_live_object
 from packages.config.constants import RiskLevel, Sandbox
 from packages.config.environments import is_production_environment
 from packages.contracts.event_bus.bodies import EventBody
@@ -79,12 +80,53 @@ async def load_actual_resource_image(evt: ManifestRenderedBody, ctx: EventContex
     return str(actual) if actual else UNKNOWN_ACTUAL_IMAGE
 
 
-def build_desired_diff(evt: ManifestRenderedBody, actual_image: str) -> Diff:
+async def load_actual_resource_manifest(
+    evt: ManifestRenderedBody, ctx: EventContext[Any]
+) -> tuple[dict[str, Any] | None, bool]:
+    """Load the exact observed object used for managed-field comparison.
+
+    The boolean distinguishes an inventory-backed miss from a legacy store that
+    does not implement the manifest reader.  A real miss must not be replaced
+    with the new desired manifest because that would falsely classify an
+    unapplied replica change as already converged.
+    """
+
+    reader = getattr(ctx.db, "get_actual_resource_manifest", None)
+    if not callable(reader):
+        return None, False
+    observed = await reader(
+        evt.workspace_id,
+        evt.cluster_id,
+        evt.rendered_manifest.metadata.namespace or Sandbox.NAMESPACE,
+        resource_ref(evt.rendered_manifest.kind, evt.rendered_manifest.metadata.name),
+    )
+    if not isinstance(observed, Mapping):
+        return None, True
+    raw = observed.get("raw")
+    live = reconstruct_live_object(
+        str(observed.get("kind") or evt.rendered_manifest.kind),
+        raw if isinstance(raw, Mapping) else None,
+    )
+    return live, True
+
+
+def build_desired_diff(
+    evt: ManifestRenderedBody,
+    actual_image: str,
+    *,
+    actual_manifest: Mapping[str, Any] | None = None,
+    inventory_manifest_supported: bool = False,
+) -> Diff:
     rendered = evt.rendered_manifest
     namespace = rendered.metadata.namespace or Sandbox.NAMESPACE
     policy = load_field_policy(rendered)
     new_desired, ssa_meta = load_new_desired_snapshot(rendered)
-    live = load_live_snapshot(rendered, actual_image)
+    live = load_live_snapshot(
+        rendered,
+        actual_image,
+        actual_manifest=actual_manifest,
+        inventory_manifest_supported=inventory_manifest_supported,
+    )
     old_desired = load_previous_desired_snapshot(live, policy)
     changes = compare_managed_fields(
         old_desired=old_desired.fields,
@@ -188,7 +230,25 @@ def load_new_desired_snapshot(
 def load_live_snapshot(
     rendered: RenderedManifest,
     actual_image: str,
+    *,
+    actual_manifest: Mapping[str, Any] | None = None,
+    inventory_manifest_supported: bool = False,
 ) -> ManagedFieldSnapshot:
+    if actual_manifest is not None:
+        return snapshot_from_kubernetes_object(
+            actual_manifest,
+            source="observed_actual_manifest",
+        )
+    if inventory_manifest_supported:
+        return ManagedFieldSnapshot(
+            resource=resource_ref(rendered.kind, rendered.metadata.name),
+            namespace=rendered.metadata.namespace or Sandbox.NAMESPACE,
+            fields={},
+            source="inventory_resource_missing",
+        )
+
+    # Compatibility for stores that have not implemented the full inventory
+    # manifest reader.  Production stores use the exact branch above.
     live = rendered_manifest_to_object(rendered)
     if rendered.kind == "Deployment" and rendered.spec.image:
         containers = (
@@ -566,12 +626,18 @@ def target_resource_label(resource: str) -> str:
 async def on_manifest_rendered(
     evt: ManifestRenderedBody, ctx: EventContext
 ) -> AsyncIterator[EventBody]:
+    actual_manifest, inventory_manifest_supported = await load_actual_resource_manifest(evt, ctx)
     actual_image = (
         await load_actual_resource_image(evt, ctx)
         if evt.rendered_manifest.spec.image
         else RESOURCE_NOT_INSPECTED
     )
-    diff = build_desired_diff(evt, actual_image)
+    diff = build_desired_diff(
+        evt,
+        actual_image,
+        actual_manifest=actual_manifest,
+        inventory_manifest_supported=inventory_manifest_supported,
+    )
     yield DesiredDesiredDiffDetectedBody(diff=diff)
     yield build_change_context_event(evt, diff)
 

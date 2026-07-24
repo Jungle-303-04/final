@@ -240,6 +240,15 @@ class RepoChangeStore(Protocol):
         renderer_version: str,
     ) -> list[JsonObject]: ...
 
+    async def get_last_approved_resource_snapshot(
+        self,
+        workspace_id: str,
+        binding_id: str,
+        cluster_id: str,
+        namespace: str,
+        resource: str,
+    ) -> JsonObject | None: ...
+
 
 class ReleaseFlowStore(Protocol):
     async def project_release_workflow_event(self, payload: JsonObject) -> JsonObject | None: ...
@@ -248,6 +257,14 @@ class ReleaseFlowStore(Protocol):
 
 
 class RcaChangesStore(Protocol):
+    async def get_completed_workload_change_contexts(
+        self,
+        workspace_id: str,
+        workflow_run_id: str,
+        application_id: str,
+        binding_id: str,
+    ) -> list[JsonObject]: ...
+
     async def get_completed_workload_change_context(
         self,
         workspace_id: str,
@@ -297,6 +314,10 @@ class WorkflowStore(Protocol):
     async def resolve_workflow_approval(self, payload: JsonObject) -> JsonObject: ...
 
     async def attach_workflow_command(self, workflow_run_id: str, command_id: str) -> None: ...
+
+    async def get_workflow_command_progress(self, workflow_run_id: str) -> JsonObject: ...
+
+    async def record_approved_workflow_snapshots(self, workflow_run_id: str) -> int: ...
 
     async def update_workflow_run_for_command(self, payload: JsonObject) -> WorkflowMutation: ...
 
