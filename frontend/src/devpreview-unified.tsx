@@ -1816,32 +1816,6 @@ function HomeSurface({ workspaceId, applicationsFeed, namespaceFeed, clusterMeta
                 ))}
                 {pendingCl.length > 0 && <span style={{ color: TINT.blue.fg }}>· 연결 중 {pendingCl.length}</span>}
               </span>
-              {/*
-              {operationMetrics.length > 0 && (
-                <button
-                  type="button"
-                  className="product-focusable product-control"
-                  disabled={!onOpenIssues || openIncidentCount === 0}
-                  onClick={onOpenIssues}
-                  title={openIncidentCount && openIncidentCount > 0 ? "이슈 목록에서 원인·복구 보기" : undefined}
-                  style={{
-                    ...seg,
-                    borderColor: openIncidentCount && openIncidentCount > 0 ? TINT.crit.bd : UI.line,
-                    background: openIncidentCount && openIncidentCount > 0 ? TINT.crit.bg : UI.card,
-                    color: openIncidentCount && openIncidentCount > 0 ? HP.crit : UI.ink2,
-                    cursor: onOpenIssues && openIncidentCount && openIncidentCount > 0 ? "pointer" : "default",
-                  }}
-                >
-                  <Activity size={12} />
-                  {operationMetrics.map((metric, index) => (
-                    <span key={metric.key}>
-                      {index > 0 && <span aria-hidden="true" style={{ marginRight: 5, color: UI.line }}>·</span>}
-                      {metric.label} <b style={{ ...num, color: "inherit" }}>{metric.value}</b>
-                    </span>
-                  ))}
-                </button>
-              )}
-              */}
             </span>
           );
         })()}
