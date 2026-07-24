@@ -46,8 +46,13 @@ def _deployment_raw(name: str, image: str, replicas: int = 2):
 
 
 class _FakeDiscovery:
-    def __init__(self, objects: list[dict]) -> None:
+    def __init__(self, objects: list[dict], seen_tokens: list[str] | None = None) -> None:
         self._objects = objects
+        self._seen_tokens = seen_tokens if seen_tokens is not None else []
+
+    def with_token(self, token: str):
+        self._seen_tokens.append(token)
+        return _FakeDiscovery(self._objects, self._seen_tokens)
 
     async def render_desired_objects(self, _payload):
         return "a" * 40, list(self._objects), ["render warning"]
@@ -142,3 +147,65 @@ def test_all_create_when_no_live_observation() -> None:
     assert response.create_count == 2
     assert response.live_observed is False
     assert all(r.change == "create" for r in response.resources)
+
+
+def test_preview_reuses_stored_github_app_installation_without_frontend_id(
+    monkeypatch,
+) -> None:
+    """재연결은 프런트 임시 상태가 없어도 저장된 App 설치 참조로 인증해야 한다."""
+
+    repository = {
+        "repository_id": "repo-1",
+        "credential_ref": "github-app-installation:148437041",
+        "status": "disconnected",
+    }
+    monkeypatch.setattr(
+        app_router,
+        "require_repository_manage_if_registered",
+        lambda *args, **kwargs: repository,
+    )
+    monkeypatch.setattr(
+        app_router,
+        "database_credential_token",
+        lambda *args, **kwargs: pytest.fail(
+            "GitHub App 설치 참조를 일반 secret vault에서 읽으면 안 됩니다"
+        ),
+    )
+
+    from domains.scm import github_app_credentials
+
+    async def _resolve_installation_token(_db, workspace_id, installation_id):
+        assert workspace_id == "ws-1"
+        assert installation_id == "148437041"
+        return "installation-token"
+
+    monkeypatch.setattr(
+        github_app_credentials,
+        "resolve_installation_token",
+        _resolve_installation_token,
+    )
+
+    request = RepositoryConnectionPreviewRequest(
+        repo_ref="jungle-303-04/demo-game",
+        branch="main",
+        manifest_path="deploy/k8s/overlays/game",
+        source_type="kustomize",
+        cluster_id="battlegrounds-8352",
+        namespace="sandbox",
+    )
+    seen_tokens: list[str] = []
+    response = asyncio.run(
+        connect_application_preview(
+            payload=request,
+            current=SimpleNamespace(
+                user_id="admin",
+                roles=("service_admin",),
+                workspace_id="ws-1",
+            ),
+            db=_StubPreviewDb(live={}, owned={}),
+            discovery=_FakeDiscovery([_deployment_desired("lobby", "repo/lobby:v1")], seen_tokens),
+        )
+    )
+
+    assert response.revision == "a" * 40
+    assert seen_tokens == ["installation-token"]
