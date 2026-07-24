@@ -38,6 +38,7 @@ import {
   SIDE_PANEL_WIDTH_TRANSITION,
   SidePanelResizeHandle,
   SidePanelWindowControls,
+  SIDE_PANEL_CONTENT_HOST_STYLE,
   clampSidePanelWidth,
   sidePanelWidthFromKeyboard,
 } from "./devpreview/SidePanelShell";
@@ -3145,7 +3146,7 @@ function App() {
                 value={aiW}
               />
             )}
-            <div style={{ flex: 1, minWidth: 0 }}>
+            <div data-ai-panel-host="true" style={SIDE_PANEL_CONTENT_HOST_STYLE}>
               <AiPanel embedded full={aiFull} recoveryRequest={aiRecoveryRequest}
                 onToggleFull={() => setAiFull((v) => !v)}
                 onClose={closeAi}

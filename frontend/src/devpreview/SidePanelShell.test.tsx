@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   SIDE_PANEL_KEYBOARD_LARGE_STEP,
   SIDE_PANEL_KEYBOARD_STEP,
+  SIDE_PANEL_CONTENT_HOST_STYLE,
   SidePanelResizeHandle,
   SidePanelWindowControls,
   clampSidePanelWidth,
@@ -150,5 +151,17 @@ describe("side panel width math", () => {
       maximumWidth: 760,
       minimumWidth: 380,
     })).toBeNull();
+  });
+});
+
+describe("side panel content sizing", () => {
+  it("allows long panel content to shrink inside a fixed viewport", () => {
+    expect(SIDE_PANEL_CONTENT_HOST_STYLE).toMatchObject({
+      display: "flex",
+      flex: 1,
+      minHeight: 0,
+      minWidth: 0,
+      overflow: "hidden",
+    });
   });
 });

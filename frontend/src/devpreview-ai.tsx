@@ -950,8 +950,11 @@ export function AiPanel({ onClose, onCancelRecovery, onRecoveryReviewStateChange
   };
 
   return (
-    <div className={`opsia-ai relative flex ${embedded ? "h-full w-full min-w-0" : "h-screen w-[460px]"} flex-col overflow-hidden bg-white`}>
-      <header className="flex items-center gap-2.5 border-b border-black/[0.05] bg-white/60 px-3.5 py-3 backdrop-blur-xl">
+    <div
+      className={`opsia-ai relative flex min-h-0 max-h-full ${embedded ? "h-full w-full min-w-0" : "h-screen w-[460px]"} flex-col overflow-hidden bg-white`}
+      data-ai-panel-root="true"
+    >
+      <header className="flex shrink-0 items-center gap-2.5 border-b border-black/[0.05] bg-white/60 px-3.5 py-3 backdrop-blur-xl">
         <span className="grid size-9 shrink-0 place-items-center rounded-[13px] bg-[linear-gradient(135deg,#0A84FF,#5AC8FA)] text-primary-foreground shadow-[0_2px_8px_-2px_color-mix(in_oklch,var(--primary)_55%,transparent)]"><Sparkles className="size-4" /></span>
         <div className="min-w-0 flex-1"><h2 className="text-body font-semibold leading-tight tracking-[-0.01em] text-heading">Kyro AI</h2></div>
         <SidePanelWindowControls
@@ -995,7 +998,7 @@ export function AiPanel({ onClose, onCancelRecovery, onRecoveryReviewStateChange
           showExpandedControl={onToggleFull !== undefined}
         />
       </header>
-      <div className="flex items-center gap-1.5 border-b border-black/[0.04] bg-white/30 px-3.5 py-2 text-black backdrop-blur">
+      <div className="flex shrink-0 items-center gap-1.5 border-b border-black/[0.04] bg-white/30 px-3.5 py-2 text-black backdrop-blur">
         <span className="text-caption font-medium text-black">맥락</span>
         <span className="inline-flex items-center gap-1 rounded-full bg-black/[0.05] px-2 py-0.5 text-caption font-medium text-black"><Boxes className="size-3" />{contextView}</span>
         <span className="inline-flex items-center gap-1 rounded-full bg-black/[0.05] px-2 py-0.5 text-caption font-medium text-black"><Server className="size-3" />{contextScopeLabel ?? (contextScope || "전체 클러스터")}</span>
@@ -1090,7 +1093,11 @@ export function AiPanel({ onClose, onCancelRecovery, onRecoveryReviewStateChange
         </div>
       ) : null}
 
-      <div className="chatscroll flex-1 space-y-3.5 overflow-y-auto scroll-smooth px-4 py-5 [scrollbar-gutter:stable]" ref={scrollRef}>
+      <div
+        className="chatscroll min-h-0 flex-1 space-y-3.5 overflow-y-auto scroll-smooth px-4 py-5 [scrollbar-gutter:stable]"
+        data-ai-scroll-region="true"
+        ref={scrollRef}
+      >
         {viewingHistory ? (
           // 저장된 대화 이력 (읽기 전용). 상세가 없거나 못 불러오면 정직한 빈 상태.
           detail.status === "loading" ? (
@@ -1133,9 +1140,14 @@ export function AiPanel({ onClose, onCancelRecovery, onRecoveryReviewStateChange
         )}
       </div>
 
-      <div className="border-t border-black/[0.05] bg-white/50 px-3.5 pb-3.5 pt-3 backdrop-blur-xl">
-        {recoveryRequest !== null ? (
-          <div className="mb-3 rounded-2xl border border-primary/20 bg-primary/[0.04] p-3">
+      <footer
+        className="flex min-h-0 shrink-0 flex-col overflow-hidden border-t border-black/[0.05] bg-white/50 backdrop-blur-xl"
+        data-ai-composer-region="true"
+        style={{ maxHeight: "min(52%, 28rem)" }}
+      >
+        <div className="min-h-0 overflow-y-auto px-3.5 pt-3 [scrollbar-gutter:stable]">
+          {recoveryRequest !== null ? (
+            <div className="mb-3 rounded-2xl border border-primary/20 bg-primary/[0.04] p-3">
             <div className="flex items-start gap-2">
               <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary"><Sparkles className="size-3.5" /></span>
               <div className="min-w-0 flex-1">
@@ -1217,22 +1229,25 @@ export function AiPanel({ onClose, onCancelRecovery, onRecoveryReviewStateChange
                 </button>
               )}
             </div>
-          </div>
-        ) : null}
-        {suggestions.status === "ready" && suggestions.items.length > 0 ? (
-          <div className="mb-2.5 flex flex-wrap gap-1.5">{suggestions.items.map((s) => <button className="rounded-full border border-border bg-card/80 px-3 py-1.5 text-caption font-medium text-muted-foreground shadow-[0_1px_2px_rgba(0,0,0,0.03)] transition-all hover:-translate-y-px hover:border-ring hover:text-foreground hover:shadow-[0_2px_6px_-2px_rgba(0,0,0,0.12)]" key={s.id} onClick={() => send(s.prompt)} type="button">{s.label}</button>)}</div>
-        ) : null}
-        <div className="relative rounded-[20px] border border-black/[0.12] bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),inset_0_1px_0_rgba(255,255,255,0.8)] transition-all focus-within:border-primary/40 focus-within:shadow-[0_0_0_4px_color-mix(in_oklch,var(--primary)_12%,transparent)]">
-          <textarea
-            className="min-h-[60px] w-full resize-none rounded-[20px] bg-white px-3.5 py-3 pr-12 text-body leading-relaxed tracking-[-0.006em] text-black caret-black outline-none placeholder:text-black/40"
-            onChange={(e) => setInput(e.currentTarget.value)}
-            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(input); } }}
-            placeholder="질문 입력"
-            value={input}
-          />
-          <button className="absolute bottom-2.5 right-2.5 grid size-8 place-items-center rounded-full bg-primary text-primary-foreground shadow-[0_2px_6px_-1px_color-mix(in_oklch,var(--primary)_50%,transparent)] transition-all hover:brightness-105 active:scale-90 disabled:scale-90 disabled:bg-primary/20 disabled:text-primary disabled:opacity-100" disabled={!input.trim()} onClick={() => send(input)} title="보내기" type="button"><Send className="size-4" /></button>
+            </div>
+          ) : null}
+          {suggestions.status === "ready" && suggestions.items.length > 0 ? (
+            <div className="mb-2.5 flex flex-wrap gap-1.5">{suggestions.items.map((s) => <button className="rounded-full border border-border bg-card/80 px-3 py-1.5 text-caption font-medium text-muted-foreground shadow-[0_1px_2px_rgba(0,0,0,0.03)] transition-all hover:-translate-y-px hover:border-ring hover:text-foreground hover:shadow-[0_2px_6px_-2px_rgba(0,0,0,0.12)]" key={s.id} onClick={() => send(s.prompt)} type="button">{s.label}</button>)}</div>
+          ) : null}
         </div>
-      </div>
+        <div className="shrink-0 px-3.5 pb-3.5 pt-3" data-ai-composer="true">
+          <div className="relative rounded-[20px] border border-black/[0.12] bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),inset_0_1px_0_rgba(255,255,255,0.8)] transition-all focus-within:border-primary/40 focus-within:shadow-[0_0_0_4px_color-mix(in_oklch,var(--primary)_12%,transparent)]">
+            <textarea
+              className="min-h-[60px] w-full resize-none rounded-[20px] bg-white px-3.5 py-3 pr-12 text-body leading-relaxed tracking-[-0.006em] text-black caret-black outline-none placeholder:text-black/40"
+              onChange={(e) => setInput(e.currentTarget.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(input); } }}
+              placeholder="질문 입력"
+              value={input}
+            />
+            <button className="absolute bottom-2.5 right-2.5 grid size-8 place-items-center rounded-full bg-primary text-primary-foreground shadow-[0_2px_6px_-1px_color-mix(in_oklch,var(--primary)_50%,transparent)] transition-all hover:brightness-105 active:scale-90 disabled:scale-90 disabled:bg-primary/20 disabled:text-primary disabled:opacity-100" disabled={!input.trim()} onClick={() => send(input)} title="보내기" type="button"><Send className="size-4" /></button>
+          </div>
+        </div>
+      </footer>
 
       <style>{`
         @keyframes surfaceIn { from { opacity: 0; transform: translateY(10px) scale(0.985); } to { opacity: 1; transform: none; } }
