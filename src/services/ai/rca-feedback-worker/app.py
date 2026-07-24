@@ -27,6 +27,7 @@ from domains.rca.events import (
 from domains.rca.recovery_verification import (
     DEFAULT_MAXIMUM_SECONDS,
     DEFAULT_MINIMUM_SECONDS,
+    STANDARD_SLI_ALERT_NAME,
     before_alert_snapshot,
     evaluate_recovery_evidence,
     finite_float,
@@ -34,6 +35,7 @@ from domains.rca.recovery_verification import (
     metric_identity,
     metric_sample_with_identity,
     normalized_utc,
+    parse_datetime,
     protected_workloads,
     recovery_target,
     verification_deadline,
@@ -437,12 +439,30 @@ async def on_recovery_safe_pr_created(
     if approved_alert_before:
         before = dict(approved_alert_before)
     else:
-        alerts = await ctx.db.list_alert_events(evt.workspace_id, limit=200)
+        alerts = await ctx.db.list_alert_events(
+            evt.workspace_id,
+            rule_name=STANDARD_SLI_ALERT_NAME,
+            source="alertmanager",
+            incident_ids=tuple(
+                sorted(
+                    {
+                        value
+                        for value in (
+                            ctx.correlation_id,
+                            str(record.get("incident_id") or ""),
+                        )
+                        if value
+                    }
+                )
+            ),
+            limit=10,
+        )
         before = before_alert_snapshot(
             alerts,
             target=target,
             correlation_id=ctx.correlation_id,
             incident_id=str(record.get("incident_id") or ""),
+            expected_series_identity=failure_ratio_identity,
         )
     before.update(
         {
@@ -767,11 +787,36 @@ async def on_recovery_verification_evidence(
     )
     if not records:
         return
-    alerts = await ctx.db.list_alert_events(evt.workspace_id, limit=500)
     now = normalized_utc(await ctx.db.current_database_time())
     for record in records:
         payload = mapping(record.get("payload"))
         lifecycle = dict(mapping(payload.get("lifecycle")))
+        verification = dict(mapping(lifecycle.get("verification")))
+        before_snapshot = mapping(verification.get("before"))
+        original_event_id = str(before_snapshot.get("alert_event_id") or "")
+        subject_key = str(before_snapshot.get("subject_key") or "")
+        verification_started_at = parse_datetime(verification.get("started_at"))
+        alerts: list[JsonObject] = []
+        if original_event_id and subject_key and verification_started_at is not None:
+            original_alerts = await ctx.db.list_alert_events(
+                evt.workspace_id,
+                event_ids=(original_event_id,),
+                limit=1,
+            )
+            refire_alerts = await ctx.db.list_alert_events(
+                evt.workspace_id,
+                from_time=verification_started_at,
+                rule_name=STANDARD_SLI_ALERT_NAME,
+                source="alertmanager",
+                subject_key=subject_key,
+                limit=500,
+            )
+            alerts_by_id = {
+                str(alert.get("event_id") or ""): dict(alert)
+                for alert in (*original_alerts, *refire_alerts)
+                if str(alert.get("event_id") or "")
+            }
+            alerts = list(alerts_by_id.values())
         decision = evaluate_recovery_evidence(
             plan_payload=payload,
             lifecycle=lifecycle,
@@ -779,7 +824,6 @@ async def on_recovery_verification_evidence(
             alerts=alerts,
             now=now,
         )
-        verification = dict(mapping(lifecycle.get("verification")))
         verification.update(
             {
                 "status": decision.status,

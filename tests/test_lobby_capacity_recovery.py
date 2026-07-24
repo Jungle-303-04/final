@@ -228,10 +228,16 @@ class LobbyEvidencePort:
         self,
         workspace_id: str,
         *,
+        rule_name: str | None = None,
+        source: str | None = None,
+        incident_ids: tuple[str, ...] | None = None,
         limit: int,
     ):
         assert workspace_id == "workspace-1"
-        assert limit == 200
+        assert rule_name == "OpsiaSliFailureRatioHigh"
+        assert source == "alertmanager"
+        assert set(incident_ids or ()) == {"correlation-lobby", "incident-lobby"}
+        assert limit == 10
         if not self.include_exact_alert:
             return []
         return [
@@ -479,6 +485,42 @@ def test_safe_pr_preflight_snapshots_arbitrary_active_workload_identity() -> Non
     assert prepared.draft.params["verification_alert_before"]["alert_event_id"] == (
         "alert-lobby"
     )
+
+
+def test_safe_pr_preflight_accepts_same_exact_alert_after_resolution() -> None:
+    class ResolvedLobbyEvidencePort(LobbyEvidencePort):
+        async def list_alert_events(
+            self,
+            workspace_id: str,
+            *,
+            rule_name: str | None = None,
+            source: str | None = None,
+            incident_ids: tuple[str, ...] | None = None,
+            limit: int,
+        ):
+            alerts = await super().list_alert_events(
+                workspace_id,
+                rule_name=rule_name,
+                source=source,
+                incident_ids=incident_ids,
+                limit=limit,
+            )
+            alerts[0]["status"] = "resolved"
+            alerts[0]["resolved_at"] = "2026-07-24T01:01:00Z"
+            return alerts
+
+    prepared = asyncio.run(
+        RecoveryActionPreflight(
+            LobbyAuthorityPort(),
+            ResolvedLobbyEvidencePort(),
+        ).prepare(lobby_selection_event(), "correlation-lobby")
+    )
+
+    assert not isinstance(prepared, RcaActionRequiredBody)
+    assert prepared.draft.params["verification_alert_before"][
+        "alert_event_id"
+    ] == "alert-lobby"
+    assert prepared.draft.params["verification_alert_before"]["threshold"] == 0.2
 
 
 def test_safe_pr_preflight_uses_serving_pod_during_protected_candidate_surge() -> None:

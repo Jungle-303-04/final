@@ -3,7 +3,10 @@ from __future__ import annotations
 from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 
-from domains.rca.recovery_verification import evaluate_recovery_evidence
+from domains.rca.recovery_verification import (
+    before_alert_snapshot,
+    evaluate_recovery_evidence,
+)
 
 START = datetime(2026, 7, 24, 1, 0, tzinfo=UTC)
 TARGET = {
@@ -103,6 +106,133 @@ def alert(
         "status": status,
         "fired_at": fired_at.isoformat(),
         "resolved_at": resolved_at.isoformat() if resolved_at else None,
+    }
+
+
+def alert_for_snapshot(
+    *,
+    event_id: str = "alert-original",
+    status: str = "resolved",
+    incident_id: str = "incident-1",
+    fired_at: datetime | None = START - timedelta(minutes=2),
+    resolved_at: datetime | None = START - timedelta(minutes=1),
+) -> dict[str, object]:
+    item = alert(
+        event_id=event_id,
+        status=status,
+        fired_at=fired_at or START - timedelta(minutes=2),
+        resolved_at=resolved_at,
+    )
+    item.update(
+        {
+            "incident_id": incident_id,
+            "observed_value": 0.381,
+            "threshold": 0.2,
+        }
+    )
+    if fired_at is None:
+        item["fired_at"] = None
+    return item
+
+
+def test_before_alert_snapshot_accepts_exact_terminal_resolved_occurrence() -> None:
+    snapshot = before_alert_snapshot(
+        [alert_for_snapshot()],
+        target=TARGET,
+        correlation_id="correlation-1",
+        incident_id="incident-1",
+    )
+
+    assert snapshot["available"] is True
+    assert snapshot["alert_event_id"] == "alert-original"
+    assert snapshot["observed_value"] == 0.381
+    assert snapshot["threshold"] == 0.2
+
+
+def test_before_alert_snapshot_rejects_incomplete_resolved_chronology() -> None:
+    for candidate in (
+        alert_for_snapshot(fired_at=None),
+        alert_for_snapshot(resolved_at=None),
+        alert_for_snapshot(
+            fired_at=START,
+            resolved_at=START - timedelta(seconds=1),
+        ),
+    ):
+        snapshot = before_alert_snapshot(
+            [candidate],
+            target=TARGET,
+            correlation_id="correlation-1",
+            incident_id="incident-1",
+        )
+
+        assert snapshot == {
+            "available": False,
+            "reason_code": "pre_recovery_alert_missing",
+        }
+
+
+def test_before_alert_snapshot_keeps_exact_resolved_duplicates_ambiguous() -> None:
+    snapshot = before_alert_snapshot(
+        [
+            alert_for_snapshot(event_id="alert-original"),
+            alert_for_snapshot(event_id="alert-duplicate"),
+        ],
+        target=TARGET,
+        correlation_id="correlation-1",
+        incident_id="incident-1",
+    )
+
+    assert snapshot == {
+        "available": False,
+        "reason_code": "pre_recovery_alert_ambiguous",
+    }
+
+
+def test_before_alert_snapshot_rejects_other_incident_and_series() -> None:
+    other_series = alert_for_snapshot()
+    other_series["series_identity"] = {
+        **ALERT_SERIES_IDENTITY,
+        "resource_name": "another-api",
+    }
+
+    snapshot = before_alert_snapshot(
+        [
+            alert_for_snapshot(incident_id="another-incident"),
+            other_series,
+        ],
+        target=TARGET,
+        correlation_id="correlation-1",
+        incident_id="incident-1",
+    )
+
+    assert snapshot == {
+        "available": False,
+        "reason_code": "pre_recovery_alert_missing",
+    }
+
+
+def test_before_alert_snapshot_requires_alertmanager_rule_and_metric_identity() -> None:
+    wrong_source = alert_for_snapshot(event_id="wrong-source")
+    wrong_source["source"] = "synthetic"
+    wrong_rule = alert_for_snapshot(event_id="wrong-rule")
+    wrong_rule["rule_name"] = "AnotherFailureRatioRule"
+    wrong_sli = alert_for_snapshot(event_id="wrong-sli")
+    wrong_sli["series_identity"] = {
+        **ALERT_SERIES_IDENTITY,
+        "symptom": "latency_failure",
+    }
+
+    snapshot = before_alert_snapshot(
+        [wrong_source, wrong_rule, wrong_sli],
+        target=TARGET,
+        correlation_id="correlation-1",
+        incident_id="incident-1",
+        expected_series_identity=ALERT_SERIES_IDENTITY,
+    )
+
+    assert snapshot == {
+        "available": False,
+        "reason_code": "pre_recovery_alert_missing",
     }
 
 
