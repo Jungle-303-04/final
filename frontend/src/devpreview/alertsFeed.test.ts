@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { isIncidentNotification, type AlertEventView } from "./alertsFeed";
+import {
+  alertEventOccurrenceKey,
+  isIncidentNotification,
+  type AlertEventView,
+} from "./alertsFeed";
 
 function alert(
   changes: Partial<AlertEventView> = {},
@@ -31,5 +35,14 @@ describe("isIncidentNotification", () => {
     expect(isIncidentNotification(alert({ source: "opsia" }))).toBe(false);
     expect(isIncidentNotification(alert({ status: "resolved" }))).toBe(false);
     expect(isIncidentNotification(alert({ incidentId: null }))).toBe(false);
+  });
+});
+
+describe("alertEventOccurrenceKey", () => {
+  it("does not let a read alert hide a new incident reusing the source event id", () => {
+    const first = alert({ eventId: "ale-am-stable", incidentId: "incident-old" });
+    const reopened = alert({ eventId: "ale-am-stable", incidentId: "incident-new" });
+
+    expect(alertEventOccurrenceKey(first)).not.toBe(alertEventOccurrenceKey(reopened));
   });
 });
