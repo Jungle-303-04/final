@@ -5,6 +5,8 @@ export interface RepositoryApplicationSummary {
   name: string;
   branch: string | null;
   manifestPath: string | null;
+  deliveryStatus: string | null;
+  healthStatus: string | null;
 }
 
 export interface RepositoryGroup {
@@ -27,6 +29,8 @@ export function groupApplicationsByRepository(
       name: application.name,
       branch: application.defaultBranch,
       manifestPath: application.manifestPath,
+      deliveryStatus: application.deliveryStatus,
+      healthStatus: application.healthStatus,
     });
     groups.set(key, group);
   }

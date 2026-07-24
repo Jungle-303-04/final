@@ -17,6 +17,7 @@ const STATUS_KO: Record<string, string> = {
   warning: "주의",
   warn: "주의",
   pending: "대기",
+  waiting_for_approval: "승인 대기",
   provisioning: "예약 중",
   progressing: "진행 중",
   critical: "위험",
@@ -109,7 +110,10 @@ const REASON_KO: Record<string, string> = {
 };
 
 const MESSAGE_KO: Record<string, string> = {
+  "git change confirmed": "Git 변경 확인",
   "git change confirmed; rendering manifest": "Git 변경 확인 · 매니페스트 반영 중",
+  "manifest rendered": "매니페스트 렌더링 완료",
+  "desired diff detected": "원하는 상태와 차이 감지",
   "pod readiness failure": "파드 준비 상태 실패",
   "readiness probe response failure": "준비 상태 확인 응답 실패",
 };

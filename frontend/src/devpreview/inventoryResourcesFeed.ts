@@ -1,13 +1,14 @@
 import { useEffect, useState } from "react";
 
 import { listInventoryResourcesByType } from "../api/inventory-query";
+import type { InventoryResource } from "../api/inventory-schemas";
+import { projectInventoryResourceRow } from "./inventoryResourceTableProjection";
 import { getSharedInventorySummary } from "./inventorySummaryFeed";
 
 // UI-PHASE2-001: typed live adapter for the 통합 리소스 37종 테이블.
 // Reads only `GET /api/clusters/{id}/inventory/resources?resource_type=` and
-// `GET /api/clusters/{id}/inventory/summary`. Contract fields that the backend
-// does not expose (cpu/mem/replicas/endpoints/ready/restarts …) are never
-// fabricated — the table renders those columns as "관측 안 됨" blanks.
+// `GET /api/clusters/{id}/inventory/summary`. Kind-specific values are projected
+// from each row's bounded `summary`; absent evidence remains an honest blank.
 
 export type ResourcesFeedStatus = "loading" | "ready" | "unavailable";
 
@@ -33,8 +34,11 @@ const RESOURCE_QUERY_LIMIT = 1000;
 // 불확실하므로 대부분은 kindId를 소문자화한 값(= 쿠버네티스 kind 소문자)을 쓰고,
 // 약어로 표기된 종류(HPA/PVC)만 정식 kind 이름으로 매핑한다.
 const KIND_TO_RESOURCE_TYPE: Record<string, string> = {
-  HPA: "horizontalpodautoscaler",
-  PVC: "persistentvolumeclaim",
+  HPA: "hpa",
+  HorizontalPodAutoscaler: "hpa",
+  PVC: "pvc",
+  PersistentVolumeClaim: "pvc",
+  EndpointSlice: "endpoint",
 };
 
 export function kindToResourceType(kindId: string): string {
@@ -46,34 +50,9 @@ function isAbortError(error: unknown): boolean {
     && (error as { name?: unknown }).name === "AbortError";
 }
 
-interface InventoryResourceRow {
-  name: string;
-  namespace: string | null;
-  kind: string;
-  status: string;
-  health: string;
-  resource_type: string;
-  uid: string | null;
-  created_at: string | null;
-  cluster_id: string;
-  inventory_key: string;
-}
-
-// 계약이 노출하는 필드만 Row로 옮긴다 — SPEC 특화 필드(replicas/cpu/mem 등)는
-// 절대 채우지 않는다. 값이 없으면 undefined로 두고 셀이 "–"를 렌더한다.
-function toRow(resource: InventoryResourceRow): Row {
-  return {
-    name: resource.name,
-    ns: resource.namespace ?? undefined,
-    kind: resource.kind,
-    status: resource.status,
-    health: resource.health,
-    resource_type: resource.resource_type,
-    uid: resource.uid ?? undefined,
-    created: resource.created_at ?? undefined,
-    cluster: resource.cluster_id,
-    _key: resource.inventory_key,
-  };
+function matchesResourceType(resource: InventoryResource, resourceType: string): boolean {
+  return resource.resource_type.toLowerCase() === resourceType
+    || kindToResourceType(resource.kind) === resourceType;
 }
 
 export function useInventoryResources(
@@ -106,8 +85,8 @@ export function useInventoryResources(
         // 정식 kind 소문자 === 추정 resource_type 로 한 번 더 걸러 표기 불일치로
         // 빈 표/오염 행이 나오는 것을 막는다.
         const rows = response.resources
-          .filter((resource) => resource.kind.toLowerCase() === type)
-          .map(toRow);
+          .filter((resource) => matchesResourceType(resource, type))
+          .map((resource) => projectInventoryResourceRow(resource));
         setView({ status: "ready", rows });
       })
       .catch((cause: unknown) => {
@@ -151,8 +130,8 @@ export function useInventoryResourcesAcrossClusters(
       const fulfilled = results.filter((result): result is PromiseFulfilledResult<Awaited<ReturnType<typeof listInventoryResourcesByType>>> => result.status === "fulfilled");
       const rows = fulfilled
         .flatMap((result) => result.value.resources)
-        .filter((resource) => resource.kind.toLowerCase() === requestedType)
-        .map(toRow)
+        .filter((resource) => matchesResourceType(resource, requestedType))
+        .map((resource) => projectInventoryResourceRow(resource))
         .sort((a, b) => `${String(a.cluster)}\u0000${String(a.ns ?? "")}\u0000${String(a.name)}`.localeCompare(`${String(b.cluster)}\u0000${String(b.ns ?? "")}\u0000${String(b.name)}`));
       setView({ status: fulfilled.length > 0 ? "ready" : "unavailable", rows, key });
     });

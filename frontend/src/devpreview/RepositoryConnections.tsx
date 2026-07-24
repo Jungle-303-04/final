@@ -2,8 +2,48 @@ import { useState } from "react";
 
 import { disconnectRepository } from "../api/repository-connection";
 import { GithubIcon } from "./brandIcons";
+import { ResourceAuxiliaryRow } from "./ResourceAuxiliaryPanel";
 import type { RepositoryGroup } from "./repositoryRegistry";
-import { BLUE, HP, TINT, TYPE, UI, blueA, critA } from "./theme";
+import { HP, TINT, TYPE, UI, critA } from "./theme";
+
+const UNHEALTHY_REPOSITORY_STATUSES = new Set([
+  "outofsync", "out_of_sync", "failed", "error", "degraded", "unhealthy",
+]);
+
+function repositorySummary(group: RepositoryGroup): {
+  branch: string;
+  status: string;
+  statusColor: string;
+} {
+  const branch = group.applications.find((application) => application.branch)?.branch
+    ?? "브랜치 관측 안 됨";
+  const statuses = group.applications.flatMap((application) => [
+    application.deliveryStatus,
+    application.healthStatus,
+  ]).filter((status): status is string => Boolean(status?.trim()));
+  const rawStatus = statuses.find((status) =>
+    UNHEALTHY_REPOSITORY_STATUSES.has(status.toLowerCase().replace(/-/g, "_")),
+  ) ?? statuses[0] ?? "상태 관측 안 됨";
+  const normalized = rawStatus.toLowerCase().replace(/-/g, "_");
+  const unhealthy = UNHEALTHY_REPOSITORY_STATUSES.has(normalized);
+  const label = ({
+    synced: "동기화됨",
+    outofsync: "동기화 필요",
+    out_of_sync: "동기화 필요",
+    healthy: "정상",
+    degraded: "성능 저하",
+    unhealthy: "비정상",
+    failed: "실패",
+    error: "오류",
+    pending: "대기 중",
+    progressing: "진행 중",
+  } as Record<string, string>)[normalized] ?? rawStatus;
+  return {
+    branch,
+    status: label,
+    statusColor: unhealthy ? TINT.warn.fg : UI.ink3,
+  };
+}
 
 /**
  * Repository-level summary backed by observed application bindings.
@@ -71,6 +111,7 @@ function RepositoryRow({
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const summary = repositorySummary(group);
 
   const runDisconnect = async () => {
     setBusy(true);
@@ -88,63 +129,31 @@ function RepositoryRow({
 
   return (
     <div>
-      <button
-        type="button"
-        className="product-focusable product-control"
+      <ResourceAuxiliaryRow
+        className="product-control"
         aria-expanded={accordion ? selected : undefined}
         aria-controls={accordion ? applicationsId : undefined}
-        aria-label={accordion
+        ariaLabel={accordion
           ? `${group.repositoryRef} GitOps ${selected ? "닫기" : "열기"}`
           : `${group.repositoryRef} 배포 화면에서 열기`}
-        onClick={() => onOpenRepository?.(group.repositoryRef)}
+        onActivate={onOpenRepository ? () => onOpenRepository(group.repositoryRef) : undefined}
         onMouseEnter={() => onHoverRepository?.(group)}
         onMouseLeave={() => onHoverRepository?.(null)}
         onFocus={() => onHoverRepository?.(group)}
         onBlur={() => onHoverRepository?.(null)}
         data-pod-highlight-source="repository"
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-          width: "100%",
-          minWidth: 0,
-          minHeight: 54,
-          padding: "6px 7px",
-          border: selected ? `1px solid ${blueA(0.45)}` : "1px solid transparent",
-          borderRadius: 9,
-          background: selected ? blueA(0.09) : TINT.ok.bg,
-          boxShadow: selected ? `0 0 0 2px ${blueA(0.08)}` : "none",
-          color: UI.ink,
-          textAlign: "left",
-          cursor: onOpenRepository ? "pointer" : "default",
-        }}
-      >
-        <GithubIcon size={16} aria-hidden="true" style={{ flexShrink: 0 }} />
-        <span style={{ minWidth: 0, flex: 1 }}>
-          <strong
-            data-pod-highlight-primary
-            title={group.repositoryRef}
-            style={{
-              display: "block",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-              color: UI.ink,
-              fontSize: TYPE.label,
-            }}
-          >
-            {group.repositoryRef}
-          </strong>
-          <span style={{ display: "block", marginTop: 2, color: TINT.ok.fg, fontSize: TYPE.caption, lineHeight: 1.35 }}>
-            연결됨 · 앱 {group.applications.length}개
-          </span>
-        </span>
-        {accordion && (
-          <span aria-hidden="true" style={{ color: selected ? BLUE : UI.ink2, fontSize: TYPE.body, transform: selected ? "rotate(180deg)" : "none", transition: "transform 150ms ease" }}>
+        selected={selected}
+        icon={<GithubIcon size={16} aria-hidden="true" />}
+        title={group.repositoryRef}
+        tooltip={group.repositoryRef}
+        meta={<span style={{ color: summary.statusColor }}>{summary.branch} · {summary.status}</span>}
+        trailing={<>
+          <span aria-label={`애플리케이션 ${group.applications.length}개`}>{group.applications.length}</span>
+          {accordion && <span aria-hidden="true" style={{ color: selected ? "inherit" : UI.ink2, fontFamily: "inherit", fontSize: TYPE.body, transform: selected ? "rotate(180deg)" : "none", transition: "transform 150ms ease" }}>
             ▾
-          </span>
-        )}
-      </button>
+          </span>}
+        </>}
+      />
 
       {selected && (
         <ul

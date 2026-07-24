@@ -117,5 +117,24 @@ export const RADIUS = { tile: 3, chip: 6, control: 9, card: 14, panel: 16, sheet
 // 여백 스케일 — 조밀한 목록부터 페이지 구획까지 4px 그리드로 제한한다.
 export const SPACE = { compact: 8, stack: 12, card: 16, section: 20, page: 24 } as const;
 
+// 리소스 관점(인프라·쿠버네티스·트래픽)의 공통 2열 프레임.
+// 관점 전환 시 우측 보조 패널의 위치와 크기가 흔들리지 않게 한 계약에서 관리한다.
+export const RESOURCE_LAYOUT = {
+  viewSwitcherHeight: 56,
+  auxiliaryWidth: 270,
+  columnGap: 16,
+  stickyGap: 12,
+  viewportBottomGap: 16,
+  auxiliaryHeaderHeight: 52,
+  auxiliaryHeaderPadding: "8px",
+  auxiliaryBodyPadding: "8px",
+  auxiliarySectionHeight: 28,
+  auxiliaryRowHeight: 52,
+  auxiliaryRowPadding: "7px 8px",
+  auxiliaryRowGap: 2,
+  auxiliaryIconColumn: 20,
+  auxiliaryTrailingColumn: 30,
+} as const;
+
 // 시연 스케일 — 데모는 멀리서도 읽혀야 한다 (기본 1.25 = 별도 확대 없이 발표 가독)
 export const PRESENT_SCALE = 1.25;

@@ -41,3 +41,6 @@ DEV_BRANCH_STATUS.md
 report_*.json
 bugreport-*.zip
 *.zip
+
+# Local recovery and comparison artifacts
+_to_delete/

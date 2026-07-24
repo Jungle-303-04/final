@@ -8,7 +8,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Activity, AlertTriangle, Box, Check, ChevronLeft, ChevronRight, Clock3, Cpu, EllipsisVertical, ExternalLink, FileCog, Monitor, Plug, RotateCcw, Server, Settings, Unplug } from "lucide-react";
-import { UI, BLUE, HP, TINT, MONO, TYPE, SOFT, SPRING, PAGE, PRESENT_SCALE, DUR, inkA, blueA, LINE3, INK4, BRAND, cardA } from "./devpreview/theme";
+import { UI, BLUE, HP, TINT, MONO, TYPE, SOFT, SPRING, PAGE, PRESENT_SCALE, DUR, RESOURCE_LAYOUT, inkA, blueA, LINE3, INK4, BRAND, cardA } from "./devpreview/theme";
 import { AwsIcon, GithubIcon } from "./devpreview/brandIcons";
 import { statusLabel, reasonLabel } from "./devpreview/statusLabel";
 import { useNarrowViewport } from "./devpreview/useNarrowViewport";
@@ -29,6 +29,12 @@ import {
 import { OpsiaConfigPanel } from "./devpreview/OpsiaConfigPanel";
 import { OpsiaServicePanel } from "./devpreview/OpsiaServicePanel";
 import { RepositoryConnections } from "./devpreview/RepositoryConnections";
+import {
+  ResourceAuxiliaryPanel,
+  ResourceAuxiliaryRow,
+  resourceAuxiliaryFooterButtonStyle,
+  resourceAuxiliaryViewportHeight,
+} from "./devpreview/ResourceAuxiliaryPanel";
 import type { RepositoryGroup } from "./devpreview/repositoryRegistry";
 import { useRelationTopology } from "./devpreview/relationTopologyFeed";
 import {
@@ -901,7 +907,7 @@ function PodRow({ pod, onClick, onTip }: {
 
 // ── 앱 ─────────────────────────────
 // embedded: 셸(통합 리소스)에 내장될 때 자체 헤더·내비를 숨기고 스코프 변화를 알림
-export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOpenRca, lensTab, onAddCluster, onAddRepo, onOpenRepository, stickyTop, initialCluster, selectedNamespace = null, pendingClusters, pendingRepos, connectedRepos, repositoryGroups, onRepositoryDisconnected }: {
+export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOpenRca, lensTab, onAddCluster, onAddRepo, onOpenRepository, stickyTop, viewportTopInset = 0, initialCluster, selectedNamespace = null, pendingClusters, pendingRepos, connectedRepos, repositoryGroups, onRepositoryDisconnected }: {
   embedded?: boolean;
   onScopeChange?: (v: View) => void;
   /** 임베드 모드: 파드 클릭 시 셸의 통합 상세 오버레이를 연다 (내부 패널 대신) */
@@ -917,6 +923,8 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
   onOpenRepository?: (repositoryRef: string) => void;
   /** 탐색 패널 고정 오프셋(CSS px) — 셸 sticky 헤더 바로 아래 */
   stickyTop?: number;
+  /** 임베드된 셸의 고정 헤더 높이. 보조 패널의 가용 높이 계산에 사용한다. */
+  viewportTopInset?: number;
   /** 홈 카드 클릭 등 외부 진입 시 해당 클러스터 노드 뷰로 시작 (스코프 전달 — D21) */
   initialCluster?: string;
   /** 셸 네임스페이스 선택값. null이면 클러스터의 모든 네임스페이스를 본다. */
@@ -1030,7 +1038,7 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
     : 8;
 
   return (
-    <div className="op">
+    <div className="op" data-embedded={embedded ? "true" : "false"}>
       <div style={{ width: embedded ? "100%" : 1220, maxWidth: "100%", margin: "0 auto", padding: embedded ? 0 : "32px 24px 48px" }}>
         {!embedded && (
         <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
@@ -1044,6 +1052,10 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
         </header>
         )}
 
+        {/* 세 관점 공통 2열 프레임: 요약·경로는 좌측 본문에 포함하고,
+            우측 보조 패널은 다른 관점과 같은 상단선에서 시작한다. */}
+        <div className="opsia-content-layout" style={{ display: "flex", gap: RESOURCE_LAYOUT.columnGap, alignItems: "flex-start", flexWrap: "wrap" }}>
+          <div className="opsia-main-pane" style={{ flex: "1 1 440px", minWidth: 0, position: "relative" }}>
         {/* 상태 요약 줄 — 클러스터 수(실). 드릴 시 관측된 노드·파드 수를 정직하게 표기. */}
         {(() => {
           const seg: React.CSSProperties = { display: "flex", alignItems: "center", gap: 5, fontSize: TYPE.label, fontWeight: 600, color: UI.ink2, background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 999, padding: "5px 11px", whiteSpace: "nowrap" };
@@ -1104,9 +1116,7 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
           ))}
         </div>
 
-        {/* 좁아지면(AI 도킹 등) 어사이드가 아래로 내려간다 — 겹침 방지 */}
-        <div className="opsia-content-layout" style={{ display: "flex", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
-          <div className="opsia-main-pane" style={{ flex: "1 1 440px", minWidth: 0, position: "relative" }}>
+            {/* 좁아지면(AI 도킹 등) 어사이드가 아래로 내려간다 — 겹침 방지 */}
             <AnimatePresence mode="popLayout" custom={{ dir, mode }} initial={false}>
               <motion.div key={viewKey} custom={{ dir, mode }}
                 variants={{
@@ -1203,7 +1213,7 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
                     ) : nodePods.length === 0 ? (
                       <EmptyState icon={<Box size={18} strokeWidth={1.75} />} label="관측된 파드가 없습니다"
                         hint="이 노드에 귀속된 파드가 아직 관측되지 않았습니다." flush />
-                    ) : (<div style={{ maxHeight: 480, overflowY: "auto", scrollbarGutter: "stable", overscrollBehavior: "contain" }}>
+                    ) : (<div style={embedded ? undefined : { maxHeight: 480, overflowY: "auto", scrollbarGutter: "stable", overscrollBehavior: "contain" }}>
                       <div style={{ display: "grid", gridTemplateColumns: "12px minmax(160px,1.8fr) minmax(90px,1fr) 92px 96px", alignItems: "center", gap: 12, padding: "0 10px 7px", borderBottom: `1px solid ${UI.line}`, fontSize: TYPE.caption, fontWeight: 600, letterSpacing: "0.07em", color: UI.ink3 }}>
                         <span /><span>파드</span><span>네임스페이스</span><span>상태</span><span>헬스</span>
                       </div>
@@ -1219,6 +1229,7 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
 
           <SidePanel key={lensTab ?? "default"} forcedTab={lensTab ?? null} scaled={embedded}
             onAddRepo={onAddRepo} onOpenRepository={onOpenRepository} stickyTop={stickyTop}
+            viewportTopInset={viewportTopInset}
             activeCluster={activeCluster} selectedNamespace={selectedNamespace}
             onHighlightTarget={setPodHighlightTarget}
             pendingRepos={pendingRepos} connectedRepos={connectedRepos}
@@ -1278,7 +1289,8 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
 
       <style>{`
         html, body { background: ${UI.bg}; }
-        .op { min-height: 100vh; background: ${UI.bg}; font-family: var(--font-sans); font-weight: var(--font-weight-body); -webkit-font-smoothing: antialiased; }
+        .op { background: ${UI.bg}; font-family: var(--font-sans); font-weight: var(--font-weight-body); -webkit-font-smoothing: antialiased; }
+        .op:not([data-embedded="true"]) { min-height: 100vh; }
         .op .opsia-content-layout { container: opsia-content / inline-size; }
         .op .opsia-main-pane { container: opsia-main / inline-size; }
         .op .node-slot-grid { justify-content: start; }
@@ -1307,7 +1319,7 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
         .op .podrow:hover { background: ${inkA(0.035)} !important; }
         @container opsia-content (max-width: 1000px) {
           .op .opsia-main-pane { flex-basis: 100% !important; }
-          .op .opsia-side-panel { position: static !important; top: auto !important; width: 100% !important; max-height: none !important; }
+          .op .opsia-side-panel { position: static !important; top: auto !important; width: 100% !important; height: auto !important; max-height: none !important; }
         }
         @container opsia-main (max-width: 720px) {
           .op .node-grid { grid-template-columns: minmax(0, 1fr) !important; }
@@ -1417,12 +1429,13 @@ function PodSkeleton() {
 
 // ── 우측 패널 ─────────────────────────────
 // 서비스/구성 탭은 현재 드릴된 클러스터/네임스페이스 범위의 read-only projection을 보여준다.
-function SidePanel({ forcedTab, scaled, onAddRepo, onOpenRepository, stickyTop, activeCluster, selectedNamespace, onHighlightTarget, pendingRepos, connectedRepos, repositoryGroups, onRepositoryDisconnected }: {
+function SidePanel({ forcedTab, scaled, onAddRepo, onOpenRepository, stickyTop, viewportTopInset = 0, activeCluster, selectedNamespace, onHighlightTarget, pendingRepos, connectedRepos, repositoryGroups, onRepositoryDisconnected }: {
   forcedTab?: "svc" | "cfg" | "git" | null;
   scaled?: boolean;
   onAddRepo?: () => void;
   onOpenRepository?: (repositoryRef: string) => void;
   stickyTop?: number;
+  viewportTopInset?: number;
   activeCluster?: string | null;
   selectedNamespace?: string | null;
   onHighlightTarget?: (target: PodHighlightTarget | null) => void;
@@ -1432,24 +1445,28 @@ function SidePanel({ forcedTab, scaled, onAddRepo, onOpenRepository, stickyTop, 
   onRepositoryDisconnected?: (repositoryRef: string) => void;
 }) {
   const [tab, setTab] = useState<"svc" | "cfg" | "git">(forcedTab ?? "svc");
+  const panelHeight = scaled
+    ? resourceAuxiliaryViewportHeight(viewportTopInset, stickyTop ?? 24)
+    : "calc(100vh - 60px)";
   return (
-    <aside className="opsia-side-panel" style={{ width: 270, flexShrink: 0, alignSelf: "flex-start", background: UI.card, border: `1px solid ${UI.line}`, borderRadius: 16, position: "static", top: stickyTop ?? 24, height: scaled ? `calc(100vh / ${PRESENT_SCALE} - ${(stickyTop ?? 24) + 16}px)` : "calc(100vh - 60px)", maxHeight: scaled ? `calc(100vh / ${PRESENT_SCALE} - ${(stickyTop ?? 24) + 16}px)` : "calc(100vh - 60px)", overflow: "hidden", display: "flex" }}>
-    <div style={{ flex: 1, minWidth: 0, minHeight: 0, padding: "14px 6px 14px 14px", display: "flex", flexDirection: "column", gap: 12, overflow: "hidden" }}>
-      {/* 서비스/구성/저장소 탭과 각 패널의 제목·범위는 고정하고,
-          실제 결과 목록만 패널 내부에서 스크롤한다. */}
-      <div style={{ display: "flex", gap: 3, flexShrink: 0, background: UI.bg2, borderRadius: 10, padding: 3, zIndex: 2, boxShadow: `0 6px 12px -12px ${inkA(0.3)}` }}>
+    <ResourceAuxiliaryPanel
+      className="opsia-side-panel"
+      aria-label="인프라 보조 정보"
+      style={{ position: "sticky", top: stickyTop ?? 24, height: panelHeight, maxHeight: panelHeight }}
+      header={(
+      <div role="tablist" aria-label="인프라 보조 정보" style={{ width: "100%", height: 36, display: "flex", gap: 3, flexShrink: 0, background: UI.bg2, borderRadius: 10, padding: 3 }}>
         {([["svc", "서비스", Plug], ["cfg", "구성", FileCog], ["git", "저장소", GithubIcon]] as const).map(([id, label, I]) => {
           const on = tab === id;
           return (
-            <button key={id} onClick={() => { onHighlightTarget?.(null); setTab(id); }} style={{ position: "relative", flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, padding: "6px 0", borderRadius: 8, border: "none", background: "transparent", cursor: "pointer", fontSize: TYPE.label, fontWeight: 600, color: on ? UI.ink : UI.ink3 }}>
+            <button type="button" role="tab" aria-selected={on} key={id} onClick={() => { onHighlightTarget?.(null); setTab(id); }} style={{ position: "relative", flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, padding: "6px 0", borderRadius: 8, border: "none", background: "transparent", cursor: "pointer", fontSize: TYPE.label, fontWeight: 600, color: on ? UI.ink : UI.ink3 }}>
               {on && <motion.span layoutId="ptab" transition={SOFT} style={{ position: "absolute", inset: 0, borderRadius: 8, background: UI.card, boxShadow: `0 1px 3px ${inkA(0.12)}` }} />}
               <span style={{ position: "relative", display: "flex", alignItems: "center", gap: 5 }}><I size={12} />{label}</span>
             </button>
           );
         })}
       </div>
-
-      <div style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
+      )}
+    >
         {tab === "svc" && (
           <OpsiaServicePanel
             activeCluster={activeCluster ?? null}
@@ -1467,7 +1484,7 @@ function SidePanel({ forcedTab, scaled, onAddRepo, onOpenRepository, stickyTop, 
         )}
 
         {tab === "git" && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 1, height: "100%", minHeight: 0, overflowY: "auto", scrollbarGutter: "stable", overscrollBehavior: "contain", paddingRight: 8 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
           {repositoryGroups ? <RepositoryConnections
             groups={repositoryGroups}
             onOpenRepository={onOpenRepository}
@@ -1482,24 +1499,27 @@ function SidePanel({ forcedTab, scaled, onAddRepo, onOpenRepository, stickyTop, 
                 : null,
             )}
           /> : (connectedRepos ?? []).map((r) => (
-            <div key={`connected-${r}`} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", borderRadius: 9, padding: "7px 10px", background: TINT.ok.bg }}>
-              <GithubIcon size={14} style={{ color: UI.ink3, flexShrink: 0 }} />
-              <span style={{ minWidth: 0, flex: 1 }}>
-                <span style={{ display: "block", fontSize: TYPE.label, fontWeight: 600, fontFamily: MONO, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r}</span>
-                <span style={{ display: "block", fontSize: TYPE.caption, color: TINT.ok.fg, marginTop: 1 }}>연결됨 · GitOps 관리</span>
-              </span>
-              <Check size={13} style={{ color: TINT.ok.fg, flexShrink: 0 }} />
-            </div>
+            <ResourceAuxiliaryRow
+              key={`connected-${r}`}
+              icon={<GithubIcon size={15} />}
+              title={r}
+              tooltip={r}
+              titleFontFamily={MONO}
+              meta={<span style={{ color: TINT.ok.fg }}>연결됨 · GitOps 관리</span>}
+              trailing={<Check size={13} style={{ color: TINT.ok.fg }} />}
+            />
           ))}
           {(pendingRepos ?? []).map((r) => (
-            <div key={r} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", borderRadius: 9, padding: "7px 10px", background: blueA(0.05) }}>
-              <GithubIcon size={14} style={{ color: UI.ink3, flexShrink: 0 }} />
-              <span style={{ minWidth: 0, flex: 1 }}>
-                <span style={{ display: "block", fontSize: TYPE.label, fontWeight: 600, fontFamily: MONO, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r}</span>
-                <span style={{ display: "block", fontSize: TYPE.caption, color: TINT.blue.fg, marginTop: 1 }}>연결 중 · 초기 동기화 대기</span>
-              </span>
-              <span className="pulsedot" style={{ width: 6, height: 6, borderRadius: 999, background: BLUE, flexShrink: 0 }} />
-            </div>
+            <ResourceAuxiliaryRow
+              key={r}
+              icon={<GithubIcon size={15} />}
+              title={r}
+              tooltip={r}
+              titleFontFamily={MONO}
+              meta={<span style={{ color: TINT.blue.fg }}>연결 중 · 초기 동기화 대기</span>}
+              trailing={<span className="pulsedot" style={{ width: 6, height: 6, borderRadius: 999, background: BLUE }} />}
+              style={{ background: blueA(0.05) }}
+            />
           ))}
           {(pendingRepos ?? []).length === 0
             && (repositoryGroups ? repositoryGroups.length === 0 : (connectedRepos ?? []).length === 0) && (
@@ -1507,15 +1527,12 @@ function SidePanel({ forcedTab, scaled, onAddRepo, onOpenRepository, stickyTop, 
           )}
           {onAddRepo && (
             <button onClick={onAddRepo}
-              style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 7, width: "100%", marginTop: 6, padding: "9px 0",
-                border: `1.5px dashed ${LINE3}`, borderRadius: 11, background: "transparent", cursor: "pointer", fontSize: TYPE.label, fontWeight: 600, color: BLUE }}>
+              style={{ ...resourceAuxiliaryFooterButtonStyle, border: `1.5px dashed ${LINE3}`, color: BLUE }}>
               + 저장소 연결
             </button>
           )}
           </div>
         )}
-      </div>
-    </div>
-    </aside>
+    </ResourceAuxiliaryPanel>
   );
 }
