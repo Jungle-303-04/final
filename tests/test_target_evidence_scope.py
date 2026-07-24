@@ -102,6 +102,27 @@ def test_standard_profile_collects_control_namespace_logs() -> None:
     assert any(query["query"] == '{k8s_namespace_name="sandbox"}' for query in queries)
 
 
+def test_metadata_collects_target_and_configured_control_namespaces() -> None:
+    queries = evidence_provider_queries(
+        "metadata",
+        cluster_id="c-1",
+        evidence_profile="standard",
+        control_namespaces=("sandbox", "color-turf", "target", "sandbox"),
+    )
+
+    assert [query["query"] for query in queries] == [
+        "target",
+        "sandbox",
+        "color-turf",
+    ]
+    assert queries[0]["provenance"]["namespaces"] == ["target"]
+    assert queries[1]["provenance"]["namespaces"] == ["sandbox"]
+    assert queries[2]["provenance"]["namespaces"] == ["color-turf"]
+    serialized = "\n".join(str(query) for query in queries)
+    assert "api-server" not in serialized
+    assert "find_game_rejected" not in serialized
+
+
 def test_target_profile_enables_cluster_local_tempo_query() -> None:
     queries = evidence_provider_queries(
         "traces",

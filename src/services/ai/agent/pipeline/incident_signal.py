@@ -1,4 +1,4 @@
-"""Stable identities for polled Kubernetes container terminations."""
+"""Stable identities for concrete incident signal occurrences."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ from domains.rca.events import Evidence, IncidentRecord
 from packages.contracts.event_bus.interfaces import JsonObject
 
 SIGNAL_IDENTITY_VERSION = "k8s-container-termination-v1"
+ALERTMANAGER_SIGNAL_IDENTITY_VERSION = "alertmanager-firing-v1"
 EVIDENCE_SIGNAL_IDENTITY_VERSION = "rca-incident-evidence-v1"
 
 
@@ -33,6 +34,9 @@ def incident_claim_identity(
     termination = incident_termination_identity(evidence, incident)
     if termination is not None:
         return termination
+    alertmanager = incident_alertmanager_identity(evidence, incident)
+    if alertmanager is not None:
+        return alertmanager
     object_ref = text(evidence.object_ref)
     if object_ref is None:
         return None
@@ -51,6 +55,85 @@ def incident_claim_identity(
     return IncidentSignalIdentity(
         signal_key=f"{EVIDENCE_SIGNAL_IDENTITY_VERSION}:{hashlib.sha256(encoded).hexdigest()}",
         payload=identity,
+    )
+
+
+def incident_alertmanager_identity(
+    evidence: Evidence,
+    incident: IncidentRecord,
+) -> IncidentSignalIdentity | None:
+    """Return one stable identity for an active Alertmanager occurrence.
+
+    Alertmanager repeats a firing notification and the evidence worker can join
+    that same occurrence to several adjacent collection windows.  The evidence
+    object reference is therefore not an incident identity.  The immutable
+    Alertmanager occurrence fields plus tenant, cluster, and target are.
+    """
+
+    alertmanager = evidence.metrics.get("alertmanager")
+    alerts = alertmanager.get("alerts") if isinstance(alertmanager, dict) else None
+    if not isinstance(alerts, list):
+        return None
+
+    candidates: list[JsonObject] = []
+    for alert in alerts:
+        if not isinstance(alert, dict) or text(alert.get("status")) != "firing":
+            continue
+        fingerprint = text(alert.get("fingerprint"))
+        starts_at = text(alert.get("startsAt"))
+        labels = alert.get("labels")
+        if (
+            fingerprint is None
+            or starts_at is None
+            or not isinstance(labels, dict)
+            or not alert_target_matches_incident(labels, incident)
+        ):
+            continue
+        candidates.append(
+            {
+                "version": ALERTMANAGER_SIGNAL_IDENTITY_VERSION,
+                "workspace_id": evidence.workspace_id,
+                "cluster_id": evidence.cluster_id,
+                "namespace": incident.namespace,
+                "resource_kind": incident.resource_kind,
+                "resource_name": incident.resource_name,
+                "symptom": incident.symptom,
+                "fingerprint": fingerprint,
+                "starts_at": starts_at,
+            }
+        )
+
+    # One classified incident must map to one exact alert occurrence.  Ambiguous
+    # groups fail closed to the evidence identity instead of merging incidents.
+    if len(candidates) != 1:
+        return None
+    identity = candidates[0]
+    encoded = json.dumps(identity, sort_keys=True, separators=(",", ":")).encode()
+    return IncidentSignalIdentity(
+        signal_key=(
+            f"{ALERTMANAGER_SIGNAL_IDENTITY_VERSION}:{hashlib.sha256(encoded).hexdigest()}"
+        ),
+        payload=identity,
+    )
+
+
+def alert_target_matches_incident(
+    labels: dict,
+    incident: IncidentRecord,
+) -> bool:
+    """Match standard Alertmanager target labels to the classified incident."""
+
+    namespace = text(labels.get("opsia_namespace")) or text(labels.get("namespace"))
+    resource_kind = text(labels.get("opsia_resource_kind"))
+    resource_name = text(labels.get("opsia_resource_name"))
+    symptom = text(labels.get("opsia_symptom"))
+    if namespace is None or resource_kind is None or resource_name is None:
+        return False
+    return (
+        namespace == incident.namespace
+        and resource_kind.casefold() == incident.resource_kind.casefold()
+        and resource_name == incident.resource_name
+        and (symptom is None or symptom == incident.symptom)
     )
 
 

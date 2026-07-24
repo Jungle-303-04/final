@@ -19,10 +19,6 @@ REFERENCE_UPSTREAM_REPOSITORY ?= $(shell node scripts/reference-provenance.mjs r
 export IMAGE_NAME
 export MGMT_CLUSTER
 export TARGET_CLUSTER
-export REFERENCE_REVISION
-export REFERENCE_UI_BASE_REVISION
-export REFERENCE_UPSTREAM_GIT
-export REFERENCE_UPSTREAM_REPOSITORY
 
 .PHONY: help setup setup-hooks env local-test-env frontend-live local-up local-smoke sync hooks doctor lint format test manifest-check product-brand-boundary-check reference-ledger reference-ledger-check reference-feature-ledger reference-feature-ledger-check reference-upstream-prepare reference-ui-delta-ledger reference-ui-delta-ledger-check reference-ui-delta-rebaseline-check reference-feature-parity-check reference-feature-web-parity-check reference-feature-post-parity-check mirror-parity-check release-governance release-governance-web release-governance-web-patch gate gate-backend gate-contract-manifest gate-deploy-smoke-backend gate-deploy-smoke-frontend gate-frontend gate-frontend-changed gate-fast events event-bus-equivalence crash-test check build-image up install-telemetry down status smoke demo scale kill-pod external-instances external-kubeconfig cluster-interactions aws-up aws-down clean
 

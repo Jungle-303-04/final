@@ -289,6 +289,54 @@ def _control_namespace_log_queries(
     return queries
 
 
+def _metadata_queries(
+    control_namespaces: tuple[str, ...],
+    *,
+    cluster_id: str,
+    evidence_profile: EvidenceProfile,
+) -> list[dict[str, object]]:
+    """Collect change context from the agent namespace and every controlled namespace."""
+
+    queries = [
+        _namespace_query(
+            source="metadata",
+            name="change_context",
+            description="Change context metadata in the target agent namespace for RCA.",
+            query="target",
+            namespace="target",
+            cluster_id=cluster_id,
+            evidence_profile=evidence_profile,
+        )
+    ]
+    covered = {"target"}
+    used_names = {"change_context"}
+    for namespace in control_namespaces:
+        namespace = namespace.strip()
+        if not namespace or namespace in covered:
+            continue
+        covered.add(namespace)
+        slug = re.sub(r"[^a-z0-9]+", "_", namespace.lower()).strip("_") or "namespace"
+        base_name = f"{slug}_change_context"
+        name = base_name
+        suffix = 2
+        while name in used_names:
+            name = f"{base_name}_{suffix}"
+            suffix += 1
+        used_names.add(name)
+        queries.append(
+            _namespace_query(
+                source="metadata",
+                name=name,
+                description=f"Change context metadata in the {namespace} control namespace.",
+                query=namespace,
+                namespace=namespace,
+                cluster_id=cluster_id,
+                evidence_profile=evidence_profile,
+            )
+        )
+    return queries
+
+
 def evidence_provider_queries(
     provider_key: str,
     *,
@@ -680,19 +728,11 @@ def evidence_provider_queries(
             )
         ]
     if provider_key == "metadata":
-        return [
-            _query(
-                source="metadata",
-                name="change_context",
-                description="Change context metadata for RCA.",
-                query="change_context",
-                provenance=_provenance(
-                    cluster_id=cluster_id,
-                    evidence_profile=evidence_profile,
-                    query_scope="cluster",
-                ),
-            )
-        ]
+        return _metadata_queries(
+            control_namespaces,
+            cluster_id=cluster_id,
+            evidence_profile=evidence_profile,
+        )
     return []
 
 

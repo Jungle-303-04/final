@@ -65,6 +65,14 @@ CONTEXT_RESOURCE_TYPE_ORDER = (
 )
 
 _CAPABILITY_QUESTION_PATTERNS = (
+    re.compile(
+        r"(?:너가?|네가?)\s*(?:할\s*수\s*있는\s*(?:게|것)|"
+        r"(?:뭘|무엇을|어떤\s*일을).*(?:할\s*수|도와))"
+    ),
+    re.compile(
+        r"(?:ai|opsia|kyro)(?:가|는)?\s*"
+        r"(?:지원|제공)하는\s*(?:기능|일|도움)"
+    ),
     re.compile(r"(?:넌|너는|ai가?|opsia가?).*(?:뭘|무엇을|어떤).*(?:할\s*수|도와)"),
     re.compile(r"(?:뭘|무엇을|어떤\s*일을)\s*할\s*수"),
     re.compile(r"(?:ai|opsia).*(?:연결|작동).*(?:됐|되어|하니|해|인가)"),

@@ -33,10 +33,18 @@ def workload_change_row(
         )
     ):
         return None
-    result = _mapping(_mapping(authority.get("run_metadata")).get("result"))
+    result = _mapping(authority.get("command_result"))
+    if not result:
+        result = _mapping(_mapping(authority.get("run_metadata")).get("result"))
     resources = result.get("resources")
+    resource_list = resources if isinstance(resources, list) else []
     rollout = _mapping(result.get("rollout"))
-    failed_resources = _mapping(authority.get("run_metadata")).get("failed_resources")
+    failed_resources = [
+        item
+        for item in resource_list
+        if isinstance(item, Mapping)
+        and (item.get("applied") is False or _text(item.get("status")).casefold() == "failed")
+    ]
     if (
         _text(result.get("status")) != CommandStatus.COMPLETED
         or result.get("applied") is False
@@ -44,17 +52,18 @@ def workload_change_row(
         or rollout.get("ready") is False
     ):
         return None
-    if isinstance(resources, list) and any(
+    if any(
         isinstance(item, Mapping)
         and (item.get("applied") is False or _text(item.get("status")).casefold() == "failed")
-        for item in resources
+        for item in resource_list
     ):
         return None
     command_id = _text(authority.get("command_id"))
-    if not command_id or _text(evt.details.get("command_id")) != command_id:
-        return None
-    apply_details = _mapping(authority.get("apply_details"))
-    if _text(apply_details.get("command_id")) != command_id:
+    command_ids = evt.details.get("command_ids")
+    completed_ids = {
+        _text(item) for item in command_ids if isinstance(item, str)
+    } if isinstance(command_ids, list) else {_text(evt.details.get("command_id"))}
+    if not command_id or command_id not in completed_ids:
         return None
     diff = _mapping(authority.get("diff_details"))
     if any(
@@ -96,7 +105,7 @@ def workload_change_row(
     if any(not _text(value) if isinstance(value, str) else value is None for value in required):
         return None
     return {
-        "event_id": ctx.event_id,
+        "event_id": f"{ctx.event_id}:{command_id}",
         "workspace_id": _text(authority.get("workspace_id")),
         "cluster_id": _text(authority.get("cluster_id")),
         "namespace": namespace,
@@ -110,6 +119,7 @@ def workload_change_row(
         "workflow_run_id": _text(authority.get("workflow_run_id")),
         "image_before": _optional_text(diff.get("actual_image")),
         "image_after": _optional_text(diff.get("desired_image")),
+        "diff_details": dict(diff),
         "changed_at": changed_at,
     }
 

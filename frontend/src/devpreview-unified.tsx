@@ -2919,7 +2919,8 @@ function App() {
                 }}
                 onRecoveryReviewStateChange={setAiRecoveryReviewState}
                 contextView={aiRecoveryRequest?.contextView ?? (surface === "connect" ? "연결 설정" : surface === "home" ? "홈" : surface === "deploy" ? "배포" : surface === "issues" ? "이슈" : surface === "timeline" ? "타임라인" : surface === "checks" ? "점검" : surface === "cost" ? "비용" : surface === "alerts" ? "알림" : surface === "ai" ? "AI 대화" : surface === "settings" ? "설정" : resView === "flow" ? "트래픽" : resView === "list" ? "쿠버네티스 리소스" : "인프라 지도")}
-                contextScope={aiRecoveryRequest?.contextScope ?? scope.cluster ?? "전체 클러스터"} />
+                contextScope={aiRecoveryRequest?.contextScope ?? scope.cluster ?? ""}
+                contextScopeLabel={aiRecoveryRequest?.contextScope ?? scope.cluster ?? "전체 클러스터"} />
             </div>
           </motion.div>
         )}

@@ -736,6 +736,70 @@ jobs:
           ' >/dev/null <<<"${console_service}"
           unset api_gateway_service console_service diff_exit
 
+      - name: Reconcile agent API proxy runtime
+        if: steps.release_lease.outputs.mode == 'deploy' && env.DEPLOYMENT_SCOPE == 'FULL'
+        shell: bash
+        run: |
+          set -euo pipefail
+          proxy_config="${RUNNER_TEMP}/agent-api-proxy-config.yaml"
+          proxy_resources="${RUNNER_TEMP}/agent-api-proxy-resources.yaml"
+
+          uv run python scripts/select_kubernetes_resources.py \
+            --input "${RUNNER_TEMP}/management.yaml" \
+            --kind ConfigMap \
+            --name agent-api-proxy-config \
+            >"${proxy_config}"
+          {
+            cat "${proxy_config}"
+            printf '%s\n' '---'
+            uv run python scripts/select_kubernetes_resources.py \
+              --input "${RUNNER_TEMP}/management.yaml" \
+              --kind Deployment \
+              --name agent-api-proxy
+            printf '%s\n' '---'
+            uv run python scripts/select_kubernetes_resources.py \
+              --input "${RUNNER_TEMP}/management.yaml" \
+              --kind PodDisruptionBudget \
+              --name agent-api-proxy
+            printf '%s\n' '---'
+            uv run python scripts/select_kubernetes_resources.py \
+              --input "${RUNNER_TEMP}/management.yaml" \
+              --kind Service \
+              --name agent-api-proxy
+          } >"${proxy_resources}"
+
+          diff_exit=0
+          kubectl --context "${MGMT_CONTEXT}" diff \
+            --field-manager=opsia-dev-deploy \
+            --filename "${proxy_resources}" || diff_exit=$?
+          case "${diff_exit}" in
+            0|1) ;;
+            *) echo "agent API proxy server-side diff failed" >&2; exit "${diff_exit}" ;;
+          esac
+          kubectl --context "${MGMT_CONTEXT}" apply \
+            --field-manager=opsia-dev-deploy \
+            --filename "${proxy_resources}"
+
+          proxy_config_sha256="$(sha256sum "${proxy_config}" | awk '{print $1}')"
+          [[ "${proxy_config_sha256}" =~ ^[0-9a-f]{64}$ ]]
+          proxy_patch="$(
+            jq -cn \
+              --arg checksum "${proxy_config_sha256}" \
+              '{spec:{template:{metadata:{annotations:{"opsia.dev/config-sha256":$checksum}}}}}'
+          )"
+          kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+            patch deployment agent-api-proxy --type merge --patch "${proxy_patch}"
+          kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+            rollout status deployment/agent-api-proxy --timeout=300s
+
+          installed_checksum="$(
+            kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+              get deployment agent-api-proxy \
+              --output jsonpath='{.spec.template.metadata.annotations.opsia\.dev/config-sha256}'
+          )"
+          test "${installed_checksum}" = "${proxy_config_sha256}"
+          unset proxy_config proxy_resources proxy_config_sha256 proxy_patch installed_checksum diff_exit
+
       - name: Enforce live auth bypass zero
         if: steps.release_lease.outputs.mode == 'deploy' && env.DEPLOYMENT_SCOPE == 'FULL'
         shell: bash
