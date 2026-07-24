@@ -1,13 +1,12 @@
 name: Dev Deploy
 
 "on":
-  workflow_run:
-    workflows: [Dev Gate]
-    types: [completed]
+  push:
+    branches: [dev]
   workflow_dispatch:
     inputs:
       source_sha:
-        description: Full dev SHA with a successful Dev Gate run
+        description: Full SHA that is present on dev
         required: true
         type: string
       deployment_scope:
@@ -34,12 +33,10 @@ concurrency:
 
 jobs:
   scope:
-    name: Resolve gated deployment scope
+    name: Resolve deployment scope
     if: >-
-      (github.event_name == 'workflow_run' &&
-       github.event.workflow_run.conclusion == 'success' &&
-       github.event.workflow_run.event == 'push' &&
-       github.event.workflow_run.head_branch == 'dev' &&
+      (github.event_name == 'push' &&
+       github.ref == 'refs/heads/dev' &&
        vars.AWS_DEV_DEPLOY_ENABLED == '1') ||
       (github.event_name == 'workflow_dispatch' &&
        github.ref == 'refs/heads/dev')
@@ -51,26 +48,24 @@ jobs:
     outputs:
       deployment_scope: ${{ steps.resolve.outputs.scope }}
     steps:
-      - name: Download automatic deployment scope
-        if: github.event_name == 'workflow_run'
-        uses: actions/download-artifact@v4
+      - name: Check out dev SHA for scope classification
+        if: github.event_name == 'push'
+        uses: actions/checkout@v4
         with:
-          name: dev-deploy-scope
-          path: ${{ runner.temp }}/dev-deploy-scope
-          github-token: ${{ github.token }}
-          run-id: ${{ github.event.workflow_run.id }}
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
 
       - name: Resolve deployment scope
         id: resolve
         env:
+          GH_TOKEN: ${{ github.token }}
           MANUAL_SCOPE: ${{ inputs.deployment_scope }}
         shell: bash
         run: |
           set -euo pipefail
-          if [[ "${GITHUB_EVENT_NAME}" == "workflow_run" ]]; then
-            scope_file="${RUNNER_TEMP}/dev-deploy-scope/scope"
-            test -f "${scope_file}"
-            scope="$(tr -d '\r\n' <"${scope_file}")"
+          if [[ "${GITHUB_EVENT_NAME}" == "push" ]]; then
+            scope="$(scripts/classify-live-deploy-scope.sh HEAD)"
             case "${scope}" in
               FULL|CONSOLE|NONE) ;;
               *) echo "invalid automatic deployment scope" >&2; exit 1 ;;
@@ -85,7 +80,7 @@ jobs:
           echo "scope=${scope}" >>"${GITHUB_OUTPUT}"
 
   deploy:
-    name: Deploy gated dev SHA
+    name: Deploy dev SHA
     needs: scope
     if: ${{ needs.scope.result == 'success' && needs.scope.outputs.deployment_scope != 'NONE' }}
     runs-on: ubuntu-latest
@@ -100,7 +95,7 @@ jobs:
       AGENT_API_BASE_URL: ${{ vars.AGENT_API_BASE_URL }}
       MGMT_CONTEXT: opsia-dev
       MGMT_NS: management
-      SOURCE_SHA: ${{ github.event_name == 'workflow_dispatch' && inputs.source_sha || github.event.workflow_run.head_sha }}
+      SOURCE_SHA: ${{ github.event_name == 'workflow_dispatch' && inputs.source_sha || github.sha }}
       DEPLOYMENT_SCOPE: ${{ needs.scope.outputs.deployment_scope }}
       PREVIOUS_RELEASE_SHA: ${{ inputs.previous_release_sha }}
       AUTH_EMAIL: admin
@@ -118,10 +113,10 @@ jobs:
       ROUTE_SMOKE_MIN_CRITICAL_API_REQUESTS: ${{ vars.AWS_DEV_ROUTE_SMOKE_MIN_CRITICAL_API_REQUESTS || '1' }}
       DEPLOY_LEASE_TTL_SECONDS: ${{ vars.AWS_DEV_DEPLOY_LEASE_TTL_SECONDS || '600' }}
     steps:
-      - name: Check out gated dev SHA
+      - name: Check out dev SHA
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.source_sha || github.event.workflow_run.head_sha }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.source_sha || github.sha }}
           persist-credentials: false
 
       - name: Set up Python
@@ -204,7 +199,7 @@ jobs:
             esac
           fi
 
-      - name: Verify manual gated SHA
+      - name: Verify manual dev SHA
         if: github.event_name == 'workflow_dispatch'
         shell: bash
         env:
@@ -266,11 +261,6 @@ jobs:
             "ahead"|"identical") ;;
             *) echo "source SHA is not an ancestor of dev: ${comparison}" >&2; exit 1 ;;
           esac
-          gh_api_retry \
-            "repos/${GITHUB_REPOSITORY}/actions/workflows/dev-gate.yml/runs?branch=dev&event=push&status=success&per_page=100" \
-            | jq -e '.workflow_runs[] | select(.head_sha == env.SOURCE_SHA) | select(.conclusion == "success")' \
-              >/dev/null
-
       - name: Configure AWS identity
         uses: aws-actions/configure-aws-credentials@v4
         with:

@@ -31,10 +31,9 @@ if ! deployed_sha="$(
     --method GET \
     "repos/${GITHUB_REPOSITORY}/actions/workflows/${deployment_workflow}/runs" \
     -f "branch=${deployment_branch}" \
-    -f "event=workflow_run" \
     -f "status=success" \
-    -f "per_page=1" \
-    --jq '.workflow_runs[0].head_sha // empty'
+    -f "per_page=100" \
+    --jq '[.workflow_runs[] | select(.event == "push" or .event == "workflow_run")][0].head_sha // empty'
 )"; then
   fallback_full "latest successful deployment lookup failed"
 fi
