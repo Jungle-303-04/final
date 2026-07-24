@@ -22,7 +22,7 @@ import asyncio
 import hashlib
 import json
 from collections.abc import AsyncIterator, Collection
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
@@ -103,6 +103,7 @@ from packages.runtime.dependencies import get_dashboard_ready_fanout, get_db
 
 # health 롤업 상수 — degraded workload 가 이 값을 초과하면 critical(0 = 1개라도 있으면).
 FLEET_DEGRADED_WORKLOAD_THRESHOLD = 0
+INVENTORY_DEGRADATION_MAX_USAGE_LAG = timedelta(minutes=2)
 HEALTH_HEALTHY = "healthy"
 HEALTH_WARNING = "warning"
 HEALTH_CRITICAL = "critical"
@@ -864,7 +865,7 @@ def build_cluster_summary_detail(
     restarts_recent = restarts_recent_from_samples(samples)
     nodes_ready, nodes_total = _node_counts(rollup, _latest_usage(samples))
     health = rollup_health(
-        workloads_degraded=int(rollup.get("workloads_degraded") or 0),
+        workloads_degraded=current_workloads_degraded(rollup, samples),
         nodes_ready=nodes_ready,
         nodes_total=nodes_total,
         restarts_recent=restarts_recent,
@@ -1436,6 +1437,26 @@ def restarts_recent_from_samples(samples: list[JsonObject]) -> int:
     return max(latest - previous, 0)
 
 
+def current_workloads_degraded(
+    rollup: JsonObject,
+    samples: list[JsonObject],
+) -> int:
+    """Ignore degradation superseded by substantially newer live usage."""
+
+    degraded = _int_or_zero(rollup.get("workloads_degraded"))
+    if degraded == 0 or not samples:
+        return degraded
+    unknown_time = datetime.min.replace(tzinfo=UTC)
+    inventory_seen = event_time_sort_key(_optional_text(rollup.get("last_seen_at")))
+    usage_seen = event_time_sort_key(_optional_text(samples[-1].get("sampled_at")))
+    if (
+        inventory_seen != unknown_time
+        and usage_seen - inventory_seen > INVENTORY_DEGRADATION_MAX_USAGE_LAG
+    ):
+        return 0
+    return degraded
+
+
 def fleet_cluster_item(
     cluster: JsonObject,
     rollup: JsonObject,
@@ -1453,7 +1474,7 @@ def fleet_cluster_item(
         cluster_id=str(cluster["cluster_id"]),
         name=str(cluster.get("name") or cluster["cluster_id"]),
         health=rollup_health(
-            workloads_degraded=int(rollup.get("workloads_degraded") or 0),
+            workloads_degraded=current_workloads_degraded(rollup, samples),
             nodes_ready=nodes_ready,
             nodes_total=nodes_total,
             restarts_recent=restarts_recent,
