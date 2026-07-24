@@ -138,7 +138,7 @@ def test_prometheus_values_define_generic_application_sli_alert() -> None:
     )
     server = values["server"]
     assert server["global"]["scrape_interval"] == "15s"
-    assert server["global"]["evaluation_interval"] == "15s"
+    assert server["global"]["evaluation_interval"] == "5s"
 
     rules = values["serverFiles"]["alerting_rules.yml"]["groups"][0]["rules"]
     recording_rule = next(
@@ -152,6 +152,7 @@ def test_prometheus_values_define_generic_application_sli_alert() -> None:
     ) == 2
     assert "pod" not in recording_expr
     assert "instance" not in recording_expr
+    assert recording_expr.count("[45s]") == 2
 
     rule = next(item for item in rules if item.get("alert") == "OpsiaSliFailureRatioHigh")
     assert rule["alert"] == "OpsiaSliFailureRatioHigh"
@@ -166,7 +167,7 @@ def test_prometheus_values_define_generic_application_sli_alert() -> None:
     ):
         assert f'{required_label}!=""' in rule["expr"]
     assert rule["expr"].strip().endswith("> 0.2")
-    assert rule["for"] == "20s"
+    assert rule["for"] == "0s"
     assert rule["labels"]["opsia_symptom"] == "{{ $labels.symptom }}"
     assert rule["labels"]["opsia_resource_kind"] == "{{ $labels.resource_kind }}"
     assert rule["labels"]["opsia_resource_name"] == "{{ $labels.resource_name }}"

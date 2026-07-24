@@ -9,7 +9,7 @@ server:
     # 애플리케이션 SLI 장애를 1분 기본값보다 빠르게 탐지한다.
     scrape_interval: 15s
     scrape_timeout: 10s
-    evaluation_interval: 15s
+    evaluation_interval: 5s
 
   persistentVolume:
     # Prometheus Pod restart 후에도 time-series data 유지
@@ -39,7 +39,7 @@ serverFiles:
                   sli!="",
                   symptom!="",
                   outcome="failure"
-                }[1m])
+                }[45s])
               )
               /
               clamp_min(
@@ -51,7 +51,7 @@ serverFiles:
                     service!="",
                     sli!="",
                     symptom!=""
-                  }[1m])
+                  }[45s])
                 ),
                 0.000001
               )
@@ -65,7 +65,7 @@ serverFiles:
                 sli!="",
                 symptom!=""
               } > 0.2
-            for: 20s
+            for: 0s
             labels:
               severity: warning
               # 표준 SLI metric label을 RCA가 소비하는 외부 alert 계약으로 승격한다.
