@@ -458,11 +458,21 @@ def matching_replica_changes(
     collector: _SignalCollector,
     alert: _AlertClaim,
 ) -> list[_ReplicaChange]:
-    return [
+    candidates = [
         item
         for item in collector.replica_changes
         if replica_change_matches_alert(item, alert) and item.changed_at is not None
     ]
+    if not candidates:
+        return []
+    nearest_changed_at = max(
+        item.changed_at for item in candidates if item.changed_at is not None
+    )
+    # Repeated demo/production deploys can legitimately leave several
+    # reductions inside the correlation window.  The latest preceding change
+    # is the causal candidate; equal-timestamp duplicates remain ambiguous and
+    # therefore still fail closed through the caller's len(...) == 1 check.
+    return [item for item in candidates if item.changed_at == nearest_changed_at]
 
 
 def structured_rejection_reason_fact(reason: str) -> str:

@@ -184,6 +184,25 @@ def test_lobby_capacity_requires_alert_log_and_time_aligned_replica_reduction() 
     assert generic_reduction.missing_evidence == []
 
 
+def test_repeated_deploy_cycle_uses_nearest_preceding_replica_reduction() -> None:
+    bundle = admission_bundle(changed_at="2026-07-24T01:00:30Z")
+    metadata = next(item for item in bundle.items if item.source == "metadata")
+    metadata.value["recent_changes"].append(
+        {
+            "field_path": "spec.replicas",
+            "target_resource": "Deployment/api-server",
+            "before": 2,
+            "after": 1,
+            "changed_at": "2026-07-24T00:59:00Z",
+        }
+    )
+
+    evaluation = lobby_evaluation(bundle)
+
+    assert evaluation.score == 1.0
+    assert evaluation.missing_evidence == []
+
+
 def test_alert_alone_or_competing_reason_cannot_finalize_lobby_capacity() -> None:
     wrong_reason = lobby_evaluation(admission_bundle(reason="upstream_unavailable"))
     wrong_diff = lobby_evaluation(admission_bundle(replicas_before=1, replicas_after=2))
