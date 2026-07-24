@@ -91,6 +91,7 @@ import {
 import { SegmentedControl } from "./devpreview/SegmentedControl";
 import { EventMessageText } from "./devpreview/EventMessageText";
 import { usePodResourceDetail } from "./devpreview/podResourceDetailFeed";
+import { PodContainerDetail } from "./devpreview/PodContainerDetail";
 import { useResourceEvents } from "./devpreview/resourceEventsFeed";
 import { useResourceIdentity } from "./devpreview/resourceIdentityFeed";
 import { getRepositoryConnectionStatus } from "./api/repository-connection";
@@ -1066,16 +1067,20 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
                 </Sec>
               )}
 
-              {/* 파드 템플릿 / 컨테이너 (워크로드·파드) — 이미지·포트는 계약에 없어 지어내지 않는다 */}
+              {/* 파드 템플릿 / 컨테이너 — Pod는 resource-detail summary를 쓰고, workload 템플릿은 기존 placeholder를 유지한다. */}
               {wp && (
               <Sec title={isWorkload ? "파드 템플릿" : "컨테이너"} icon={Boxes}>
-                <div style={{ border: `1px solid ${UI.line2}`, background: UI.bg2, borderRadius: 10, padding: "11px 13px" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ fontSize: TYPE.body, fontWeight: 600, fontFamily: MONO, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
+                {isPodKind ? (
+                  <PodContainerDetail summary={podResourceDetail.summary} />
+                ) : (
+                  <div style={{ border: `1px solid ${UI.line2}`, background: UI.bg2, borderRadius: 10, padding: "11px 13px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ fontSize: TYPE.body, fontWeight: 600, fontFamily: MONO, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
+                    </div>
+                    <div style={{ fontSize: TYPE.caption, color: UI.ink3, marginTop: 4 }}>이미지 관측 안 됨</div>
+                    <div style={{ fontSize: TYPE.caption, color: UI.ink3, marginTop: 3 }}>포트 관측 안 됨</div>
                   </div>
-                  <div style={{ fontSize: TYPE.caption, color: UI.ink3, marginTop: 4 }}>이미지 관측 안 됨</div>
-                  <div style={{ fontSize: TYPE.caption, color: UI.ink3, marginTop: 3 }}>포트 관측 안 됨</div>
-                </div>
+                )}
               </Sec>
               )}
 

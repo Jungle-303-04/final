@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { getInventoryResourceDetail } from "../api/inventory";
 import type { InventoryResourceDetail } from "../api/inventory-schemas";
+import { podContainerSummary, type PodContainerView } from "./podContainerSummary";
 import { kindToResourceType } from "./inventoryResourcesFeed";
 import {
   RESOURCE_DETAIL_EVENT_LIMIT,
@@ -19,6 +20,8 @@ export interface PodResourceSummaryView {
   podIp: string | null;
   hostIp: string | null;
   serviceAccountName: string | null;
+  containers: PodContainerView[];
+  containerPortsComplete: boolean | null;
 }
 
 export interface PodResourceDetailView {
@@ -44,11 +47,14 @@ const POD_SUMMARY_KEYS = {
   hostIp: "host_ip",
   serviceAccountName: "service_account_name",
 } as const;
+const EMPTY_CONTAINERS: PodContainerView[] = [];
 const EMPTY_SUMMARY = {
   nodeName: null,
   podIp: null,
   hostIp: null,
   serviceAccountName: null,
+  containers: EMPTY_CONTAINERS,
+  containerPortsComplete: null,
 };
 const EMPTY_EVENTS: ResourceEventView[] = [];
 const NOOP = () => undefined;
@@ -74,11 +80,14 @@ function isUnavailable(error: unknown): boolean {
 
 function toSummary(detail: InventoryResourceDetail): Omit<PodResourceSummaryView, "status"> {
   const summary = detail.resource.summary;
+  const containers = podContainerSummary(summary);
   return {
     nodeName: text(summary[POD_SUMMARY_KEYS.nodeName]),
     podIp: text(summary[POD_SUMMARY_KEYS.podIp]),
     hostIp: text(summary[POD_SUMMARY_KEYS.hostIp]),
     serviceAccountName: text(summary[POD_SUMMARY_KEYS.serviceAccountName]),
+    containers: containers.containers,
+    containerPortsComplete: containers.containerPortsComplete,
   };
 }
 
