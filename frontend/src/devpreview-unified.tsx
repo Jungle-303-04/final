@@ -122,7 +122,6 @@ type Cell = { t: "text" } | { t: "mono" } | { t: "ns" } | { t: "ready" } | { t: 
   | { t: "meter" } | { t: "dots" } | { t: "num" } | { t: "status" };
 type Col = { k: string; label: string; w?: string; cell: Cell };
 type Row = Record<string, unknown>;
-type TableDensity = "default" | "compact";
 // 리소스 본문의 유일한 sticky 기준선. 관점 전환 바가 이 높이를 차지하고,
 // 표 헤더와 보조 패널은 정확히 그 아래에서 고정된다.
 const RESOURCE_VIEW_STICKY_TOP = RESOURCE_LAYOUT.viewSwitcherHeight;
@@ -453,21 +452,28 @@ function Hi({ text, q }: { text: string; q: string }) {
   return <>{text.slice(0, i)}<span style={{ background: MARK, borderRadius: 3, padding: "0 1px" }}>{text.slice(i, i + q.length)}</span>{text.slice(i + q.length)}</>;
 }
 
-function ResourceTable({ kind, rows, q, density, filterDesc = "", onClearFilter, onOpen }: { kind: Kind; rows: Row[]; q: string; density: TableDensity; filterDesc?: string; onClearFilter?: () => void; onOpen: (r: Row) => void }) {
+function ResourceTable({ kind, rows, q, filterDesc = "", onClearFilter, onOpen }: { kind: Kind; rows: Row[]; q: string; filterDesc?: string; onClearFilter?: () => void; onOpen: (r: Row) => void }) {
   const spec = SPEC[kind.id];
   if (!spec) return null;
   const filtered = rows;
-  /* 가로 스크롤 금지 — 고정폭 컬럼을 minmax로 감싸 컨테이너에 항상 맞춘다 */
-  const grid = spec.cols.map((c) => { const w = c.w ?? "1fr"; return w.endsWith("px") ? `minmax(48px, ${w})` : w; }).join(" ");
-  const rowPad = density === "compact" ? "7px 16px" : "12px 16px";
+  /* 확대/좁은 화면에서도 모든 열이 카드 안에 남도록 최소 폭을 0으로 열어 둔다.
+     셀과 헤더는 말줄임 처리되어 인접 열의 텍스트를 침범하지 않는다. */
+  const grid = spec.cols.map((c) => {
+    const width = c.w ?? "1fr";
+    if (width.endsWith("px")) {
+      const proportionalWidth = Math.max(0.5, Number.parseFloat(width) / 100);
+      return `minmax(0, ${proportionalWidth}fr)`;
+    }
+    return width.replace(/^minmax\(\d+px,/, "minmax(0,");
+  }).join(" ");
   return (
     /* 표는 셸 본문과 함께 스크롤한다. 카드 내부에 두 번째 세로 스크롤을 만들지 않는다. */
     <div data-resource-table="true" style={{ background: UI.card, border: `1px solid ${UI.line}`, borderRadius: RADIUS.card, overflow: "visible" }}>
     <div>
-      <div data-resource-table-header="true" style={{ display: "grid", gridTemplateColumns: grid, gap: 14, padding: density === "compact" ? "9px 16px" : "11px 16px", borderBottom: `1px solid ${UI.line}`, background: UI.bg2, borderRadius: `${RADIUS.card}px ${RADIUS.card}px 0 0`, position: "sticky", top: RESOURCE_VIEW_STICKY_TOP, zIndex: 6, boxShadow: `0 5px 10px -10px ${inkA(0.35)}` }}>
+      <div data-resource-table-header="true" style={{ display: "grid", gridTemplateColumns: grid, gap: 14, padding: "11px 16px", borderBottom: `1px solid ${UI.line}`, background: UI.bg2, borderRadius: `${RADIUS.card}px ${RADIUS.card}px 0 0`, position: "sticky", top: RESOURCE_VIEW_STICKY_TOP, zIndex: 6, boxShadow: `0 5px 10px -10px ${inkA(0.35)}` }}>
         {/* 정렬 미구현 — 동작 없는 정렬 셰브론을 그리지 않는다(가짜 컨트롤 금지) */}
         {spec.cols.map((c) => (
-          <span key={c.k} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: TYPE.caption, fontWeight: 600, letterSpacing: "0.05em", color: UI.ink3, whiteSpace: "nowrap" }}>
+          <span key={c.k} title={COLUMN_LABEL_KO[c.label] ?? c.label} style={{ display: "block", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", fontSize: TYPE.caption, fontWeight: 600, letterSpacing: "0.05em", color: UI.ink3, whiteSpace: "nowrap" }}>
             {COLUMN_LABEL_KO[c.label] ?? c.label}
           </span>
         ))}
@@ -481,7 +487,7 @@ function ResourceTable({ kind, rows, q, density, filterDesc = "", onClearFilter,
         </div>
       ) : filtered.map((row, i) => (
         <motion.div key={`${kind.id}-${String(row.cluster ?? "")}-${String(row._key ?? row.name)}`} role="button" tabIndex={0} aria-label={`${kind.label} ${String(row.name ?? row._key ?? "")}`} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpen(row); } }} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} transition={{ ...SOFT, delay: Math.min(i, 10) * 0.022 }}
-          className="rrow" onClick={() => onOpen(row)} style={{ display: "grid", gridTemplateColumns: grid, gap: 14, alignItems: "center", padding: rowPad, borderTop: i ? `1px solid ${UI.line2}` : "none", cursor: "pointer" }}>
+          className="rrow" onClick={() => onOpen(row)} style={{ display: "grid", gridTemplateColumns: grid, gap: 14, alignItems: "center", padding: "12px 16px", borderTop: i ? `1px solid ${UI.line2}` : "none", cursor: "pointer" }}>
           {spec.cols.map((c, ci) => (
             <span key={c.k} style={{ minWidth: 0, fontWeight: ci === 0 ? 600 : 400, color: ci === 0 ? UI.ink : undefined, fontSize: ci === 0 ? 12 : undefined, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: ci === 0 ? "nowrap" : undefined }}>
               {ci === 0 ? <Hi text={String(row[c.k] ?? "")} q={q} /> : <CellView cell={c.cell} v={row[c.k]} bad={row.bad as boolean} />}
@@ -1834,7 +1840,6 @@ function App() {
     promoteAlertRcaIssue,
   );
   const [kindId, setKindId] = useState("Deployment");
-  const [tableDensity, setTableDensity] = useState<TableDensity>("default");
   const [resView, setResView] = useState<ResView>("map"); // D18 관점 — 지도가 기본, 스코프는 관점 공유
   const [trafficFocus, setTrafficFocus] = useState<string | null>(null); // 트래픽 보조 패널 → 그래프 포커스
   const [showEmpty, setShowEmpty] = useState(false);
@@ -2739,30 +2744,6 @@ function App() {
                   <span style={{ fontSize: TYPE.section, fontWeight: 700, letterSpacing: "-0.02em", color: UI.heading }}>{kind.label}</span>
                   <span style={{ fontSize: TYPE.label, fontVariantNumeric: "tabular-nums", color: UI.ink3 }}>{shownRows.length}{shownRows.length !== allRows.length ? ` / ${allRows.length}` : ""}</span>
                   <span style={{ fontSize: TYPE.caption, fontWeight: 600, color: inScope ? BLUE : UI.ink2, background: inScope ? blueA(0.08) : inkA(0.045), borderRadius: 999, padding: "3px 11px" }}>범위 · {scopeLabel}</span>
-                  <span role="group" aria-label="표 밀도" style={{ display: "flex", gap: 2, marginLeft: "auto", padding: 2, borderRadius: 8, background: inkA(0.05) }}>
-                    {([["default", "기본"], ["compact", "촘촘"]] as const).map(([value, label]) => (
-                      <button
-                        key={value}
-                        type="button"
-                        className="product-focusable product-control"
-                        aria-pressed={tableDensity === value}
-                        onClick={() => setTableDensity(value)}
-                        style={{
-                          border: 0,
-                          borderRadius: 6,
-                          padding: "4px 10px",
-                          background: tableDensity === value ? UI.card : "transparent",
-                          boxShadow: tableDensity === value ? `0 1px 3px ${inkA(0.12)}` : "none",
-                          color: tableDensity === value ? UI.ink : UI.ink3,
-                          fontSize: TYPE.caption,
-                          fontWeight: 600,
-                          cursor: "pointer",
-                        }}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </span>
                 </div>
                 {/* 표 교체는 대기 없이 즉시 — exit를 기다리면 전환이 느리고, 탭 스로틀 시 멈춘다 */}
                 <motion.div key={kindId} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={SOFT}>
@@ -2772,7 +2753,7 @@ function App() {
                   ) : resourcesView.status === "unavailable" ? (
                     <div style={{ background: UI.card, border: `1px solid ${UI.line}`, borderRadius: RADIUS.card, padding: "40px 18px", textAlign: "center", fontSize: TYPE.body, color: UI.ink3 }}>인벤토리 관측 안 됨</div>
                   ) : (
-                    <ResourceTable kind={kind} rows={shownRows} q={q} density={tableDensity}
+                    <ResourceTable kind={kind} rows={shownRows} q={q}
                       filterDesc={[inScope ? `${scopeLabel}` : "", ns !== "모든 네임스페이스" ? `${ns} 네임스페이스` : ""].filter(Boolean).join(" · ")}
                       onClearFilter={() => { setQ(""); setNs("모든 네임스페이스"); }}
                       onOpen={(r) => setDetail({ kind, row: r })} />
@@ -2858,9 +2839,7 @@ function App() {
             className="group"
             style={{
               position: "fixed",
-              right: surface === "resources" && !narrowList
-                ? RESOURCE_LAYOUT.auxiliaryWidth + RESOURCE_LAYOUT.columnGap + 22
-                : 22,
+              right: 22,
               bottom: 22,
               zIndex: 75,
               width: 48,
