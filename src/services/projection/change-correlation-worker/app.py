@@ -18,18 +18,16 @@ async def on_workflow_completed(
 ) -> None:
     if not ctx.workspace_id or ctx.workspace_id != evt.workspace_id:
         return
-    authority = await ctx.db.get_completed_workload_change_context(
+    authorities = await ctx.db.get_completed_workload_change_contexts(
         ctx.workspace_id,
         evt.workflow_run_id,
         evt.application_id,
         evt.binding_id,
     )
-    if authority is None:
-        return
-    row = workload_change_row(evt, ctx, authority)
-    if row is None:
-        return
-    await ctx.db.record_workload_change(row)
+    for authority in authorities:
+        row = workload_change_row(evt, ctx, authority)
+        if row is not None:
+            await ctx.db.record_workload_change(row)
 
 
 @app.on(SafePrCreatedBody)
