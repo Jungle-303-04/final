@@ -82,7 +82,7 @@ import {
   alertIncidentClusterIds,
   alertIncidentPollMs,
   incidentFromAlertEvent,
-  incidentFromRcaIssue,
+  incidentFromRcaIssueByIncidentId,
   promoteAlertIncident,
 } from "./devpreview/alertIncident";
 import { acknowledgeAlertEvent } from "./api/alert-events";
@@ -2703,14 +2703,10 @@ function App() {
                               if (ev.incidentId) {
                                 setSurface("issues");
                                 setDetail(null);
-                                const matchingIssue = alertRcaIssues.items.find(
-                                  (issue) => issue.incidentId === ev.incidentId,
+                                setRcaIncident(
+                                  incidentFromRcaIssueByIncidentId(alertRcaIssues.items, ev.incidentId)
+                                  ?? incidentFromAlertEvent(ev),
                                 );
-                                if (matchingIssue) {
-                                  setRcaIncident(incidentFromRcaIssue(matchingIssue));
-                                } else {
-                                  setRcaIncident(incidentFromAlertEvent(ev));
-                                }
                                 markAlertRead(ev);
                                 return;
                               }
@@ -3139,7 +3135,7 @@ function App() {
         {detail ? (
           <DetailOverlay key={`resource-${detail.kind.id}-${String(detail.row.cluster ?? "")}-${String(detail.row._key ?? detail.row.name)}`} kind={detail.kind} row={detail.row} onClose={() => setDetail(null)} onToast={pushToast} onOpenRef={openRef} onShowPods={(b) => { setDetail(null); setSurface("resources"); setResView("list"); setKindId("Pod"); setQ(b); }} onConnectRepository={(context) => { setRepositoryConnectContext(context); setConnectModal("repo"); }} onRequestManifestAccess={() => { setDetail(null); setSurface("settings"); }} onOpenDeploySurface={() => { setDetail(null); setSurface("deploy"); }} manifestRefreshKey={manifestRefreshKey} forceFull={aiOpen} rightInset={aiOpen ? aiW : 0} leftInset={navCollapsed ? 60 : 208} topInset={topH} viewportW={vwCss} />
         ) : rcaIncident ? (
-          <IssueDetail key={`rca-${rcaIncident.incidentId ?? rcaIncident.correlationId ?? rcaIncident.name}`} {...rcaIncident} topInset={topH} leftInset={navCollapsed ? 60 : 208}
+          <IssueDetail key={`rca-${rcaIncident.correlationId ?? rcaIncident.incidentId ?? rcaIncident.name}`} {...rcaIncident} topInset={topH} leftInset={navCollapsed ? 60 : 208}
           onClose={() => setRcaIncident(null)}
           onOpenRef={(k, n) => {
             setRcaIncident(null);

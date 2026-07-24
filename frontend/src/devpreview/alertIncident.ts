@@ -1,6 +1,7 @@
 import type { RcaIncident } from "../devpreview-surfaces";
 import type { AlertEventView } from "./alertsFeed";
 import type { RcaIssueDetailView } from "./rcaDetailFeed";
+import type { RcaIssueAttemptSummary } from "./rcaIssueGrouping";
 import { operationalMessageLabel } from "./statusLabel";
 
 export const ALERT_RCA_POLL_MS = 4000;
@@ -30,6 +31,52 @@ export function incidentFromRcaIssue(issue: RcaIssueDetailView): RcaIncident {
     evidenceBundleSummary: issue.evidenceBundleSummary,
     prUrl: issue.prUrl,
   };
+}
+
+export function incidentFromRcaIssueAttempt(
+  issue: RcaIssueDetailView,
+  attempt: RcaIssueAttemptSummary,
+): RcaIncident {
+  const rawSymptom = attempt.rawSymptom;
+  const correlationId = attempt.correlationId;
+  return {
+    name: attempt.resourceName ?? issue.resourceName ?? correlationId.slice(0, 12),
+    symptom: rawSymptom ? operationalMessageLabel(rawSymptom) : attempt.status,
+    rawSymptom,
+    cluster: attempt.clusterId ?? issue.clusterId ?? "-",
+    svc: attempt.resourceName ?? issue.resourceName ?? correlationId.slice(0, 12),
+    ns: attempt.namespace ?? issue.namespace ?? "-",
+    resourceKind: attempt.resourceKind ?? issue.resourceKind,
+    correlationId,
+    incidentId: attempt.incidentId,
+    currentSubject: attempt.currentSubject,
+    updatedAt: attempt.updatedAt,
+    status: attempt.status,
+    severity: attempt.severity,
+    rootCause: attempt.rootCause,
+    confidence: attempt.confidence,
+    supportingEvidence: attempt.supportingEvidence,
+    missingEvidence: attempt.missingEvidence,
+    situationSummary: attempt.situationSummary,
+    recommendedActionSummary: attempt.recommendedActionSummary,
+    evidenceSummary: attempt.evidenceSummary,
+    evidenceBundleSummary: attempt.evidenceBundleSummary,
+    recoveryReasonCode: attempt.recoveryReasonCode,
+    prUrl: attempt.prUrl,
+  };
+}
+
+export function incidentFromRcaIssueByIncidentId(
+  issues: readonly RcaIssueDetailView[],
+  incidentId: string,
+): RcaIncident | null {
+  const direct = issues.find((issue) => issue.incidentId === incidentId);
+  if (direct) return incidentFromRcaIssue(direct);
+  for (const issue of issues) {
+    const attempt = issue.recentAttempts?.find((item) => item.incidentId === incidentId);
+    if (attempt) return incidentFromRcaIssueAttempt(issue, attempt);
+  }
+  return null;
 }
 
 /**
@@ -63,8 +110,7 @@ export function promoteAlertIncident(
   issues: readonly RcaIssueDetailView[],
 ): RcaIncident | null {
   if (!current?.incidentId || current.correlationId) return current;
-  const matchingIssue = issues.find((issue) => issue.incidentId === current.incidentId);
-  return matchingIssue ? incidentFromRcaIssue(matchingIssue) : current;
+  return incidentFromRcaIssueByIncidentId(issues, current.incidentId) ?? current;
 }
 
 export function alertIncidentPollMs(incident: RcaIncident | null): number {

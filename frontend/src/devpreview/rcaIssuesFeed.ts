@@ -4,6 +4,12 @@ import { listRcaIssues } from "../api/rca-issues";
 import type { RcaIssueList } from "../api/schemas";
 import type { DevpreviewCluster } from "./contracts";
 import { useVisibleRefreshClock } from "../shared/data/useVisibleRefreshClock";
+import {
+  isTerminalRcaIssueStatus,
+  rcaIssueIdentity,
+  selectRcaIssueRepresentatives,
+  type RcaIssueRepresentativeItem,
+} from "./rcaIssueGrouping";
 
 // UI-PHASE2-001 §5.2: typed live adapter for the Issue widget/surface and the
 // notification bell. Reads the additive RCA Issue queue from
@@ -30,16 +36,9 @@ export interface RcaIssuesFeed {
 
 export type RcaIssueItem = RcaIssueList["items"][number];
 export const RCA_ISSUES_REFRESH_MS = 10_000;
+export { rcaIssueIdentity };
 
 const OBSERVED_TARGET_STAGES = new Set(["agent_connected", "snapshot_received", "ready"]);
-const TERMINAL_ISSUE_STATUSES = new Set([
-  "cancelled",
-  "closed",
-  "completed",
-  "dismissed",
-  "incident_resolved",
-  "resolved",
-]);
 
 /**
  * The rehearsal queue follows live, mutable target clusters only. Management
@@ -65,49 +64,14 @@ export function isActiveIncidentCluster(
 }
 
 export function isActiveRcaIssue(item: Pick<RcaIssueItem, "status">): boolean {
-  return !TERMINAL_ISSUE_STATUSES.has(normalizeStatus(item.status));
-}
-
-/**
- * RCA emits a new correlation id whenever the same observed failure is
- * re-evaluated. The dashboard identity is the affected resource plus symptom,
- * not that processing-attempt id. Missing resource evidence stays conservative
- * and falls back to the incident/correlation id so unrelated unknowns are never
- * merged.
- */
-export function rcaIssueIdentity(item: Pick<RcaIssueItem,
-  "cluster_id" | "incident_namespace" | "incident_resource_kind" |
-  "incident_resource_name" | "incident_symptom" | "incident_id" | "correlation_id"
->): string {
-  const resourceName = normalizeIdentityPart(item.incident_resource_name);
-  const symptom = normalizeIdentityPart(item.incident_symptom);
-  if (resourceName === "" || symptom === "") {
-    return `event:${item.incident_id ?? item.correlation_id}`;
-  }
-  return [
-    normalizeIdentityPart(item.cluster_id),
-    normalizeIdentityPart(item.incident_namespace),
-    normalizeIdentityPart(item.incident_resource_kind),
-    resourceName,
-    symptom,
-  ].join("\u0000");
+  return !isTerminalRcaIssueStatus(item.status);
 }
 
 export async function loadRcaIssueItems(
   clusterIds: readonly string[] | undefined,
   signal: AbortSignal,
 ): Promise<RcaIssueItem[]> {
-  const scopedClusterIds = clusterIds === undefined
-    ? null
-    : [...new Set(clusterIds.filter((clusterId) => clusterId.trim() !== ""))].sort();
-  const requests = scopedClusterIds === null
-    ? [listRcaIssues({ limit: 100, signal })]
-    : scopedClusterIds.map((clusterId) => listRcaIssues({ clusterId, limit: 100, signal }));
-  const responses = await Promise.all(requests);
-  const allowedClusters = scopedClusterIds === null ? null : new Set(scopedClusterIds);
-  const candidates = responses
-    .flatMap((response) => response.items)
-    .filter((item) => allowedClusters === null || (item.cluster_id !== null && allowedClusters.has(item.cluster_id)));
+  const candidates = await loadRcaIssueCandidates(clusterIds, signal);
   const latestByIdentity = new Map<string, { item: RcaIssueItem; index: number; updatedMs: number }>();
   candidates.forEach((item, index) => {
     const identity = rcaIssueIdentity(item);
@@ -120,6 +84,30 @@ export async function loadRcaIssueItems(
   return [...latestByIdentity.values()]
     .sort((a, b) => b.updatedMs - a.updatedMs || a.index - b.index)
     .map(({ item }) => item);
+}
+
+export async function loadRcaIssueRepresentativeItems(
+  clusterIds: readonly string[] | undefined,
+  signal: AbortSignal,
+): Promise<RcaIssueRepresentativeItem[]> {
+  return selectRcaIssueRepresentatives(await loadRcaIssueCandidates(clusterIds, signal));
+}
+
+async function loadRcaIssueCandidates(
+  clusterIds: readonly string[] | undefined,
+  signal: AbortSignal,
+): Promise<RcaIssueItem[]> {
+  const scopedClusterIds = clusterIds === undefined
+    ? null
+    : [...new Set(clusterIds.filter((clusterId) => clusterId.trim() !== ""))].sort();
+  const requests = scopedClusterIds === null
+    ? [listRcaIssues({ limit: 100, signal })]
+    : scopedClusterIds.map((clusterId) => listRcaIssues({ clusterId, limit: 100, signal }));
+  const responses = await Promise.all(requests);
+  const allowedClusters = scopedClusterIds === null ? null : new Set(scopedClusterIds);
+  return responses
+    .flatMap((response) => response.items)
+    .filter((item) => allowedClusters === null || (item.cluster_id !== null && allowedClusters.has(item.cluster_id)));
 }
 
 export async function loadActiveRcaIssueItems(
@@ -190,14 +178,6 @@ export function useRcaIssues(clusterIds?: readonly string[]): RcaIssuesFeed {
   return snapshot.scopeKey === scopeKey
     ? snapshot.feed
     : { status: "loading", items: [] };
-}
-
-function normalizeStatus(status: string): string {
-  return status.trim().toLocaleLowerCase().replace(/[.\s-]+/gu, "_");
-}
-
-function normalizeIdentityPart(value: string | null): string {
-  return (value ?? "").trim().toLocaleLowerCase().replace(/[\s_-]+/gu, " ");
 }
 
 function parseUpdatedMs(value: string | null): number {

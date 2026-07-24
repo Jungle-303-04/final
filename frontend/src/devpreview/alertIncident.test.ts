@@ -6,6 +6,7 @@ import {
   alertIncidentClusterIds,
   alertIncidentPollMs,
   incidentFromAlertEvent,
+  incidentFromRcaIssueByIncidentId,
   promoteAlertIncident,
 } from "./alertIncident";
 import type { RcaIssueDetailView } from "./rcaDetailFeed";
@@ -102,5 +103,101 @@ describe("incidentFromAlertEvent", () => {
     );
 
     expect(promoteAlertIncident(promoted, [])).toBe(promoted);
+  });
+
+  it("promotes a grouped latest attempt when the representative keeps an older recovery plan", () => {
+    const grouped = rcaIssue({
+      correlationId: "older-ready-plan",
+      incidentId: "older-incident",
+      status: "approval_recommended",
+      recentAttempts: [
+        {
+          correlationId: "latest-evaluated",
+          incidentId: "incident-1",
+          currentSubject: "rca.evaluated",
+          clusterId: "cluster-1",
+          namespace: "sandbox",
+          resourceName: "game-room-abc",
+          resourceKind: "ReplicaSet",
+          rawSymptom: null,
+          status: "rca_evaluated",
+          updatedAt: "2026-07-23T22:39:09Z",
+          severity: "warning",
+          rootCause: "probe_path_wrong_latest",
+          confidence: 0.87,
+          supportingEvidence: ["object://evidence/latest-evaluated.json#logs:related_logs"],
+          missingEvidence: ["rollout_status"],
+          situationSummary: "최신 분석 요약",
+          recommendedActionSummary: "최신 권장 조치",
+          evidenceSummary: "최신 근거 요약",
+          evidenceBundleSummary: "최신 번들 요약",
+          actionRoute: null,
+          prUrl: null,
+          errorReason: null,
+          recoveryReasonCode: null,
+        },
+      ],
+    });
+
+    expect(incidentFromRcaIssueByIncidentId([grouped], "incident-1")).toMatchObject({
+      correlationId: "latest-evaluated",
+      incidentId: "incident-1",
+      rootCause: "probe_path_wrong_latest",
+      supportingEvidence: ["object://evidence/latest-evaluated.json#logs:related_logs"],
+    });
+    expect(promoteAlertIncident(incidentFromAlertEvent(alertEvent()), [grouped])).toMatchObject({
+      correlationId: "latest-evaluated",
+      incidentId: "incident-1",
+    });
+  });
+
+  it("does not copy representative analysis fields into a grouped attempt", () => {
+    const grouped = rcaIssue({
+      correlationId: "older-ready-plan",
+      incidentId: "older-incident",
+      status: "approval_recommended",
+      rootCause: "older_root_cause",
+      confidence: 0.91,
+      supportingEvidence: ["object://evidence/older-ready-plan.json#logs:related_logs"],
+      prUrl: "https://github.com/acme/platform/pull/7",
+      recentAttempts: [
+        {
+          correlationId: "latest-evaluated",
+          incidentId: "incident-1",
+          currentSubject: "rca.evaluated",
+          clusterId: "cluster-1",
+          namespace: "sandbox",
+          resourceName: "game-room-abc",
+          resourceKind: "ReplicaSet",
+          rawSymptom: null,
+          status: "rca_evaluated",
+          updatedAt: "2026-07-23T22:39:09Z",
+          severity: null,
+          rootCause: null,
+          confidence: null,
+          supportingEvidence: [],
+          missingEvidence: [],
+          situationSummary: null,
+          recommendedActionSummary: null,
+          evidenceSummary: null,
+          evidenceBundleSummary: null,
+          actionRoute: null,
+          prUrl: null,
+          errorReason: null,
+          recoveryReasonCode: null,
+        },
+      ],
+    });
+
+    expect(incidentFromRcaIssueByIncidentId([grouped], "incident-1")).toMatchObject({
+      correlationId: "latest-evaluated",
+      incidentId: "incident-1",
+      symptom: "rca_evaluated",
+      severity: null,
+      rootCause: null,
+      confidence: null,
+      supportingEvidence: [],
+      prUrl: null,
+    });
   });
 });
