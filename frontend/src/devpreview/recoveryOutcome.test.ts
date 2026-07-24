@@ -117,9 +117,33 @@ describe("recoveryOutcomeNotices", () => {
       submittedAt: "2026-07-24T01:00:00Z",
     });
 
-    expect(notices[0]?.detail).toBe(
+    expect(notices[0]).toMatchObject({
+      title: "복구 명령이 정책 검증에서 거부되었습니다.",
+      detail:
       "대상 네임스페이스가 클러스터 연결 시 허용한 제어 범위 밖입니다. 클러스터 설정의 제어 네임스페이스를 확인해 주세요.",
-    );
+    });
+  });
+
+  it("explains a control policy blocker emitted before selection", () => {
+    const notices = recoveryOutcomeNotices({
+      actionRoute: "auto",
+      audit: [
+        event("blocked", "rca.action_required", {
+          reason_code: "control_namespace_not_allowed",
+          reason: "target 네임스페이스는 현재 클러스터 제어 허용 범위에 포함되지 않습니다.",
+        }),
+      ],
+      issueStatus: "selection_required",
+      selectionEventId: "not-persisted",
+      submittedAt: "2026-07-24T01:00:00Z",
+    });
+
+    expect(notices[0]).toMatchObject({
+      kind: "recovery_blocked",
+      title: "복구 조치를 시작할 수 없습니다.",
+      summary: "대상 네임스페이스가 제어 허용 범위 밖입니다.",
+      detail: "target 네임스페이스는 현재 클러스터 제어 허용 범위에 포함되지 않습니다.",
+    });
   });
 
   it("reports an authority blocker instead of leaving PR creation pending", () => {

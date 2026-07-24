@@ -114,6 +114,7 @@ RCA_TEST_TARGET_NOT_FOUND = "RCA test target cluster is not registered"
 RCA_TEST_TARGET_ENVIRONMENT_DENIED = "RCA test runs require a test or aws-test target"
 RCA_TEST_RUN_CONFLICT = "RCA test target already has an active run"
 SAFE_PR_ROUTES = frozenset({"draft_pr", "safe_pr"})
+PREFLIGHT_REQUIRED_ROUTES = SAFE_PR_ROUTES | {"auto"}
 RECOVERY_STATUS_DEPLOY_PENDING = "deploy_pending"
 RECOVERY_STATUS_VERIFICATION_PENDING = "verification_pending"
 RECOVERY_STATUS_FAILED = "failed"
@@ -1193,7 +1194,7 @@ async def _select_recovery_action_from_record(
     selected = candidate_by_action_id(plan, action_id or plan.recommended_action_id)
     reason = reason or f"operator selected recovery action: {selected.title}"
     correlation_id = str(record["correlation_id"])
-    if selected.route in SAFE_PR_ROUTES:
+    if selected.route in PREFLIGHT_REQUIRED_ROUTES:
         proposed = RecoveryActionSelectedBody(
             plan=plan,
             selected=selected,
@@ -1204,12 +1205,25 @@ async def _select_recovery_action_from_record(
         )
         prepared: RecoveryActionCandidate | RcaActionRequiredBody
         if preflight is None:
+            is_safe_pr = selected.route in SAFE_PR_ROUTES
             prepared = RcaActionRequiredBody(
-                reason="Safe PR 사전 검증 서비스가 준비되지 않았습니다.",
+                reason=(
+                    "Safe PR 사전 검증 서비스가 준비되지 않았습니다."
+                    if is_safe_pr
+                    else "복구 명령 사전 정책 검증 서비스가 준비되지 않았습니다."
+                ),
                 evidence_ref=plan.evidence_ref,
                 workspace_id=workspace_id,
-                reason_code="safe_pr_preflight_unavailable",
-                missing_evidence=["gitops_authority_context"],
+                reason_code=(
+                    "safe_pr_preflight_unavailable"
+                    if is_safe_pr
+                    else "recovery_action_preflight_unavailable"
+                ),
+                missing_evidence=(
+                    ["gitops_authority_context"]
+                    if is_safe_pr
+                    else ["command_control_policy"]
+                ),
                 diagnostics={
                     "plan_id": plan.plan_id,
                     "action_id": selected.action_id,

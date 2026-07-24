@@ -13,7 +13,7 @@ export type RecoveryProgressPhase =
 
 export interface RecoveryProgressState {
   phase: RecoveryProgressPhase;
-  label: "복구 대기" | "자동 복구 요청됨" | "PR 생성 요청됨" | "복구 요청됨" | "복구 실행 중" | "복구 배포 중" | "검증 중" | "안정화 검증 중" | "PR 생성됨" | "PR 검토 필요" | "추가 설정 필요" | "복구 완료" | "복구 실패";
+  label: "복구 대기" | "자동 복구 요청됨" | "PR 생성 요청됨" | "복구 요청됨" | "복구 실행 중" | "복구 배포 중" | "검증 중" | "안정화 검증 중" | "PR 생성됨" | "PR 검토 필요" | "추가 설정 필요" | "정책 검증에서 거부" | "복구 완료" | "복구 실패";
   step: number;
   tone: "waiting" | "approval" | "active" | "completed" | "failed";
   latestEvent: AuditTimelineItem | null;
@@ -116,13 +116,24 @@ const BLOCKED_SUBJECTS = new Set([
   "rca.followup.required",
 ]);
 const RETRYABLE_BLOCKER_CODES = new Set([
+  "command_action_namespace_not_allowed",
   "gitops_authority_unavailable",
   "gitops_authority_mismatch",
+  "recovery_action_preflight_unavailable",
+  "recovery_target_identity_invalid",
   "safe_pr_patch_missing",
   "safe_pr_patch_unsupported",
   "safe_pr_preflight_failed",
   "safe_pr_preflight_unavailable",
   "pre_recovery_continuity_baseline_missing",
+  "unsupported_auto_action",
+  "control_namespace_not_allowed",
+]);
+const POLICY_REJECTION_CODES = new Set([
+  "command_action_namespace_not_allowed",
+  "control_namespace_not_allowed",
+  "recovery_target_identity_invalid",
+  "unsupported_auto_action",
 ]);
 const COMPLETED_SUBJECTS = new Set(["incident.resolved"]);
 const PR_OPEN_SUBJECTS = new Set(["recovery.pr.tracked"]);
@@ -181,7 +192,14 @@ export function recoveryProgressState({
     RETRYABLE_BLOCKER_CODES.has(normalizedReasonCode)
     || currentAudit.some(isRetryableRecoveryBlocker)
   );
+  const hasPolicyRejection = currentAudit.some(isPolicyRecoveryRejection);
+  const commandRejected = effectiveStatus === "command_rejected"
+    || normalizedSubject === "command.rejected"
+    || subjects.includes("command.rejected");
 
+  if (hasPolicyRejection || commandRejected) {
+    return state("blocked", "정책 검증에서 거부", 1, "failed", latestEvent);
+  }
   if (
     (
       BLOCKED_SUBJECTS.has(normalizedSubject)
@@ -276,6 +294,17 @@ function isRetryableRecoveryBlocker(event: AuditTimelineItem): boolean {
   const reasonCode = event.payload_summary.reason_code;
   return typeof reasonCode === "string"
     && RETRYABLE_BLOCKER_CODES.has(normalize(reasonCode));
+}
+
+function isPolicyRecoveryRejection(event: AuditTimelineItem): boolean {
+  const subject = normalize(event.subject);
+  if (
+    !BLOCKED_SUBJECTS.has(subject)
+    && subject !== "command.rejected"
+  ) return false;
+  const reasonCode = event.payload_summary.reason_code;
+  return typeof reasonCode === "string"
+    && POLICY_REJECTION_CODES.has(normalize(reasonCode));
 }
 
 export function currentRecoveryAttemptAudit(

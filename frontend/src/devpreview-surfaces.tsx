@@ -734,7 +734,7 @@ export function DeploySurface({ applicationsFeed, onRefreshApplications, pending
 // 서버가 준 값만 렌더하고, 없으면 정직한 "관측 안 됨"으로 둔다(no backfill).
 // 실제 복구 실행 경로(capability/CSRF)는 이 데모에 배선되어 있지 않으므로 실행
 // 컨트롤은 비활성으로 두고 가짜 성공을 만들지 않는다.
-const RECOVERY_STEP_LABELS = ["승인", "제출", "실행", "검증", "완료"] as const;
+const RECOVERY_STEP_LABELS = ["승인", "정책", "실행", "검증", "완료"] as const;
 const ISSUE_DETAIL_TYPE = {
   sectionTitle: TYPE.section,
   itemTitle: TYPE.body,

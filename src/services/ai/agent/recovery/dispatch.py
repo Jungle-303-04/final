@@ -7,7 +7,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from typing import Any, Protocol
 
-from domains.command.actions import command_action_for_recovery
+from domains.command.actions import command_action_for_recovery, command_action_spec
 from domains.command.events import CommandRequestedBody
 from domains.gitops.events import Diff
 from domains.gitops.source_patch import (
@@ -42,6 +42,11 @@ from domains.scm.events import (
     SafePrRequestedBody,
 )
 from packages.config.constants import Command, GitHub, Sandbox
+from packages.config.control import (
+    CONTROL_NAMESPACE_DENIED_CODE,
+    control_allowed_namespaces,
+    control_namespace_allowed,
+)
 from packages.contracts.event_bus.bodies import EventBody, JsonObject
 from packages.contracts.gitops_authority import (
     GitOpsAuthorityContext,
@@ -240,7 +245,7 @@ class RecoveryDispatcher:
 
 @dataclass(frozen=True)
 class RecoveryActionPreflight:
-    """HTTP 선택 단계에서 worker와 같은 Safe PR 계약을 미리 검증한다."""
+    """HTTP 선택 단계에서 worker와 같은 실행 계약을 미리 검증한다."""
 
     authority: GitOpsAuthorityReadPort | None
     evidence: RecoveryEvidenceReadPort | None = None
@@ -251,6 +256,8 @@ class RecoveryActionPreflight:
         evt: RecoveryActionSelectedBody,
         correlation_id: str,
     ) -> RecoveryActionCandidate | RcaActionRequiredBody:
+        if evt.selected.route == self.routes.auto:
+            return auto_action_preflight(evt)
         if evt.selected.route != self.routes.safe_pr:
             return evt.selected
         outcome = await dispatch_safe_pr_body(evt, self.authority, correlation_id)
@@ -858,6 +865,104 @@ def authority_required_body(
             "plan_id": evt.plan.plan_id,
             "action_id": evt.selected.action_id,
             "action_type": evt.selected.draft.action_type,
+        },
+    )
+
+
+def auto_action_preflight(
+    evt: RecoveryActionSelectedBody,
+) -> RecoveryActionCandidate | RcaActionRequiredBody:
+    """Reject an impossible command before the recovery selection is persisted."""
+
+    selected = evt.selected
+    action = command_action_for(selected)
+    if action is None:
+        return command_policy_required_body(
+            evt,
+            "unsupported_auto_action",
+            UNSUPPORTED_AUTO_ACTION_REASON,
+            missing=["command_action"],
+        )
+    spec = command_action_spec(action)
+    if spec is None:
+        return command_policy_required_body(
+            evt,
+            "unsupported_auto_action",
+            UNSUPPORTED_AUTO_ACTION_REASON,
+            missing=["command_action_spec"],
+            diagnostics={"command_action": action},
+        )
+    namespace = exact_nonempty_value(
+        evt.plan.target.get("namespace"),
+        selected.draft.namespace,
+        selected.draft.params.get("namespace"),
+    )
+    if not namespace:
+        return command_policy_required_body(
+            evt,
+            "recovery_target_identity_invalid",
+            "복구 대상 네임스페이스를 하나의 값으로 확인할 수 없습니다.",
+            missing=["target:namespace"],
+            diagnostics={"command_action": action},
+        )
+    diagnostics: JsonObject = {
+        "command_action": action,
+        "namespace": namespace,
+        "control_allowed_namespaces": list(control_allowed_namespaces()),
+        "action_allowed_namespaces": list(spec.allowed_namespaces),
+    }
+    if spec.enforce_control_namespace and not control_namespace_allowed(namespace):
+        return command_policy_required_body(
+            evt,
+            CONTROL_NAMESPACE_DENIED_CODE,
+            (
+                f"{namespace} 네임스페이스는 현재 클러스터 제어 허용 범위에 "
+                "포함되지 않아 복구 명령을 제출할 수 없습니다."
+            ),
+            diagnostics=diagnostics,
+        )
+    if not spec.allows_namespace(namespace):
+        return command_policy_required_body(
+            evt,
+            "command_action_namespace_not_allowed",
+            (
+                f"{action} 액션은 {namespace} 네임스페이스에서 허용되지 않아 "
+                "복구 명령을 제출할 수 없습니다."
+            ),
+            diagnostics=diagnostics,
+        )
+    return selected
+
+
+def command_policy_required_body(
+    evt: RecoveryActionSelectedBody,
+    reason_code: str,
+    reason: str,
+    *,
+    missing: list[str] | None = None,
+    diagnostics: JsonObject | None = None,
+) -> RcaActionRequiredBody:
+    return RcaActionRequiredBody(
+        reason=reason,
+        evidence_ref=evt.plan.evidence_ref,
+        workspace_id=evt.workspace_id,
+        reason_code=reason_code,
+        missing_evidence=missing or [],
+        next_actions=[
+            {
+                "action_type": "review_control_namespace_policy",
+                "reason": (
+                    "클러스터 연결의 제어 허용 범위와 명령 액션 정책을 확인한 뒤 "
+                    "허용되는 복구 후보를 선택하세요."
+                ),
+                "target": evt.plan.target,
+            }
+        ],
+        diagnostics={
+            "plan_id": evt.plan.plan_id,
+            "action_id": evt.selected.action_id,
+            "action_type": evt.selected.draft.action_type,
+            **(diagnostics or {}),
         },
     )
 

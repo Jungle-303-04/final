@@ -16,25 +16,32 @@ from domains.rca.events import (
     RecoveryActionSelectedBody,
     RecoveryPlan,
 )
+from services.ai.agent.recovery.dispatch import RecoveryActionPreflight
 
 
-def recovery_candidate() -> RecoveryActionCandidate:
+def recovery_candidate(
+    *,
+    route: str = "draft_pr",
+    namespace: str = "sandbox",
+    action_type: str = "probe_fix",
+    params: dict[str, Any] | None = None,
+) -> RecoveryActionCandidate:
     return RecoveryActionCandidate(
         action_id="action-1",
         title="Readiness probe 수정",
         description="GitOps manifest의 readiness probe를 수정합니다.",
         draft=HealingActionDraft(
-            action_type="probe_fix",
-            namespace="sandbox",
+            action_type=action_type,
+            namespace=namespace,
             resource_kind="Deployment",
             resource_name="game-room",
             reason="probe path mismatch",
             risk_level="medium",
             dry_run=True,
             source_evidence=["object://evidence/correlation-1.json"],
-            params={},
+            params=params or {},
         ),
-        route="draft_pr",
+        route=route,
         rank=1,
         score=0.95,
         risk_level="medium",
@@ -56,7 +63,7 @@ def recovery_plan(candidate: RecoveryActionCandidate) -> RecoveryPlan:
         target={
             "workspace_id": "workspace-1",
             "cluster_id": "cluster-1",
-            "namespace": "sandbox",
+            "namespace": candidate.draft.namespace,
             "resource_kind": "Deployment",
             "resource_name": "game-room",
         },
@@ -188,9 +195,10 @@ def run_selection(
     *,
     db: SelectionDb,
     events: RecordingEvents,
-    preflight: BlockingPreflight | SuccessfulPreflight | None,
+    preflight: object | None,
+    candidate: RecoveryActionCandidate | None = None,
 ) -> object:
-    candidate = recovery_candidate()
+    candidate = candidate or recovery_candidate()
     plan = recovery_plan(candidate)
     return asyncio.run(
         rca_router._select_recovery_action_from_record(
@@ -277,6 +285,74 @@ def test_missing_preflight_fails_closed_without_selecting_plan(
 
     assert raised.value.status_code == 409
     assert raised.value.detail["code"] == "safe_pr_preflight_unavailable"
+    assert trace == ["event:rca.action_required"]
+    assert db.selection_calls == []
+    assert db.approval_payloads == []
+
+
+def test_auto_preflight_rejects_disallowed_namespace_before_selection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    trace: list[str] = []
+    db = SelectionDb(trace)
+    events = RecordingEvents(trace)
+    candidate = recovery_candidate(
+        route="auto",
+        namespace="target",
+        action_type="rollout_restart",
+        params={"command": "rollout_restart"},
+    )
+    monkeypatch.setenv("CONTROL_ALLOWED_NAMESPACES", "sandbox,color-turf")
+    monkeypatch.setattr(rca_router, "require_cluster_access", lambda *args, **kwargs: None)
+
+    with pytest.raises(HTTPException) as raised:
+        run_selection(
+            db=db,
+            events=events,
+            preflight=RecoveryActionPreflight(authority=None),
+            candidate=candidate,
+        )
+
+    assert raised.value.status_code == 409
+    assert raised.value.detail["code"] == "control_namespace_not_allowed"
+    assert "target 네임스페이스" in raised.value.detail["detail"]
+    assert raised.value.detail["retryable"] is True
+    assert trace == ["event:rca.action_required"]
+    assert db.selection_calls == []
+    assert db.approval_payloads == []
+    blocker = events.bodies[0]
+    assert isinstance(blocker, RcaActionRequiredBody)
+    assert blocker.diagnostics["namespace"] == "target"
+    assert blocker.diagnostics["control_allowed_namespaces"] == [
+        "sandbox",
+        "color-turf",
+    ]
+
+
+def test_missing_auto_preflight_fails_closed_without_selecting_plan(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    trace: list[str] = []
+    db = SelectionDb(trace)
+    events = RecordingEvents(trace)
+    candidate = recovery_candidate(
+        route="auto",
+        namespace="sandbox",
+        action_type="rollout_restart",
+        params={"command": "rollout_restart"},
+    )
+    monkeypatch.setattr(rca_router, "require_cluster_access", lambda *args, **kwargs: None)
+
+    with pytest.raises(HTTPException) as raised:
+        run_selection(
+            db=db,
+            events=events,
+            preflight=None,
+            candidate=candidate,
+        )
+
+    assert raised.value.status_code == 409
+    assert raised.value.detail["code"] == "recovery_action_preflight_unavailable"
     assert trace == ["event:rca.action_required"]
     assert db.selection_calls == []
     assert db.approval_payloads == []

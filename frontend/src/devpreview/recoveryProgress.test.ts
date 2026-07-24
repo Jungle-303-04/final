@@ -130,11 +130,80 @@ describe("recoveryProgressState", () => {
     expect(recoveryDisplayedStep(progress)).toBe(5);
   });
 
-  it("keeps the failed stage visible", () => {
+  it("keeps a rejected command at the pre-execution policy stage", () => {
     expect(recoveryProgressState({ status: "command_rejected" })).toMatchObject({
-      phase: "failed",
-      label: "복구 실패",
-      step: 2,
+      phase: "blocked",
+      label: "정책 검증에서 거부",
+      step: 1,
+    });
+  });
+
+  it("shows a legacy control rejection at the policy stage with the true latest event", () => {
+    expect(recoveryProgressState({
+      status: "command_rejected",
+      selectionFailed: true,
+      audit: [
+        {
+          event_id: "old-evidence",
+          subject: "cluster.evidence.received",
+          source: "cluster-agent",
+          created_at: "2026-07-24T01:00:00Z",
+          causation_id: null,
+          journey_stage: "evidence",
+          payload_summary: {},
+        },
+        {
+          event_id: "selected",
+          subject: "recovery.action_selected",
+          source: "api-gateway",
+          created_at: "2026-07-24T01:01:00Z",
+          causation_id: null,
+          journey_stage: "recovery",
+          payload_summary: {},
+        },
+        {
+          event_id: "rejected",
+          subject: "command.rejected",
+          source: "command-worker",
+          created_at: "2026-07-24T01:02:00Z",
+          causation_id: "selected",
+          journey_stage: "recovery",
+          payload_summary: {
+            reason_code: "control_namespace_not_allowed",
+            reason: "namespace is not allowed by control policy",
+          },
+        },
+      ],
+    })).toMatchObject({
+      phase: "blocked",
+      label: "정책 검증에서 거부",
+      step: 1,
+      tone: "failed",
+      latestEvent: { event_id: "rejected", subject: "command.rejected" },
+    });
+  });
+
+  it("shows a preflight policy blocker before command submission", () => {
+    expect(recoveryProgressState({
+      actionRoute: "auto",
+      selectionFailed: true,
+      audit: [{
+        event_id: "policy-blocked",
+        subject: "rca.action_required",
+        source: "api-gateway",
+        created_at: "2026-07-24T01:00:00Z",
+        causation_id: null,
+        journey_stage: "recovery",
+        payload_summary: {
+          reason_code: "control_namespace_not_allowed",
+          reason: "target 네임스페이스는 현재 클러스터 제어 허용 범위에 포함되지 않습니다.",
+        },
+      }],
+    })).toMatchObject({
+      phase: "blocked",
+      label: "정책 검증에서 거부",
+      step: 1,
+      latestEvent: { event_id: "policy-blocked" },
     });
   });
 

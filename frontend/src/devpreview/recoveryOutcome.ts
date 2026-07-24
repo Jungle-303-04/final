@@ -77,12 +77,15 @@ export function recoveryOutcomeNotices({
   }
   const failed = findLast(relevant, (item) => FAILED_SUBJECTS.has(normalize(item.subject)));
   if (failed) {
+    const policyRejected = isPolicyRejection(failed);
     notices.push({
       key: failed.event_id,
       kind: "recovery_failed",
       terminal: true,
       tone: "critical",
-      title: "복구 조치를 완료하지 못했습니다.",
+      title: policyRejected
+        ? "복구 명령이 정책 검증에서 거부되었습니다."
+        : "복구 조치를 완료하지 못했습니다.",
       summary: failureSummary(failed),
       detail: failureDetail(failed),
       prUrl: null,
@@ -187,6 +190,9 @@ function failureDetail(item: AuditTimelineItem): string | null {
   if (reasonCode === "control_namespace_not_allowed") {
     return "대상 네임스페이스가 클러스터 연결 시 허용한 제어 범위 밖입니다. 클러스터 설정의 제어 네임스페이스를 확인해 주세요.";
   }
+  if (reasonCode === "command_action_namespace_not_allowed") {
+    return "선택한 복구 액션은 대상 네임스페이스에서 허용되지 않습니다. 허용되는 복구 후보를 선택해 주세요.";
+  }
   return reason;
 }
 
@@ -197,7 +203,20 @@ function blockerSummary(reasonCode: string | null): string {
   if (reasonCode === "gitops_authority_mismatch") {
     return "복구 대상과 GitOps 배포 정보가 일치하지 않습니다.";
   }
+  if (reasonCode === "control_namespace_not_allowed") {
+    return "대상 네임스페이스가 제어 허용 범위 밖입니다.";
+  }
+  if (reasonCode === "command_action_namespace_not_allowed") {
+    return "선택한 복구 액션은 대상 네임스페이스에서 허용되지 않습니다.";
+  }
   return "복구 조치를 진행하기 위한 추가 설정이나 근거가 필요합니다.";
+}
+
+function isPolicyRejection(item: AuditTimelineItem): boolean {
+  if (normalize(item.subject) === "command_rejected") return true;
+  const reasonCode = summaryString(item, "reason_code");
+  return reasonCode === "control_namespace_not_allowed"
+    || reasonCode === "command_action_namespace_not_allowed";
 }
 
 function summaryString(item: AuditTimelineItem, key: string): string | null {
