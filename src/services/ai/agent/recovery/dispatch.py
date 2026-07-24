@@ -25,6 +25,7 @@ from domains.rca.events import (
 )
 from domains.rca.recovery_verification import (
     CONTINUITY_SAMPLE_MAX_AGE_SECONDS,
+    STANDARD_SLI_ALERT_NAME,
     before_alert_snapshot,
     finite_float,
     metric_sample_with_identity,
@@ -187,6 +188,9 @@ class RecoveryEvidenceReadPort(Protocol):
         self,
         workspace_id: str,
         *,
+        rule_name: str | None = None,
+        source: str | None = None,
+        incident_ids: tuple[str, ...] | None = None,
         limit: int,
     ) -> list[JsonObject]: ...
 
@@ -395,7 +399,18 @@ class RecoveryActionPreflight:
                 )
             alerts = await self.evidence.list_alert_events(
                 evt.workspace_id,
-                limit=200,
+                rule_name=STANDARD_SLI_ALERT_NAME,
+                source="alertmanager",
+                incident_ids=tuple(
+                    sorted(
+                        {
+                            value
+                            for value in (correlation_id, evt.plan.incident_id)
+                            if value
+                        }
+                    )
+                ),
+                limit=10,
             )
             alert_before = before_alert_snapshot(
                 alerts,

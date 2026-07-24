@@ -208,6 +208,12 @@ class RecoveryPlanStore(Protocol):
         self,
         workspace_id: str,
         *,
+        from_time: object | None = None,
+        rule_name: str | None = None,
+        source: str | None = None,
+        incident_ids: tuple[str, ...] | None = None,
+        event_ids: tuple[str, ...] | None = None,
+        subject_key: str | None = None,
         limit: int = 100,
     ) -> list[JsonObject]: ...
 

@@ -228,10 +228,16 @@ class LobbyEvidencePort:
         self,
         workspace_id: str,
         *,
+        rule_name: str | None = None,
+        source: str | None = None,
+        incident_ids: tuple[str, ...] | None = None,
         limit: int,
     ):
         assert workspace_id == "workspace-1"
-        assert limit == 200
+        assert rule_name == "OpsiaSliFailureRatioHigh"
+        assert source == "alertmanager"
+        assert set(incident_ids or ()) == {"correlation-lobby", "incident-lobby"}
+        assert limit == 10
         if not self.include_exact_alert:
             return []
         return [
@@ -487,10 +493,16 @@ def test_safe_pr_preflight_accepts_same_exact_alert_after_resolution() -> None:
             self,
             workspace_id: str,
             *,
+            rule_name: str | None = None,
+            source: str | None = None,
+            incident_ids: tuple[str, ...] | None = None,
             limit: int,
         ):
             alerts = await super().list_alert_events(
                 workspace_id,
+                rule_name=rule_name,
+                source=source,
+                incident_ids=incident_ids,
                 limit=limit,
             )
             alerts[0]["status"] = "resolved"
