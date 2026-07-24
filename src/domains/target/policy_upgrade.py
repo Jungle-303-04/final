@@ -28,6 +28,7 @@ from domains.target.evidence_policy import (
 from domains.target.install_manifest import cluster_agent_manifest
 from domains.target.management_guard import (
     MANAGEMENT_CLUSTER_ROLE,
+    TARGET_CLUSTER_ROLE,
     cluster_role_from_registration,
 )
 from packages.contracts.event_bus.interfaces import JsonObject
@@ -395,8 +396,27 @@ def build_target_upgrade_plan(
     rbac_status = (
         "current" if rbac_actual_version == TARGET_RBAC_MANIFEST_VERSION else "admin_apply_required"
     )
+    registration_role = cluster_role_from_registration(registration)
+    if registration_role not in (TARGET_CLUSTER_ROLE, MANAGEMENT_CLUSTER_ROLE):
+        return TargetUpgradePlan(
+            registration_id=registration_id,
+            workspace_id=workspace_id,
+            cluster_id=cluster_id,
+            changed=False,
+            current_generation=current.generation,
+            next_generation=current.generation,
+            policy=None,
+            policy_existed=policy is not None,
+            settings_patch={},
+            desired_states=desired_states,
+            rbac_status="not_applicable",
+            rbac_actual_version=rbac_actual_version,
+            rbac_expected_version=TARGET_RBAC_MANIFEST_VERSION,
+            admin_manifest_path=admin_path,
+            skipped_reason="unsupported_cluster_role",
+        )
     if (
-        cluster_role_from_registration(registration) == MANAGEMENT_CLUSTER_ROLE
+        registration_role == MANAGEMENT_CLUSTER_ROLE
         or current.cluster_role == MANAGEMENT_CLUSTER_ROLE
     ):
         return TargetUpgradePlan(

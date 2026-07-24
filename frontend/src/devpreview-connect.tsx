@@ -75,6 +75,7 @@ import {
   connectionFailurePresentation,
   type ConnectionFailurePresentation,
 } from "./devpreview/connectErrors";
+import { DEFAULT_CLUSTER_DISPLAY_NAME } from "./devpreview/clusterConnectionDefaults";
 import { useSession } from "./devpreview/sessionFeed";
 import "./styles/tokens.css";
 import "./styles/foundation.css";
@@ -1249,7 +1250,7 @@ function ClusterInfoStep({
         <span className="px-0.5 text-label font-semibold c-2">클러스터 표시 이름</span>
         <div className="field flex items-center gap-3 bg-surface" style={{ borderRadius: 14, padding: "15px 16px" }}>
           <Server className="size-[18px] c-3" />
-          <input aria-label="클러스터 표시 이름" value={name} onChange={(e) => setName(e.currentTarget.value)} placeholder="game-server-apne2" className="w-full bg-transparent font-mono text-body c-ink outline-none placeholder:font-sans placeholder:c-3" />
+          <input aria-label="클러스터 표시 이름" value={name} onChange={(e) => setName(e.currentTarget.value)} placeholder={DEFAULT_CLUSTER_DISPLAY_NAME} className="w-full bg-transparent font-mono text-body c-ink outline-none placeholder:font-sans placeholder:c-3" />
         </div>
       </div>
       <NextButton show={name.trim().length > 1 && !selectedDisabled}
@@ -1510,7 +1511,9 @@ function ClusterWizard({ providers, resumeCluster, onClose, onComplete }: {
   onComplete: (name: string) => void;
 }) {
   const [step, setStep] = useState(resumeCluster ? 1 : 0);
-  const [name, setName] = useState(resumeCluster?.name ?? "game-server");
+  const [name, setName] = useState(
+    resumeCluster?.name ?? DEFAULT_CLUSTER_DISPLAY_NAME,
+  );
   const [platform, setPlatform] = useState<PlatformId>(() =>
     resumeCluster ? connectionPlatform(resumeCluster.provider) : "aws");
   const [connection, setConnection] = useState<ConnectionStatusView | null>(null);
