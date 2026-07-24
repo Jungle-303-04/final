@@ -188,6 +188,28 @@ def agent_command_values(
     }
 
 
+def leased_agent_command_columns(table: Any) -> tuple[Any, ...]:
+    """Columns that cross the management-to-agent lease boundary."""
+
+    return (
+        table.c.command_id,
+        table.c.workspace_id,
+        table.c.correlation_id,
+        table.c.cluster_id,
+        table.c.action,
+        table.c.payload,
+        table.c.status,
+        table.c.lease_id,
+        table.c.agent_id,
+        table.c.leased_until,
+        table.c.active_attempt_id.label("attempt_id"),
+        # Direct execution is immutable server-side authority stored beside
+        # the command. The target agent must receive this column at lease
+        # time; the nested plan is payload, not an execution grant.
+        table.c.direct_execution,
+    )
+
+
 def agent_command_insert(
     *,
     correlation_id: str,
@@ -1195,19 +1217,7 @@ class AgentCommandRepository(DatabaseConnection):
         now = datetime.now(UTC)
         leased_until = now + timedelta(seconds=lease_seconds)
         lease_id = str(uuid.uuid4())
-        columns = (
-            table.c.command_id,
-            table.c.workspace_id,
-            table.c.correlation_id,
-            table.c.cluster_id,
-            table.c.action,
-            table.c.payload,
-            table.c.status,
-            table.c.lease_id,
-            table.c.agent_id,
-            table.c.leased_until,
-            table.c.active_attempt_id.label("attempt_id"),
-        )
+        columns = leased_agent_command_columns(table)
         # A running lease may have applied side effects before the agent died.
         # It is deliberately never re-leased: the janitor marks it failed for a
         # human-reviewed retry instead of silently running the command twice.
