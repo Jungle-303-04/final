@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import math
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from domains.command.actions import command_action_for_recovery
@@ -36,6 +36,7 @@ from packages.contracts.gitops_authority import (
     GitOpsAuthorityReadPort,
 )
 from services.ai.agent.defaults import ActionRoutes
+from services.ai.agent.workload_target import resolved_target_from_metadata
 
 UNKNOWN_ROUTE_REASON = "선택된 복구 후보의 route를 처리할 수 없습니다."
 UNSUPPORTED_AUTO_ACTION_REASON = "자동 실행 대상 command action으로 변환할 수 없습니다."
@@ -198,6 +199,52 @@ class RecoveryDispatcher:
         )
 
 
+@dataclass(frozen=True)
+class RecoveryActionPreflight:
+    """HTTP 선택 단계에서 worker와 같은 Safe PR 계약을 미리 검증한다."""
+
+    authority: GitOpsAuthorityReadPort | None
+    routes: ActionRoutes = field(default_factory=ActionRoutes)
+
+    async def prepare(
+        self,
+        evt: RecoveryActionSelectedBody,
+        correlation_id: str,
+    ) -> RecoveryActionCandidate | RcaActionRequiredBody:
+        if evt.selected.route != self.routes.safe_pr:
+            return evt.selected
+        outcome = await dispatch_safe_pr_body(evt, self.authority, correlation_id)
+        if isinstance(outcome, RcaActionRequiredBody):
+            return outcome
+        if not isinstance(outcome, SafePrRequestedBody):
+            return authority_required_body(
+                evt,
+                "safe_pr_preflight_failed",
+                "Safe PR 사전 검증 결과를 해석할 수 없습니다.",
+                ["gitops_authority_context"],
+            )
+        draft = evt.selected.draft
+        return replace(
+            evt.selected,
+            draft=replace(
+                draft,
+                params={
+                    **draft.params,
+                    "workspace_id": outcome.workspace_id,
+                    "repository_id": outcome.repository_id,
+                    "binding_id": outcome.binding_id,
+                    "application_id": outcome.application_id,
+                    "workflow_run_id": outcome.workflow_run_id,
+                    "environment": outcome.environment,
+                    "manifest_path": outcome.manifest_path,
+                    "repo_ref": outcome.repo_ref,
+                    "base_branch": outcome.base_branch,
+                    "commit_sha": outcome.commit_sha,
+                },
+            ),
+        )
+
+
 def approval_required_body(evt: RecoveryActionSelectedBody) -> RcaActionRequiredBody:
     selected = evt.selected
     context = APPROVAL_REQUIRED_CONTEXTS.get(
@@ -267,9 +314,10 @@ def build_safe_pr_request_body(
         body=recovery_safe_pr_body(plan, selected),
         provider=GitHub.PROVIDER,
         patches=patches,
-        # 원설계 보존: 운영자 승인까지 끝난 복구는 직접 커밋으로 즉시 반영하고,
-        # high risk 변경만 PR 리뷰 게이트를 유지한다.
-        delivery="pull_request" if selected.risk_level == "high" else "direct_commit",
+        # ``safe_pr`` route는 이름과 사용자 계약 그대로 항상 리뷰 가능한 PR을
+        # 만든다. 승인 완료는 변경 제안 권한이지 base branch 직접 쓰기 권한이
+        # 아니다. 직접 커밋은 별도 route에서 명시적으로 요청해야 한다.
+        delivery="pull_request",
         pr_kind=safe_pr_kind(selected),
         workspace_id=workspace_id,
         repository_id=(
@@ -421,20 +469,6 @@ async def dispatch_safe_pr_body(
     correlation_id: str,
 ) -> EventBody:
     selected = evt.selected
-    if selected.draft.action_type in REVIEW_DOC_ACTIONS:
-        return build_safe_pr_request_body(
-            evt.plan,
-            selected,
-            evt.workspace_id,
-            [fallback_recovery_patch(selected)],
-        )
-    if selected.draft.action_type not in AUTHORITY_PATCH_ACTIONS:
-        return authority_required_body(
-            evt,
-            "safe_pr_patch_unsupported",
-            f"지원하지 않는 recovery patch action입니다: {selected.draft.action_type}",
-            ["supported_patch_action"],
-        )
     if authority_port is None or not correlation_id:
         return authority_required_body(
             evt,
@@ -457,6 +491,21 @@ async def dispatch_safe_pr_body(
             "gitops_authority_mismatch",
             "조회된 GitOps 권위 context가 선택된 recovery target과 일치하지 않습니다.",
             ["matching_gitops_authority_context"],
+        )
+    if selected.draft.action_type in REVIEW_DOC_ACTIONS:
+        return build_safe_pr_request_body(
+            evt.plan,
+            selected,
+            evt.workspace_id,
+            [fallback_recovery_patch(selected)],
+            authority,
+        )
+    if selected.draft.action_type not in AUTHORITY_PATCH_ACTIONS:
+        return authority_required_body(
+            evt,
+            "safe_pr_patch_unsupported",
+            f"지원하지 않는 recovery patch action입니다: {selected.draft.action_type}",
+            ["supported_patch_action"],
         )
     try:
         patches = authority_safe_pr_patches(selected, authority)
@@ -484,14 +533,24 @@ def authority_query(
 ) -> GitOpsAuthorityQuery:
     target = evt.plan.target
     draft = evt.selected.draft
+    namespace = str(target.get("namespace") or draft.namespace)
+    resource_kind = str(target.get("resource_kind") or draft.resource_kind)
+    resource_name = str(target.get("resource_name") or draft.resource_name)
+    resolved = resolved_target_from_metadata(
+        namespace,
+        resource_kind,
+        resource_name,
+        target,
+        draft.params,
+    )
     return GitOpsAuthorityQuery(
         correlation_id=correlation_id,
         workspace_id=evt.workspace_id,
         incident_id=evt.plan.incident_id,
         cluster_id=str(target.get("cluster_id") or ""),
-        namespace=str(target.get("namespace") or draft.namespace),
-        resource_kind=str(target.get("resource_kind") or draft.resource_kind),
-        resource_name=str(target.get("resource_name") or draft.resource_name),
+        namespace=resolved.namespace,
+        resource_kind=resolved.resource_kind,
+        resource_name=resolved.resource_name,
     )
 
 
@@ -735,10 +794,13 @@ def scalar_replacements_for(
         replicas = nested_value(manifest, "spec", "replicas")
         if type(replicas) is not int or not 1 <= replicas < 10:
             return []
-        # 원복 우선: 권위 스냅샷 변경 이력에서 "축소 이전 승인 값"을 찾으면 그 값으로
-        # 되돌린다(설명 계약과 일치). 이력이 특정되지 않으면 +1 증설로 폴백 —
-        # 값은 전부 관측 이력에서만 나오며 합성하지 않는다.
+        # 원복 전략은 권위 스냅샷 변경 이력에서 "축소 이전 승인 값"이 하나로
+        # 특정될 때만 패치를 만든다. 이력이 없거나 모호한데 +1을 합성하면
+        # last_approved_snapshot이라는 사용자 계약을 위반한다.
         previous = previous_replicas_from_changes(authority, replicas)
+        strategy = first_str(selected.draft.params.get("strategy"))
+        if strategy == "last_approved_snapshot" and previous is None:
+            return []
         desired = previous if previous is not None else replicas + 1
         if desired == replicas or not 1 <= desired < 10:
             return []

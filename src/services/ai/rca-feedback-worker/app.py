@@ -13,9 +13,11 @@ from domains.rca.events import (
     RcaFollowupRequiredBody,
     RecoveryPlannedBody,
 )
+from domains.scm.events import SafePrFailedBody
 from packages.contracts.event_bus.bodies import EventBody, JsonObject
 from packages.contracts.event_bus.bodies.platform import PipelineContractFailedBody
-from packages.runtime.app import App
+from packages.contracts.stores import RecoveryPlanStore
+from packages.runtime.app import App, EventContext
 from services.ai.agent.recovery.engine import RecoveryPlanner
 
 app = App("rca-feedback-worker")
@@ -63,6 +65,16 @@ MISSING_EVIDENCE_LABELS = {
     "supported_patch_action": "지원 가능한 Safe PR patch action",
     "manifest_patch": "구체적인 manifest patch",
 }
+RETRYABLE_RECOVERY_REASON_CODES = frozenset(
+    {
+        "gitops_authority_unavailable",
+        "gitops_authority_mismatch",
+        "safe_pr_patch_missing",
+        "safe_pr_patch_unsupported",
+        "safe_pr_preflight_failed",
+        "safe_pr_preflight_unavailable",
+    }
+)
 
 planner = RecoveryPlanner()
 
@@ -190,7 +202,18 @@ def blocked_recovery_plan(evt: RcaAnalysisBlockedBody) -> RecoveryPlannedBody | 
 
 
 @app.on(RcaActionRequiredBody)
-async def on_rca_action_required(evt: RcaActionRequiredBody) -> AsyncIterator[EventBody]:
+async def on_rca_action_required(
+    evt: RcaActionRequiredBody,
+    ctx: EventContext[RecoveryPlanStore],
+) -> AsyncIterator[EventBody]:
+    if evt.reason_code in RETRYABLE_RECOVERY_REASON_CODES:
+        allowed = await reopen_recovery_selection(
+            ctx,
+            evt.workspace_id,
+            evt.diagnostics,
+        )
+        if not allowed:
+            return
     yield RcaFollowupRequiredBody(
         reason_code=evt.reason_code,
         summary=followup_summary(evt.reason_code, evt.reason),
@@ -205,6 +228,107 @@ async def on_rca_action_required(evt: RcaActionRequiredBody) -> AsyncIterator[Ev
             "agent_safe": True,
         },
     )
+
+
+@app.on(SafePrFailedBody)
+async def on_recovery_safe_pr_failed(
+    evt: SafePrFailedBody,
+    ctx: EventContext[RecoveryPlanStore],
+) -> AsyncIterator[EventBody]:
+    identity = await failed_safe_pr_recovery_identity(evt, ctx)
+    if identity is None:
+        return
+    plan_id, action_id = identity
+    reopened = await ctx.db.reopen_recovery_plan_action(
+        plan_id,
+        evt.workspace_id,
+        action_id,
+    )
+    if not reopened:
+        return
+    yield RcaFollowupRequiredBody(
+        reason_code=evt.reason_code,
+        summary=followup_summary(evt.reason_code, evt.reason),
+        evidence_ref=str(evt.details.get("evidence_ref") or "unknown"),
+        workspace_id=evt.workspace_id,
+        severity=SEVERITY_WARNING,
+        next_actions=[
+            {
+                "action_type": "retry_recovery_action",
+                "description": "차단 원인을 해결한 뒤 같은 복구 후보를 다시 선택합니다.",
+            }
+        ],
+        diagnostics={
+            **evt.details,
+            "plan_id": plan_id,
+            "action_id": action_id,
+            "source_event": evt.__subject__,
+            "agent_safe": True,
+            "retryable": True,
+        },
+    )
+
+
+async def failed_safe_pr_recovery_identity(
+    evt: SafePrFailedBody,
+    ctx: EventContext[RecoveryPlanStore],
+) -> tuple[str, str] | None:
+    approval_ref = evt.details.get("approval_ref")
+    if isinstance(approval_ref, str) and approval_ref.strip():
+        approval = await ctx.db.get_workflow_approval(
+            approval_ref.strip(),
+            evt.workspace_id,
+        )
+        if isinstance(approval, dict):
+            approval_details = approval.get("details")
+            if isinstance(approval_details, dict):
+                plan_id = text_value(approval_details.get("recovery_plan_id"))
+                action_id = text_value(approval_details.get("recovery_action_id"))
+                if plan_id and action_id:
+                    return plan_id, action_id
+    record = await ctx.db.get_recovery_plan_by_correlation(
+        ctx.correlation_id,
+        evt.workspace_id,
+    )
+    if not isinstance(record, dict) or record.get("status") != "selected":
+        return None
+    plan_id = text_value(record.get("plan_id"))
+    action_id = text_value(record.get("selected_action_id"))
+    if not plan_id or not action_id:
+        return None
+    return plan_id, action_id
+
+
+async def reopen_recovery_selection(
+    ctx: EventContext[RecoveryPlanStore],
+    workspace_id: str,
+    diagnostics: JsonObject,
+) -> bool:
+    plan_id = text_value(diagnostics.get("plan_id"))
+    action_id = text_value(diagnostics.get("action_id"))
+    if not plan_id or not action_id:
+        return True
+    reopened = await ctx.db.reopen_recovery_plan_action(
+        plan_id,
+        workspace_id,
+        action_id,
+    )
+    if reopened:
+        return True
+    record = await ctx.db.get_recovery_plan_by_correlation(
+        ctx.correlation_id,
+        workspace_id,
+    )
+    return bool(
+        isinstance(record, dict)
+        and text_value(record.get("plan_id")) == plan_id
+        and record.get("status") == "selection_requested"
+        and record.get("selected_action_id") is None
+    )
+
+
+def text_value(value: object) -> str:
+    return value.strip() if isinstance(value, str) else ""
 
 
 @app.on(PipelineContractFailedBody)

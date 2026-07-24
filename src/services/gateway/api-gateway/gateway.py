@@ -37,7 +37,6 @@ from domains.diagnostics.router import router as diagnostics_router
 from domains.gitops.detail_router import router as gitops_detail_router
 from domains.gitops.overview_router import router as gitops_overview_router
 from domains.gitops.repository_discovery_router import router as repository_discovery_router
-from domains.scm.app_router import router as github_app_router
 from domains.gitops.router import approval_router
 from domains.gitops.router import router as gitops_router
 from domains.gitops_filter.router import router as gitops_filter_router
@@ -66,6 +65,7 @@ from domains.rca_bundle.router import router as rca_bundle_router
 from domains.rca_changes.router import router as rca_changes_router
 from domains.release_flow.router import router as release_flow_router
 from domains.resource_access.router import router as resource_access_router
+from domains.scm.app_router import router as github_app_router
 from domains.service_access.router import router as service_access_router
 from domains.shell_state.router import router as shell_state_router
 from domains.target.events import AgentConnectedBody
@@ -91,6 +91,7 @@ from packages.contracts.gateway.responses import (
 )
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID, ClusterRegistrationStatus, ServiceRole
 from packages.events.bus import NatsEventBus
+from packages.runtime.async_db import AsyncDb
 from packages.runtime.command_wakeup import COMMAND_NOTIFY_DATABASE_URL_ENV, WAKEUP
 from packages.runtime.gateway import ApiEventGateway
 from packages.runtime.metrics import (
@@ -110,6 +111,8 @@ from packages.storage.sessions import (
     SessionStoreUnavailable,
 )
 from services.ai.agent.playbooks.cause import registered_cause_profiles
+from services.ai.agent.recovery.authority import DatabaseGitOpsAuthorityReadPort
+from services.ai.agent.recovery.dispatch import RecoveryActionPreflight
 from services.mcp.internal_control.ai_runtime import request_context_mcp_engine
 
 LOGGER = get_logger(__name__)
@@ -276,6 +279,9 @@ class ApiGateway:
         self.app.state.auth = self.auth
         self.app.state.password_auth = self.password_auth
         self.app.state.rca_rule_profiles = registered_cause_profiles()
+        self.app.state.recovery_action_preflight = RecoveryActionPreflight(
+            DatabaseGitOpsAuthorityReadPort(AsyncDb(self.db))
+        )
         self.configure_routes()
 
     @staticmethod

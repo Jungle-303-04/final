@@ -398,24 +398,35 @@ export function useIncidentRecentChanges(incidentId: string | null): IncidentRec
  * read-only observation of the server-generated candidates; it never executes a
  * recovery. Without a correlation id the feed stays `idle` (nothing to observe).
  */
-export function useRecoveryPlan(correlationId?: string | null): RecoveryPlanFeed {
+export function useRecoveryPlan(
+  correlationId?: string | null,
+  pollMs = 0,
+): RecoveryPlanFeed {
   const [feed, setFeed] = useState<RecoveryPlanFeed>(
     () => ({ status: correlationId ? "loading" : "idle", plan: null }),
   );
   useEffect(() => {
     if (!correlationId) return;
     const controller = new AbortController();
-    void getRecoveryPlanByCorrelation(correlationId, { signal: controller.signal })
-      .then((plan) => {
-        if (controller.signal.aborted) return;
-        setFeed({ status: "ready", plan });
-      })
-      .catch((cause: unknown) => {
-        if (controller.signal.aborted || isAbortError(cause)) return;
-        setFeed({ status: "unavailable", plan: null });
-    });
-    return () => controller.abort();
-  }, [correlationId]);
+    let timer: number | undefined;
+    const load = () => {
+      void getRecoveryPlanByCorrelation(correlationId, { signal: controller.signal })
+        .then((plan) => {
+          if (controller.signal.aborted) return;
+          setFeed({ status: "ready", plan });
+        })
+        .catch((cause: unknown) => {
+          if (controller.signal.aborted || isAbortError(cause)) return;
+          setFeed({ status: "unavailable", plan: null });
+        });
+    };
+    load();
+    if (pollMs > 0) timer = window.setInterval(load, pollMs);
+    return () => {
+      controller.abort();
+      if (timer !== undefined) window.clearInterval(timer);
+    };
+  }, [correlationId, pollMs]);
   return feed;
 }
 

@@ -15,6 +15,7 @@ from packages.contracts.event_bus.bodies import EventBody, JsonObject
 from packages.contracts.stores import RcaStore
 from packages.runtime.app import App, EventContext
 from services.ai.agent.pipeline import EvidencePipeline
+from services.ai.agent.workload_target import WorkloadTarget, resolve_workload_target
 
 app = App("evidence-worker")
 pipeline = EvidencePipeline()
@@ -74,14 +75,20 @@ async def attach_gitops_change_context(
     ctx: EventContext[RcaStore],
 ) -> ClusterEvidenceReceivedBody:
     resource = evidence_resource(evt.kubernetes)
+    target = resolve_workload_target(
+        resource.get("namespace"),
+        resource.get("kind"),
+        resource.get("name"),
+        evt.metadata,
+    )
     changed_before = evt.window_start or ctx.created_at or datetime.now(UTC).isoformat()
     if not all(
         [
             evt.workspace_id,
             evt.cluster_id,
-            resource.get("namespace"),
-            resource.get("kind"),
-            resource.get("name"),
+            target.namespace,
+            target.resource_kind,
+            target.resource_name,
             changed_before,
         ]
     ):
@@ -89,15 +96,15 @@ async def attach_gitops_change_context(
     changes = await ctx.db.list_recent_workload_changes_for_evidence(
         evt.workspace_id,
         evt.cluster_id,
-        str(resource["namespace"]),
-        str(resource["kind"]),
-        str(resource["name"]),
+        target.namespace,
+        target.resource_kind,
+        target.resource_name,
         changed_before,
         limit=RECENT_CHANGE_LIMIT,
     )
     if not changes:
         return evt
-    metadata = merge_gitops_change_context(evt.metadata, changes)
+    metadata = merge_gitops_change_context(evt.metadata, changes, target=target)
     return replace(evt, metadata=metadata)
 
 
@@ -112,7 +119,12 @@ def evidence_resource(kubernetes: JsonObject) -> JsonObject:
     }
 
 
-def merge_gitops_change_context(metadata: JsonObject, changes: list[JsonObject]) -> JsonObject:
+def merge_gitops_change_context(
+    metadata: JsonObject,
+    changes: list[JsonObject],
+    *,
+    target: WorkloadTarget | None = None,
+) -> JsonObject:
     merged = dict(metadata)
     change_context = (
         dict(merged.get("change_context")) if isinstance(merged.get("change_context"), dict) else {}
@@ -122,7 +134,13 @@ def merge_gitops_change_context(metadata: JsonObject, changes: list[JsonObject])
     recent_changes.extend(recent_change_payload(change) for change in changes)
     change_context["recent_changes"] = recent_changes
     latest = changes[0]
-    change_context.setdefault("gitops", gitops_context_payload(latest))
+    # GitOps identity와 target lineage는 agent 입력이 아니라 서버의 exact
+    # workload-change 조회 결과만 권위로 사용한다.
+    change_context["gitops"] = gitops_context_payload(latest)
+    for key in ("gitops_target", "original_target", "gitops_target_resolution"):
+        change_context.pop(key, None)
+    if target is not None:
+        change_context.update(target.resolution_metadata())
     image_context = image_context_payload(latest)
     if image_context:
         change_context.setdefault("image", image_context)
@@ -155,7 +173,13 @@ def recent_change_payload(change: JsonObject) -> JsonObject:
 
 def gitops_context_payload(change: JsonObject) -> JsonObject:
     payload: JsonObject = {
+        "workspace_id": optional_text(change.get("workspace_id")),
+        "cluster_id": optional_text(change.get("cluster_id")),
+        "namespace": optional_text(change.get("namespace")),
+        "resource_kind": optional_text(change.get("resource_kind")),
+        "resource_name": optional_text(change.get("resource_name")),
         "repository_id": optional_text(change.get("repository_id")),
+        "binding_id": optional_text(change.get("binding_id")),
         "repo_ref": optional_text(change.get("repo_ref")),
         "manifest_path": optional_text(change.get("manifest_path")),
         "commit_sha": optional_text(change.get("commit_sha")),

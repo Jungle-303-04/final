@@ -414,12 +414,15 @@ class RcaChangesRepository(DatabaseConnection):
         statement = (
             select(
                 change.c.event_id,
+                change.c.workspace_id,
+                change.c.cluster_id,
                 change.c.changed_at,
                 change.c.image_before,
                 change.c.image_after,
                 reference.c.pr_url,
                 change.c.commit_sha,
                 change.c.repository_id,
+                change.c.binding_id,
                 change.c.repo_ref,
                 change.c.workflow_run_id,
                 change.c.namespace,

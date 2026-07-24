@@ -1,5 +1,7 @@
 from domains.rca.events import HealingActionDraft, RecoveryActionCandidate, RecoveryPlan
+from domains.scm.events import SafePrFilePatch, SafePrRequestedBody
 from services.ai.agent.recovery.dispatch import (
+    build_safe_pr_request_body,
     recovery_safe_pr_body,
     recovery_safe_pr_title,
 )
@@ -95,3 +97,23 @@ def test_recovery_safe_pr_title_collapses_whitespace_and_limits_length() -> None
     assert "\n" not in title
     assert len(title) <= 120
     assert title.endswith("…")
+
+
+def test_recovery_safe_pr_always_uses_pull_request_delivery() -> None:
+    patch = SafePrFilePatch(
+        path="deploy/k8s/payment-api.yaml",
+        content="apiVersion: apps/v1\nkind: Deployment\n",
+    )
+
+    for risk_level in ("low", "medium", "high"):
+        candidate = recovery_candidate(risk_level=risk_level)
+
+        request = build_safe_pr_request_body(
+            recovery_plan(candidate),
+            candidate,
+            "default",
+            [patch],
+        )
+
+        assert isinstance(request, SafePrRequestedBody)
+        assert request.delivery == "pull_request"

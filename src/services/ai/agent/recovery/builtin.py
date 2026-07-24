@@ -184,30 +184,6 @@ class NetworkRecoveryActions:
     root_causes=("lobby_capacity_saturation",),
     actions=(
         RecoveryActionSpec(
-            action_type="deployment_scale",
-            title="로비(매치메이킹) replica 증설",
-            description=(
-                "입장 요청 처리 한도는 로비 인스턴스 수에 비례합니다. 로비 Deployment 를 "
-                "3 replicas 로 증설해 매치메이킹 거절을 즉시 완화합니다."
-            ),
-            route=routes.auto,
-            risk_level="medium",
-            score=0.72,
-            blast_radius="target_workload",
-            approval_required=True,
-            prerequisites=(
-                "대상이 로비(매치메이킹) Deployment 로 특정됨",
-                "클러스터에 추가 replica 를 수용할 리소스 여유가 있음",
-            ),
-            validation_checks=(
-                "로비 pod 수 증가·Ready 도달",
-                "매치메이킹 실패율(find_game_fail_ratio) 하락",
-                "입장 거절 로그(find_game_rejected) 감소",
-            ),
-            rollback_plan="replica 수를 배포 이전 값으로 되돌립니다.",
-            params={"command": "deployment_scale", "replicas": 3},
-        ),
-        RecoveryActionSpec(
             action_type="replica_scale",
             title="로비 replicas 원복 PR",
             description=(
@@ -216,7 +192,7 @@ class NetworkRecoveryActions:
             ),
             route=routes.safe_pr,
             risk_level="medium",
-            score=0.6,
+            score=0.72,
             blast_radius="target_workload",
             approval_required=True,
             prerequisites=(

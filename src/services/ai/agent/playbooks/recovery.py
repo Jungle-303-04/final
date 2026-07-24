@@ -14,6 +14,7 @@ from domains.rca.events import (
 from packages.config.constants import Sandbox
 from packages.contracts.event_bus.bodies import JsonObject
 from services.ai.agent.defaults import RecoveryDefaults
+from services.ai.agent.workload_target import resolved_target_from_metadata
 
 
 @dataclass(frozen=True)
@@ -29,7 +30,7 @@ class RecoveryContext:
 
     @property
     def target(self) -> JsonObject:
-        return {
+        target: JsonObject = {
             "cluster_id": self.incident.cluster_id,
             "workspace_id": self.incident.workspace_id,
             "namespace": self.incident.namespace,
@@ -38,6 +39,15 @@ class RecoveryContext:
             "symptom": self.incident.symptom,
             "severity": self.incident.severity,
         }
+        change_context = recovery_change_context(self.report)
+        resolved = resolved_target_from_metadata(
+            self.incident.namespace,
+            self.incident.resource_kind,
+            self.incident.resource_name,
+            change_context,
+        )
+        target.update(resolved.resolution_metadata())
+        return target
 
 
 class RecoveryRule(Protocol):
@@ -191,3 +201,15 @@ def build_recovery_context(report: RcaCompletedBody) -> RecoveryContext | None:
         detail=report.rca_detail,
         evidence_ref=report.evidence_ref,
     )
+
+
+def recovery_change_context(report: RcaCompletedBody) -> JsonObject:
+    bundle = report.evidence_bundle
+    if bundle is None:
+        return {}
+    matches = [
+        item.value
+        for item in bundle.items
+        if item.source == "metadata" and item.name == "change_context"
+    ]
+    return dict(matches[0]) if len(matches) == 1 else {}

@@ -85,6 +85,110 @@ describe("recoveryProgressState", () => {
     });
   });
 
+  it("lets a backend authority blocker override the accepted selection", () => {
+    expect(recoveryProgressState({
+      actionRoute: "safe_pr",
+      selectionAccepted: true,
+      audit: [{
+        event_id: "blocked",
+        subject: "rca.action_required",
+        source: "dispatch-worker",
+        created_at: "2026-07-24T01:00:01Z",
+        causation_id: null,
+        journey_stage: "recovery",
+        payload_summary: {
+          reason_code: "gitops_authority_unavailable",
+          reason: "승인 snapshot·binding·repository 권위 context를 확보하지 못했습니다.",
+        },
+      }],
+    })).toMatchObject({
+      phase: "blocked",
+      label: "추가 설정 필요",
+      step: 1,
+      tone: "failed",
+    });
+  });
+
+  it("ignores a blocker from an older recovery attempt after a new selection", () => {
+    expect(recoveryProgressState({
+      actionRoute: "safe_pr",
+      selectionAccepted: true,
+      audit: [
+        {
+          event_id: "old-blocker",
+          subject: "rca.action_required",
+          source: "dispatch-worker",
+          created_at: "2026-07-24T01:00:00Z",
+          causation_id: null,
+          journey_stage: "recovery",
+          payload_summary: {
+            reason_code: "gitops_authority_unavailable",
+            reason: "old attempt failed",
+          },
+        },
+        {
+          event_id: "new-selection",
+          subject: "recovery.action_selected",
+          source: "api-gateway",
+          created_at: "2026-07-24T01:01:00Z",
+          causation_id: null,
+          journey_stage: "recovery",
+          payload_summary: {},
+        },
+      ],
+    })).toMatchObject({
+      phase: "submitting",
+      label: "PR 생성 요청됨",
+      latestEvent: { event_id: "new-selection" },
+    });
+  });
+
+  it("applies only a blocker emitted after the latest recovery selection", () => {
+    expect(recoveryProgressState({
+      actionRoute: "safe_pr",
+      selectionAccepted: true,
+      audit: [
+        {
+          event_id: "old-blocker",
+          subject: "rca.action_required",
+          source: "dispatch-worker",
+          created_at: "2026-07-24T01:00:00Z",
+          causation_id: null,
+          journey_stage: "recovery",
+          payload_summary: {
+            reason_code: "gitops_authority_unavailable",
+            reason: "old attempt failed",
+          },
+        },
+        {
+          event_id: "new-selection",
+          subject: "recovery.action_selected",
+          source: "api-gateway",
+          created_at: "2026-07-24T01:01:00Z",
+          causation_id: null,
+          journey_stage: "recovery",
+          payload_summary: {},
+        },
+        {
+          event_id: "new-blocker",
+          subject: "rca.action_required",
+          source: "dispatch-worker",
+          created_at: "2026-07-24T01:02:00Z",
+          causation_id: "new-selection",
+          journey_stage: "recovery",
+          payload_summary: {
+            reason_code: "gitops_authority_mismatch",
+            reason: "new attempt failed",
+          },
+        },
+      ],
+    })).toMatchObject({
+      phase: "blocked",
+      label: "추가 설정 필요",
+      latestEvent: { event_id: "new-blocker" },
+    });
+  });
+
   it("uses workflow terminal events without claiming the incident is resolved", () => {
     expect(recoveryProgressState({
       audit: [{

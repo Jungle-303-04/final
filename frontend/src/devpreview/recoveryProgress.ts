@@ -7,12 +7,13 @@ export type RecoveryProgressPhase =
   | "submitting"
   | "executing"
   | "verifying"
+  | "blocked"
   | "completed"
   | "failed";
 
 export interface RecoveryProgressState {
   phase: RecoveryProgressPhase;
-  label: "복구 대기" | "자동 복구 요청됨" | "PR 생성 요청됨" | "복구 요청됨" | "복구 실행 중" | "검증 중" | "PR 생성됨" | "PR 검토 필요" | "복구 완료" | "복구 실패";
+  label: "복구 대기" | "자동 복구 요청됨" | "PR 생성 요청됨" | "복구 요청됨" | "복구 실행 중" | "검증 중" | "PR 생성됨" | "PR 검토 필요" | "추가 설정 필요" | "복구 완료" | "복구 실패";
   step: number;
   tone: "waiting" | "approval" | "active" | "completed" | "failed";
   latestEvent: AuditTimelineItem | null;
@@ -29,7 +30,12 @@ export function withCreatedPullRequest(
   prUrl: string | null | undefined,
   label: "PR 생성됨" | "PR 검토 필요",
 ): RecoveryProgressState {
-  if (!prUrl?.trim() || progress.phase === "completed" || progress.phase === "failed") {
+  if (
+    !prUrl?.trim()
+    || progress.phase === "completed"
+    || progress.phase === "failed"
+    || progress.phase === "blocked"
+  ) {
     return progress;
   }
   return {
@@ -68,6 +74,18 @@ const FAILED_SUBJECTS = new Set([
   "safe_pr.failed",
   "workflow.failed",
   "workflow.run.failed",
+]);
+const BLOCKED_SUBJECTS = new Set([
+  "rca.action_required",
+  "rca.followup.required",
+]);
+const RETRYABLE_BLOCKER_CODES = new Set([
+  "gitops_authority_unavailable",
+  "gitops_authority_mismatch",
+  "safe_pr_patch_missing",
+  "safe_pr_patch_unsupported",
+  "safe_pr_preflight_failed",
+  "safe_pr_preflight_unavailable",
 ]);
 const COMPLETED_SUBJECTS = new Set(["incident.resolved"]);
 const VERIFYING_SUBJECTS = new Set([
@@ -108,9 +126,21 @@ export function recoveryProgressState({
   const normalizedStatus = normalize(status);
   const normalizedSubject = normalize(currentSubject);
   const normalizedRoute = normalize(actionRoute);
-  const latestEvent = audit[0] ?? null;
-  const subjects = audit.map((event) => normalize(event.subject));
+  const currentAudit = currentRecoveryAttemptAudit(audit);
+  const latestEvent = currentAudit[0] ?? null;
+  const subjects = currentAudit.map((event) => normalize(event.subject));
+  const hasRetryableBlocker = currentAudit.some(isRetryableRecoveryBlocker);
 
+  if (
+    (
+      BLOCKED_SUBJECTS.has(normalizedSubject)
+      && currentAudit.some((event) => normalize(event.subject) === normalizedSubject)
+      && hasRetryableBlocker
+    )
+    || hasRetryableBlocker
+  ) {
+    return state("blocked", "추가 설정 필요", 1, "failed", latestEvent);
+  }
   if (
     selectionFailed
     || FAILED_STATUSES.has(normalizedStatus)
@@ -167,6 +197,26 @@ export function recoveryProgressState({
     return state("waiting", "복구 대기", 0, "waiting", latestEvent);
   }
   return state("waiting", "복구 대기", 0, "waiting", latestEvent);
+}
+
+function isRetryableRecoveryBlocker(event: AuditTimelineItem): boolean {
+  if (!BLOCKED_SUBJECTS.has(normalize(event.subject))) return false;
+  const reasonCode = event.payload_summary.reason_code;
+  return typeof reasonCode === "string"
+    && RETRYABLE_BLOCKER_CODES.has(normalize(reasonCode));
+}
+
+export function currentRecoveryAttemptAudit(
+  audit: readonly AuditTimelineItem[],
+): AuditTimelineItem[] {
+  const ordered = [...audit].sort((left, right) => {
+    const time = Date.parse(right.created_at) - Date.parse(left.created_at);
+    return time || right.event_id.localeCompare(left.event_id);
+  });
+  const latestSelection = ordered.findIndex((event) =>
+    SELECTED_SUBJECTS.has(normalize(event.subject))
+  );
+  return latestSelection < 0 ? ordered : ordered.slice(0, latestSelection + 1);
 }
 
 function failureStep(status: string, subject: string, auditSubjects: readonly string[]): number {

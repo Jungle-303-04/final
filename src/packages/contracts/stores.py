@@ -95,6 +95,25 @@ class RecoveryPlanStore(Protocol):
         plan: JsonObject,
     ) -> None: ...
 
+    async def reopen_recovery_plan_action(
+        self,
+        plan_id: str,
+        workspace_id: str,
+        action_id: str,
+    ) -> bool: ...
+
+    async def get_recovery_plan_by_correlation(
+        self,
+        correlation_id: str,
+        workspace_id: str,
+    ) -> JsonObject | None: ...
+
+    async def get_workflow_approval(
+        self,
+        approval_id: str,
+        workspace_id: str = "default",
+    ) -> JsonObject | None: ...
+
 
 class RepoChangeStore(Protocol):
     async def save_repo_change(

@@ -28,6 +28,7 @@ import {
 import type { RcaReport } from "./api/evidence-schemas";
 import type { RecoveryActionAccepted, RecoveryActionCandidate, RecoveryPlan } from "./api/recovery-schemas";
 import type { RemediationBundleActionDraft } from "./api/rca-bundle-schemas";
+import { isApiError } from "./api/client";
 import { selectRecoveryAction } from "./api/recovery";
 import type { AiRecoveryHandoff, AiRecoveryPreview, AiRecoveryPreviewLine } from "./features/ai-assistant/aiRecoveryHandoff";
 import { isActiveRcaIssue } from "./devpreview/rcaIssuesFeed";
@@ -1636,7 +1637,10 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
   const recoveryListScrollTopRef = useRef(0);
   // 복구 후보는 실 계약(GET /api/rca/recovery-plans/by-correlation)에서만. 상관관계
   // id가 없으면(예: 지도 파생 진입) idle로 두고 관측 안 됨을 정직하게 표시한다.
-  const recovery = useRecoveryPlan(correlationId ?? null);
+  const recovery = useRecoveryPlan(
+    correlationId ?? null,
+    recoverySelectionAccepted ? 4000 : 0,
+  );
   const remediationBundle = useRemediationBundle(correlationId ?? null);
   const recoveryAudit = useRecoveryAudit(
     correlationId ?? null,
@@ -1729,6 +1733,30 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
     selectionAccepted: recoverySelectionAccepted,
     selectionFailed: recoverySelectionError !== null,
   });
+  useEffect(() => {
+    if (
+      recovery.plan?.status !== "selection_requested"
+      || recovery.plan.selected_action_id !== null
+      || !["blocked", "failed"].includes(recoveryProgress.phase)
+    ) {
+      return;
+    }
+    const reason = recoveryProgress.latestEvent?.payload_summary.reason;
+    const timer = window.setTimeout(() => {
+      setSelectedRecoveryActionId(null);
+      setRecoverySelectionAccepted(false);
+      if (typeof reason === "string" && reason.trim()) {
+        setRecoverySelectionError(reason.trim());
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [
+    recovery.plan?.status,
+    recovery.plan?.selected_action_id,
+    recoveryProgress.phase,
+    recoveryProgress.latestEvent?.event_id,
+    recoveryProgress.latestEvent?.payload_summary.reason,
+  ]);
   const auditPrUrl = recoveryAudit.items.find((event) => event.subject === "safe_pr.created")
     ?.payload_summary.pr_url;
   const effectiveRecoveryPrUrl = typeof auditPrUrl === "string" && auditPrUrl.trim()
@@ -1769,8 +1797,13 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
       setRecoverySelectionAccepted(true);
       onRecoverySelected?.(correlationId, selectedRoute, source);
       return receipt;
-    } catch {
-      setRecoverySelectionError("복구 조치를 선택하지 못했습니다. 권한과 현재 플랜 상태를 확인해 주세요.");
+    } catch (cause: unknown) {
+      setRecoverySelectionError(
+        isApiError(cause)
+          ? cause.detail ?? cause.message
+          : "복구 조치를 선택하지 못했습니다. 권한과 현재 플랜 상태를 확인해 주세요.",
+      );
+      if (source === "ai") throw cause;
       return null;
     } finally {
       setRecoverySelectionPendingId(null);

@@ -481,6 +481,34 @@ class RcaRepository(DatabaseConnection):
             row = conn.execute(statement).mappings().first()
         return dict(row) if row else None
 
+    def reopen_recovery_plan_action(
+        self,
+        plan_id: str,
+        workspace_id: str,
+        action_id: str,
+    ) -> bool:
+        """Retryable dispatch failure 뒤 같은 선택만 원자적으로 다시 연다."""
+
+        table = RecoveryPlanRecord.__table__
+        statement = (
+            table.update()
+            .where(
+                table.c.plan_id == plan_id,
+                table.c.workspace_id == workspace_id,
+                table.c.status == RECOVERY_PLAN_STATUS_SELECTED,
+                table.c.selected_action_id == action_id,
+            )
+            .values(
+                status=RECOVERY_PLAN_STATUS_SELECTION_REQUESTED,
+                selected_action_id=None,
+                selected_by=None,
+                updated_at=func.now(),
+            )
+            .returning(table.c.plan_id)
+        )
+        with self.connection() as conn:
+            return conn.execute(statement).scalar_one_or_none() is not None
+
     def save_rca_report(
         self,
         correlation_id: str,

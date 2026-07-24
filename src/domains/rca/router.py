@@ -20,6 +20,7 @@ from domains.identity.dependencies import (
 )
 from domains.rca.events import (
     ClusterEvidenceReceivedBody,
+    RcaActionRequiredBody,
     RecoveryActionCandidate,
     RecoveryActionSelectedBody,
     RecoveryPlan,
@@ -99,6 +100,7 @@ RCA_TEST_MANAGEMENT_CLUSTER_DENIED = "RCA test runs cannot target a management c
 RCA_TEST_TARGET_NOT_FOUND = "RCA test target cluster is not registered"
 RCA_TEST_TARGET_ENVIRONMENT_DENIED = "RCA test runs require a test or aws-test target"
 RCA_TEST_RUN_CONFLICT = "RCA test target already has an active run"
+SAFE_PR_ROUTES = frozenset({"draft_pr", "safe_pr"})
 
 
 class RcaRuleCandidateView(Protocol):
@@ -115,12 +117,25 @@ class RcaRuleProfileView(Protocol):
     candidate_specs: tuple[RcaRuleCandidateView, ...]
 
 
+class RecoveryActionPreflightPort(Protocol):
+    async def prepare(
+        self,
+        evt: RecoveryActionSelectedBody,
+        correlation_id: str,
+    ) -> RecoveryActionCandidate | RcaActionRequiredBody: ...
+
+
 def get_rca_rule_profiles(request: Request) -> tuple[RcaRuleProfileView, ...]:
     """Gateway composition이 주입한 AI rule profile read port를 반환한다."""
     profiles = getattr(request.app.state, "rca_rule_profiles", None)
     if profiles is None:
         raise RuntimeError("RCA rule catalog provider is not configured")
     return tuple(profiles)
+
+
+def get_recovery_action_preflight(request: Request) -> RecoveryActionPreflightPort | None:
+    configured = getattr(request.app.state, "recovery_action_preflight", None)
+    return configured
 
 
 def require_rca_test_api(
@@ -1037,6 +1052,7 @@ async def _select_recovery_action_from_record(
     current: Any,
     db: Any,
     events: Any,
+    preflight: RecoveryActionPreflightPort | None,
 ) -> AcceptedResponse:
     workspace_id = current.workspace_id
     plan = RecoveryPlan.from_body(record["payload"])
@@ -1052,6 +1068,50 @@ async def _select_recovery_action_from_record(
     if expected_plan_id is not None and plan.plan_id != expected_plan_id:
         raise HTTPException(status_code=HTTP_CONFLICT, detail=RECOVERY_PLAN_CHANGED)
     selected = candidate_by_action_id(plan, action_id or plan.recommended_action_id)
+    reason = reason or f"operator selected recovery action: {selected.title}"
+    correlation_id = str(record["correlation_id"])
+    if selected.route in SAFE_PR_ROUTES:
+        proposed = RecoveryActionSelectedBody(
+            plan=plan,
+            selected=selected,
+            selected_by=current.user_id,
+            auto_selected=False,
+            reason=reason,
+            workspace_id=workspace_id,
+        )
+        prepared: RecoveryActionCandidate | RcaActionRequiredBody
+        if preflight is None:
+            prepared = RcaActionRequiredBody(
+                reason="Safe PR 사전 검증 서비스가 준비되지 않았습니다.",
+                evidence_ref=plan.evidence_ref,
+                workspace_id=workspace_id,
+                reason_code="safe_pr_preflight_unavailable",
+                missing_evidence=["gitops_authority_context"],
+                diagnostics={
+                    "plan_id": plan.plan_id,
+                    "action_id": selected.action_id,
+                    "route": selected.route,
+                },
+            )
+        else:
+            prepared = await preflight.prepare(proposed, correlation_id)
+        if isinstance(prepared, RcaActionRequiredBody):
+            await events.accept_body(
+                prepared,
+                correlation_id=correlation_id,
+                actor=Actor(current.user_id, tuple(current.roles)),
+            )
+            raise HTTPException(
+                status_code=HTTP_CONFLICT,
+                detail={
+                    "code": prepared.reason_code,
+                    "detail": prepared.reason,
+                    "missing_evidence": prepared.missing_evidence,
+                    "next_actions": prepared.next_actions,
+                    "retryable": True,
+                },
+            )
+        selected = prepared
     approval_ref = recovery_approval_id(plan.plan_id, selected.action_id)
     policy_decision_ref = recovery_policy_decision_ref(approval_ref)
     selected = candidate_with_approval(
@@ -1059,7 +1119,6 @@ async def _select_recovery_action_from_record(
         approval_ref=approval_ref,
         policy_decision_ref=policy_decision_ref,
     )
-    reason = reason or f"operator selected recovery action: {selected.title}"
     with unit_of_work_or_null(db):
         selected_record = db.select_recovery_plan_action_if_open(
             plan.plan_id,
@@ -1090,7 +1149,7 @@ async def _select_recovery_action_from_record(
                 reason=reason,
                 workspace_id=workspace_id,
             ),
-            correlation_id=str(record["correlation_id"]),
+            correlation_id=correlation_id,
             actor=Actor(current.user_id, tuple(current.roles)),
         )
     return AcceptedResponse(
@@ -1108,6 +1167,7 @@ async def select_recovery_action(
     current: Any = Depends(require_session),
     db: Any = Depends(get_db),
     events: Any = Depends(get_events),
+    preflight: RecoveryActionPreflightPort | None = Depends(get_recovery_action_preflight),
 ) -> AcceptedResponse:
     record = await db_call(db.get_recovery_plan, plan_id, current.workspace_id)
     if record is None:
@@ -1120,6 +1180,7 @@ async def select_recovery_action(
         current=current,
         db=db,
         events=events,
+        preflight=preflight,
     )
 
 
@@ -1133,6 +1194,7 @@ async def select_recovery_action_by_correlation(
     current: Any = Depends(require_session),
     db: Any = Depends(get_db),
     events: Any = Depends(get_events),
+    preflight: RecoveryActionPreflightPort | None = Depends(get_recovery_action_preflight),
 ) -> AcceptedResponse:
     record = await db_call(
         db.get_recovery_plan_by_correlation,
@@ -1149,6 +1211,7 @@ async def select_recovery_action_by_correlation(
         current=current,
         db=db,
         events=events,
+        preflight=preflight,
     )
 
 

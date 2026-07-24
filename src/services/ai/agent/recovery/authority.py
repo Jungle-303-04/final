@@ -11,6 +11,10 @@ from packages.contracts.gitops_authority import (
     GitOpsAuthorityQuery,
     GitOpsAuthorityReadPort,
 )
+from services.ai.agent.workload_target import (
+    WORKLOAD_SNAPSHOT_SOURCE,
+    resolve_workload_target,
+)
 
 GITOPS_CHANGE_CONTEXT_EVIDENCE_KIND = "gitops_change_context"
 RCA_EVIDENCE_KIND = "rca_bundle"
@@ -29,32 +33,57 @@ class DatabaseGitOpsAuthorityReadPort(GitOpsAuthorityReadPort):
     ) -> GitOpsAuthorityContext | None:
         if self.db is None:
             return None
-        gitops = await self.db.get_evidence_payload(
+        exact = await self.db.get_evidence_payload(
             query.workspace_id,
             query.correlation_id,
             GITOPS_CHANGE_CONTEXT_EVIDENCE_KIND,
         )
-        if not isinstance(gitops, Mapping):
-            return None
-        identity = identity_from_evidence(gitops)
+        if isinstance(exact, Mapping):
+            # 같은 correlation의 권위 이벤트가 존재하면 그것만 신뢰한다. 손상된
+            # exact record를 RCA fallback으로 우회하면 변조를 숨길 수 있다.
+            identity = identity_from_evidence(exact)
+            if not all(
+                text(identity, key)
+                for key in ("application_id", "environment", "branch")
+            ):
+                return None
+        evidence = await self.db.get_evidence_payload(
+            query.workspace_id,
+            query.correlation_id,
+            RCA_EVIDENCE_KIND,
+        )
+        evidence = dict(evidence) if isinstance(evidence, Mapping) else {}
+        if not isinstance(exact, Mapping):
+            identity = identity_from_rca_evidence(evidence)
         if not identity_matches_query(identity, query):
             return None
 
         workflow_run_id = text(identity, "workflow_run_id")
-        application_id = text(identity, "application_id")
         binding_id = text(identity, "binding_id")
         commit_sha = text(identity, "commit_sha")
         manifest_path = text(identity, "manifest_path")
         run = await self.db.get_workflow_run(workflow_run_id)
+        if not isinstance(run, Mapping):
+            return None
+        run = dict(run)
+        identity = enriched_identity(identity, run)
+        application_id = text(identity, "application_id")
         diff = await self.db.get_workflow_step_details(workflow_run_id, "diff")
         application = await self.db.get_application(query.workspace_id, application_id)
         binding = await self.db.get_deployment_binding(query.workspace_id, binding_id)
-        if not all(isinstance(value, Mapping) for value in (run, diff, application, binding)):
+        if not all(isinstance(value, Mapping) for value in (diff, application, binding)):
             return None
-        run = dict(run)
         diff = dict(diff)
         application = dict(application)
         binding = dict(binding)
+        identity = enriched_identity(identity, application)
+        repository = await self.db.get_repository_by_ref(
+            query.workspace_id,
+            text(identity, "repo_ref"),
+        )
+        if not isinstance(repository, Mapping):
+            return None
+        repository = dict(repository)
         basis = mapping(diff.get("basis"))
         desired = mapping(diff.get("desired_manifest"))
         resource = text(diff, "resource")
@@ -70,12 +99,6 @@ class DatabaseGitOpsAuthorityReadPort(GitOpsAuthorityReadPort):
         if not isinstance(provenance, Mapping):
             return None
         provenance = dict(provenance)
-        evidence = await self.db.get_evidence_payload(
-            query.workspace_id,
-            query.correlation_id,
-            RCA_EVIDENCE_KIND,
-        )
-        evidence = dict(evidence) if isinstance(evidence, Mapping) else {}
         if not authority_rows_match(
             query,
             identity,
@@ -83,6 +106,7 @@ class DatabaseGitOpsAuthorityReadPort(GitOpsAuthorityReadPort):
             diff,
             application,
             binding,
+            repository,
             provenance,
             desired,
             artifact_digest,
@@ -132,6 +156,106 @@ def identity_from_evidence(payload: Mapping[str, object]) -> dict[str, object]:
     }
 
 
+def identity_from_rca_evidence(payload: Mapping[str, object]) -> dict[str, object]:
+    """evidence-worker가 incident 시점 workload change에서 붙인 identity만 읽는다."""
+
+    metadata = mapping(payload.get("metadata"))
+    change_context = mapping(metadata.get("change_context"))
+    gitops = mapping(change_context.get("gitops"))
+    if not gitops or not rca_target_lineage_is_consistent(payload, change_context, gitops):
+        return {}
+    resource_kind = text(gitops, "resource_kind")
+    resource_name = text(gitops, "resource_name")
+    return {
+        "workspace_id": gitops.get("workspace_id"),
+        "repository_id": gitops.get("repository_id"),
+        "binding_id": gitops.get("binding_id"),
+        "workflow_run_id": gitops.get("workflow_run_id"),
+        "cluster_id": gitops.get("cluster_id"),
+        "commit_sha": gitops.get("commit_sha"),
+        "manifest_path": gitops.get("manifest_path"),
+        "repo_ref": gitops.get("repo_ref"),
+        "resource": f"{resource_kind}/{resource_name}",
+        "namespace": gitops.get("namespace"),
+    }
+
+
+def rca_target_lineage_is_consistent(
+    payload: Mapping[str, object],
+    change_context: Mapping[str, object],
+    gitops: Mapping[str, object],
+) -> bool:
+    gitops_target = {
+        "namespace": text(gitops, "namespace"),
+        "resource_kind": text(gitops, "resource_kind"),
+        "resource_name": text(gitops, "resource_name"),
+    }
+    if not all(gitops_target.values()):
+        return False
+    kubernetes_resource = mapping(mapping(payload.get("kubernetes")).get("resource"))
+    incident_target = {
+        "namespace": text(kubernetes_resource, "namespace"),
+        "resource_kind": text(kubernetes_resource, "kind"),
+        "resource_name": text(kubernetes_resource, "name"),
+    }
+    declared_target = normalized_target(change_context.get("gitops_target"))
+    declared_original = normalized_target(change_context.get("original_target"))
+    resolution = text(change_context, "gitops_target_resolution")
+    if resolution or any(declared_target.values()) or any(declared_original.values()):
+        trusted_resolution = resolve_workload_target(
+            incident_target["namespace"],
+            incident_target["resource_kind"],
+            incident_target["resource_name"],
+            mapping(payload.get("metadata")),
+        )
+        return bool(
+            resolution == WORKLOAD_SNAPSHOT_SOURCE
+            and trusted_resolution.resolved
+            and targets_equal(trusted_resolution.identity(), declared_target)
+            and targets_equal(declared_target, gitops_target)
+            and targets_equal(declared_original, incident_target)
+            and declared_original["namespace"] == declared_target["namespace"]
+            and declared_original["resource_kind"].casefold() in {"pod", "replicaset"}
+            and declared_target["resource_kind"].casefold() == "deployment"
+        )
+    return targets_equal(gitops_target, incident_target)
+
+
+def normalized_target(value: object) -> dict[str, str]:
+    target = mapping(value)
+    return {
+        "namespace": text(target, "namespace"),
+        "resource_kind": text(target, "resource_kind"),
+        "resource_name": text(target, "resource_name"),
+    }
+
+
+def targets_equal(left: Mapping[str, str], right: Mapping[str, str]) -> bool:
+    return bool(
+        left.get("namespace")
+        and left.get("namespace") == right.get("namespace")
+        and left.get("resource_kind", "").casefold()
+        == right.get("resource_kind", "").casefold()
+        and left.get("resource_name")
+        and left.get("resource_name") == right.get("resource_name")
+    )
+
+
+def enriched_identity(
+    identity: Mapping[str, object],
+    row: Mapping[str, object],
+) -> dict[str, object]:
+    enriched = dict(identity)
+    for key, row_key in (
+        ("application_id", "application_id"),
+        ("environment", "environment"),
+        ("branch", "default_branch"),
+    ):
+        if not text(enriched, key):
+            enriched[key] = row.get(row_key)
+    return enriched
+
+
 def identity_matches_query(
     identity: Mapping[str, object],
     query: GitOpsAuthorityQuery,
@@ -140,6 +264,10 @@ def identity_matches_query(
     return bool(
         text(identity, "workspace_id") == query.workspace_id
         and text(identity, "cluster_id") == query.cluster_id
+        and (
+            not text(identity, "namespace")
+            or text(identity, "namespace") == query.namespace
+        )
         and resource_kind.casefold() == query.resource_kind.casefold()
         and resource_name == query.resource_name
         and all(
@@ -147,13 +275,10 @@ def identity_matches_query(
             for key in (
                 "repository_id",
                 "binding_id",
-                "application_id",
                 "workflow_run_id",
-                "environment",
                 "commit_sha",
                 "manifest_path",
                 "repo_ref",
-                "branch",
             )
         )
     )
@@ -166,6 +291,7 @@ def authority_rows_match(
     diff: Mapping[str, object],
     application: Mapping[str, object],
     binding: Mapping[str, object],
+    repository: Mapping[str, object],
     provenance: Mapping[str, object],
     desired: Mapping[str, object],
     artifact_digest: str,
@@ -200,16 +326,17 @@ def authority_rows_match(
     source_count = provenance.get("source_document_count")
     artifact_count = provenance.get("artifact_count")
     return bool(
-        desired.get("kind") == "Deployment"
+        text(desired, "kind").casefold() == query.resource_kind.casefold()
         and canonical_manifest_digest(desired) == artifact_digest
         and mapping(diff.get("basis")).get("old_desired_source") == "last_approved_snapshot"
-        and text(diff, "resource") == text(identity, "resource")
+        and resource_refs_equal(text(diff, "resource"), text(identity, "resource"))
         and text(diff, "namespace") == query.namespace
         and all(text(run, key) == value for key, value in run_exact.items())
         and all(text(diff, key) == value for key, value in diff_exact.items())
         and text(application, "application_id") == exact["application_id"]
         and text(application, "workspace_id") == query.workspace_id
         and text(application, "repository_id") == exact["repository_id"]
+        and text(application, "status") == "active"
         and text(application, "manifest_path") == exact["manifest_path"]
         and text(application, "repo_ref") == text(identity, "repo_ref")
         and text(application, "default_branch") == text(identity, "branch")
@@ -221,6 +348,11 @@ def authority_rows_match(
         and text(binding, "manifest_path") == exact["manifest_path"]
         and text(binding, "environment") == exact["environment"]
         and text(binding, "status") == "active"
+        and text(repository, "workspace_id") == query.workspace_id
+        and text(repository, "repository_id") == exact["repository_id"]
+        and text(repository, "repo_ref") == text(identity, "repo_ref")
+        and text(repository, "default_branch") == text(identity, "branch")
+        and text(repository, "status") == "active"
         and all(text(provenance, key) == value for key, value in provenance_exact.items())
         and text(provenance, "artifact_digest") == artifact_digest
         and text(provenance, "repo_ref") == text(identity, "repo_ref")
@@ -238,6 +370,18 @@ def authority_rows_match(
 
 def mapping(value: object) -> dict[str, Any]:
     return dict(value) if isinstance(value, Mapping) else {}
+
+
+def resource_refs_equal(left: str, right: str) -> bool:
+    left_kind, left_separator, left_name = left.partition("/")
+    right_kind, right_separator, right_name = right.partition("/")
+    return bool(
+        left_separator
+        and right_separator
+        and left_kind.casefold() == right_kind.casefold()
+        and left_name
+        and left_name == right_name
+    )
 
 
 def text(value: Mapping[str, object], key: str) -> str:
