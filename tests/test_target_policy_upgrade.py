@@ -170,3 +170,27 @@ def test_policy_upgrade_retries_a_persisted_incompatible_generation() -> None:
         if query.get("name") == TEMPO_RECENT_TRACE_QUERY_NAME
     )
     assert "range_seconds" not in retried_trace_query
+
+
+def test_policy_upgrade_skips_display_only_dashboard_cluster() -> None:
+    cluster_id = "apn2-match-prod"
+    plan = build_target_upgrade_plan(
+        registration={
+            "id": 9,
+            "workspace_id": "default",
+            "cluster_id": cluster_id,
+            "settings": {
+                "name": "apn2-match-prod",
+                "cluster_role": "display_only",
+                "image": OLD_IMAGE,
+            },
+        },
+        policy=default_agent_policy(cluster_id=cluster_id),
+        desired_states=[],
+        target_image=NEW_IMAGE,
+        rbac_actual_version=None,
+    )
+
+    assert plan.changed is False
+    assert plan.policy is None
+    assert plan.skipped_reason == "unsupported_cluster_role"
