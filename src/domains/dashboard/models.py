@@ -67,6 +67,13 @@ class RcaTimeline(Base):
             "ix_rca_timeline_open_cluster", "workspace_id", "cluster_id", "status", "incident_id"
         ),
         Index(
+            "ix_rca_timeline_occurrence",
+            "workspace_id",
+            "incident_occurrence_id",
+            "updated_at",
+            postgresql_where=text("incident_occurrence_id is not null"),
+        ),
+        Index(
             "ix_rca_timeline_workspace_incident",
             "workspace_id",
             "incident_id",
@@ -125,6 +132,7 @@ class RcaTimeline(Base):
     incident_resource_name: Mapped[str | None] = mapped_column(Text, nullable=True)
     incident_symptom: Mapped[str | None] = mapped_column(Text, nullable=True)
     incident_logical_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+    incident_occurrence_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     severity: Mapped[str | None] = mapped_column(Text, nullable=True)
     category: Mapped[str | None] = mapped_column(Text, nullable=True)
     environment: Mapped[str | None] = mapped_column(Text, nullable=True)

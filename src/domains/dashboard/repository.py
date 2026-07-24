@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Collection
 from datetime import timedelta
 from typing import Any
@@ -150,6 +151,10 @@ DEFAULT_PRE_INCIDENT_RETENTION_HOURS = 24
 DEFAULT_PRE_INCIDENT_RETENTION_LIMIT = 1000
 DEFAULT_EPHEMERAL_INCIDENT_RESOLVE_MINUTES = 5
 DEFAULT_EPHEMERAL_INCIDENT_RESOLVE_LIMIT = 500
+TERMINAL_INCIDENT_STATUSES: tuple[str, ...] = (
+    "incident_resolved",
+    "incident_expired",
+)
 EPHEMERAL_INCIDENT_RESOURCE_KINDS: tuple[str, ...] = ("Pod", "ReplicaSet")
 EPHEMERAL_INCIDENT_RESOURCE_KINDS_NORMALIZED = tuple(
     kind.casefold() for kind in EPHEMERAL_INCIDENT_RESOURCE_KINDS
@@ -242,6 +247,7 @@ def _rca_timeline_response_columns(*, include_issue_severity: bool = False) -> t
     if include_issue_severity:
         return (
             *columns,
+            table.c.incident_occurrence_id,
             table.c.severity,
             table.c.severity_complete,
             *issue_detail_projection_columns(table),
@@ -617,91 +623,106 @@ class DashboardRepository(DatabaseConnection):
             return conn.execute(statement).first() is not None
 
     def upsert_rca_timeline(self, row: JsonObject) -> None:
-        """correlation_id 단위로 최신 RCA 흐름 상태 갱신."""
+        """correlation 흐름을 장애 발생 회차에 묶어 최신 상태로 갱신."""
         table = RcaTimeline.__table__
-        insert = pg_insert(table).values(**row, updated_at=func.now())
-        preserve_when_missing = (
-            "cluster_id",
-            "incident_id",
-            "incident_namespace",
-            "incident_resource_kind",
-            "incident_resource_name",
-            "incident_symptom",
-            "incident_logical_key",
-            "evidence_ref",
-            "root_cause",
-            "confidence",
-            "supporting_evidence",
-            "missing_evidence",
-            "action_route",
-            "command_id",
-            "pr_url",
-        )
-        updates = {
-            key: func.coalesce(getattr(insert.excluded, key), getattr(table.c, key))
-            for key in preserve_when_missing
-        }
-        for value_name in (
-            "severity",
-            "category",
-            "environment",
-            "application_ids",
-            "labels",
-        ):
-            complete_name = f"{value_name}_complete"
-            existing_value = getattr(table.c, value_name)
-            incoming_value = getattr(insert.excluded, value_name)
-            existing_complete = getattr(table.c, complete_name)
-            incoming_complete = getattr(insert.excluded, complete_name)
-            updates[value_name] = case(
-                (existing_complete.is_(True), existing_value),
-                (incoming_complete.is_(True), incoming_value),
-                (existing_value.is_(None), incoming_value),
-                else_=existing_value,
-            )
-            updates[complete_name] = existing_complete | incoming_complete
-
-        newer_event = or_(
-            insert.excluded.last_event_at > table.c.last_event_at,
-            and_(
-                insert.excluded.last_event_at == table.c.last_event_at,
-                insert.excluded.last_event_id > table.c.last_event_id,
-            ),
-        )
-        updates.update(
-            current_subject=case(
-                (newer_event, insert.excluded.current_subject),
-                else_=table.c.current_subject,
-            ),
-            # Inventory recovery is the incident lifecycle authority. A late RCA
-            # completion replay may enrich the verdict, but must not reopen an
-            # already recovered issue in the operator queue.
-            status=case(
-                (table.c.status == "incident_resolved", table.c.status),
-                (newer_event, insert.excluded.status),
-                else_=table.c.status,
-            ),
-            error_reason=case(
-                (newer_event, insert.excluded.error_reason),
-                else_=table.c.error_reason,
-            ),
-            last_event_id=case(
-                (newer_event, insert.excluded.last_event_id),
-                else_=table.c.last_event_id,
-            ),
-            last_event_at=case(
-                (newer_event, insert.excluded.last_event_at),
-                else_=table.c.last_event_at,
-            ),
-            payload=case((newer_event, insert.excluded.payload), else_=table.c.payload),
-            updated_at=case((newer_event, func.now()), else_=table.c.updated_at),
-        )
-        statement = insert.on_conflict_do_update(
-            index_elements=[table.c.workspace_id, table.c.correlation_id],
-            set_=updates,
-        )
+        projected = dict(row)
         with self.connection() as conn:
+            occurrence_id = _resolve_incident_occurrence_id(conn, projected)
+            if occurrence_id is not None:
+                projected["incident_occurrence_id"] = occurrence_id
+            insert = pg_insert(table).values(**projected, updated_at=func.now())
+            preserve_when_missing = (
+                "cluster_id",
+                "incident_id",
+                "incident_namespace",
+                "incident_resource_kind",
+                "incident_resource_name",
+                "incident_symptom",
+                "incident_logical_key",
+                "incident_occurrence_id",
+                "evidence_ref",
+                "root_cause",
+                "confidence",
+                "supporting_evidence",
+                "missing_evidence",
+                "action_route",
+                "command_id",
+                "pr_url",
+            )
+            updates = {
+                key: func.coalesce(getattr(insert.excluded, key), getattr(table.c, key))
+                for key in preserve_when_missing
+            }
+            for value_name in (
+                "severity",
+                "category",
+                "environment",
+                "application_ids",
+                "labels",
+            ):
+                complete_name = f"{value_name}_complete"
+                existing_value = getattr(table.c, value_name)
+                incoming_value = getattr(insert.excluded, value_name)
+                existing_complete = getattr(table.c, complete_name)
+                incoming_complete = getattr(insert.excluded, complete_name)
+                updates[value_name] = case(
+                    (existing_complete.is_(True), existing_value),
+                    (incoming_complete.is_(True), incoming_value),
+                    (existing_value.is_(None), incoming_value),
+                    else_=existing_value,
+                )
+                updates[complete_name] = existing_complete | incoming_complete
+
+            newer_event = or_(
+                insert.excluded.last_event_at > table.c.last_event_at,
+                and_(
+                    insert.excluded.last_event_at == table.c.last_event_at,
+                    insert.excluded.last_event_id > table.c.last_event_id,
+                ),
+            )
+            updates.update(
+                current_subject=case(
+                    (newer_event, insert.excluded.current_subject),
+                    else_=table.c.current_subject,
+                ),
+                # Inventory recovery is the incident lifecycle authority. A late RCA
+                # completion replay may enrich the verdict, but must not reopen an
+                # already recovered issue in the operator queue.
+                status=case(
+                    (table.c.status == "incident_resolved", table.c.status),
+                    (newer_event, insert.excluded.status),
+                    else_=table.c.status,
+                ),
+                error_reason=case(
+                    (newer_event, insert.excluded.error_reason),
+                    else_=table.c.error_reason,
+                ),
+                last_event_id=case(
+                    (newer_event, insert.excluded.last_event_id),
+                    else_=table.c.last_event_id,
+                ),
+                last_event_at=case(
+                    (newer_event, insert.excluded.last_event_at),
+                    else_=table.c.last_event_at,
+                ),
+                payload=case((newer_event, insert.excluded.payload), else_=table.c.payload),
+                updated_at=case((newer_event, func.now()), else_=table.c.updated_at),
+            )
+            statement = insert.on_conflict_do_update(
+                index_elements=[table.c.workspace_id, table.c.correlation_id],
+                set_=updates,
+            )
             conn.execute(statement)
+            incoming_status = str(projected.get("status") or "")
+            if occurrence_id is not None and incoming_status in TERMINAL_INCIDENT_STATUSES:
+                conn.execute(
+                    table.update()
+                    .where(
+                        table.c.workspace_id == projected["workspace_id"],
+                        table.c.incident_occurrence_id == occurrence_id,
+                    )
+                    .values(status=incoming_status)
+                )
 
     def list_rca_timeline(
         self,
@@ -769,7 +790,7 @@ class DashboardRepository(DatabaseConnection):
         for row in rows:
             item = serialize_timeline_row(row)
             item.update(issue_severity_projection(row))
-            key = incident_logical_key(item)
+            key = incident_occurrence_key(item)
             if key in seen:
                 continue
             seen.add(key)
@@ -836,7 +857,7 @@ class DashboardRepository(DatabaseConnection):
             item = serialize_timeline_row(row)
             if include_issue_severity:
                 item.update(issue_severity_projection(row))
-            key = incident_logical_key(item)
+            key = incident_occurrence_key(item)
             if key in seen:
                 continue
             seen.add(key)
@@ -889,10 +910,10 @@ class DashboardRepository(DatabaseConnection):
         if allowed_cluster_ids is not None and not allowed_cluster_ids:
             return {}
         table = RcaTimeline.__table__
-        logical_key = rca_timeline_logical_incident_key_expression()
+        occurrence_key = rca_timeline_incident_occurrence_key_expression()
         statement: Select[Any] = select(
             table.c.cluster_id,
-            func.count(func.distinct(logical_key)).label("open_incidents"),
+            func.count(func.distinct(occurrence_key)).label("open_incidents"),
         ).where(
             table.c.workspace_id == workspace_id,
             table.c.incident_id.is_not(None),
@@ -937,7 +958,7 @@ class DashboardRepository(DatabaseConnection):
         items: list[JsonObject] = []
         for row in rows:
             item = serialize_timeline_row(row)
-            key = incident_logical_key(item)
+            key = incident_occurrence_key(item)
             if key in seen:
                 continue
             seen.add(key)
@@ -1190,6 +1211,15 @@ def incident_logical_key_from_projection(row: JsonObject) -> str:
     return str(row.get("incident_id") or row.get("correlation_id") or row.get("id"))
 
 
+def incident_occurrence_key(row: JsonObject) -> str:
+    """같은 증상의 한 발생 회차만 묶고, 종결 뒤 재발은 별도 항목으로 유지."""
+
+    occurrence_id = row.get("incident_occurrence_id")
+    if occurrence_id not in (None, ""):
+        return str(occurrence_id)
+    return incident_logical_key(row)
+
+
 def rca_timeline_logical_incident_key_expression() -> Any:
     """SQL 집계용 logical key — 구버전 correlation key보다 정규화 projection을 우선한다."""
     table = RcaTimeline.__table__
@@ -1214,6 +1244,59 @@ def rca_timeline_logical_incident_key_expression() -> Any:
             cast(table.c.id, Text),
         ),
     )
+
+
+def rca_timeline_incident_occurrence_key_expression() -> Any:
+    table = RcaTimeline.__table__
+    return func.coalesce(
+        func.nullif(table.c.incident_occurrence_id, ""),
+        rca_timeline_logical_incident_key_expression(),
+    )
+
+
+def incident_occurrence_lock_key(workspace_id: str, logical_key: str) -> int:
+    raw = hashlib.sha256(f"{workspace_id}\0{logical_key}".encode()).digest()[:8]
+    value = int.from_bytes(raw, byteorder="big", signed=False)
+    return value if value < 2**63 else value - 2**64
+
+
+def _resolve_incident_occurrence_id(conn: Any, row: JsonObject) -> str | None:
+    table = RcaTimeline.__table__
+    workspace_id = str(row.get("workspace_id") or "").strip()
+    correlation_id = str(row.get("correlation_id") or "").strip()
+    if not workspace_id or not correlation_id:
+        return None
+
+    existing = conn.execute(
+        select(table.c.incident_occurrence_id).where(
+            table.c.workspace_id == workspace_id,
+            table.c.correlation_id == correlation_id,
+        )
+    ).scalar_one_or_none()
+    if existing:
+        return str(existing)
+
+    logical_key = str(row.get("incident_logical_key") or "").strip()
+    incident_id = str(row.get("incident_id") or "").strip()
+    if not logical_key or not incident_id:
+        return None
+
+    conn.execute(select(func.pg_advisory_xact_lock(incident_occurrence_lock_key(
+        workspace_id,
+        logical_key,
+    ))))
+    active = conn.execute(
+        select(table.c.incident_occurrence_id)
+        .where(
+            table.c.workspace_id == workspace_id,
+            table.c.incident_logical_key == logical_key,
+            table.c.incident_occurrence_id.is_not(None),
+            table.c.status.in_(OPEN_INCIDENT_STATUSES),
+        )
+        .order_by(table.c.updated_at.desc(), table.c.id.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+    return str(active or incident_id or correlation_id)
 
 
 def timeline_update_from_event(evt: EventEnvelope) -> JsonObject | None:

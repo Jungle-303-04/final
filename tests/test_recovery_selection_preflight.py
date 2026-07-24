@@ -17,6 +17,7 @@ from domains.rca.events import (
     RecoveryPlan,
 )
 from services.ai.agent.recovery.dispatch import RecoveryActionPreflight
+from services.ai.agent.recovery.engine import with_execution_eligibility
 
 
 def recovery_candidate(
@@ -327,6 +328,24 @@ def test_auto_preflight_rejects_disallowed_namespace_before_selection(
         "sandbox",
         "color-turf",
     ]
+
+
+def test_planner_marks_disallowed_auto_candidate_before_operator_selection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CONTROL_ALLOWED_NAMESPACES", "sandbox,color-turf")
+    candidate = recovery_candidate(
+        route="auto",
+        namespace="target",
+        action_type="rollout_restart",
+        params={"command": "rollout_restart"},
+    )
+
+    evaluated = with_execution_eligibility(candidate)
+
+    assert evaluated.executable is False
+    assert evaluated.blocked_reason_code == "control_namespace_not_allowed"
+    assert "target 네임스페이스" in str(evaluated.blocked_reason)
 
 
 def test_missing_auto_preflight_fails_closed_without_selecting_plan(

@@ -12,6 +12,7 @@ const baseIssue: RcaIssueItem = {
   incident_resource_kind: "ReplicaSet",
   incident_resource_name: "game-room",
   incident_symptom: "FailedScheduling",
+  incident_occurrence_id: "occurrence-1",
   evidence_ref: null,
   current_subject: "rca.completed",
   status: "rca_completed",
@@ -82,5 +83,28 @@ describe("selectRcaIssueRepresentativeItems", () => {
 
     expect(representatives[0].item.correlation_id).toBe("new-recurrence");
     expect(representatives[0].newerAttemptCount).toBe(0);
+  });
+
+  it("keeps a recurring symptom in a new pin after the previous occurrence completed", () => {
+    const representatives = selectRcaIssueRepresentativeItems([
+      issue({
+        correlation_id: "completed",
+        incident_occurrence_id: "occurrence-1",
+        status: "incident_resolved",
+        updated_at: "2026-07-24T00:02:00Z",
+      }),
+      issue({
+        correlation_id: "recurrence",
+        incident_occurrence_id: "occurrence-2",
+        status: "incident_detected",
+        updated_at: "2026-07-24T00:03:00Z",
+      }),
+    ]);
+
+    expect(representatives).toHaveLength(2);
+    expect(representatives.map(({ item }) => item.correlation_id)).toEqual([
+      "recurrence",
+      "completed",
+    ]);
   });
 });

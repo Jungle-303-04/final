@@ -545,6 +545,9 @@ class RecoveryActionCandidate(EventBody):
     expected_outcome: str = ""
     risk_explanation: str = ""
     rollback_reason: str = ""
+    executable: bool = True
+    blocked_reason_code: str | None = None
+    blocked_reason: str | None = None
 
 
 @dataclass(frozen=True)

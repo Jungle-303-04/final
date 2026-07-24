@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
+from domains.command.actions import command_action_for_recovery, command_action_spec
 from domains.rca.events import (
     HealingActionDraft,
     RcaActionRequiredBody,
@@ -9,6 +10,10 @@ from domains.rca.events import (
     RecoveryActionCandidate,
     RecoveryPlan,
     RecoveryPlannedBody,
+)
+from packages.config.control import (
+    CONTROL_NAMESPACE_DENIED_CODE,
+    control_namespace_allowed,
 )
 from packages.contracts.event_bus.bodies import EventBody
 from services.ai.agent.defaults import ActionRoutes, RcaMessages, RecoveryDefaults
@@ -33,6 +38,8 @@ class RecoveryPlanner:
                 workspace_id=report.workspace_id,
             )
         candidates = ranked_candidates(context, registered_recovery_rules())
+        candidates = [with_execution_eligibility(candidate) for candidate in candidates]
+        candidates = sorted(candidates, key=recovery_candidate_sort_key)
         draft = first_draft_or_default(report, candidates, self.defaults)
         if not candidates:
             return RcaActionRequiredBody(
@@ -40,7 +47,28 @@ class RecoveryPlanner:
                 evidence_ref=report.evidence_ref,
                 workspace_id=report.workspace_id,
             )
-        recommended = candidates[0]
+        executable_candidates = [candidate for candidate in candidates if candidate.executable]
+        if not executable_candidates:
+            blocked = candidates[0]
+            return RcaActionRequiredBody(
+                reason=blocked.blocked_reason or NO_RECOVERY_CANDIDATES,
+                reason_code=blocked.blocked_reason_code or "recovery_candidate_not_executable",
+                evidence_ref=report.evidence_ref,
+                workspace_id=report.workspace_id,
+                next_actions=[
+                    {
+                        "action_type": "review_control_namespace_policy",
+                        "reason": blocked.blocked_reason or NO_RECOVERY_CANDIDATES,
+                        "target": context.target,
+                    }
+                ],
+                diagnostics={
+                    "candidate_action_id": blocked.action_id,
+                    "candidate_action_type": blocked.draft.action_type,
+                    "namespace": blocked.draft.namespace,
+                },
+            )
+        recommended = executable_candidates[0]
         return RecoveryPlannedBody(
             draft=draft,
             plan=RecoveryPlan(
@@ -66,12 +94,66 @@ def ranked_candidates(context, rules: tuple[RecoveryRule, ...]) -> list[Recovery
     return sorted(candidates, key=recovery_candidate_sort_key)
 
 
-def recovery_candidate_sort_key(candidate: RecoveryActionCandidate) -> tuple[bool, int, float]:
+def recovery_candidate_sort_key(
+    candidate: RecoveryActionCandidate,
+) -> tuple[bool, bool, int, float]:
     return (
+        not candidate.executable,
         bool(candidate.draft.params.get("manual")),
         candidate.rank,
         -candidate.score,
     )
+
+
+def with_execution_eligibility(
+    candidate: RecoveryActionCandidate,
+) -> RecoveryActionCandidate:
+    """Expose deterministic command-policy blockers before operator selection."""
+
+    if candidate.route != ActionRoutes().auto:
+        return candidate
+    requested = str(
+        candidate.draft.params.get("command") or candidate.draft.action_type
+    )
+    action = command_action_for_recovery(requested)
+    spec = command_action_spec(action) if action is not None else None
+    if action is None or spec is None:
+        return replace(
+            candidate,
+            executable=False,
+            blocked_reason_code="unsupported_auto_action",
+            blocked_reason=(
+                f"{candidate.title}은 현재 에이전트 명령 카탈로그에서 지원되지 않습니다."
+            ),
+        )
+    namespace = candidate.draft.namespace.strip()
+    if not namespace:
+        return replace(
+            candidate,
+            executable=False,
+            blocked_reason_code="recovery_target_identity_invalid",
+            blocked_reason="복구 대상 네임스페이스를 확인할 수 없습니다.",
+        )
+    if spec.enforce_control_namespace and not control_namespace_allowed(namespace):
+        return replace(
+            candidate,
+            executable=False,
+            blocked_reason_code=CONTROL_NAMESPACE_DENIED_CODE,
+            blocked_reason=(
+                f"{namespace} 네임스페이스는 현재 클러스터 제어 허용 범위에 "
+                "포함되지 않아 이 자동 복구를 실행할 수 없습니다."
+            ),
+        )
+    if not spec.allows_namespace(namespace):
+        return replace(
+            candidate,
+            executable=False,
+            blocked_reason_code="command_action_namespace_not_allowed",
+            blocked_reason=(
+                f"{action} 액션은 {namespace} 네임스페이스에서 허용되지 않습니다."
+            ),
+        )
+    return candidate
 
 
 def first_draft_or_default(

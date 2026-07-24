@@ -108,6 +108,7 @@ export const rcaTimelineSchema = z.strictObject({
  * responses while a new frontend rolls out the richer Issue presentation.
  */
 export const rcaIssueItemSchema = rcaTimelineItemSchema.extend({
+  incident_occurrence_id: nullableStringSchema.optional(),
   issue_severity: z.enum(["critical", "warning"]).nullable(),
   severity_availability: z.enum(["available", "unavailable"]),
   severity_reason_code: z.enum([

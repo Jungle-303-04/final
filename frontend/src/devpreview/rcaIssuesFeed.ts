@@ -92,8 +92,12 @@ export function isActiveRcaIssue(item: Pick<RcaIssueItem, "status">): boolean {
  */
 export function rcaIssueIdentity(item: Pick<RcaIssueItem,
   "cluster_id" | "incident_namespace" | "incident_resource_kind" |
-  "incident_resource_name" | "incident_symptom" | "incident_id" | "correlation_id"
+  "incident_resource_name" | "incident_symptom" | "incident_id" |
+  "incident_occurrence_id" | "correlation_id"
 >): string {
+  if (item.incident_occurrence_id?.trim()) {
+    return `occurrence:${item.incident_occurrence_id.trim()}`;
+  }
   const resourceName = normalizeIdentityPart(item.incident_resource_name);
   const symptom = normalizeIdentityPart(item.incident_symptom);
   if (resourceName === "" || symptom === "") {

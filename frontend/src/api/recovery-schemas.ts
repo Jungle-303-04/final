@@ -20,6 +20,9 @@ export const recoveryActionCandidateSchema = z.strictObject({
   expected_outcome: z.string().nullable().optional(),
   risk_explanation: z.string().nullable().optional(),
   rollback_reason: z.string().nullable().optional(),
+  executable: z.boolean().optional().default(true),
+  blocked_reason_code: z.string().nullable().optional().default(null),
+  blocked_reason: z.string().nullable().optional().default(null),
 });
 
 export const recoveryPlanSchema = z.strictObject({

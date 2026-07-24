@@ -875,6 +875,12 @@ def auto_action_preflight(
     """Reject an impossible command before the recovery selection is persisted."""
 
     selected = evt.selected
+    if not selected.executable:
+        return command_policy_required_body(
+            evt,
+            selected.blocked_reason_code or "recovery_candidate_not_executable",
+            selected.blocked_reason or "선택한 복구 후보는 현재 정책에서 실행할 수 없습니다.",
+        )
     action = command_action_for(selected)
     if action is None:
         return command_policy_required_body(

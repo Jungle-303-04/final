@@ -4,6 +4,8 @@ import domains.rca.repository as rca_repository
 from domains.dashboard.repository import (
     OPEN_INCIDENT_STATUSES,
     _rca_timeline_response_columns,
+    _resolve_incident_occurrence_id,
+    incident_occurrence_key,
     issue_detail_projection,
     timeline_update_from_event,
 )
@@ -250,3 +252,73 @@ def test_resolved_historical_issue_gets_human_situation_summary_at_query_time() 
     assert issue_detail_projection(payload)["situation_summary"] == (
         "ReplicaSet game-room-0의 readiness 응답이 실패했습니다."
     )
+
+
+class ScalarResult:
+    def __init__(self, value: str | None) -> None:
+        self.value = value
+
+    def scalar_one_or_none(self) -> str | None:
+        return self.value
+
+
+class OccurrenceConnection:
+    def __init__(self, values: list[str | None]) -> None:
+        self.values = iter(values)
+        self.statements: list[object] = []
+
+    def execute(self, statement: object) -> ScalarResult:
+        self.statements.append(statement)
+        return ScalarResult(next(self.values, None))
+
+
+def test_open_correlations_reuse_the_active_incident_occurrence() -> None:
+    connection = OccurrenceConnection([None, None, "occurrence-active"])
+
+    occurrence_id = _resolve_incident_occurrence_id(
+        connection,
+        {
+            "workspace_id": "workspace-1",
+            "correlation_id": "correlation-new",
+            "incident_id": "incident-new",
+            "incident_logical_key": "cluster|sandbox|Deployment|api|5xx",
+        },
+    )
+
+    assert occurrence_id == "occurrence-active"
+    assert len(connection.statements) == 3
+
+
+def test_recurrence_starts_a_new_occurrence_after_no_open_cycle_remains() -> None:
+    connection = OccurrenceConnection([None, None, None])
+
+    occurrence_id = _resolve_incident_occurrence_id(
+        connection,
+        {
+            "workspace_id": "workspace-1",
+            "correlation_id": "correlation-new",
+            "incident_id": "incident-new",
+            "incident_logical_key": "cluster|sandbox|Deployment|api|5xx",
+        },
+    )
+
+    assert occurrence_id == "incident-new"
+    assert incident_occurrence_key(
+        {
+            "incident_occurrence_id": occurrence_id,
+            "incident_logical_key": "cluster|sandbox|Deployment|api|5xx",
+        }
+    ) == "incident-new"
+
+
+def test_occurrence_projection_is_additive_only_for_the_issue_contract() -> None:
+    timeline_columns = {
+        column.name for column in _rca_timeline_response_columns()
+    }
+    issue_columns = {
+        column.name
+        for column in _rca_timeline_response_columns(include_issue_severity=True)
+    }
+
+    assert "incident_occurrence_id" not in timeline_columns
+    assert "incident_occurrence_id" in issue_columns

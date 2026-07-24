@@ -952,8 +952,15 @@ function RecoveryCandidateDetails({
   onOpenTarget?: (() => void) | null;
   showAction?: boolean;
 }) {
+  const blocked = candidate.executable === false;
   return (
     <div style={{ display: "grid", gap: 16 }}>
+      {blocked && (
+        <div role="status" style={{ display: "flex", alignItems: "flex-start", gap: 7, border: `1px solid ${TINT.warn.bd}`, borderRadius: 8, background: TINT.warn.bg, color: TINT.warn.fg, padding: 11, fontSize: TYPE.caption, lineHeight: 1.45 }}>
+          <CircleAlert size={14} style={{ flexShrink: 0, marginTop: 1 }} />
+          {candidate.blocked_reason || "현재 클러스터 제어 정책에서는 이 복구를 실행할 수 없습니다."}
+        </div>
+      )}
       <dl style={{ display: "grid", gridTemplateColumns: "72px minmax(0, 1fr)", alignItems: "center", gap: "8px 10px", margin: 0, paddingBottom: 14 }}>
         <dt style={{ fontSize: TYPE.caption, color: UI.ink2 }}>조치 위험도</dt>
         <dd style={{ margin: 0, fontSize: TYPE.caption, lineHeight: 1.5, color: candidate.risk_level ? UI.ink : UI.ink3 }}>{candidate.risk_level || "미확인"}</dd>
@@ -988,11 +995,11 @@ function RecoveryCandidateDetails({
         <button
           type="button"
           className={selected ? undefined : "product-focusable product-action"}
-          disabled={selected || pending}
+          disabled={selected || pending || blocked}
           onClick={onSelect}
-          style={{ border: selected ? `1px solid ${TINT.ok.bd}` : "none", borderRadius: 8, background: selected ? TINT.ok.bg : pending ? UI.bg2 : BLUE, color: selected ? TINT.ok.fg : pending ? UI.ink3 : UI.card, padding: "7px 13px", fontSize: TYPE.label, fontWeight: 600, cursor: selected || pending ? "not-allowed" : "pointer", boxShadow: selected || pending ? "none" : `0 2px 6px ${blueA(0.2)}` }}
+          style={{ border: selected ? `1px solid ${TINT.ok.bd}` : "none", borderRadius: 8, background: selected ? TINT.ok.bg : pending || blocked ? UI.bg2 : BLUE, color: selected ? TINT.ok.fg : pending || blocked ? UI.ink3 : UI.card, padding: "7px 13px", fontSize: TYPE.label, fontWeight: 600, cursor: selected || pending || blocked ? "not-allowed" : "pointer", boxShadow: selected || pending || blocked ? "none" : `0 2px 6px ${blueA(0.2)}` }}
         >
-          {selected ? "선택됨" : pending ? "선택 중…" : "검토하기"}
+          {selected ? "선택됨" : pending ? "선택 중…" : blocked ? "권한 정책상 실행 불가" : "검토하기"}
         </button>
       </div>}
     </div>
