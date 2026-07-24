@@ -393,3 +393,16 @@ async def delete_conversation(
     if not deleted:
         raise HTTPException(status_code=404, detail=NOT_FOUND)
     return Response(status_code=204)
+
+
+@router.delete(gateway_routes.AI_CONVERSATIONS_PATH, status_code=204)
+async def delete_conversations(
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> Response:
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    db.delete_ai_conversations(
+        workspace_id,
+        user_id=current.user_id,
+    )
+    return Response(status_code=204)

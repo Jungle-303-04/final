@@ -59,6 +59,16 @@ export function deleteAiConversation(
   return apiRequestNoContent(path, { method: "DELETE", signal });
 }
 
+/** Deletes every stored conversation owned by the signed-in user. */
+export function deleteAllAiConversations(
+  signal?: AbortSignal,
+): Promise<void> {
+  return apiRequestNoContent("/api/ai/conversations" as ApiPath, {
+    method: "DELETE",
+    signal,
+  });
+}
+
 /** Creates a conversation and queues its first user message. */
 export async function createAiConversation(
   input: AiConversationCreateInput,

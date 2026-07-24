@@ -2,7 +2,7 @@
 // AI 대화와 복구 검토를 실제 대화·복구 계약에 연결한 제품 패널.
 import {
   Activity, ArrowUpRight, BellPlus, Boxes, Check, ChevronDown, CircleAlert,
-  CircleStop, FileText, GitBranch, Maximize2, Minimize2, Play, Send, Server, Sparkles, SquarePen, X,
+  CircleStop, FileText, GitBranch, Maximize2, Minimize2, Play, Send, Server, Sparkles, SquarePen, Trash2, X,
 } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import "./styles/tokens.css";
@@ -12,6 +12,7 @@ import { emitAction } from "./devpreview/bus";
 import {
   appendRecoveryConversationMessage, buildAiContext, createAiAlertRule,
   createRecoveryConversation, isAiProviderFailureTurn, sendAiChatTurn,
+  deleteAllStoredAiConversations, deleteStoredAiConversation,
   useAiConversations, useConversationDetail, useAiSuggestions,
 } from "./devpreview/aiFeed";
 import { getAuditTimeline } from "./api/audit-timeline";
@@ -670,6 +671,11 @@ export function AiPanel({ onClose, onCancelRecovery, onRecoveryReviewStateChange
   } | null>(null);
   // AI history: 목록에서 고른 대화 id. null이면 라이브 대화 화면.
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
+  const [historyDeleteConfirmId, setHistoryDeleteConfirmId] = useState<string | null>(null);
+  const [historyDeletePendingId, setHistoryDeletePendingId] = useState<string | null>(null);
+  const [historyDeleteAllConfirm, setHistoryDeleteAllConfirm] = useState(false);
+  const [historyDeleteAllPending, setHistoryDeleteAllPending] = useState(false);
+  const [historyDeleteError, setHistoryDeleteError] = useState<string | null>(null);
   const suggestions = useAiSuggestions(contextView, contextScope);
   const conversations = useAiConversations();
   const detail = useConversationDetail(selectedConversationId);
@@ -881,10 +887,38 @@ export function AiPanel({ onClose, onCancelRecovery, onRecoveryReviewStateChange
   const openConversation = (id: string) => {
     chatAbort.current?.abort(); setThinking(false); setError(null);
     alertDraft.current = null;
+    setHistoryDeleteConfirmId(null);
     setListOpen(false); setSelectedConversationId(id);
   };
 
   const newChat = () => { chatAbort.current?.abort(); alertDraft.current = null; setSelectedConversationId(null); setTurns([]); setError(null); setInput(""); setThinking(false); };
+  const deleteHistoryConversation = async (conversationId: string) => {
+    setHistoryDeletePendingId(conversationId);
+    setHistoryDeleteError(null);
+    try {
+      await deleteStoredAiConversation(conversationId);
+      if (selectedConversationId === conversationId) setSelectedConversationId(null);
+      setHistoryDeleteConfirmId(null);
+    } catch {
+      setHistoryDeleteError("대화를 삭제하지 못했습니다. 잠시 후 다시 시도해 주세요.");
+    } finally {
+      setHistoryDeletePendingId(null);
+    }
+  };
+  const deleteAllHistoryConversations = async () => {
+    setHistoryDeleteAllPending(true);
+    setHistoryDeleteError(null);
+    try {
+      await deleteAllStoredAiConversations();
+      setSelectedConversationId(null);
+      setTurns([]);
+      setHistoryDeleteAllConfirm(false);
+    } catch {
+      setHistoryDeleteError("전체 대화를 삭제하지 못했습니다. 잠시 후 다시 시도해 주세요.");
+    } finally {
+      setHistoryDeleteAllPending(false);
+    }
+  };
   function cancelRecoveryReview(): void {
     chatAbort.current?.abort();
     alertDraft.current = null;
@@ -942,6 +976,43 @@ export function AiPanel({ onClose, onCancelRecovery, onRecoveryReviewStateChange
       </div>
       {listOpen ? (
         <div className="max-h-64 shrink-0 overflow-y-auto border-b border-black/[0.06] bg-white/90 shadow-sm backdrop-blur-xl" style={{ animation: `fadeUp 0.2s ${SPRING}` }}>
+          <div className="flex items-center justify-between border-b border-black/[0.05] px-3.5 py-2">
+            <span className="text-caption font-semibold text-heading">대화 목록</span>
+            {conversations.items.length > 0 ? (
+              historyDeleteAllConfirm ? (
+                <span className="flex items-center gap-1">
+                  <button
+                    className="rounded-lg bg-red-500/10 px-2 py-1 text-caption font-semibold text-red-600 transition-colors hover:bg-red-500/15 disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={historyDeleteAllPending}
+                    onClick={() => void deleteAllHistoryConversations()}
+                    type="button"
+                  >
+                    {historyDeleteAllPending ? "삭제 중…" : "전체 삭제 확인"}
+                  </button>
+                  <button
+                    className="rounded-lg px-2 py-1 text-caption font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={historyDeleteAllPending}
+                    onClick={() => setHistoryDeleteAllConfirm(false)}
+                    type="button"
+                  >
+                    취소
+                  </button>
+                </span>
+              ) : (
+                <button
+                  className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-caption font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  onClick={() => setHistoryDeleteAllConfirm(true)}
+                  type="button"
+                >
+                  <Trash2 className="size-3.5" />
+                  전체 삭제
+                </button>
+              )
+            ) : null}
+          </div>
+          {historyDeleteError ? (
+            <p className="px-3.5 py-2 text-caption text-red-600" role="alert">{historyDeleteError}</p>
+          ) : null}
           {conversations.status === "loading" ? (
             <p className="flex items-center gap-2 px-3.5 py-3 text-label text-muted-foreground"><Spinner className="size-3.5 ap-accent" decorative /> 대화 목록 불러오는 중…</p>
           ) : conversations.status === "unavailable" ? (
@@ -950,7 +1021,44 @@ export function AiPanel({ onClose, onCancelRecovery, onRecoveryReviewStateChange
             <p className="px-3.5 py-3 text-label text-inactive-foreground">저장된 대화가 없습니다.</p>
           ) : (
             <ul className="grid gap-0.5 p-2">{conversations.items.map((c) => (
-              <li key={c.id}><button className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-body text-foreground transition-colors hover:bg-muted" onClick={() => openConversation(c.id)} type="button"><Sparkles className="size-3.5 shrink-0 text-muted-foreground" /><span className="flex-1 truncate">{c.title}</span>{c.updatedAt ? <span className="shrink-0 text-caption text-muted-foreground">{c.updatedAt}</span> : null}</button></li>
+              <li className="flex items-center gap-1 rounded-xl hover:bg-muted" key={c.id}>
+                <button className="flex min-w-0 flex-1 items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-body text-foreground" onClick={() => openConversation(c.id)} type="button">
+                  <Sparkles className="size-3.5 shrink-0 text-muted-foreground" />
+                  <span className="flex-1 truncate">{c.title}</span>
+                  {c.updatedAt ? <span className="shrink-0 text-caption text-muted-foreground">{c.updatedAt}</span> : null}
+                </button>
+                {historyDeleteConfirmId === c.id ? (
+                  <span className="mr-1 flex shrink-0 items-center gap-1">
+                    <button
+                      className="rounded-lg bg-red-500/10 px-2 py-1 text-caption font-semibold text-red-600 transition-colors hover:bg-red-500/15 disabled:cursor-not-allowed disabled:opacity-50"
+                      disabled={historyDeletePendingId === c.id}
+                      onClick={() => void deleteHistoryConversation(c.id)}
+                      type="button"
+                    >
+                      {historyDeletePendingId === c.id ? "삭제 중…" : "삭제"}
+                    </button>
+                    <button
+                      aria-label="삭제 취소"
+                      className="grid size-7 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-black/[0.05] hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                      disabled={historyDeletePendingId === c.id}
+                      onClick={() => setHistoryDeleteConfirmId(null)}
+                      type="button"
+                    >
+                      <X className="size-3.5" />
+                    </button>
+                  </span>
+                ) : (
+                  <button
+                    aria-label={`${c.title} 삭제`}
+                    className="mr-1 grid size-8 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-600"
+                    onClick={() => setHistoryDeleteConfirmId(c.id)}
+                    title="대화 삭제"
+                    type="button"
+                  >
+                    <Trash2 className="size-3.5" />
+                  </button>
+                )}
+              </li>
             ))}</ul>
           )}
         </div>

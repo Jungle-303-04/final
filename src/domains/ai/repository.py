@@ -250,6 +250,20 @@ class AiConversationRepository(DatabaseConnection):
             row = conn.execute(statement).first()
         return row is not None
 
+    def delete_ai_conversations(
+        self,
+        workspace_id: str,
+        *,
+        user_id: str,
+    ) -> int:
+        statement = self.conversation_table.delete().where(
+            self.conversation_table.c.workspace_id == workspace_id,
+            self.conversation_table.c.user_id == user_id,
+        )
+        with self.connection() as conn:
+            result = conn.execute(statement)
+        return int(result.rowcount or 0)
+
     def list_ai_messages(
         self,
         workspace_id: str,
