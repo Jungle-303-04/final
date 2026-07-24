@@ -9,6 +9,7 @@ import {
   HardDrive, Cpu, Folder, Activity, UserCog, Eye, Radio, ChevronDown, Pin,
   Home, ListTree, AlertTriangle, Clock, Coins, Settings, Sparkles, PanelLeftClose, PanelLeftOpen,
   Bell, Pencil, Check, Hourglass, Webhook, SignalHigh, Building2, LogOut, RefreshCw,
+  X,
 } from "lucide-react";
 import { HomeClustersWidget, OpsiaMap } from "./devpreview-opsia";
 import { DASHBOARD_WIDGET_GRID_CLASS, DASHBOARD_WIDGET_GRID_ITEM_CLASS, WidgetFrame, RatioBar, Donut, RankList, MultiLine, MiniTimeline, dashboardWidgetGridStyle, dashboardWidgetItemStyle, type DashboardWidgetSpan } from "./devpreview/widgets";
@@ -109,6 +110,7 @@ import { getRepositoryConnectionStatus } from "./api/repository-connection";
 import { useNarrowViewport } from "./devpreview/useNarrowViewport";
 import { operationalMessageLabel, reasonLabel, statusLabel, isCriticalStatus } from "./devpreview/statusLabel";
 import { LiveResourceManifestEditor } from "./devpreview/resourceManifestEditor";
+import type { ResourceManifestSourceEndpoint } from "./devpreview/resourceManifestFeed";
 import { groupApplicationsByRepository } from "./devpreview/repositoryRegistry";
 import { podsForNode, useClusterTopology } from "./devpreview/inventoryTopologyFeed";
 import { UI, BLUE, BLUE2, HP, INTERACTION, TINT, MONO, TYPE, SOFT, SPRING, PRESENT_SCALE, DUR, RADIUS, SPACE, RESOURCE_LAYOUT, inkA, blueA, MARK, cardA, GLASS, critA } from "./devpreview/theme";
@@ -898,21 +900,20 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
   const tabs = TABS_FOR(kind.id);
   const [tab, setTab] = useState<DetailTab>(tabs[0]);
   const [fullSelf, setFull] = useState(false);   // 전체 화면 (원본 레퍼런스의 ⤢)
-  const full = forceFull || fullSelf;            // AI 대화창이 열리면 자연스럽게 전체 화면으로
-  // YAML 편집 자동 확장 — 편집 가능한 Git 원본이 열리면 패널을 넓혀 IDE 2열(에디터|diff)로.
-  // 사용자가 직접 확장한 경우와 구분해, 자동 확장분만 탭 이탈 시 원복한다.
-  const yamlAutoExpanded = useRef(false);
-  const handleYamlEditableChange = (editable: boolean) => {
-    if (editable && !fullSelf && !forceFull) {
-      yamlAutoExpanded.current = true;
-      setFull(true);
-    }
-  };
+  const [yamlEditorOpen, setYamlEditorOpen] = useState(false);
+  const [manifestSource, setManifestSource] = useState<ResourceManifestSourceEndpoint | null>(null);
+  // AI 또는 YAML 보조 편집 패널이 열리면 읽기 전용 상세도 남은 영역을 채운다.
+  // 편집 패널로 교체하지 않고 두 화면을 나란히 비교하기 위한 확장이다.
+  const full = forceFull || fullSelf || yamlEditorOpen;
+  const yamlEditorWidth = Math.max(
+    360,
+    Math.min(560, (viewportW - leftInset - rightInset) * 0.52),
+  );
+  useEffect(() => {
+    if (forceFull) setYamlEditorOpen(false);
+  }, [forceFull]);
   const switchTab = (next: DetailTab) => {
-    if (next !== "yaml" && yamlAutoExpanded.current) {
-      yamlAutoExpanded.current = false;
-      setFull(false);
-    }
+    if (next !== "yaml") setYamlEditorOpen(false);
     setTab(next);
   };
   const name = String(row.name ?? "");
@@ -997,7 +998,8 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
   // Git 바인딩 누락 상태를 명시해 잘못된 매니페스트를 편집·적용하지 않도록 한다.
 
   return (
-    <DetailDrawer
+    <>
+      <DetailDrawer
       actions={(
         <span title="YAML 탭에서 실제 Git 소스·권한·에이전트 적용 가능성을 확인합니다" style={{ display: "flex", alignItems: "center", gap: 5, border: `1px solid ${UI.line}`, background: UI.bg2, borderRadius: 8, padding: "5px 10px", fontSize: TYPE.label, fontWeight: 600, color: UI.ink3 }}>
           소스·권한 검증
@@ -1005,7 +1007,8 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
       )}
       ariaLabel={`${kind.label} ${name} 상세`}
       expanded={fullSelf}
-      forceExpanded={forceFull}
+      forceExpanded={forceFull || yamlEditorOpen}
+      forceExpandedLabel={yamlEditorOpen ? "YAML 편집 중에는 비교 화면 유지" : undefined}
       header={(
         <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
             <span style={{ width: 30, height: 30, borderRadius: 9, background: blueA(0.09), display: "grid", placeItems: "center", flexShrink: 0 }}>
@@ -1031,7 +1034,7 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
       )}
       onClose={onClose}
       onExpandedChange={setFull}
-      rightInset={rightInset}
+      rightInset={rightInset + (yamlEditorOpen ? yamlEditorWidth : 0)}
       topInset={topInset}
       viewportWidth={viewportW}
     >
@@ -1238,8 +1241,9 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
               resourceId={resourceId}
               resolving={observedResourceId === "" && resolvedIdentity.status === "loading"}
               refreshKey={manifestRefreshKey}
-              wide={full}
-              onEditableChange={handleYamlEditableChange}
+              mode="read"
+              onSourceLoaded={setManifestSource}
+              onEditRequest={() => setYamlEditorOpen(true)}
               onConnectRepository={() => onConnectRepository?.({
                 clusterId: row.cluster != null && String(row.cluster) ? String(row.cluster) : undefined,
                 namespace: row.ns != null && String(row.ns) ? String(row.ns) : undefined,
@@ -1290,7 +1294,65 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
             <div style={{ padding: "14px 0" }}><ResourceAccessPanel view={access} /></div>
           )}
         </div>
-    </DetailDrawer>
+      </DetailDrawer>
+      <AnimatePresence>
+        {yamlEditorOpen && tab === "yaml" && (
+          <motion.aside
+            key="resource-yaml-editor"
+            role="dialog"
+            aria-label={`${kind.label} ${name} YAML 편집`}
+            initial={{ x: 36, opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            exit={{ x: 24, opacity: 0 }}
+            transition={{ type: "spring", bounce: 0.05, visualDuration: 0.34 }}
+            style={{
+              position: "fixed",
+              top: topInset,
+              right: rightInset,
+              bottom: 0,
+              width: yamlEditorWidth,
+              maxWidth: `calc(100vw - ${leftInset + rightInset}px)`,
+              zIndex: 72,
+              display: "flex",
+              flexDirection: "column",
+              background: UI.card,
+              borderLeft: `1px solid ${UI.line}`,
+              boxShadow: `-24px 0 60px -30px ${inkA(0.3)}`,
+            }}
+          >
+            <div style={{ flexShrink: 0, display: "flex", alignItems: "flex-start", gap: 12, padding: "16px 20px", borderBottom: `1px solid ${UI.line}` }}>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ fontSize: TYPE.section, fontWeight: 700, color: UI.ink }}>YAML 편집</div>
+                <div style={{ marginTop: 2, fontSize: TYPE.label, color: UI.ink3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {kind.label} · {name}
+                </div>
+              </div>
+              <button
+                type="button"
+                className="product-focusable product-control"
+                aria-label="YAML 편집 패널 닫기"
+                onClick={() => setYamlEditorOpen(false)}
+                style={{ width: 28, height: 28, padding: 0, border: "none", borderRadius: 999, background: inkA(0.06), color: UI.ink2, cursor: "pointer", display: "grid", placeItems: "center" }}
+              >
+                <X size={15} strokeWidth={2.2} />
+              </button>
+            </div>
+            <div style={{ flex: 1, minHeight: 0, overflowY: "auto", overflowX: "hidden", overscrollBehavior: "contain", scrollbarGutter: "stable", padding: "0 20px 28px" }}>
+              <LiveResourceManifestEditor
+                resourceId={resourceId}
+                resolving={observedResourceId === "" && resolvedIdentity.status === "loading"}
+                refreshKey={manifestRefreshKey}
+                mode="edit"
+                initialSource={manifestSource}
+                onOpenDeploySurface={onOpenDeploySurface}
+                onReauthenticate={() => window.location.reload()}
+                onRequestAccess={onRequestManifestAccess}
+              />
+            </div>
+          </motion.aside>
+        )}
+      </AnimatePresence>
+    </>
   );
 }
 
@@ -3100,6 +3162,29 @@ function App() {
         .uni .livedot { animation: lv 1.6s ease-in-out infinite; }
         @keyframes lv { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
         .uni ::-webkit-scrollbar { width: 8px; } .uni ::-webkit-scrollbar-thumb { background: ${inkA(0.12)}; border-radius: 99px; }
+        .uni .manifest-yaml-editor {
+          scrollbar-width: auto;
+          scrollbar-color: #64748b #161b22;
+        }
+        .uni .manifest-yaml-editor::-webkit-scrollbar {
+          width: 0;
+          height: 12px;
+        }
+        .uni .manifest-yaml-editor::-webkit-scrollbar-track {
+          background: #161b22;
+          border-radius: 0 0 11px 11px;
+        }
+        .uni .manifest-yaml-editor::-webkit-scrollbar-thumb {
+          min-width: 48px;
+          background: #64748b;
+          border: 3px solid #161b22;
+          border-radius: 999px;
+          background-clip: padding-box;
+        }
+        .uni .manifest-yaml-editor::-webkit-scrollbar-thumb:hover {
+          background: #94a3b8;
+          background-clip: padding-box;
+        }
         @media (prefers-reduced-motion: reduce) { .uni .livedot { animation: none !important; } }
         /* 좁은 화면(200% 확대 등): 부가 요소를 접어 핵심만 남긴다 */
         @media (max-width: 980px) { .uni .hide-narrow { display: none !important; } }

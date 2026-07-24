@@ -82,12 +82,22 @@ function diffLineStyle(line: string): React.CSSProperties {
 export function DiffCodeView({ value, ariaLabel, maxHeight = 280 }: {
   value: string;
   ariaLabel: string;
-  maxHeight?: number;
+  maxHeight?: number | null;
 }) {
   const lines = value.replace(/\n$/, "").split("\n");
   return (
     <div role="figure" aria-label={ariaLabel}
-      style={{ border: "1px solid #1c2330", borderRadius: 12, background: CODE_BG, maxHeight, overflow: "auto", fontFamily: MONO, fontSize: TYPE.code, lineHeight: 1.65 }}>
+      style={{
+        border: "1px solid #1c2330",
+        borderRadius: 12,
+        background: CODE_BG,
+        maxHeight: maxHeight ?? undefined,
+        overflowX: "auto",
+        overflowY: maxHeight == null ? "visible" : "auto",
+        fontFamily: MONO,
+        fontSize: TYPE.code,
+        lineHeight: 1.65,
+      }}>
       <pre style={{ margin: 0, padding: "12px 16px", whiteSpace: "pre", minWidth: 0 }}>
         {lines.map((line, index) => (
           <div key={index} style={diffLineStyle(line)}>{line || " "}</div>
@@ -101,12 +111,23 @@ export function DiffCodeView({ value, ariaLabel, maxHeight = 280 }: {
 export function YamlCodeView({ value, ariaLabel, maxHeight = 320 }: {
   value: string;
   ariaLabel: string;
-  maxHeight?: number;
+  maxHeight?: number | null;
 }) {
   const lines = value.replace(/\n$/, "").split("\n");
   return (
     <div role="figure" aria-label={ariaLabel}
-      style={{ display: "flex", border: "1px solid #1c2330", borderRadius: 12, background: CODE_BG, maxHeight, overflow: "auto", fontFamily: MONO, fontSize: TYPE.code, lineHeight: 1.65 }}>
+      style={{
+        display: "flex",
+        border: "1px solid #1c2330",
+        borderRadius: 12,
+        background: CODE_BG,
+        maxHeight: maxHeight ?? undefined,
+        overflowX: "auto",
+        overflowY: maxHeight == null ? "visible" : "auto",
+        fontFamily: MONO,
+        fontSize: TYPE.code,
+        lineHeight: 1.65,
+      }}>
       <div aria-hidden style={{ flexShrink: 0, padding: "12px 0", background: GUTTER_BG, color: GUTTER_FG, textAlign: "right", userSelect: "none", position: "sticky", left: 0 }}>
         {lines.map((_, index) => (
           <div key={index} style={{ padding: "0 10px 0 14px", fontVariantNumeric: "tabular-nums" }}>{index + 1}</div>

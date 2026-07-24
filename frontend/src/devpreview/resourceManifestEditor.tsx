@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
+import { Check, ExternalLink } from "lucide-react";
 
+import { getAuditTimeline } from "../api/audit-timeline";
 import {
   applyResourceManifestEdit,
   approveResourceManifestEdit,
@@ -24,10 +26,20 @@ import { BLUE, HP, MONO, TINT, TYPE, UI, inkA } from "./theme";
 import { DiffCodeView, YamlCodeView } from "./YamlCodeView";
 
 type Phase = "loading" | "ready" | "previewing" | "submitting" | "failed";
+const MANIFEST_LOADING_NOTICE_DELAY_MS = 400;
+
 interface LiveResourceManifestEditorProps {
   resourceId: string;
   resolving?: boolean;
   refreshKey?: number;
+  /** 읽기 패널에서 이미 조회한 소스. 보조 편집 패널의 중복 조회와 깜박임을 막는다. */
+  initialSource?: ResourceManifestSourceEndpoint | null;
+  /** 조회한 소스를 나란히 열리는 편집 패널과 공유한다. */
+  onSourceLoaded?: (source: ResourceManifestSourceEndpoint) => void;
+  /** 읽기 전용 상세과 보조 편집 패널을 분리할 때 사용하는 표시 모드. */
+  mode?: "read" | "edit";
+  /** 읽기 전용 화면의 편집 요청을 부모 보조 패널로 전달한다. */
+  onEditRequest?: () => void;
   /** 확장(전체 화면) 모드 — 에디터|관측·diff 2열 레이아웃으로 전환. */
   wide?: boolean;
   /** 편집 가능한 Git 원본이 열렸는지 통지 — 부모가 패널 자동 확장에 사용. */
@@ -42,6 +54,10 @@ export function LiveResourceManifestEditor({
   resourceId,
   resolving = false,
   refreshKey = 0,
+  initialSource = null,
+  onSourceLoaded,
+  mode,
+  onEditRequest,
   wide = false,
   onEditableChange,
   onConnectRepository,
@@ -49,10 +65,17 @@ export function LiveResourceManifestEditor({
   onReauthenticate,
   onRequestAccess,
 }: LiveResourceManifestEditorProps) {
-  const [phase, setPhase] = useState<Phase>("loading");
-  const [source, setSource] = useState<ResourceManifestSourceEndpoint | null>(null);
-  const [applicationId, setApplicationId] = useState("");
-  const [yaml, setYaml] = useState("");
+  const hasInitialSource = initialSource?.resource_id === resourceId;
+  const [phase, setPhase] = useState<Phase>(hasInitialSource ? "ready" : "loading");
+  const [source, setSource] = useState<ResourceManifestSourceEndpoint | null>(
+    hasInitialSource ? initialSource : null,
+  );
+  const [applicationId, setApplicationId] = useState(
+    hasInitialSource ? initialSource.selected?.application_id ?? "" : "",
+  );
+  const [yaml, setYaml] = useState(
+    hasInitialSource ? restoreManifestDraft(resourceId, initialSource) : "",
+  );
   const [preview, setPreview] = useState<ResourceManifestPreviewEndpoint | null>(null);
   const [reason, setReason] = useState("");
   const [confirmed, setConfirmed] = useState(false);
@@ -63,11 +86,13 @@ export function LiveResourceManifestEditor({
   const [emergencyApproval, setEmergencyApproval] = useState<ResourceManifestApproveEndpoint | null>(null);
   const [applyReceipt, setApplyReceipt] = useState<ResourceManifestApplyEndpoint | null>(null);
   const [applyStatus, setApplyStatus] = useState<CommandStatus | null>(null);
+  const [manifestPrUrl, setManifestPrUrl] = useState<string | null>(null);
+  const [manifestPrFailed, setManifestPrFailed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [failureRemediation, setFailureRemediation] = useState<ResourceManifestRemediation>("none");
   const [sourceConflictNotice, setSourceConflictNotice] = useState<string | null>(null);
   const [sourceRefreshRequired, setSourceRefreshRequired] = useState(false);
-  const [editing, setEditing] = useState(false);
+  const [editingSelf, setEditingSelf] = useState(false);
   const [draftSaved, setDraftSaved] = useState(false);
   const controller = useRef<AbortController | null>(null);
 
@@ -85,11 +110,14 @@ export function LiveResourceManifestEditor({
     setEmergencyApproval(null);
     setApplyReceipt(null);
     setApplyStatus(null);
-    setEditing(false);
+    setManifestPrUrl(null);
+    setManifestPrFailed(false);
+    setEditingSelf(false);
     try {
       const loaded = await getResourceManifestSource(resourceId, selectedApplicationId, next.signal);
       if (next.signal.aborted) return;
       setSource(loaded);
+      onSourceLoaded?.(loaded);
       setApplicationId(loaded.selected?.application_id ?? selectedApplicationId ?? "");
       setYaml(restoreManifestDraft(resourceId, loaded));
       setDraftSaved(false);
@@ -105,7 +133,14 @@ export function LiveResourceManifestEditor({
   useEffect(() => {
     controller.current?.abort();
     if (!resourceId) return;
-    setEditing(false);
+    setEditingSelf(false);
+    if (initialSource?.resource_id === resourceId) {
+      setSource(initialSource);
+      setApplicationId(initialSource.selected?.application_id ?? "");
+      setYaml(restoreManifestDraft(resourceId, initialSource));
+      setPhase("ready");
+      return;
+    }
     const next = new AbortController();
     controller.current = next;
     void (async () => {
@@ -113,6 +148,7 @@ export function LiveResourceManifestEditor({
         const loaded = await getResourceManifestSource(resourceId, null, next.signal);
         if (next.signal.aborted) return;
         setSource(loaded);
+        onSourceLoaded?.(loaded);
         setApplicationId(loaded.selected?.application_id ?? "");
         setYaml(restoreManifestDraft(resourceId, loaded));
         setDraftSaved(false);
@@ -121,6 +157,8 @@ export function LiveResourceManifestEditor({
         setEmergencyApproval(null);
         setApplyReceipt(null);
         setApplyStatus(null);
+        setManifestPrUrl(null);
+        setManifestPrFailed(false);
         setError(null);
         setFailureRemediation("none");
         setSourceConflictNotice(null);
@@ -135,6 +173,9 @@ export function LiveResourceManifestEditor({
       }
     })();
     return () => next.abort();
+    // initialSource/onSourceLoaded는 첫 마운트에 사용하는 전달값이다. 이후 새로고침은
+    // refreshKey/resourceId 변경으로만 수행해 편집 중 원본이 되감기지 않게 한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshKey, resourceId]);
 
   useEffect(() => {
@@ -161,6 +202,50 @@ export function LiveResourceManifestEditor({
     };
   }, [applyReceipt?.command_id]);
 
+  const manifestCorrelationId = approval?.correlation_id
+    ?? emergencyApproval?.correlation_id
+    ?? null;
+  useEffect(() => {
+    if (!manifestCorrelationId || approvalDecision === "rejected") return;
+    const abort = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const poll = async () => {
+      try {
+        const timeline = await getAuditTimeline(manifestCorrelationId, {
+          limit: 50,
+          signal: abort.signal,
+        });
+        if (abort.signal.aborted) return;
+        const created = [...timeline.items].reverse().find(
+          (item) => item.subject.replace(/[.-]/gu, "_").toLowerCase() === "safe_pr_created",
+        );
+        const failed = [...timeline.items].reverse().find(
+          (item) => item.subject.replace(/[.-]/gu, "_").toLowerCase() === "safe_pr_failed",
+        );
+        const prUrl = created && typeof created.payload_summary.pr_url === "string"
+          ? created.payload_summary.pr_url
+          : null;
+        if (prUrl) {
+          setManifestPrUrl(prUrl);
+          setManifestPrFailed(false);
+          return;
+        }
+        if (failed) {
+          setManifestPrFailed(true);
+          return;
+        }
+        timer = setTimeout(() => void poll(), 2_000);
+      } catch {
+        if (!abort.signal.aborted) timer = setTimeout(() => void poll(), 3_000);
+      }
+    };
+    void poll();
+    return () => {
+      abort.abort();
+      if (timer !== null) clearTimeout(timer);
+    };
+  }, [approvalDecision, manifestCorrelationId]);
+
   const sourceIsCurrent = source?.resource_id === resourceId;
   const editInput = sourceIsCurrent && source?.base_sha && source.source_sha256 && applicationId && yaml
     ? {
@@ -176,6 +261,7 @@ export function LiveResourceManifestEditor({
     source && source.status === "available" && source.selected && source.content,
   );
   // 사용자가 편집을 명시적으로 시작했을 때만 부모 패널을 확장한다.
+  const editing = mode === "edit" || (mode !== "read" && editingSelf);
   const editable = canEdit && editing;
   useEffect(() => {
     onEditableChange?.(editable);
@@ -191,6 +277,8 @@ export function LiveResourceManifestEditor({
     setEmergencyApproval(null);
     setApplyReceipt(null);
     setApplyStatus(null);
+    setManifestPrUrl(null);
+    setManifestPrFailed(false);
   };
 
   const saveDraft = () => {
@@ -337,13 +425,21 @@ export function LiveResourceManifestEditor({
   };
 
   if (!resourceId && resolving) {
-    return <ManifestLoadingNotice title="YAML 정체성 확인 중">서버가 발급한 inventory key를 정확한 리소스 정체성으로 조회하고 있습니다.</ManifestLoadingNotice>;
+    return (
+      <DelayedManifestLoadingNotice title="YAML 정체성 확인 중">
+        서버가 발급한 inventory key를 정확한 리소스 정체성으로 조회하고 있습니다.
+      </DelayedManifestLoadingNotice>
+    );
   }
   if (!resourceId) {
     return <ManifestNotice tone="warn" title="YAML 정체성 확인 불가">이 행에는 서버가 발급한 inventory key가 없습니다.</ManifestNotice>;
   }
   if (phase === "loading" || (!sourceIsCurrent && phase !== "failed")) {
-    return <ManifestLoadingNotice title="YAML 소스 확인 중">Git에 고정된 실제 매니페스트와 편집 권한을 조회하고 있습니다.</ManifestLoadingNotice>;
+    return (
+      <DelayedManifestLoadingNotice title="YAML 소스 확인 중">
+        Git에 고정된 실제 매니페스트와 편집 권한을 조회하고 있습니다.
+      </DelayedManifestLoadingNotice>
+    );
   }
   if (phase === "failed" && !source) {
     const title = failureRemediation === "reauthenticate"
@@ -434,18 +530,29 @@ export function LiveResourceManifestEditor({
       <div style={{ padding: "16px 0 24px" }}>
         <LiveManifestPanel
           source={source}
-          action={<ActionButton primary disabled={false} onClick={() => setEditing(true)}>편집</ActionButton>}
+          action={(
+            <ActionButton
+              primary
+              disabled={false}
+              onClick={() => {
+                if (onEditRequest) onEditRequest();
+                else setEditingSelf(true);
+              }}
+            >
+              편집
+            </ActionButton>
+          )}
         />
       </div>
     );
   }
 
   const diffView = preview?.diff ? (
-    <DiffCodeView value={preview.diff} ariaLabel="변경 diff 미리보기" maxHeight={wide ? 460 : 280} />
+    <DiffCodeView value={preview.diff} ariaLabel="변경 diff 미리보기" maxHeight={null} />
   ) : null;
   const editColumn = (
     <div style={{ display: "grid", gap: 12, minWidth: 0 }}>
-      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+      <div style={{ display: "grid", gap: 4 }}>
         <b style={{ color: UI.ink, fontSize: TYPE.body }}>Git 원본 · IDE 편집</b>
         {source.edit_target && (
           <span style={{ color: UI.ink3, fontSize: TYPE.caption }}>
@@ -456,12 +563,14 @@ export function LiveResourceManifestEditor({
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap", fontSize: TYPE.caption, color: UI.ink2 }}>
         <Pill>{source.selected.repository_ref}</Pill><Pill>{source.selected.branch}</Pill>
-        <span style={{ fontFamily: MONO }}>{source.selected.manifest_path}</span>
-        <span style={{ marginLeft: "auto", fontFamily: MONO, color: UI.ink3 }}>commit {source.base_sha?.slice(0, 12)}</span>
+        <span style={{ flexBasis: "100%", fontFamily: MONO }}>{source.selected.manifest_path}</span>
+        <span style={{ flexBasis: "100%", fontFamily: MONO, color: UI.ink3 }}>commit {source.base_sha?.slice(0, 12)}</span>
       </div>
-      <textarea aria-label="Git YAML 원본 편집기" value={yaml} disabled={busy || !!approval || !!emergencyApproval || !!applyReceipt}
+      <textarea className="manifest-yaml-editor" aria-label="Git YAML 원본 편집기" value={yaml} disabled={busy || !!approval || !!emergencyApproval || !!applyReceipt}
+        rows={Math.max(18, yaml.split("\n").length + 1)}
+        wrap="off"
         onChange={(event) => { setYaml(event.currentTarget.value); setPreview(null); setConfirmed(false); setSourceConflictNotice(null); setDraftSaved(false); }} spellCheck={false}
-        style={{ width: "100%", minHeight: wide ? 480 : 360, resize: "vertical", boxSizing: "border-box", border: `1px solid ${UI.line}`, borderRadius: 12, padding: 14, background: "#0d1117", color: "#e6edf3", fontFamily: MONO, fontSize: TYPE.code, lineHeight: 1.6, outline: "none" }} />
+        style={{ width: "100%", minHeight: wide ? 480 : 360, resize: "none", overflowX: "scroll", overflowY: "hidden", boxSizing: "border-box", border: `1px solid ${UI.line}`, borderRadius: 12, padding: 14, background: "#0d1117", color: "#e6edf3", fontFamily: MONO, fontSize: TYPE.code, lineHeight: 1.6, outline: "none" }} />
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
         <ActionButton primary disabled={busy || !editInput} onClick={saveDraft}>저장</ActionButton>
         <ActionButton disabled={busy || sourceRefreshRequired} onClick={() => void runPreview()}>
@@ -510,46 +619,22 @@ export function LiveResourceManifestEditor({
           </div>
         </div>
       )}
-      {approval && (
-        <ManifestNotice tone="ok" title="Safe PR 요청 접수">
-          승인 {approval.approval_id} · 워크플로 {approval.workflow_run_id} · 기준 commit {source.base_sha?.slice(0, 12)}
-          {approvalDecision === null && (
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
-              <ActionButton
-                primary
-                disabled={approvalDecisionBusy}
-                onClick={() => void decideApproval("granted")}
-              >
-                승인하고 배포 진행
-              </ActionButton>
-              <ActionButton disabled={approvalDecisionBusy} onClick={() => void decideApproval("rejected")}>
-                거부
-              </ActionButton>
-            </div>
-          )}
-          {approvalDecision === "granted" && (
-            <div style={{ marginTop: 6 }}>
-              승인 완료 — 배포 파이프라인이 진행됩니다.
-              {onOpenDeploySurface && (
-                <div style={{ marginTop: 6 }}>
-                  <ActionButton primary disabled={false} onClick={onOpenDeploySurface}>배포 현황에서 추적</ActionButton>
-                </div>
-              )}
-            </div>
-          )}
-          {approvalDecision === "rejected" && <div style={{ marginTop: 6 }}>거부됨 — 이 변경은 배포되지 않습니다.</div>}
-          {approvalDecisionError && <div style={{ marginTop: 6 }}>결정 실패: {approvalDecisionError}</div>}
-        </ManifestNotice>
-      )}
-      {emergencyApproval && <ManifestNotice tone="warn" title="Git artifact 기록 · 동기화 대기">승인 {emergencyApproval.approval_id} · 기준 commit {source.base_sha?.slice(0, 12)} · 클러스터 직접 적용 후 Git 감지·동기화가 끝날 때까지 drift 상태로 추적합니다.</ManifestNotice>}
-      {applyReceipt && <ManifestNotice tone="ok" title="Owner controller 적용 명령 접수">명령 {applyReceipt.command_id} · 감사 이벤트 {applyReceipt.audit_event_id}</ManifestNotice>}
-      {applyStatus && (
-        <ManifestNotice
-          tone={applyStatus.status === "failed" ? "error" : applyStatus.status === "completed" ? "ok" : "neutral"}
-          title={`적용 상태 · ${commandStatusLabel(applyStatus.status)}`}
-        >
-          {commandResultSummary(applyStatus)}
-        </ManifestNotice>
+      {(approval || emergencyApproval || applyReceipt) && (
+        <ManifestWorkflowProgress
+          route={emergencyApproval || applyReceipt ? "direct" : "safe-pr"}
+          approval={approval}
+          approvalDecision={approvalDecision}
+          approvalDecisionBusy={approvalDecisionBusy}
+          approvalDecisionError={approvalDecisionError}
+          applyReceipt={applyReceipt}
+          applyStatus={applyStatus}
+          baseSha={source.base_sha}
+          repositoryRef={source.selected.repository_ref}
+          prUrl={manifestPrUrl}
+          prFailed={manifestPrFailed}
+          onApprovalDecision={decideApproval}
+          onOpenDeploySurface={onOpenDeploySurface}
+        />
       )}
     </div>
   );
@@ -557,27 +642,238 @@ export function LiveResourceManifestEditor({
   return <div style={{ padding: "16px 0 24px" }}>{editColumn}</div>;
 }
 
+const SAFE_PR_MANIFEST_STEPS = ["검증", "요청", "승인", "PR 생성", "완료"] as const;
+const DIRECT_MANIFEST_STEPS = ["검증", "Git 기록", "명령 접수", "적용", "완료"] as const;
+
+function ManifestWorkflowProgress({
+  route,
+  approval,
+  approvalDecision,
+  approvalDecisionBusy,
+  approvalDecisionError,
+  applyReceipt,
+  applyStatus,
+  baseSha,
+  repositoryRef,
+  prUrl,
+  prFailed,
+  onApprovalDecision,
+  onOpenDeploySurface,
+}: {
+  route: "safe-pr" | "direct";
+  approval: ResourceManifestApproveEndpoint | null;
+  approvalDecision: "granted" | "rejected" | null;
+  approvalDecisionBusy: boolean;
+  approvalDecisionError: string | null;
+  applyReceipt: ResourceManifestApplyEndpoint | null;
+  applyStatus: CommandStatus | null;
+  baseSha: string | null;
+  repositoryRef: string;
+  prUrl: string | null;
+  prFailed: boolean;
+  onApprovalDecision: (decision: "granted" | "rejected") => Promise<void>;
+  onOpenDeploySurface?: () => void;
+}) {
+  const failed = prFailed
+    || approvalDecision === "rejected"
+    || applyStatus?.status === "failed";
+  const completed = route === "safe-pr"
+    ? Boolean(prUrl)
+    : applyStatus?.status === "completed";
+  const step = route === "safe-pr"
+    ? prUrl ? 5 : approvalDecision === "granted" ? 3 : approval ? 2 : 1
+    : applyStatus?.status === "completed" ? 5
+      : applyStatus?.status === "running" || applyStatus?.status === "leased" ? 4
+        : applyReceipt ? 3 : 2;
+  const labels = route === "safe-pr" ? SAFE_PR_MANIFEST_STEPS : DIRECT_MANIFEST_STEPS;
+  const activeColor = failed ? HP.crit : completed ? HP.ok : BLUE;
+  const statusLabel = failed
+    ? "중단"
+    : completed
+      ? "완료"
+      : `${step}/5`;
+  const latestRecord = manifestWorkflowRecord({
+    route,
+    approval,
+    approvalDecision,
+    applyReceipt,
+    applyStatus,
+    prUrl,
+    prFailed,
+  });
+  const commitUrl = githubCommitUrl(repositoryRef, baseSha);
+
+  return (
+    <section
+      aria-live="polite"
+      style={{
+        display: "grid",
+        gap: 12,
+        border: `1px solid ${UI.line}`,
+        borderRadius: 10,
+        background: UI.card,
+        padding: 14,
+        boxShadow: `0 6px 16px -10px ${inkA(0.26)}, 0 1px 3px ${inkA(0.06)}`,
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <div style={{ minWidth: 0, flex: 1, display: "grid", gap: 3 }}>
+          <strong style={{ color: UI.heading, fontSize: TYPE.section, fontWeight: 700 }}>
+            {route === "safe-pr" ? "Safe PR 진행" : "긴급 적용 진행"}
+          </strong>
+          <span style={{ color: UI.ink3, fontSize: TYPE.label }}>YAML 변경 진행 상태</span>
+        </div>
+        <span style={{ flexShrink: 0, color: failed ? HP.crit : UI.ink2, fontSize: TYPE.body, fontVariantNumeric: "tabular-nums" }}>
+          {statusLabel}
+        </span>
+      </div>
+
+      <div aria-label="YAML 변경 진행률" style={{ height: 5, overflow: "hidden", borderRadius: 999, background: HP.pending }}>
+        <div style={{ width: `${step * 20}%`, height: "100%", borderRadius: 999, background: activeColor, transition: "width 320ms ease" }} />
+      </div>
+
+      <ol aria-label="YAML 변경 진행 단계" style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(0, 1fr))", gap: 5, margin: 0, padding: "11px 0 0", borderTop: `1px dashed ${UI.line}`, listStyle: "none" }}>
+        {labels.map((label, index) => {
+          const position = index + 1;
+          const done = completed || position < step;
+          const active = !completed && position === step;
+          return (
+            <li key={label} style={{ minWidth: 0, display: "grid", justifyItems: "center", gap: 5, textAlign: "center" }}>
+              <span
+                aria-hidden="true"
+                style={{
+                  width: 22,
+                  height: 22,
+                  display: "grid",
+                  placeItems: "center",
+                  borderRadius: 6,
+                  border: `1px solid ${active ? activeColor : UI.line}`,
+                  background: active ? activeColor : done ? TINT.ok.bg : UI.card,
+                  color: active ? UI.card : done ? TINT.ok.fg : UI.ink3,
+                  fontSize: TYPE.caption,
+                  fontWeight: 600,
+                }}
+              >
+                {done ? <Check size={12} /> : position}
+              </span>
+              <span style={{ width: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: active ? UI.ink : UI.ink3, fontSize: TYPE.caption, fontWeight: active ? 600 : 500 }}>
+                {label}
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+
+      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: UI.ink3, fontSize: TYPE.caption }}>
+        최근 기록 · {latestRecord}
+      </span>
+
+      {route === "safe-pr" && approval && approvalDecision === null && !prUrl && !prFailed && (
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <ActionButton primary disabled={approvalDecisionBusy} onClick={() => void onApprovalDecision("granted")}>
+            승인하고 진행
+          </ActionButton>
+          <ActionButton disabled={approvalDecisionBusy} onClick={() => void onApprovalDecision("rejected")}>
+            거부
+          </ActionButton>
+        </div>
+      )}
+      {approvalDecisionError && (
+        <span role="alert" style={{ color: HP.crit, fontSize: TYPE.label }}>
+          승인 결정을 처리하지 못했습니다. {approvalDecisionError}
+        </span>
+      )}
+
+      {(prUrl || commitUrl || (approvalDecision === "granted" && onOpenDeploySurface)) && (
+        <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", paddingTop: 10, borderTop: `1px dashed ${UI.line}` }}>
+          {prUrl && (
+            <a className="product-focusable" href={prUrl} rel="noopener noreferrer" target="_blank" style={manifestLinkStyle}>
+              Pull Request 열기 <ExternalLink size={13} />
+            </a>
+          )}
+          {commitUrl && (
+            <a className="product-focusable" href={commitUrl} rel="noopener noreferrer" target="_blank" style={manifestLinkStyle}>
+              기준 커밋 보기 <ExternalLink size={13} />
+            </a>
+          )}
+          {approvalDecision === "granted" && onOpenDeploySurface && (
+            <button type="button" className="product-focusable" onClick={onOpenDeploySurface} style={manifestTextButtonStyle}>
+              배포 현황에서 추적
+            </button>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function manifestWorkflowRecord({
+  route,
+  approval,
+  approvalDecision,
+  applyReceipt,
+  applyStatus,
+  prUrl,
+  prFailed,
+}: {
+  route: "safe-pr" | "direct";
+  approval: ResourceManifestApproveEndpoint | null;
+  approvalDecision: "granted" | "rejected" | null;
+  applyReceipt: ResourceManifestApplyEndpoint | null;
+  applyStatus: CommandStatus | null;
+  prUrl: string | null;
+  prFailed: boolean;
+}): string {
+  if (prFailed) return "PR 생성 실패";
+  if (prUrl) return "PR 생성 완료";
+  if (approvalDecision === "rejected") return "변경 거부";
+  if (route === "safe-pr") {
+    if (approvalDecision === "granted") return "승인 완료 · PR 생성 대기";
+    if (approval) return "Safe PR 요청 접수";
+  }
+  if (applyStatus) return commandStatusLabel(applyStatus.status);
+  if (applyReceipt) return "적용 명령 접수";
+  return "Git 변경 기록";
+}
+
+function githubCommitUrl(repositoryRef: string, sha: string | null): string | null {
+  if (!sha) return null;
+  const normalized = repositoryRef.trim()
+    .replace(/^https:\/\/github\.com\//u, "")
+    .replace(/^git@github\.com:/u, "")
+    .replace(/\.git$/u, "")
+    .replace(/^\/+|\/+$/gu, "");
+  return /^[^/\s]+\/[^/\s]+$/u.test(normalized)
+    ? `https://github.com/${normalized}/commit/${encodeURIComponent(sha)}`
+    : null;
+}
+
+const manifestLinkStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 5,
+  color: BLUE,
+  fontSize: TYPE.label,
+  fontWeight: 600,
+  textDecoration: "none",
+};
+
+const manifestTextButtonStyle: React.CSSProperties = {
+  border: 0,
+  padding: 0,
+  background: "transparent",
+  color: BLUE,
+  fontSize: TYPE.label,
+  fontWeight: 600,
+  cursor: "pointer",
+};
+
 function commandStatusLabel(status: CommandStatus["status"]): string {
   if (status === "queued") return "대기";
   if (status === "leased") return "에이전트 수신";
   if (status === "running") return "적용 중";
   if (status === "completed") return "명령 완료";
   return "실패";
-}
-
-function commandResultSummary(command: CommandStatus): string {
-  const message = typeof command.result.message === "string" ? command.result.message : null;
-  const resources = Array.isArray(command.result.resources) ? command.result.resources : [];
-  const rollout = resources
-    .filter((item): item is Record<string, unknown> => typeof item === "object" && item !== null)
-    .map((item) => item.rollout)
-    .find((item): item is Record<string, unknown> => typeof item === "object" && item !== null);
-  const phase = typeof rollout?.phase === "string" ? rollout.phase : null;
-  const resource = typeof rollout?.resource === "string" ? rollout.resource : null;
-  const rolloutText = phase ? `Rollout ${phase}${resource ? ` · ${resource}` : ""}` : null;
-  return [message, rolloutText, command.completed_at ? `완료 ${command.completed_at}` : null]
-    .filter((item): item is string => item !== null)
-    .join(" · ") || "에이전트의 실제 적용 결과를 기다리고 있습니다.";
 }
 
 function LiveManifestPanel({ source, action }: {
@@ -594,7 +890,7 @@ function LiveManifestPanel({ source, action }: {
         </div>
       </div>
       {source.live_yaml ? (
-        <YamlCodeView value={source.live_yaml} ariaLabel="Live YAML" maxHeight={320} />
+        <YamlCodeView value={source.live_yaml} ariaLabel="Live YAML" maxHeight={null} />
       ) : (
         <ManifestNotice tone="warn" title="Live YAML 관측 불가">{source.live_reason ?? "현재 inventory snapshot에 원문이 없습니다."}</ManifestNotice>
       )}
@@ -618,6 +914,26 @@ function ManifestLoadingNotice({ title, children }: { title: string; children: R
       {children}
     </div>
   );
+}
+
+function DelayedManifestLoadingNotice(
+  { title, children }: { title: string; children: React.ReactNode },
+) {
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const timer = window.setTimeout(
+      () => setVisible(true),
+      MANIFEST_LOADING_NOTICE_DELAY_MS,
+    );
+    return () => window.clearTimeout(timer);
+  }, []);
+  return visible
+    ? <ManifestLoadingNotice title={title}>{children}</ManifestLoadingNotice>
+    : <ManifestLoadingPlaceholder />;
+}
+
+function ManifestLoadingPlaceholder() {
+  return <div aria-hidden="true" style={{ minHeight: 72 }} />;
 }
 
 function manifestDraftKey(resourceId: string): string {

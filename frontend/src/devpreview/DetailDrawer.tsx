@@ -92,6 +92,7 @@ export function DetailDrawer({
   children,
   expanded,
   forceExpanded = false,
+  forceExpandedLabel = "AI 대화 중에는 전체 화면 유지",
   header,
   leftInset = 0,
   navigation,
@@ -108,6 +109,7 @@ export function DetailDrawer({
   children: ReactNode;
   expanded: boolean;
   forceExpanded?: boolean;
+  forceExpandedLabel?: string;
   header: ReactNode;
   leftInset?: number;
   navigation?: ReactNode;
@@ -358,14 +360,14 @@ export function DetailDrawer({
                 className="product-focusable product-control"
                 aria-label={
                   forceExpanded
-                    ? "AI 대화 중에는 전체 화면 유지"
+                    ? forceExpandedLabel
                     : full
                       ? "상세 패널 축소"
                       : "상세 패널 전체 화면"
                 }
                 title={
                   forceExpanded
-                    ? "AI 대화 중에는 전체 화면 유지"
+                    ? forceExpandedLabel
                     : full
                       ? "패널로 축소"
                       : "전체 화면"
