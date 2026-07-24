@@ -3,10 +3,14 @@ from __future__ import annotations
 from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 
+from conftest import load_service
+
 from domains.rca.recovery_verification import (
     before_alert_snapshot,
     evaluate_recovery_evidence,
 )
+
+feedback_worker = load_service("ai/rca-feedback-worker")
 
 START = datetime(2026, 7, 24, 1, 0, tzinfo=UTC)
 TARGET = {
@@ -418,6 +422,81 @@ def test_restores_approved_three_replica_baseline_without_two_replica_constant()
     assert decision.after["checks"]["ready_replicas_restored"] is True
 
 
+def test_omitted_unavailable_replicas_is_zero_for_a_complete_rollout() -> None:
+    sample = evidence(0)
+    metadata = sample["metadata"]
+    assert isinstance(metadata, dict)
+    snapshots = metadata["current_workload_snapshots"]
+    assert isinstance(snapshots, list)
+    target_snapshot = snapshots[0]
+    assert isinstance(target_snapshot, dict)
+    status = target_snapshot["deployment_status"]
+    assert isinstance(status, dict)
+    status.pop("unavailable_replicas")
+
+    decision = apply_decision(lifecycle(), offset_seconds=0, sample=sample)
+
+    assert decision.reason_code == "stabilization_window_in_progress"
+    assert decision.after["deployment"]["unavailable_replicas"] is None
+    assert decision.after["checks"]["unavailable_replicas_zero"] is True
+
+
+def test_omitted_unavailable_replicas_fails_closed_for_incomplete_rollout() -> None:
+    variants = (
+        ("desired_replicas", 1),
+        ("ready_replicas", 1),
+        ("updated_replicas", 1),
+        ("available_replicas", 1),
+        ("observed_generation", 8),
+    )
+
+    for field, value in variants:
+        sample = evidence(0)
+        snapshots = sample["metadata"]["current_workload_snapshots"]  # type: ignore[index]
+        assert isinstance(snapshots, list)
+        target_snapshot = snapshots[0]
+        assert isinstance(target_snapshot, dict)
+        status = target_snapshot["deployment_status"]
+        assert isinstance(status, dict)
+        status.pop("unavailable_replicas")
+        status[field] = value
+
+        decision = apply_decision(lifecycle(), offset_seconds=0, sample=sample)
+
+        assert decision.after["checks"]["unavailable_replicas_zero"] is None
+
+
+def test_omitted_unavailable_replicas_accepts_newer_observed_generation() -> None:
+    sample = evidence(0)
+    snapshots = sample["metadata"]["current_workload_snapshots"]  # type: ignore[index]
+    assert isinstance(snapshots, list)
+    target_snapshot = snapshots[0]
+    assert isinstance(target_snapshot, dict)
+    status = target_snapshot["deployment_status"]
+    assert isinstance(status, dict)
+    status.pop("unavailable_replicas")
+    status["observed_generation"] = 10
+
+    decision = apply_decision(lifecycle(), offset_seconds=0, sample=sample)
+
+    assert decision.after["checks"]["unavailable_replicas_zero"] is True
+
+
+def test_invalid_present_unavailable_replicas_is_not_treated_as_omitted() -> None:
+    sample = evidence(0)
+    snapshots = sample["metadata"]["current_workload_snapshots"]  # type: ignore[index]
+    assert isinstance(snapshots, list)
+    target_snapshot = snapshots[0]
+    assert isinstance(target_snapshot, dict)
+    status = target_snapshot["deployment_status"]
+    assert isinstance(status, dict)
+    status["unavailable_replicas"] = -1
+
+    decision = apply_decision(lifecycle(), offset_seconds=0, sample=sample)
+
+    assert decision.after["checks"]["unavailable_replicas_zero"] is None
+
+
 def test_duplicate_and_stale_windows_do_not_advance_stability_clock() -> None:
     durable = lifecycle()
     first = apply_decision(durable, offset_seconds=0)
@@ -795,3 +874,20 @@ def test_maximum_window_fails_without_five_minutes_of_continuous_health() -> Non
 
     assert expired.status == "failed"
     assert expired.reason_code == "verification_window_expired"
+
+
+def test_evidence_expiry_persists_retryable_failure_identity() -> None:
+    durable = lifecycle()
+    expired = apply_decision(durable, offset_seconds=600)
+
+    feedback_worker.apply_verification_terminal_state(
+        durable,
+        expired,
+        evidence_ref="window-expired",
+    )
+
+    assert durable["failure"] == {
+        "reason_code": "verification_window_expired",
+        "reason": expired.reason,
+        "evidence_ref": "window-expired",
+    }

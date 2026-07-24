@@ -1543,6 +1543,9 @@ async def retry_recovery_by_correlation(
     lifecycle = recovery_object(record_payload.get("lifecycle"))
     failure = recovery_object(lifecycle.get("failure"))
     reason_code = recovery_text(failure.get("reason_code"))
+    if not reason_code:
+        verification = recovery_object(lifecycle.get("verification"))
+        reason_code = recovery_text(verification.get("last_reason_code"))
     merge = recovery_object(lifecycle.get("merge"))
     old_workflow_run_id = recovery_text(merge.get("workflow_run_id"))
     if not old_workflow_run_id:

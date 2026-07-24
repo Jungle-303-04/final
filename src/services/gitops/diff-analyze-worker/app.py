@@ -20,6 +20,7 @@ from domains.command.events import CommandRequestedBody
 from domains.gitops.approvals import resource_approval_qualifier
 from domains.gitops.diffing import MISSING
 from domains.gitops.events import DesiredDesiredDiffDetectedBody, Diff, DiffAnalyzedBody
+from domains.gitops.recovery_merge import recovery_merge_authorization
 from domains.gitops.repository import derive_approval_id
 from domains.scm.events import SafePrFilePatch, SafePrRequestedBody
 from packages.config.constants import Command, GitHub, RiskLevel, Sandbox, Target
@@ -42,8 +43,13 @@ ROLLBACK_PATCH_DIR = ".gitops/rollback"
 POLICY_ROUTE_NOOP = "noop"
 POLICY_ROUTE_SAFE_PR = "safe_pr"
 POLICY_ROUTE_APPROVAL_REQUIRED = "approval_required"
+POLICY_ROUTE_RECOVERY_PR_MERGED = "recovery_pr_merged"
 POLICY_DECISION_REF_PREFIX = "policy-decision"
 SYSTEM_POLICY_APPROVER = "system-policy"
+RECOVERY_PR_MERGE_REASON = "operator-reviewed recovery PR merged"
+RECOVERY_PR_SCOPE_REJECTED_REASON = (
+    "resource is outside the exact operator-reviewed recovery change"
+)
 
 
 @dataclass(frozen=True)
@@ -375,7 +381,29 @@ async def on_desired_diff(
     evt: DesiredDesiredDiffDetectedBody, ctx: EventContext
 ) -> AsyncIterator[EventBody]:
     diff = evt.diff
-    decision = evaluate_safe_pr_policy(diff)
+    recovery_authorization = await recovery_merge_authorization(ctx.db, diff)
+    if recovery_authorization.tracked and recovery_authorization.request is None:
+        yield DiffAnalyzedBody(
+            diff=diff,
+            safe=False,
+            risk=diff.risk,
+            reason=RECOVERY_PR_SCOPE_REJECTED_REASON,
+        )
+        return
+    if recovery_authorization.request is not None:
+        approval_ref = derive_approval_id(diff.workflow_run_id, approval_qualifier(diff))
+        decision = PolicyDecision(
+            route=POLICY_ROUTE_RECOVERY_PR_MERGED,
+            safe=False,
+            reason=RECOVERY_PR_MERGE_REASON,
+            approval_ref=approval_ref,
+            policy_decision_ref=policy_decision_ref(
+                approval_ref,
+                POLICY_ROUTE_RECOVERY_PR_MERGED,
+            ),
+        )
+    else:
+        decision = evaluate_safe_pr_policy(diff)
     await persist_policy_decision(ctx.db, diff, decision)
     yield DiffAnalyzedBody(diff=diff, safe=decision.safe, risk=diff.risk, reason=decision.reason)
     if decision.route == POLICY_ROUTE_SAFE_PR:

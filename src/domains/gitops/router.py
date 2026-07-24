@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 from collections.abc import Mapping
 from dataclasses import replace
 from typing import Any, cast
@@ -19,7 +20,10 @@ from domains.gitops.events import (
     Diff,
     GitWebhookReceivedBody,
 )
-from domains.gitops.repository import derive_workflow_run_id
+from domains.gitops.recovery_merge import (
+    approved_change_contract,
+    approved_replica_count,
+)
 from domains.identity.dependencies import require_cluster_access, require_session
 from domains.rca.events import (
     RecoveryPrMergedBody,
@@ -80,6 +84,11 @@ RECOVERY_STATUS_PR_OPEN = "pr_open"
 RECOVERY_STATUS_DEPLOY_PENDING = "deploy_pending"
 RECOVERY_STATUS_FAILED = "failed"
 RECOVERY_STATUS_SELECTION_REQUESTED = "selection_requested"
+
+
+def recovery_merge_workflow_run_id(plan_id: str, merge_commit_sha: str) -> str:
+    raw = f"{plan_id}|{merge_commit_sha}|recovery-merge"
+    return f"workflow-{hashlib.sha256(raw.encode()).hexdigest()[:32]}"
 
 
 def build_git_webhook_body(payload: GitHubWebhookRequest) -> GitWebhookReceivedBody:
@@ -590,8 +599,17 @@ async def handle_tracked_recovery_pull_request(
             reason_code="recovery_binding_unavailable",
             reason="merge된 PR과 정확히 일치하는 활성 deployment binding을 찾지 못했습니다.",
         )
+    record_payload = exact_record["payload"]
+    lifecycle = dict(record_payload.get("lifecycle") or {})
+    pr = dict(lifecycle.get("pr") or {})
+    approved_changes = approved_change_contract(record_payload)
+    approved_replicas = approved_replica_count(record_payload)
     image = env(GITOPS_WEBHOOK_IMAGE_ENV, "")
-    if not image or not identity["merge_commit_sha"]:
+    if (
+        not image
+        or not identity["merge_commit_sha"]
+        or approved_changes is None
+    ):
         return await reject_tracked_recovery_pull_request(
             db=db,
             events=events,
@@ -604,12 +622,17 @@ async def handle_tracked_recovery_pull_request(
         commit_sha=identity["merge_commit_sha"],
         image=image,
         correlation_id=str(exact_record["correlation_id"]),
+        replicas=approved_replicas or DEFAULT_WEBHOOK_REPLICAS,
+        force=True,
     )
-    workflow_run_id = derive_workflow_run_id(body.to_body())
+    # A normal base-branch push may finish before the PR-closed webhook. Give
+    # recovery its own deterministic run so delivery order cannot strand the
+    # plan behind a terminal commit-scoped workflow.
+    workflow_run_id = recovery_merge_workflow_run_id(
+        str(exact_record["plan_id"]),
+        identity["merge_commit_sha"],
+    )
     body = replace(body, workflow_run_id=workflow_run_id)
-    record_payload = exact_record["payload"]
-    lifecycle = dict(record_payload.get("lifecycle") or {})
-    pr = dict(lifecycle.get("pr") or {})
     now = db.current_database_time()
     lifecycle.update(
         {

@@ -318,6 +318,14 @@ class WorkflowStore(Protocol):
 
     async def get_workflow_run(self, workflow_run_id: str) -> JsonObject | None: ...
 
+    async def get_recovery_plan_for_workflow(
+        self,
+        workspace_id: str,
+        workflow_run_id: str,
+        binding_id: str,
+        application_id: str,
+    ) -> JsonObject | None: ...
+
     async def upsert_application(self, payload: JsonObject) -> JsonObject: ...
 
     async def start_workflow_run(self, payload: JsonObject) -> WorkflowMutation: ...
@@ -329,6 +337,16 @@ class WorkflowStore(Protocol):
     async def request_workflow_approval(self, payload: JsonObject) -> JsonObject: ...
 
     async def resolve_workflow_approval(self, payload: JsonObject) -> JsonObject: ...
+
+    async def resolve_workflow_approval_if_open(
+        self,
+        approval_id: str,
+        workspace_id: str,
+        status: str,
+        decided_by: str | None,
+        decision: str | None,
+        details: JsonObject,
+    ) -> bool: ...
 
     async def attach_workflow_command(self, workflow_run_id: str, command_id: str) -> None: ...
 

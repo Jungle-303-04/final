@@ -689,7 +689,7 @@ class RcaRepository(DatabaseConnection):
             .where(
                 table.c.status == RECOVERY_PLAN_STATUS_PR_OPEN,
                 pr["url"].astext == pr_url,
-                pr["repo_ref"].astext == repo_ref,
+                func.lower(pr["repo_ref"].astext) == repo_ref.casefold(),
                 pr["base_branch"].astext == base_branch,
                 pr["number"].astext == str(pr_number),
                 pr["node_id"].astext == pr_node_id,
@@ -731,7 +731,7 @@ class RcaRepository(DatabaseConnection):
             .where(
                 table.c.status == RECOVERY_PLAN_STATUS_PR_OPEN,
                 pr["url"].astext == pr_url,
-                pr["repo_ref"].astext == repo_ref,
+                func.lower(pr["repo_ref"].astext) == repo_ref.casefold(),
                 pr["base_branch"].astext == base_branch,
                 pr["number"].astext == str(pr_number),
                 pr["node_id"].astext == pr_node_id,
@@ -772,6 +772,8 @@ class RcaRepository(DatabaseConnection):
                     (
                         RECOVERY_PLAN_STATUS_DEPLOY_PENDING,
                         RECOVERY_PLAN_STATUS_VERIFICATION_PENDING,
+                        RECOVERY_PLAN_STATUS_COMPLETED,
+                        RECOVERY_PLAN_STATUS_FAILED,
                     )
                 ),
                 merge["workflow_run_id"].astext == workflow_run_id,

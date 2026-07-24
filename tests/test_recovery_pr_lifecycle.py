@@ -76,6 +76,13 @@ def approved_params() -> dict[str, object]:
         "base_branch": "main",
         "commit_sha": "c" * 40,
         "expected_replicas": 2,
+        "authorized_changes": [
+            {
+                "field_path": "spec.replicas",
+                "current_value": 1,
+                "desired_value": 2,
+            }
+        ],
         "verification_failure_ratio_before": 0.8,
         "verification_failure_ratio_metric_identity": {
             "namespace": "sandbox",
@@ -502,7 +509,11 @@ def test_pr_is_not_tracked_when_verification_prerequisite_is_missing() -> None:
     assert db.reopened is True
 
 
-def tracked_record(*, status: str = "pr_open") -> dict[str, Any]:
+def tracked_record(
+    *,
+    status: str = "pr_open",
+    expected_replicas: int = 2,
+) -> dict[str, Any]:
     return {
         "plan_id": "plan-1",
         "workspace_id": "workspace-1",
@@ -532,9 +543,19 @@ def tracked_record(*, status: str = "pr_open") -> dict[str, Any]:
                 "verification": {
                     "minimum_seconds": 300,
                     "maximum_seconds": 600,
-                    "expected": {"replicas": 2},
+                    "expected": {"replicas": expected_replicas},
                     "before": {"alert_event_id": "alert-1"},
                     "target": TARGET,
+                },
+                "authorization": {
+                    "target": TARGET,
+                    "changes": [
+                        {
+                            "field_path": "spec.replicas",
+                            "current_value": 1,
+                            "desired_value": expected_replicas,
+                        }
+                    ],
                 },
             },
         },
@@ -594,8 +615,8 @@ class Events:
 
 
 class MergeDb:
-    def __init__(self) -> None:
-        self.record = tracked_record()
+    def __init__(self, *, expected_replicas: int = 2) -> None:
+        self.record = tracked_record(expected_replicas=expected_replicas)
         self.transition: tuple[tuple[str, ...], str, dict[str, Any]] | None = None
         self.cleared_selection = False
 
@@ -680,7 +701,7 @@ class MergeDb:
 def test_signed_exact_merge_moves_only_tracked_pr_to_deploy_pending(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    db = MergeDb()
+    db = MergeDb(expected_replicas=3)
     events = Events()
     monkeypatch.setenv("GITOPS_WEBHOOK_IMAGE", "demo/game-server:v2")
 
@@ -704,9 +725,15 @@ def test_signed_exact_merge_moves_only_tracked_pr_to_deploy_pending(
     assert lifecycle["merge"]["deployment_request"]["workflow_run_id"].startswith(
         "workflow-"
     )
+    assert lifecycle["merge"]["workflow_run_id"] == (
+        gitops_router.recovery_merge_workflow_run_id("plan-1", MERGE_SHA)
+    )
+    assert lifecycle["merge"]["deployment_request"]["force"] is True
+    assert lifecycle["merge"]["deployment_request"]["replicas"] == 3
     assert len(events.calls) == 2
     assert isinstance(events.calls[0][0], RecoveryPrMergedBody)
     assert events.calls[1][0].commit_sha == MERGE_SHA
+    assert events.calls[1][0].force is True
     assert events.calls[1][2] is not None
 
 
@@ -1107,6 +1134,27 @@ def test_expired_verification_retry_keeps_deployment_and_restarts_only_window(
     assert lifecycle["verification"]["last_evidence_key"] is None
     assert lifecycle["verification"]["after"] == {}
     assert len(events.calls) == 1
+    assert isinstance(events.calls[0][0], RecoveryRetryRequestedBody)
+
+
+def test_expired_verification_retry_recovers_legacy_missing_failure_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db = RetryRouteDb(
+        reason_code="verification_window_expired",
+        workflow_status="succeeded",
+    )
+    lifecycle = db.record["payload"]["lifecycle"]
+    lifecycle.pop("failure")
+    lifecycle["verification"]["last_reason_code"] = "verification_window_expired"
+    events = RetryEvents()
+
+    run_retry(db, events, monkeypatch)
+
+    assert db.transitions[0][1] == "verification_pending"
+    assert db.transitions[0][2]["verification"]["last_reason_code"] == (
+        "waiting_for_post_deploy_evidence"
+    )
     assert isinstance(events.calls[0][0], RecoveryRetryRequestedBody)
 
 
