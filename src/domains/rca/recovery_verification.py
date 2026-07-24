@@ -461,8 +461,27 @@ def before_alert_snapshot(
     target: Mapping[str, str],
     correlation_id: str,
     incident_id: str,
+    expected_series_identity: Mapping[str, Any] | None = None,
 ) -> JsonObject:
-    """Capture one exact firing Alertmanager SLI occurrence before recovery."""
+    """Capture one exact Alertmanager SLI occurrence before recovery.
+
+    Alertmanager resolution updates the durable occurrence in place. Therefore an
+    exact occurrence that fired for this incident remains valid after it reaches
+    the terminal ``resolved`` state, provided its firing/resolution chronology is
+    complete. This lets an operator start recovery after the alert clears without
+    weakening target, incident, threshold, or series-identity checks.
+    """
+
+    expected_identity = (
+        standard_sli_series_identity(expected_series_identity)
+        if expected_series_identity is not None
+        else None
+    )
+    if expected_series_identity is not None and expected_identity is None:
+        return {
+            "available": False,
+            "reason_code": "pre_recovery_alert_missing",
+        }
 
     matches: list[Mapping[str, Any]] = []
     for alert in alerts:
@@ -470,16 +489,38 @@ def before_alert_snapshot(
             continue
         if text(alert.get("incident_id")) not in {correlation_id, incident_id}:
             continue
-        if text(alert.get("status")).casefold() not in {"firing", "acked"}:
+        if (
+            text(alert.get("source")).casefold() != "alertmanager"
+            or text(alert.get("rule_name")) != STANDARD_SLI_ALERT_NAME
+        ):
+            continue
+        status = text(alert.get("status")).casefold()
+        if status not in {"firing", "acked", "resolved"}:
+            continue
+        if status == "resolved":
+            fired_at = parse_datetime(alert.get("fired_at"))
+            resolved_at = parse_datetime(alert.get("resolved_at"))
+            if (
+                fired_at is None
+                or resolved_at is None
+                or resolved_at < fired_at
+            ):
+                continue
+        elif parse_datetime(alert.get("fired_at")) is None:
             continue
         observed = finite_float(alert.get("observed_value"))
         threshold = finite_float(alert.get("threshold"))
         if observed is None or threshold is None or observed <= threshold:
             continue
-        if (
-            text(alert.get("rule_name")) == STANDARD_SLI_ALERT_NAME
-            and standard_sli_series_identity(alert.get("series_identity")) is None
+        series_identity = standard_sli_series_identity(
+            alert.get("series_identity")
+        )
+        if series_identity is None or not metric_labels_match_target(
+            series_identity,
+            target,
         ):
+            continue
+        if expected_identity is not None and series_identity != expected_identity:
             continue
         matches.append(alert)
     if len(matches) != 1:

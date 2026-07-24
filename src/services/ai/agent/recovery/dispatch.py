@@ -402,6 +402,7 @@ class RecoveryActionPreflight:
                 target=target,
                 correlation_id=correlation_id,
                 incident_id=evt.plan.incident_id,
+                expected_series_identity=failure_ratio_identity,
             )
             threshold = finite_float(alert_before.get("threshold"))
             registration = await self.evidence.get_cluster_registration(

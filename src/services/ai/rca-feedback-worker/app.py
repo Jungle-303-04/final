@@ -443,6 +443,7 @@ async def on_recovery_safe_pr_created(
             target=target,
             correlation_id=ctx.correlation_id,
             incident_id=str(record.get("incident_id") or ""),
+            expected_series_identity=failure_ratio_identity,
         )
     before.update(
         {
