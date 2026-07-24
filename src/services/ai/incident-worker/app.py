@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import inspect
 from collections.abc import AsyncIterator
 
 from domains.rca.events import Evidence, EvidenceBuiltBody, IncidentRecord
 from domains.rca.timeline import incident_timeline_event
+from domains.target.management_guard import is_management_registration
 from domains.timeline.repository import TimelineLedgerAppend
 from packages.contracts.event_bus.bodies import EventBody
 from packages.contracts.stores import RcaStore
@@ -24,6 +26,8 @@ async def on_evidence_built(
     evt: EvidenceBuiltBody,
     ctx: EventContext[RcaStore],
 ) -> AsyncIterator[EventBody]:
+    if await evidence_is_from_management_cluster(evt.evidence, ctx.db):
+        return
     evt = await hydrate_evidence_built(evt, ctx)
     bodies = pipeline.build_bodies(evt.evidence, ctx.correlation_id)
     if not bodies.detected_body.detected:
@@ -47,6 +51,18 @@ async def on_evidence_built(
         return
     yield bodies.detected_body
     yield bodies.next_body
+
+
+async def evidence_is_from_management_cluster(evidence: Evidence, db: object) -> bool:
+    """Keep read-only management snapshots out of the target incident lifecycle."""
+
+    getter = getattr(db, "get_cluster_registration", None)
+    if not callable(getter):
+        return False
+    registration = getter(evidence.workspace_id, evidence.cluster_id)
+    if inspect.isawaitable(registration):
+        registration = await registration
+    return is_management_registration(registration)
 
 
 async def append_confirmed_incident_timeline(
