@@ -601,6 +601,26 @@ async def handle_tracked_recovery_pull_request(
         )
     record_payload = exact_record["payload"]
     lifecycle = dict(record_payload.get("lifecycle") or {})
+    verification = lifecycle.get("verification")
+    verification_blockers = (
+        [
+            str(value)
+            for value in verification.get("blockers", [])
+            if str(value)
+        ]
+        if isinstance(verification, Mapping)
+        and isinstance(verification.get("blockers"), list)
+        else []
+    )
+    if verification_blockers:
+        return JSONResponse(
+            status_code=409,
+            content={
+                "accepted": False,
+                "reason": "recovery merge blocked by missing verification baseline",
+                "missing_evidence": verification_blockers,
+            },
+        )
     pr = dict(lifecycle.get("pr") or {})
     approved_changes = approved_change_contract(record_payload)
     approved_replicas = approved_replica_count(record_payload)
