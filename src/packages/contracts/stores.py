@@ -274,6 +274,18 @@ class RcaChangesStore(Protocol):
         resource_name: str,
     ) -> JsonObject | None: ...
 
+    async def list_recent_completed_workload_resource_diffs(
+        self,
+        workspace_id: str,
+        binding_id: str,
+        cluster_id: str,
+        namespace: str,
+        resource_kind: str,
+        resource_name: str,
+        *,
+        limit: int = 20,
+    ) -> list[JsonObject]: ...
+
     async def get_completed_workload_change_contexts(
         self,
         workspace_id: str,

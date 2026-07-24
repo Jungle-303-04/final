@@ -311,6 +311,56 @@ class RcaChangesRepository(DatabaseConnection):
         row["diff_details"] = dict(row.get("diff_details") or {})
         return row
 
+    def list_recent_completed_workload_resource_diffs(
+        self,
+        workspace_id: str,
+        binding_id: str,
+        cluster_id: str,
+        namespace: str,
+        resource_kind: str,
+        resource_name: str,
+        *,
+        limit: int = 20,
+    ) -> list[JsonObject]:
+        """Return recent completed diffs for one exact GitOps workload lineage."""
+
+        change = WorkloadChange.__table__
+        statement = (
+            select(
+                change.c.event_id,
+                change.c.changed_at,
+                change.c.workspace_id,
+                change.c.workflow_run_id,
+                change.c.binding_id,
+                change.c.cluster_id,
+                change.c.namespace,
+                change.c.resource_kind,
+                change.c.resource_name,
+                change.c.repository_id,
+                change.c.manifest_path,
+                change.c.commit_sha,
+                change.c.diff_details,
+            )
+            .where(
+                change.c.workspace_id == workspace_id,
+                change.c.binding_id == binding_id,
+                change.c.cluster_id == cluster_id,
+                change.c.namespace == namespace,
+                func.lower(change.c.resource_kind) == resource_kind.casefold(),
+                change.c.resource_name == resource_name,
+            )
+            .order_by(change.c.changed_at.desc(), change.c.event_id.desc())
+            .limit(max(1, min(limit, 100)))
+        )
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        result: list[JsonObject] = []
+        for value in rows:
+            row = dict(value)
+            row["diff_details"] = dict(row.get("diff_details") or {})
+            result.append(row)
+        return result
+
     def record_workload_change(self, row: JsonObject) -> None:
         change = WorkloadChange.__table__
         with self.connection() as conn:

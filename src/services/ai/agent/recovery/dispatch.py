@@ -1204,12 +1204,23 @@ def scalar_replacements_for(
         replicas = nested_value(manifest, "spec", "replicas")
         if type(replicas) is not int or not 1 <= replicas < 10:
             return []
-        # 원복 전략은 권위 스냅샷 변경 이력에서 "축소 이전 승인 값"이 하나로
-        # 특정될 때만 패치를 만든다. 이력이 없거나 모호한데 +1을 합성하면
-        # last_approved_snapshot이라는 사용자 계약을 위반한다.
+        # 원복 이력이 있으면 그 값을 우선한다. 용량 포화 규칙이 명시적으로
+        # 허용한 경우에만 이력이 없거나 모호할 때 제한된 +1 증설로 전환한다.
         previous = previous_replicas_from_changes(authority, replicas)
         strategy = first_str(selected.draft.params.get("strategy"))
-        if strategy == "last_approved_snapshot" and previous is None:
+        root_cause = first_str(selected.draft.params.get("root_cause"))
+        allow_scale_out = (
+            selected.draft.params.get("allow_bounded_scale_out") is True
+            or (
+                strategy == "last_approved_snapshot"
+                and root_cause == "lobby_capacity_saturation"
+            )
+        )
+        if (
+            strategy == "last_approved_snapshot"
+            and previous is None
+            and not allow_scale_out
+        ):
             return []
         desired = previous if previous is not None else replicas + 1
         if desired == replicas or not 1 <= desired < 10:

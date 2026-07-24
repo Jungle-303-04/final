@@ -1,4 +1,5 @@
 import asyncio
+from dataclasses import replace
 
 from domains.rca.events import (
     ClusterEvidenceReceivedBody,
@@ -105,6 +106,7 @@ def test_lobby_capacity_recommends_only_gitops_safe_pr() -> None:
     assert spec.route == ActionRoutes().safe_pr
     assert spec.params == {
         "strategy": "last_approved_snapshot",
+        "allow_bounded_scale_out": True,
         "verification_contract": "protected_workload_continuity",
     }
     assert all(action.action_type != "deployment_scale" for action in matching[0].action_specs)
@@ -154,7 +156,7 @@ def test_lobby_safe_pr_restores_exact_previous_approved_replicas() -> None:
     assert replacements[0].desired_value == 2
 
 
-def test_lobby_safe_pr_does_not_guess_without_one_approved_previous_value() -> None:
+def test_lobby_safe_pr_scales_out_once_without_approved_previous_value() -> None:
     planned = RecoveryPlanner().plan_body(lobby_report())
     assert isinstance(planned, RecoveryPlannedBody)
     assert planned.plan is not None
@@ -164,11 +166,43 @@ def test_lobby_safe_pr_does_not_guess_without_one_approved_previous_value() -> N
         if candidate.action_id == planned.plan.recommended_action_id
     )
 
-    assert scalar_replacements_for(
+    replacements = scalar_replacements_for(
         "replica_scale",
         selected,
         lobby_authority(changes=()),
-    ) == []
+    )
+
+    assert len(replacements) == 1
+    assert replacements[0].field_path == "spec.replicas"
+    assert replacements[0].current_value == 1
+    assert replacements[0].desired_value == 2
+
+
+def test_legacy_lobby_plan_without_scale_out_flag_still_scales_once() -> None:
+    planned = RecoveryPlanner().plan_body(lobby_report())
+    assert isinstance(planned, RecoveryPlannedBody)
+    assert planned.plan is not None
+    selected = next(
+        candidate
+        for candidate in planned.plan.candidates
+        if candidate.action_id == planned.plan.recommended_action_id
+    )
+    legacy_params = dict(selected.draft.params)
+    legacy_params.pop("allow_bounded_scale_out")
+    legacy_selected = replace(
+        selected,
+        draft=replace(selected.draft, params=legacy_params),
+    )
+
+    replacements = scalar_replacements_for(
+        "replica_scale",
+        legacy_selected,
+        lobby_authority(changes=()),
+    )
+
+    assert len(replacements) == 1
+    assert replacements[0].current_value == 1
+    assert replacements[0].desired_value == 2
 
 
 class LobbyAuthorityPort:

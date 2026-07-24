@@ -157,10 +157,10 @@ class NetworkRecoveryActions:
     actions=(
         RecoveryActionSpec(
             action_type="replica_scale",
-            title="로비 replicas 원복 PR",
+            title="로비 replicas 복구 PR",
             description=(
-                "최근 배포에서 축소된 로비 replicas 를 GitOps 매니페스트에서 이전 값으로 "
-                "되돌리는 Safe PR 을 제안합니다. 임시 증설과 달리 선언 상태를 함께 복구합니다."
+                "최근 배포의 축소 이력이 있으면 이전 승인 값으로 되돌리고, 이력이 없으면 "
+                "정책 범위에서 한 대를 증설하는 Safe PR을 제안합니다."
             ),
             route=routes.safe_pr,
             risk_level="medium",
@@ -178,6 +178,7 @@ class NetworkRecoveryActions:
             rollback_plan="생성된 PR 또는 merge commit 을 revert 합니다.",
             params={
                 "strategy": "last_approved_snapshot",
+                "allow_bounded_scale_out": True,
                 "verification_contract": "protected_workload_continuity",
             },
         ),

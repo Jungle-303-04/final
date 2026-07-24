@@ -622,6 +622,19 @@ class AuthorityDb:
             },
         }
 
+    async def list_recent_completed_workload_resource_diffs(
+        self,
+        workspace_id: str,
+        binding_id: str,
+        cluster_id: str,
+        namespace: str,
+        resource_kind: str,
+        resource_name: str,
+        *,
+        limit: int,
+    ) -> list[dict[str, object]]:
+        return []
+
 
 def query(kind: str = "Deployment", name: str = "checkout") -> GitOpsAuthorityQuery:
     return GitOpsAuthorityQuery(
@@ -664,6 +677,102 @@ def test_authority_uses_current_approved_snapshot_when_incident_has_no_recent_ch
     assert authority.manifest_path == "deploy/app.yaml"
     assert authority.resource == "Deployment/checkout"
     assert authority.desired_manifest == db.desired
+    assert authority.changes == ()
+
+
+def test_authority_enriches_approved_snapshot_with_latest_replica_change() -> None:
+    db = AuthorityDb(evidence={"metadata": {}})
+
+    async def no_current_workflow_diff(*args: object) -> None:
+        return None
+
+    async def recent_diffs(
+        workspace_id: str,
+        binding_id: str,
+        cluster_id: str,
+        namespace: str,
+        resource_kind: str,
+        resource_name: str,
+        *,
+        limit: int,
+    ) -> list[dict[str, object]]:
+        return [
+            {
+                "workspace_id": workspace_id,
+                "binding_id": binding_id,
+                "cluster_id": cluster_id,
+                "namespace": namespace,
+                "resource_kind": resource_kind,
+                "resource_name": resource_name,
+                "repository_id": "repo-1",
+                "manifest_path": "deploy/app.yaml",
+                "diff_details": {
+                    "changes": [
+                        {
+                            "field_path": "spec.replicas",
+                            "old_desired": 2,
+                            "new_desired": 1,
+                        }
+                    ]
+                },
+            }
+        ]
+
+    db.get_completed_workload_resource_diff = no_current_workflow_diff  # type: ignore[method-assign]
+    db.list_recent_completed_workload_resource_diffs = recent_diffs  # type: ignore[method-assign]
+
+    authority = load_authority(db, query())
+
+    assert authority is not None
+    assert authority.changes == (
+        {
+            "field_path": "spec.replicas",
+            "old_desired": 2,
+            "new_desired": 1,
+        },
+    )
+
+
+def test_authority_ignores_ambiguous_replica_history() -> None:
+    db = AuthorityDb(evidence={"metadata": {}})
+
+    async def no_current_workflow_diff(*args: object) -> None:
+        return None
+
+    async def ambiguous_diffs(*args: object, **kwargs: object) -> list[dict[str, object]]:
+        return [
+            {
+                "workspace_id": "workspace-1",
+                "binding_id": "binding-1",
+                "cluster_id": "cluster-1",
+                "namespace": "sandbox",
+                "resource_kind": "Deployment",
+                "resource_name": "checkout",
+                "repository_id": "repo-1",
+                "manifest_path": "deploy/app.yaml",
+                "diff_details": {
+                    "changes": [
+                        {
+                            "field_path": "spec.replicas",
+                            "old_desired": 2,
+                            "new_desired": 1,
+                        },
+                        {
+                            "field_path": "spec.replicas",
+                            "old_desired": 3,
+                            "new_desired": 1,
+                        },
+                    ]
+                },
+            }
+        ]
+
+    db.get_completed_workload_resource_diff = no_current_workflow_diff  # type: ignore[method-assign]
+    db.list_recent_completed_workload_resource_diffs = ambiguous_diffs  # type: ignore[method-assign]
+
+    authority = load_authority(db, query())
+
+    assert authority is not None
     assert authority.changes == ()
 
 

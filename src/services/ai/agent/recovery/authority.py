@@ -137,6 +137,11 @@ class DatabaseGitOpsAuthorityReadPort(GitOpsAuthorityReadPort):
         provenance = dict(provenance)
         if not diff:
             desired = mapping(provenance.get("desired_manifest"))
+            historical_changes = await self._load_recent_replica_changes(
+                query,
+                identity,
+                desired,
+            )
             diff = {
                 **identity,
                 "namespace": query.namespace,
@@ -146,7 +151,7 @@ class DatabaseGitOpsAuthorityReadPort(GitOpsAuthorityReadPort):
                     "artifact_digest": artifact_digest,
                     "old_desired_source": "last_approved_snapshot",
                 },
-                "changes": [],
+                "changes": historical_changes,
             }
         if not authority_rows_match(
             query,
@@ -255,6 +260,66 @@ class DatabaseGitOpsAuthorityReadPort(GitOpsAuthorityReadPort):
                 identities.append(identity)
         return identities[0] if len(identities) == 1 else {}
 
+    async def _load_recent_replica_changes(
+        self,
+        query: GitOpsAuthorityQuery,
+        identity: Mapping[str, object],
+        desired: Mapping[str, object],
+    ) -> list[dict[str, object]]:
+        """Recover the latest exact replicas transition for an approved snapshot.
+
+        The current snapshot proves the manifest identity, while workload change
+        history provides the prior scalar value. Only the newest replicas change
+        on the same binding, repository, and manifest path is considered.
+        """
+
+        list_diffs = getattr(
+            self.db,
+            "list_recent_completed_workload_resource_diffs",
+            None,
+        )
+        current = nested_int(desired, "spec", "replicas")
+        if not callable(list_diffs) or current is None:
+            return []
+        rows = await list_diffs(
+            query.workspace_id,
+            text(identity, "binding_id"),
+            query.cluster_id,
+            query.namespace,
+            query.resource_kind,
+            query.resource_name,
+            limit=20,
+        )
+        if not isinstance(rows, list):
+            return []
+        for value in rows:
+            if not isinstance(value, Mapping):
+                continue
+            row = dict(value)
+            if not historical_diff_matches_identity(row, identity, query):
+                continue
+            diff = mapping(row.get("diff_details"))
+            raw_changes = diff.get("changes")
+            if not isinstance(raw_changes, list):
+                continue
+            replica_changes = [
+                dict(change)
+                for change in raw_changes
+                if isinstance(change, Mapping)
+                and text(change, "field_path").endswith("spec.replicas")
+            ]
+            if not replica_changes:
+                continue
+            if len(replica_changes) != 1:
+                return []
+            change = replica_changes[0]
+            before = scalar_int(change.get("old_desired", change.get("before")))
+            after = scalar_int(change.get("new_desired", change.get("after")))
+            if before is None or after != current or before == current:
+                return []
+            return [change]
+        return []
+
 
 def completed_resource_diff_matches_identity(
     record: Mapping[str, object],
@@ -274,6 +339,41 @@ def completed_resource_diff_matches_identity(
         and text(record, "manifest_path") == text(identity, "manifest_path")
         and text(record, "commit_sha") == text(identity, "commit_sha")
     )
+
+
+def historical_diff_matches_identity(
+    record: Mapping[str, object],
+    identity: Mapping[str, object],
+    query: GitOpsAuthorityQuery,
+) -> bool:
+    return bool(
+        text(record, "workspace_id") == query.workspace_id
+        and text(record, "binding_id") == text(identity, "binding_id")
+        and text(record, "cluster_id") == query.cluster_id
+        and text(record, "namespace") == query.namespace
+        and text(record, "resource_kind").casefold()
+        == query.resource_kind.casefold()
+        and text(record, "resource_name") == query.resource_name
+        and text(record, "repository_id") == text(identity, "repository_id")
+        and text(record, "manifest_path") == text(identity, "manifest_path")
+    )
+
+
+def scalar_int(value: object) -> int | None:
+    if type(value) is int:
+        return value
+    if isinstance(value, str) and value.strip().isdigit():
+        return int(value.strip())
+    return None
+
+
+def nested_int(value: Mapping[str, object], *path: str) -> int | None:
+    current: object = value
+    for key in path:
+        if not isinstance(current, Mapping):
+            return None
+        current = current.get(key)
+    return scalar_int(current)
 
 
 def identity_from_evidence(payload: Mapping[str, object]) -> dict[str, object]:
