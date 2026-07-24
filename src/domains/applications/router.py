@@ -53,7 +53,11 @@ from domains.identity.dependencies import (
     resolve_allowed_application_ids,
     resolve_allowed_cluster_ids,
 )
-from domains.scm.github_app_credentials import make_app_installation_ref
+from domains.scm.github_app_credentials import (
+    is_app_installation_ref,
+    make_app_installation_ref,
+    parse_app_installation_ref,
+)
 from domains.target.connectivity import (
     AGENT_STATUS_ONLINE,
     AGENT_STATUS_STALE,
@@ -368,6 +372,40 @@ def database_credential_token(db: Any, workspace_id: str, ref: str | None) -> st
         return decrypt_credential(str(stored.get("encrypted_value") or ""))
     except CredentialEncryptionError as exc:
         raise HTTPException(status_code=422, detail=REPOSITORY_CREDENTIAL_UNAVAILABLE) from exc
+
+
+async def repository_access_token(
+    db: Any,
+    workspace_id: str,
+    ref: str | None,
+    *,
+    installation_id: str | None = None,
+) -> str | None:
+    """Resolve PAT/public/App credentials without treating an App ref as a vault key."""
+
+    requested_installation_id = (installation_id or "").strip()
+    stored_installation_id = (
+        parse_app_installation_ref(ref)
+        if is_app_installation_ref(ref)
+        else ""
+    )
+    resolved_installation_id = requested_installation_id or stored_installation_id
+    if not resolved_installation_id:
+        return database_credential_token(db, workspace_id, ref)
+
+    from domains.scm.github_app_credentials import resolve_installation_token
+
+    try:
+        return await resolve_installation_token(
+            db,
+            workspace_id,
+            resolved_installation_id,
+        )
+    except Exception as exc:  # noqa: BLE001 - provider failures become a stable API contract
+        raise HTTPException(
+            status_code=422,
+            detail=REPOSITORY_CREDENTIAL_UNAVAILABLE,
+        ) from exc
 
 
 def discovery_with_token(discovery: Any, token: str | None) -> Any:
@@ -1145,17 +1183,12 @@ async def connect_application_preview(
         preflight_repository,
     )
     credential_ref = stored_ref or str((preflight_repository or {}).get("credential_ref") or "")
-    token = database_credential_token(db, workspace_id, credential_ref)
-    # PAT·저장 자격증명이 없고 App 설치 id 만 있으면(비공개 레포) 설치 토큰 폴백.
-    if token is None and payload.installation_id and payload.installation_id.strip():
-        from domains.scm.github_app_credentials import resolve_installation_token
-
-        try:
-            token = await resolve_installation_token(
-                db, workspace_id, payload.installation_id.strip()
-            )
-        except Exception:  # noqa: BLE001 - App 미구성·발급 실패는 무인증 degrade
-            token = None
+    token = await repository_access_token(
+        db,
+        workspace_id,
+        credential_ref,
+        installation_id=payload.installation_id,
+    )
     preview_discovery = discovery_with_token(discovery, token)
 
     try:
@@ -1313,22 +1346,12 @@ async def connect_application(
     validation_credential_ref = preflight_stored_ref or str(
         (preflight_repository or {}).get("credential_ref") or ""
     )
-    validation_token = payload.token or database_credential_token(
+    validation_token = payload.token or await repository_access_token(
         db,
         workspace_id,
         validation_credential_ref,
+        installation_id=payload.installation_id,
     )
-    # PAT·저장 자격증명이 없고 App 설치 id 만 있으면(비공개 레포 원클릭 연결) 설치
-    # 토큰을 발급해 재검증한다. App 미구성·발급 실패는 무인증으로 degrade.
-    if validation_token is None and payload.installation_id and payload.installation_id.strip():
-        from domains.scm.github_app_credentials import resolve_installation_token
-
-        try:
-            validation_token = await resolve_installation_token(
-                db, workspace_id, payload.installation_id.strip()
-            )
-        except Exception:  # noqa: BLE001 - App 미구성·발급 실패는 무인증 degrade
-            validation_token = None
     validation_discovery = discovery_with_token(discovery, validation_token)
     validation_request = RepositoryManifestValidationRequest(
         repo_ref=normalized_repo_ref,
