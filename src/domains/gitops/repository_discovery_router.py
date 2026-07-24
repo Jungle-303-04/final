@@ -44,7 +44,7 @@ def discovery_service() -> RepositoryDiscoveryService:
     return RepositoryDiscoveryService(GitHubRepositoryClient(token=None))
 
 
-def wizard_discovery_service(
+async def wizard_discovery_service(
     db: Any,
     current: Any,
     repo_ref: str,
@@ -68,6 +68,30 @@ def wizard_discovery_service(
         (existing_repository or {}).get("repository_id")
         or derive_repository_id({"workspace_id": workspace_id, "repo_ref": normalized})
     )
+    stored_ref = str((existing_repository or {}).get("credential_ref") or "").strip()
+    if stored_ref:
+        from domains.scm.github_app_credentials import (
+            is_app_installation_ref,
+            parse_app_installation_ref,
+            resolve_installation_token,
+        )
+
+        if is_app_installation_ref(stored_ref):
+            installation_id = parse_app_installation_ref(stored_ref)
+            try:
+                token = await resolve_installation_token(
+                    db,
+                    str(workspace_id),
+                    installation_id,
+                )
+            except Exception as exc:
+                raise RepositoryDiscoveryError(422, "credential_unavailable") from exc
+            if not token:
+                raise RepositoryDiscoveryError(422, "credential_unavailable")
+            return RepositoryDiscoveryService(
+                GitHubRepositoryClient(token=token),
+                render_executor=fallback.render_executor,
+            )
     scope = repository_credential_scope(repository_id)
     get_credential = getattr(db, "get_workspace_credential", None)
     stored = get_credential(workspace_id, "github", scope) if callable(get_credential) else None
@@ -184,7 +208,7 @@ async def probe_repository(
         effective_token = await resolve_wizard_token(
             db, request_token=token, installation_id=payload.installation_id
         )
-        scoped_service = wizard_discovery_service(
+        scoped_service = await wizard_discovery_service(
             db,
             current,
             normalized,
@@ -228,7 +252,7 @@ async def list_repository_branches(
         effective_token = await resolve_wizard_token(
             db, request_token=None, installation_id=installation_id
         )
-        scoped_service = wizard_discovery_service(
+        scoped_service = await wizard_discovery_service(
             db,
             current,
             repo_ref,
@@ -255,7 +279,7 @@ async def list_repository_manifest_candidates(
         effective_token = await resolve_wizard_token(
             db, request_token=None, installation_id=payload.installation_id
         )
-        scoped_service = wizard_discovery_service(
+        scoped_service = await wizard_discovery_service(
             db,
             current,
             payload.repo_ref,
@@ -282,7 +306,7 @@ async def validate_repository_manifest(
         effective_token = await resolve_wizard_token(
             db, request_token=None, installation_id=payload.installation_id
         )
-        scoped_service = wizard_discovery_service(
+        scoped_service = await wizard_discovery_service(
             db,
             current,
             payload.repo_ref,

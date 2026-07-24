@@ -1429,7 +1429,12 @@ async def resolve_bound_editable_source(
     if str(source.get("provider") or "") != "github" or inferred != "kustomize":
         return source
     try:
-        service = wizard_discovery_service(db, current, str(source["repo_ref"]), fallback)
+        service = await wizard_discovery_service(
+            db,
+            current,
+            str(source["repo_ref"]),
+            fallback,
+        )
         return await resolve_kustomize_edit_source(source, selected_identity, service.client)
     except (ManifestRenderValidationError, RepositoryDiscoveryError, ValueError):
         # Source lookup remains fail-closed. The caller projects the existing
@@ -1662,7 +1667,12 @@ async def read_pinned_source(
     fallback: RepositoryDiscoveryService,
 ) -> tuple[str, str]:
     try:
-        service = wizard_discovery_service(db, current, str(source["repo_ref"]), fallback)
+        service = await wizard_discovery_service(
+            db,
+            current,
+            str(source["repo_ref"]),
+            fallback,
+        )
         base_sha = await service.client.branch_sha(str(source["repo_ref"]), str(source["branch"]))
         content = await service.client.content(
             str(source["repo_ref"]), base_sha, str(source["manifest_path"])
