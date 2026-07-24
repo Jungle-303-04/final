@@ -259,6 +259,58 @@ class RcaChangesRepository(DatabaseConnection):
             contexts.append(item)
         return contexts
 
+    def get_completed_workload_resource_diff(
+        self,
+        workspace_id: str,
+        workflow_run_id: str,
+        binding_id: str,
+        cluster_id: str,
+        namespace: str,
+        resource_kind: str,
+        resource_name: str,
+    ) -> JsonObject | None:
+        """Return the one completed, projected diff for an exact workload.
+
+        A workflow step is commit-scoped and cannot identify one resource in a
+        multi-resource render.  ``workload_changes`` is written only from a
+        successfully completed resource command and carries that command's
+        immutable diff payload, so it is the recovery authority read model.
+        """
+
+        change = WorkloadChange.__table__
+        statement = (
+            select(
+                change.c.workspace_id,
+                change.c.workflow_run_id,
+                change.c.binding_id,
+                change.c.cluster_id,
+                change.c.namespace,
+                change.c.resource_kind,
+                change.c.resource_name,
+                change.c.repository_id,
+                change.c.manifest_path,
+                change.c.commit_sha,
+                change.c.diff_details,
+            )
+            .where(
+                change.c.workspace_id == workspace_id,
+                change.c.workflow_run_id == workflow_run_id,
+                change.c.binding_id == binding_id,
+                change.c.cluster_id == cluster_id,
+                change.c.namespace == namespace,
+                func.lower(change.c.resource_kind) == resource_kind.casefold(),
+                change.c.resource_name == resource_name,
+            )
+            .limit(2)
+        )
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        if len(rows) != 1:
+            return None
+        row = dict(rows[0])
+        row["diff_details"] = dict(row.get("diff_details") or {})
+        return row
+
     def record_workload_change(self, row: JsonObject) -> None:
         change = WorkloadChange.__table__
         with self.connection() as conn:

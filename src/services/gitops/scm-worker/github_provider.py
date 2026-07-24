@@ -1012,11 +1012,91 @@ class GithubScmProvider:
     ) -> Mapping[str, object]:
         load_run = getattr(ctx.db, "get_workflow_run", None)
         load_diff = getattr(ctx.db, "get_workflow_step_details", None)
+        load_resource_diff = getattr(
+            ctx.db,
+            "get_completed_workload_resource_diff",
+            None,
+        )
+        load_approval = getattr(ctx.db, "get_workflow_approval", None)
         load_provenance = getattr(ctx.db, "get_manifest_artifact_provenance", None)
-        if not callable(load_run) or not callable(load_diff) or not callable(load_provenance):
+        if not callable(load_run) or not callable(load_provenance):
             raise RuntimeError(AUTHORITY_MISMATCH_MESSAGE)
         run = await load_run(request.workflow_run_id)
-        diff = await load_diff(request.workflow_run_id, "diff")
+        target_kind, separator, target_name = request.target_resource.partition("/")
+        target_declared = any(
+            (request.cluster_id, request.target_namespace, request.target_resource)
+        )
+        resource_record: Mapping[str, object] | None = None
+        if target_declared:
+            if (
+                not all(
+                    (
+                        request.cluster_id,
+                        request.target_namespace,
+                        separator,
+                        target_kind,
+                        target_name,
+                        request.target_authority,
+                    )
+                )
+            ):
+                raise RuntimeError(AUTHORITY_MISMATCH_MESSAGE)
+            if request.target_authority == "completed_workload_change":
+                if not callable(load_resource_diff):
+                    raise RuntimeError(AUTHORITY_MISMATCH_MESSAGE)
+                loaded = await load_resource_diff(
+                    request.workspace_id,
+                    request.workflow_run_id,
+                    request.binding_id,
+                    request.cluster_id,
+                    request.target_namespace,
+                    target_kind,
+                    target_name,
+                )
+                resource_record = loaded if isinstance(loaded, Mapping) else None
+                raw_diff = (
+                    resource_record.get("diff_details")
+                    if resource_record is not None
+                    else None
+                )
+            elif request.target_authority == "policy_approval":
+                if not callable(load_approval) or not request.approval_ref:
+                    raise RuntimeError(AUTHORITY_MISMATCH_MESSAGE)
+                approval = await load_approval(
+                    request.approval_ref,
+                    request.workspace_id,
+                )
+                details = (
+                    approval.get("details")
+                    if isinstance(approval, Mapping)
+                    else None
+                )
+                if (
+                    not isinstance(approval, Mapping)
+                    or not isinstance(details, Mapping)
+                    or str(approval.get("approval_id") or "")
+                    != request.approval_ref
+                    or str(approval.get("status") or "") != "granted"
+                    or str(approval.get("workspace_id") or "")
+                    != request.workspace_id
+                    or str(approval.get("workflow_run_id") or "")
+                    != request.workflow_run_id
+                    or str(approval.get("application_id") or "")
+                    != request.application_id
+                    or str(approval.get("binding_id") or "")
+                    != request.binding_id
+                    or str(approval.get("environment") or "")
+                    != request.environment
+                ):
+                    raise RuntimeError(AUTHORITY_MISMATCH_MESSAGE)
+                raw_diff = details.get("diff")
+            else:
+                raise RuntimeError(AUTHORITY_MISMATCH_MESSAGE)
+            diff = dict(raw_diff) if isinstance(raw_diff, Mapping) else None
+        else:
+            if not callable(load_diff):
+                raise RuntimeError(AUTHORITY_MISMATCH_MESSAGE)
+            diff = await load_diff(request.workflow_run_id, "diff")
         if not isinstance(run, Mapping) or not isinstance(diff, Mapping):
             raise RuntimeError(AUTHORITY_MISMATCH_MESSAGE)
         run_fields = {
@@ -1059,6 +1139,40 @@ class GithubScmProvider:
         if (
             any(str(run.get(key) or "") != value for key, value in run_fields.items())
             or any(str(diff.get(key) or "") != value for key, value in diff_fields.items())
+            or (
+                target_declared
+                and (
+                    str(diff.get("cluster_id") or "") != request.cluster_id
+                    or str(diff.get("namespace") or "")
+                    != request.target_namespace
+                    or str(diff.get("resource") or "").casefold()
+                    != request.target_resource.casefold()
+                )
+            )
+            or (
+                resource_record is not None
+                and (
+                    str(resource_record.get("workspace_id") or "")
+                    != request.workspace_id
+                    or str(resource_record.get("workflow_run_id") or "")
+                    != request.workflow_run_id
+                    or str(resource_record.get("binding_id") or "")
+                    != request.binding_id
+                    or str(resource_record.get("cluster_id") or "")
+                    != request.cluster_id
+                    or str(resource_record.get("namespace") or "")
+                    != request.target_namespace
+                    or str(resource_record.get("resource_kind") or "").casefold()
+                    != target_kind.casefold()
+                    or str(resource_record.get("resource_name") or "") != target_name
+                    or str(resource_record.get("repository_id") or "")
+                    != request.repository_id
+                    or str(resource_record.get("manifest_path") or "")
+                    != request.manifest_path
+                    or str(resource_record.get("commit_sha") or "")
+                    != request.commit_sha
+                )
+            )
             or not isinstance(basis, Mapping)
             or basis.get("old_desired_source") != "last_approved_snapshot"
             or not isinstance(desired_manifest, Mapping)

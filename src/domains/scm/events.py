@@ -52,6 +52,10 @@ class SafePrRequestedBody(EventBody):
     repo_ref: str = DEFAULT_REPO_REF
     base_branch: str = ""
     commit_sha: str = ""
+    cluster_id: str = ""
+    target_namespace: str = ""
+    target_resource: str = ""
+    target_authority: str = ""
     patch_sha256: str = ""
     approval_ref: str | None = None
     policy_decision_ref: str | None = None
