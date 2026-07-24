@@ -1804,10 +1804,6 @@ function HomeSurface({ workspaceId, applicationsFeed, namespaceFeed, clusterMeta
             label: "클러스터",
             value: clusters.length,
           }];
-          const operationMetrics = fleetHeader?.operations ?? [];
-          const openIncidentCount = fleet.totalsObservation === "observed"
-            ? fleet.totals?.open_incidents ?? 0
-            : null;
           return (
             <span style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
               <span style={seg}>
@@ -1820,6 +1816,7 @@ function HomeSurface({ workspaceId, applicationsFeed, namespaceFeed, clusterMeta
                 ))}
                 {pendingCl.length > 0 && <span style={{ color: TINT.blue.fg }}>· 연결 중 {pendingCl.length}</span>}
               </span>
+              {/*
               {operationMetrics.length > 0 && (
                 <button
                   type="button"
@@ -1844,6 +1841,7 @@ function HomeSurface({ workspaceId, applicationsFeed, namespaceFeed, clusterMeta
                   ))}
                 </button>
               )}
+              */}
             </span>
           );
         })()}
