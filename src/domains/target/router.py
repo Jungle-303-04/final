@@ -56,6 +56,7 @@ from domains.target.evidence_policy import (
     default_agent_policy,
     enabled_provider_keys,
     evidence_profile_for_registration,
+    preserve_server_owned_evidence_queries,
     provider_policy_snapshots,
 )
 from domains.target.install_manifest import (
@@ -736,7 +737,7 @@ def guarded_kubectl_apply_command(
         (
             'telemetry_script="$(mktemp "${TMPDIR:-/tmp}/kyro-telemetry.XXXXXX")"; '
             "trap 'rm -f \"$telemetry_script\"' EXIT; "
-            f'curl -fsSL {shell_quote(telemetry_script_url)} '
+            f"curl -fsSL {shell_quote(telemetry_script_url)} "
             '-o "$telemetry_script" || exit 1; '
             f"{target_context}"
             f'TARGET_CONTEXT="$target_context" TARGET_NAMESPACE={shell_quote(namespace)} '
@@ -2042,6 +2043,22 @@ async def update_cluster_policy(
     merged_policy = merge_agent_policy(base_policy, payload)
     if management_cluster:
         merged_policy = freeze_management_policy(merged_policy)
+    elif registration:
+        raw_settings = registration.get("settings")
+        settings = raw_settings if isinstance(raw_settings, dict) else {}
+        cluster_role = str(settings.get("cluster_role") or merged_policy.cluster_role)
+        merged_policy = preserve_server_owned_evidence_queries(
+            merged_policy,
+            cluster_id=cluster_id,
+            evidence_profile=evidence_profile_for_registration(
+                cluster_role=cluster_role,
+                environment=str(settings.get("environment") or ""),
+                install_sample_workload=bool(settings.get("install_sample_workload")),
+            ),
+            control_namespaces=control_namespace_tuple(
+                str(settings.get("control_namespaces") or "")
+            ),
+        )
     try:
         stored = db.upsert_cluster_policy(workspace_id, cluster_id, merged_policy.model_dump())
     except ValueError as exc:

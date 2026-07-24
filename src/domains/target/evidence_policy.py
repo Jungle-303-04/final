@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import re
 
 from packages.config.constants import Target
@@ -436,8 +437,7 @@ def evidence_provider_queries(
                     "Kubernetes workload identity."
                 ),
                 query=(
-                    'opsia_sli_failure_ratio{namespace!="",resource_kind!="",'
-                    'resource_name!=""}'
+                    'opsia_sli_failure_ratio{namespace!="",resource_kind!="",resource_name!=""}'
                 ),
                 provenance=_provenance(
                     cluster_id=cluster_id,
@@ -455,8 +455,8 @@ def evidence_provider_queries(
                 ),
                 query=(
                     "sum by (namespace, resource_kind, resource_name, service, sli, symptom) ("
-                    "rate(opsia_sli_requests_total{namespace!=\"\",resource_kind!=\"\","
-                    "resource_name!=\"\"}[1m]))"
+                    'rate(opsia_sli_requests_total{namespace!="",resource_kind!="",'
+                    'resource_name!=""}[1m]))'
                 ),
                 provenance=_provenance(
                     cluster_id=cluster_id,
@@ -756,6 +756,70 @@ def profile_default_query_names() -> frozenset[str]:
                 )
             )
     return frozenset(names)
+
+
+def preserve_server_owned_evidence_queries(
+    policy: AgentPolicy,
+    *,
+    cluster_id: str,
+    evidence_profile: EvidenceProfile,
+    control_namespaces: tuple[str, ...] = (),
+) -> AgentPolicy:
+    """Rebase canonical collection queries while retaining operator extensions.
+
+    Evidence query presets define the management plane's minimum observation
+    contract. A partial policy update may tune workers, intervals, or disable a
+    provider, but it must not erase that contract: doing so leaves a connected
+    agent reporting empty inventory. Queries with non-reserved names remain
+    operator-owned and survive the rebase.
+    """
+
+    payload = policy.model_dump(mode="python")
+    evidence = payload["evidence"]
+    providers = evidence["providers"]
+    evidence["profile"] = evidence_profile
+    reserved_names = profile_default_query_names()
+
+    for provider_key in EVIDENCE_PROVIDER_KEYS:
+        defaults = evidence_provider_queries(
+            provider_key,
+            cluster_id=cluster_id,
+            evidence_profile=evidence_profile,
+            control_namespaces=control_namespaces,
+        )
+        provider = providers.get(provider_key)
+        if provider is None:
+            providers[provider_key] = default_evidence_provider_policy(
+                provider_key,
+                int(Target.DEFAULT_EVIDENCE_INTERVAL_SECONDS),
+                cluster_id=cluster_id,
+                evidence_profile=evidence_profile,
+                control_namespaces=control_namespaces,
+            ).model_dump(mode="python")
+            continue
+
+        defaults_by_name = {str(query["name"]): copy.deepcopy(query) for query in defaults}
+        seen_defaults: set[str] = set()
+        rebased: list[dict[str, object]] = []
+        for raw_query in provider.get("queries", []):
+            query = dict(raw_query) if isinstance(raw_query, dict) else {}
+            name = query.get("name")
+            if isinstance(name, str) and name in defaults_by_name:
+                if name not in seen_defaults:
+                    rebased.append(copy.deepcopy(defaults_by_name[name]))
+                    seen_defaults.add(name)
+                continue
+            if isinstance(name, str) and name in reserved_names:
+                continue
+            rebased.append(copy.deepcopy(query))
+
+        for default_query in defaults:
+            name = str(default_query["name"])
+            if name not in seen_defaults:
+                rebased.append(copy.deepcopy(default_query))
+        provider["queries"] = rebased
+
+    return AgentPolicy.model_validate(payload)
 
 
 def evidence_profile_for_registration(

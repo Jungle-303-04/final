@@ -111,11 +111,7 @@ def test_metrics_collect_raw_exact_active_session_continuity_series() -> None:
         cluster_id="c-1",
         evidence_profile="standard",
     )
-    query = next(
-        item
-        for item in queries
-        if item["name"] == "opsia_continuity_active_sessions"
-    )
+    query = next(item for item in queries if item["name"] == "opsia_continuity_active_sessions")
 
     assert query["query"] == (
         'opsia_continuity_active_sessions{namespace!="",resource_kind!="",'

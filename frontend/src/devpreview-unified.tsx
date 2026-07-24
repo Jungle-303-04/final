@@ -45,6 +45,7 @@ import {
 import { useFleetSummaryFeed } from "./devpreview/fleetSummaryFeed";
 import { fleetHeaderGroups } from "./devpreview/fleetSummaryPresentation";
 import { type ProductSurfaceId } from "./devpreview/realtimeContractMatrix";
+import { parseShellRoute, updateShellRouteSearch } from "./devpreview/shellRoute";
 
 // 목록(⋮ 메뉴) 연결 해제도 상세 뷰와 같은 캐논 계약 port 를 공유한다 —
 // 두 번째 unregister 구현이 생기지 않게 하는 ClusterLifecycleControl 원칙 준수.
@@ -2187,17 +2188,25 @@ function App() {
     alertIncidentPollMs(rcaIncident),
     promoteAlertRcaIssue,
   );
+  const initialShellRoute = useMemo(
+    () => parseShellRoute(window.location.search),
+    [],
+  );
   const [kindId, setKindId] = useState("Deployment");
-  const [resView, setResView] = useState<ResView>("map"); // D18 관점 — 지도가 기본, 스코프는 관점 공유
+  const [resView, setResView] = useState<ResView>(initialShellRoute.resourceView); // D18 관점 — 지도가 기본, 스코프는 관점 공유
   const [trafficFocus, setTrafficFocus] = useState<string | null>(null); // 트래픽 보조 패널 → 그래프 포커스
   const [showEmpty, setShowEmpty] = useState(false);
   const [pinned, setPinned] = useState<string[]>([]);
   const [q, setQ] = useState(""); // 단일 검색 — 종류 인덱스와 표 행을 동시에 필터
-  const [surface, setSurface] = useState<Surface>("home"); // 셸 내 서피스 전환 — 홈이 랜딩(D19)
+  const [surface, setSurface] = useState<Surface>(initialShellRoute.surface); // 셸 내 서피스 전환 — 홈이 랜딩(D19)
   const [deployRepositoryFilter, setDeployRepositoryFilter] = useState<string | null>(null);
   const [deployApplicationDetailId, setDeployApplicationDetailId] = useState<string | null>(null);
   const [selectedAlertEventId, setSelectedAlertEventId] = useState<string | null>(null);
-  const [scope, setScope] = useState<{ level: string; cluster?: string; node?: string }>({ level: "clusters" });
+  const [scope, setScope] = useState<{ level: string; cluster?: string; node?: string }>(
+    initialShellRoute.clusterId
+      ? { level: "nodes", cluster: initialShellRoute.clusterId }
+      : { level: "clusters" },
+  );
   const [ns, setNs] = useState("모든 네임스페이스");
   const [nsOpen, setNsOpen] = useState(false);
   const [clusterOpen, setClusterOpen] = useState(false);
@@ -2228,12 +2237,58 @@ function App() {
   const aiPanelRef = useRef<HTMLDivElement>(null);
   const aiPreviousFocusRef = useRef<HTMLElement | null>(null);
   const aiRestoreFocusRef = useRef(false);
-  const [drillCl, setDrillCl] = useState<string | null>(null); // 홈 카드 → 지도 드릴 스코프 전달(D21)
+  const [drillCl, setDrillCl] = useState<string | null>(initialShellRoute.clusterId); // 홈 카드 → 지도 드릴 스코프 전달(D21)
   const [connectView, setConnectView] = useState<null | "repo" | "cluster">(null); // 연결 위저드 딥오픈 대상 (설정 서피스)
   const [connectModal, setConnectModal] = useState<null | "repo" | "cluster">(() => {
     const params = new URLSearchParams(window.location.search);
     return params.get("github_app_installation_id") ? "repo" : null;
   }); // 문맥 진입 = 모달 팝업
+  const openClusterDrill = useCallback((clusterId: string) => {
+    const search = updateShellRouteSearch(window.location.search, {
+      surface: "resources",
+      resourceView: "map",
+      clusterId,
+    });
+    window.history.pushState(
+      window.history.state,
+      "",
+      `${window.location.pathname}${search}${window.location.hash}`,
+    );
+    setDrillCl(clusterId);
+    setScope({ level: "nodes", cluster: clusterId });
+    setSurface("resources");
+    setResView("map");
+  }, []);
+  useEffect(() => {
+    const onPopState = () => {
+      const route = parseShellRoute(window.location.search);
+      setSurface(route.surface);
+      setResView(route.resourceView);
+      setDrillCl(route.clusterId);
+      setScope(
+        route.clusterId
+          ? { level: "nodes", cluster: route.clusterId }
+          : { level: "clusters" },
+      );
+      setDetail(null);
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+  useEffect(() => {
+    const search = updateShellRouteSearch(window.location.search, {
+      surface,
+      resourceView: resView,
+      clusterId:
+        surface === "resources" && resView === "map" ? drillCl : null,
+    });
+    if (search === window.location.search) return;
+    window.history.replaceState(
+      window.history.state,
+      "",
+      `${window.location.pathname}${search}${window.location.hash}`,
+    );
+  }, [drillCl, resView, surface]);
   const [connectionManagerOpen, setConnectionManagerOpen] = useState(false);
   const [resumeClusterConnection, setResumeClusterConnection] = useState<ResumeClusterConnection | null>(null);
   const [repositoryConnectContext, setRepositoryConnectContext] = useState<RepositoryConnectionContext | null>(null);
@@ -2798,7 +2853,7 @@ function App() {
             <Server size={13} style={{ color: UI.ink3 }} />{scope.cluster ?? "전체 클러스터"}<ChevronDown size={12} style={{ color: UI.ink3, transform: clusterOpen ? "rotate(180deg)" : "none" }} />
           </button>
           <AnimatePresence>{clusterOpen && <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} style={{ position: "absolute", top: 40, left: 0, minWidth: 220, zIndex: 65, background: UI.card, border: `1px solid ${blueA(0.35)}`, borderRadius: 12, boxShadow: `0 18px 50px -18px ${inkA(0.28)}`, padding: 5 }}>
-            {[{ id: "", label: "전체 클러스터" }, ...contract.clusters.map((cluster) => ({ id: cluster.id, label: cluster.id }))].map((item) => <button key={item.id || "all"} className="product-focusable product-control" type="button" role="option" aria-selected={(scope.cluster ?? "") === item.id} onClick={() => { setDetail(null); setDrillCl(item.id || null); setScope(item.id ? { level: "nodes", cluster: item.id } : { level: "clusters" }); setClusterOpen(false); }}
+            {[{ id: "", label: "전체 클러스터" }, ...contract.clusters.map((cluster) => ({ id: cluster.id, label: cluster.id }))].map((item) => <button key={item.id || "all"} className="product-focusable product-control" type="button" role="option" aria-selected={(scope.cluster ?? "") === item.id} onClick={() => { setDetail(null); if (item.id) openClusterDrill(item.id); else { setDrillCl(null); setScope({ level: "clusters" }); } setClusterOpen(false); }}
               style={{ display: "flex", alignItems: "center", width: "100%", gap: 8, border: "none", borderRadius: 8, padding: "8px 10px", background: (scope.cluster ?? "") === item.id ? blueA(0.1) : "transparent", color: (scope.cluster ?? "") === item.id ? BLUE : UI.ink, fontSize: TYPE.body, fontWeight: (scope.cluster ?? "") === item.id ? 600 : 500, textAlign: "left", cursor: "pointer" }}>{item.label}{(scope.cluster ?? "") === item.id && <Check size={14} style={{ marginLeft: "auto" }} />}</button>)}</motion.div>}</AnimatePresence>
         </span>
         )}
@@ -3076,7 +3131,7 @@ function App() {
             else if (id === "W10" || id === "W11" || id === "W12") { setDeployRepositoryFilter(null); setSurface("deploy"); }
             else { setSurface("resources"); setResView("list"); setKindId("Pod"); }
           }}
-          onDrillCluster={(cl) => { setDrillCl(cl); setSurface("resources"); setResView("map"); }}
+          onDrillCluster={openClusterDrill}
           onClusterSettings={() => setSurface("settings")}
           onClusterDisconnect={(cl) => {
             // 상세 뷰와 동일한 캐논 다이얼로그(이름 입력 확인 + 단계식 진행)를
@@ -3144,7 +3199,11 @@ function App() {
               <OpsiaMap key={drillCl ?? "root"} initialCluster={drillCl ?? undefined} pendingClusters={pendingCl} pendingRepos={pendingRepo} connectedRepos={connectedRepos}
                 repositoryGroups={repositoryGroups}
                 onRepositoryDisconnected={() => setManifestRefreshKey((key) => key + 1)}
-                embedded onScopeChange={setScope} onOpenResource={openFromMap} lensTab={lensTabFor(kindId)}
+                embedded onScopeChange={(nextScope) => {
+                  setScope(nextScope);
+                  if (nextScope.level === "clusters") setDrillCl(null);
+                  else if (nextScope.cluster) setDrillCl(nextScope.cluster);
+                }} onOpenResource={openFromMap} lensTab={lensTabFor(kindId)}
                 selectedNamespace={selectedNamespace}
                 onAddCluster={() => setConnectModal("cluster")}
                 onAddRepo={() => setConnectModal("repo")}
