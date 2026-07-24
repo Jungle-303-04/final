@@ -84,7 +84,7 @@ const VERIFYING_STATUSES = new Set([
   "pr_created",
 ]);
 const EXECUTING_STATUSES = new Set(["command_requested", "command_dispatched", "command_queued"]);
-const SELECTED_STATUSES = new Set(["recovery_selected", "approval_recommended"]);
+const SELECTED_STATUSES = new Set(["recovery_selected"]);
 const PR_OPEN_STATUSES = new Set(["pr_open"]);
 const DEPLOY_PENDING_STATUSES = new Set(["deploy_pending"]);
 const VERIFICATION_PENDING_STATUSES = new Set(["verification_pending"]);

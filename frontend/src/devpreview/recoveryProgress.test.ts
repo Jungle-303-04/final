@@ -25,6 +25,20 @@ describe("recoveryProgressState", () => {
     });
   });
 
+  it("does not treat a recommended PR action as a submitted request", () => {
+    const progress = recoveryProgressState({
+      status: "approval_recommended",
+      actionRoute: "draft_pr",
+    });
+
+    expect(progress).toMatchObject({
+      phase: "waiting",
+      label: "복구 대기",
+      step: 0,
+    });
+    expect(recoveryDisplayedStep(progress)).toBe(0);
+  });
+
   it("moves to submission when a candidate is selected", () => {
     expect(recoveryProgressState({ status: "rca_completed", selectionAccepted: true })).toMatchObject({
       phase: "submitting",
