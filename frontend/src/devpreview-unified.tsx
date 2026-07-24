@@ -899,20 +899,7 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
   const [tab, setTab] = useState<DetailTab>(tabs[0]);
   const [fullSelf, setFull] = useState(false);   // 전체 화면 (원본 레퍼런스의 ⤢)
   const full = forceFull || fullSelf;            // AI 대화창이 열리면 자연스럽게 전체 화면으로
-  // YAML 편집 자동 확장 — 편집 가능한 Git 원본이 열리면 패널을 넓혀 IDE 2열(에디터|diff)로.
-  // 사용자가 직접 확장한 경우와 구분해, 자동 확장분만 탭 이탈 시 원복한다.
-  const yamlAutoExpanded = useRef(false);
-  const handleYamlEditableChange = (editable: boolean) => {
-    if (editable && !fullSelf && !forceFull) {
-      yamlAutoExpanded.current = true;
-      setFull(true);
-    }
-  };
   const switchTab = (next: DetailTab) => {
-    if (next !== "yaml" && yamlAutoExpanded.current) {
-      yamlAutoExpanded.current = false;
-      setFull(false);
-    }
     setTab(next);
   };
   const name = String(row.name ?? "");
@@ -1239,7 +1226,6 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
               resolving={observedResourceId === "" && resolvedIdentity.status === "loading"}
               refreshKey={manifestRefreshKey}
               wide={full}
-              onEditableChange={handleYamlEditableChange}
               onConnectRepository={() => onConnectRepository?.({
                 clusterId: row.cluster != null && String(row.cluster) ? String(row.cluster) : undefined,
                 namespace: row.ns != null && String(row.ns) ? String(row.ns) : undefined,
