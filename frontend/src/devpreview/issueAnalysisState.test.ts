@@ -24,6 +24,17 @@ describe("issueAnalysisState", () => {
     });
   });
 
+  it("keeps a ranked cause provisional when the report is blocked", () => {
+    expect(issueAnalysisState({
+      status: "recovery_planned",
+      rootCause: "upstream_unavailable",
+      analysisStatus: "blocked",
+    })).toEqual({
+      label: "추가 근거 필요",
+      tone: "warn",
+    });
+  });
+
   it("does not treat an empty root cause as complete", () => {
     expect(issueAnalysisState({ status: "rca_completed", rootCause: "  " })).toEqual({
       label: "분석 중",

@@ -120,6 +120,7 @@ describe("RCA report detail contract", () => {
       id: 1,
       workspace_id: "default",
       correlation_id: "correlation-1",
+      analysis_status: "completed",
       root_cause: "upstream_latency",
       action: "rollback",
       incident_id: "incident-1",

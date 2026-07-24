@@ -4,7 +4,7 @@ import asyncio
 from dataclasses import replace
 from types import SimpleNamespace
 
-from conftest import load_service, make_context
+from conftest import load_service, make_context, run_handler
 
 from domains.rca.events import (
     IncidentRecord,
@@ -180,6 +180,29 @@ class AlignedEvidenceDb:
             "kind": kind,
             "body": body,
         }
+
+
+class CapturingRcaReportDb:
+    def __init__(self) -> None:
+        self.saved: list[dict[str, object]] = []
+
+    async def save_rca_report(
+        self,
+        correlation_id: str,
+        workspace_id: str,
+        root_cause: str,
+        action: str,
+        body: dict[str, object],
+    ) -> None:
+        self.saved.append(
+            {
+                "correlation_id": correlation_id,
+                "workspace_id": workspace_id,
+                "root_cause": root_cause,
+                "action": action,
+                "body": body,
+            }
+        )
 
 
 def alert_event(worker):
@@ -680,21 +703,37 @@ def test_unscoped_no_room_text_never_finalizes_or_drives_fallback_narrative() ->
     bundle = build_incident_evidence_bundle(evidence, incident())
     plan = plan_causes(incident(), bundle, evidence.object_ref)
     evaluations = evaluate_causes(plan.candidates, bundle)
-    result = RcaCompletionPipeline().complete_body(
-        RcaCandidatesEvaluatedBody(
-            candidate_count=plan.candidate_count,
-            evidence_ref=evidence.object_ref,
-            candidates=plan.candidates,
-            evaluations=evaluations,
-            workspace_id=WORKSPACE,
-            evidence=evidence,
-            incident=incident(),
-            evidence_bundle=bundle,
-        )
+    evaluated = RcaCandidatesEvaluatedBody(
+        candidate_count=plan.candidate_count,
+        evidence_ref=evidence.object_ref,
+        candidates=plan.candidates,
+        evaluations=evaluations,
+        workspace_id=WORKSPACE,
+        evidence=evidence,
+        incident=incident(),
+        evidence_bundle=bundle,
     )
+    result = RcaCompletionPipeline().complete_body(evaluated)
 
     assert isinstance(result, RcaAnalysisBlockedBody)
     assert "signal:no_room_identity_verified" in result.missing_evidence
+
+    report_db = CapturingRcaReportDb()
+    rca_worker = load_service("ai/rca-worker")
+    emitted = run_handler(
+        rca_worker.on_candidates_evaluated,
+        evaluated,
+        report_db,
+        correlation_id="corr-unscoped",
+    )
+
+    assert isinstance(emitted[0], RcaAnalysisBlockedBody)
+    assert report_db.saved[0]["root_cause"] == "insufficient_evidence"
+    saved_body = report_db.saved[0]["body"]
+    assert isinstance(saved_body, dict)
+    assert saved_body["analysis_status"] == "blocked"
+    assert saved_body["candidates"]
+    assert saved_body["evaluations"]
 
 
 def test_fallback_requires_attestation_for_the_selected_candidate() -> None:

@@ -8,6 +8,8 @@ import type {
 import {
   appendAiMessage,
   createAiConversation,
+  deleteAiConversation,
+  deleteAllAiConversations,
   getAiConversation,
   listAiConversations,
 } from "../api/ai-conversations";
@@ -271,10 +273,25 @@ export interface AiConversationsFeed {
 
 const AI_CONVERSATIONS_CHANGED_EVENT = "opsia:ai-conversations-changed";
 
-function notifyAiConversationsChanged(): void {
+export function notifyAiConversationsChanged(): void {
   if (typeof window !== "undefined") {
     window.dispatchEvent(new Event(AI_CONVERSATIONS_CHANGED_EVENT));
   }
+}
+
+export async function deleteStoredAiConversation(
+  conversationId: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  await deleteAiConversation(conversationId, signal);
+  notifyAiConversationsChanged();
+}
+
+export async function deleteAllStoredAiConversations(
+  signal?: AbortSignal,
+): Promise<void> {
+  await deleteAllAiConversations(signal);
+  notifyAiConversationsChanged();
 }
 
 function readString(record: Record<string, unknown>, key: string): string | null {

@@ -13,9 +13,9 @@ export function hasRcaCauseOrCandidate(
 export function canOpenRecoveryPlan(
   rootCause: string | null | undefined,
   report: RcaReport | null,
-  plan: RecoveryPlan | null,
+  _plan: RecoveryPlan | null,
 ): boolean {
-  return hasRcaCauseOrCandidate(rootCause, report) && (plan?.candidates.length ?? 0) > 0;
+  return hasRcaCauseOrCandidate(rootCause, report);
 }
 
 export function canStartRecoveryReview({

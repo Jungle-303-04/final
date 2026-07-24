@@ -7,7 +7,7 @@ import {
   Rocket, Package, AlertTriangle, Bell, Clock, ShieldCheck, Coins,
   Building2, Globe, Check, Sparkle, Sparkles, Palette, RefreshCw, Lock, Pin,
   ChevronRight, MapPin, ShieldAlert, ArrowLeft, ArrowRight, ExternalLink, CircleAlert, CircleCheck,
-  Lightbulb,
+  Lightbulb, Trash2,
 } from "lucide-react";
 import { UI, BLUE, HP, TINT, INSET, MONO, TYPE, SOFT, DUR, PRESENT_SCALE, RADIUS, SPACE, inkA, blueA, critA } from "./devpreview/theme";
 import { GithubIcon } from "./devpreview/brandIcons";
@@ -33,7 +33,12 @@ import { retryRecovery, selectRecoveryAction } from "./api/recovery";
 import type { AiRecoveryHandoff, AiRecoveryPreview, AiRecoveryPreviewLine } from "./features/ai-assistant/aiRecoveryHandoff";
 import { isActiveRcaIssue } from "./devpreview/rcaIssuesFeed";
 import { useSession, sessionInitial } from "./devpreview/sessionFeed";
-import { useAiConversations, useConversationDetail } from "./devpreview/aiFeed";
+import {
+  deleteAllStoredAiConversations,
+  deleteStoredAiConversation,
+  useAiConversations,
+  useConversationDetail,
+} from "./devpreview/aiFeed";
 import { useAlertEvents, useAlertRules, useAlertChannels } from "./devpreview/alertsFeed";
 import { alertEventPresentation, alertSeverityTone, type AlertEventIcon, type AlertPresentationTone } from "./devpreview/alertEventPresentation";
 import {
@@ -1822,7 +1827,11 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
   const report = latestReport.report;
   const recoveryAvailable = canOpenRecoveryPlan(rootCause, report, recovery.plan);
   const conf = typeof confidence === "number" && Number.isFinite(confidence) ? Math.round(confidence * 100) : null;
-  const analysisState = issueAnalysisState({ status, rootCause });
+  const analysisState = issueAnalysisState({
+    status,
+    rootCause,
+    analysisStatus: report?.analysis_status,
+  });
   const headerTone = analysisState.label === "해결됨" ? TINT.ok
     : severity === "warning" ? TINT.warn
       : severity === "critical" ? TINT.crit
@@ -2282,6 +2291,13 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
                 <div style={{ fontSize: TYPE.label, color: UI.ink3 }}>복구 플랜 없음</div>
               ) : recovery.status === "loading" ? (
                 <div style={{ fontSize: TYPE.label, color: UI.ink3 }}>복구 플랜 불러오는 중…</div>
+              ) : recovery.status === "pending" ? (
+                <div style={{ display: "grid", gap: 6 }}>
+                  <strong style={{ fontSize: TYPE.label, color: UI.heading }}>복구 플랜 생성 중</strong>
+                  <span style={{ fontSize: TYPE.caption, color: UI.ink3 }}>
+                    원인 분석 결과를 바탕으로 복구 후보를 만들고 있습니다. 잠시 후 자동으로 다시 확인합니다.
+                  </span>
+                </div>
               ) : recovery.status === "unavailable" || recovery.plan === null ? (
                 <div style={{ fontSize: TYPE.label, color: UI.ink3 }}>복구 플랜을 불러오지 못했습니다.</div>
               ) : recovery.plan.candidates.length === 0 ? (
@@ -2998,9 +3014,58 @@ export function AlertsSurface({ onOpenRef }: { onOpenRef: (kind: string, name: s
 export function AiHistorySurface({ onOpenPanel }: { onOpenPanel: () => void }) {
   const feed = useAiConversations();
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [deletePendingId, setDeletePendingId] = useState<string | null>(null);
+  const [deleteAllConfirm, setDeleteAllConfirm] = useState(false);
+  const [deleteAllPending, setDeleteAllPending] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   // 행 클릭 시 선택한 대화 id로 상세(GET /api/ai/conversations/{id})를 조회해 실 Q&A를 렌더한다.
   const detail = useConversationDetail(selectedId);
-  const cols: [string, string][] = [["대화", "minmax(260px,2fr)"], ["시간", "minmax(80px,0.6fr)"]];
+  const cols: [string, string][] = [
+    ["대화", "minmax(260px,2fr)"],
+    ["시간", "minmax(80px,0.6fr)"],
+    ["관리", "minmax(104px,auto)"],
+  ];
+  const deleteConversation = async (conversationId: string) => {
+    setDeletePendingId(conversationId);
+    setDeleteError(null);
+    try {
+      await deleteStoredAiConversation(conversationId);
+      if (selectedId === conversationId) setSelectedId(null);
+      setDeleteConfirmId(null);
+    } catch {
+      setDeleteError("대화를 삭제하지 못했습니다. 잠시 후 다시 시도해 주세요.");
+    } finally {
+      setDeletePendingId(null);
+    }
+  };
+  const deleteAllConversations = async () => {
+    setDeleteAllPending(true);
+    setDeleteError(null);
+    try {
+      await deleteAllStoredAiConversations();
+      setSelectedId(null);
+      setDeleteAllConfirm(false);
+    } catch {
+      setDeleteError("전체 대화를 삭제하지 못했습니다. 잠시 후 다시 시도해 주세요.");
+    } finally {
+      setDeleteAllPending(false);
+    }
+  };
+  const neutralButton: React.CSSProperties = {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    border: `1px solid ${UI.line}`,
+    borderRadius: 8,
+    background: UI.card,
+    color: UI.ink2,
+    padding: "6px 11px",
+    fontSize: TYPE.caption,
+    fontWeight: 600,
+    cursor: "pointer",
+  };
 
   if (selectedId !== null) {
     const selected = feed.items.find((c) => c.id === selectedId);
@@ -3014,7 +3079,22 @@ export function AiHistorySurface({ onOpenPanel }: { onOpenPanel: () => void }) {
             .join("\n");
     return (
       <Page title={selected?.title ?? "AI 대화"} icon={Sparkles}
-        action={<button className="product-focusable product-control" onClick={() => setSelectedId(null)} style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${UI.line}`, background: UI.card, color: UI.ink2, borderRadius: 9, padding: "6px 13px", fontSize: TYPE.label, fontWeight: 600, cursor: "pointer" }}>← 목록</button>}>
+        action={(
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <button className="product-focusable product-control" onClick={() => setSelectedId(null)} style={{ ...neutralButton, fontSize: TYPE.label, padding: "6px 13px" }}>← 목록</button>
+            {deleteConfirmId === selectedId ? (
+              <>
+                <button className="product-focusable product-control" disabled={deletePendingId === selectedId} onClick={() => void deleteConversation(selectedId)} style={{ ...neutralButton, borderColor: TINT.crit.bd, color: TINT.crit.fg, background: TINT.crit.bg }}>
+                  {deletePendingId === selectedId ? "삭제 중…" : "삭제 확인"}
+                </button>
+                <button className="product-focusable product-control" disabled={deletePendingId === selectedId} onClick={() => setDeleteConfirmId(null)} style={neutralButton}>취소</button>
+              </>
+            ) : (
+              <button aria-label="대화 삭제" className="product-focusable product-control" onClick={() => setDeleteConfirmId(selectedId)} style={{ ...neutralButton, padding: 7 }} title="대화 삭제"><Trash2 size={15} /></button>
+            )}
+          </div>
+        )}>
+        {deleteError && <div role="alert" style={{ marginBottom: 10, color: TINT.crit.fg, fontSize: TYPE.caption }}>{deleteError}</div>}
         <Card>
           {detail.status === "loading" ? (
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -3044,20 +3124,53 @@ export function AiHistorySurface({ onOpenPanel }: { onOpenPanel: () => void }) {
 
   return (
     <Page title="AI 대화" icon={Sparkles}
-      action={<button className="product-focusable product-action" onClick={onOpenPanel} style={{ display: "flex", alignItems: "center", gap: 6, border: "none", background: BLUE, color: UI.card, borderRadius: 9, padding: "6px 13px", fontSize: TYPE.label, fontWeight: 600, cursor: "pointer" }}>새 대화</button>}>
+      action={(
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {feed.items.length > 0 && (deleteAllConfirm ? (
+            <>
+              <button className="product-focusable product-control" disabled={deleteAllPending} onClick={() => void deleteAllConversations()} style={{ ...neutralButton, borderColor: TINT.crit.bd, color: TINT.crit.fg, background: TINT.crit.bg }}>
+                {deleteAllPending ? "삭제 중…" : `전체 ${feed.items.length}개 삭제`}
+              </button>
+              <button className="product-focusable product-control" disabled={deleteAllPending} onClick={() => setDeleteAllConfirm(false)} style={neutralButton}>취소</button>
+            </>
+          ) : (
+            <button className="product-focusable product-control" onClick={() => setDeleteAllConfirm(true)} style={neutralButton}><Trash2 size={14} />전체 삭제</button>
+          ))}
+          <button className="product-focusable product-action" onClick={onOpenPanel} style={{ display: "flex", alignItems: "center", gap: 6, border: "none", background: BLUE, color: UI.card, borderRadius: 9, padding: "6px 13px", fontSize: TYPE.label, fontWeight: 600, cursor: "pointer" }}>새 대화</button>
+        </div>
+      )}>
+      {deleteError && <div role="alert" style={{ color: TINT.crit.fg, fontSize: TYPE.caption }}>{deleteError}</div>}
       <Card pad={0}>
         <THead cols={cols} />
         {feed.status === "loading" ? emptyRow("불러오는 중…")
           : feed.status === "unavailable" ? emptyRow("대화 내역을 불러오지 못했습니다.")
           : feed.items.length === 0 ? emptyRow("저장된 AI 대화 없음")
           : feed.items.map((c, i) => (
-            <TRow key={c.id} cols={cols} i={i} onClick={() => setSelectedId(c.id)} cells={[
-              <span key="t" style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
-                <span style={{ fontSize: TYPE.label, fontWeight: 600, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.title}</span>
-                <span style={{ fontSize: TYPE.caption, fontFamily: MONO, color: UI.ink3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.id}</span>
-              </span>,
-              <Mono key="w" dim>{fromNow(c.updatedAt)}</Mono>,
-            ]} />
+            <motion.div key={c.id} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} transition={{ ...SOFT, delay: Math.min(i, 8) * 0.04 }}
+              style={{ display: "grid", gridTemplateColumns: cols.map(([, width]) => width).join(" "), gap: 12, alignItems: "center", borderBottom: `1px solid ${UI.line2}`, padding: "8px 14px" }}>
+              <button type="button" className="product-focusable rrow" onClick={() => setSelectedId(c.id)}
+                style={{ minWidth: 0, border: "none", background: "transparent", padding: "2px 0", textAlign: "left", cursor: "pointer" }}>
+                <span style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
+                  <span style={{ fontSize: TYPE.label, fontWeight: 600, color: UI.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.title}</span>
+                  <span style={{ fontSize: TYPE.caption, fontFamily: MONO, color: UI.ink3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.id}</span>
+                </span>
+              </button>
+              <Mono dim>{fromNow(c.updatedAt)}</Mono>
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 6 }}>
+                {deleteConfirmId === c.id ? (
+                  <>
+                    <button type="button" className="product-focusable product-control" disabled={deletePendingId === c.id} onClick={() => void deleteConversation(c.id)}
+                      style={{ ...neutralButton, borderColor: TINT.crit.bd, color: TINT.crit.fg, background: TINT.crit.bg }}>
+                      {deletePendingId === c.id ? "삭제 중…" : "삭제"}
+                    </button>
+                    <button type="button" className="product-focusable product-control" disabled={deletePendingId === c.id} onClick={() => setDeleteConfirmId(null)} style={neutralButton}>취소</button>
+                  </>
+                ) : (
+                  <button type="button" aria-label={`${c.title} 삭제`} className="product-focusable product-control" onClick={() => setDeleteConfirmId(c.id)}
+                    style={{ ...neutralButton, padding: 7 }} title="대화 삭제"><Trash2 size={14} /></button>
+                )}
+              </div>
+            </motion.div>
           ))}
       </Card>
     </Page>

@@ -23,8 +23,8 @@ describe("recovery access", () => {
     expect(canOpenRecoveryPlan(null, null, planWithCandidate)).toBe(false);
   });
 
-  it("blocks recovery when the server has no recovery candidate", () => {
-    expect(canOpenRecoveryPlan("Probe path 설정 오류", null, null)).toBe(false);
+  it("opens the recovery tab for a confirmed cause before candidates arrive", () => {
+    expect(canOpenRecoveryPlan("Probe path 설정 오류", null, null)).toBe(true);
   });
 
   it("allows recovery for a final cause with a real recovery candidate", () => {

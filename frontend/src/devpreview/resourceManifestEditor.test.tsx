@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "../api/client";
@@ -96,6 +96,7 @@ const VALID_PREVIEW: ResourceManifestPreviewEndpoint = {
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
 });
 
 beforeEach(() => {
@@ -180,13 +181,34 @@ describe("LiveResourceManifestEditor stale source recovery", () => {
 });
 
 describe("LiveResourceManifestEditor read-only entry", () => {
-  it("shows a loading progress bar while the YAML source is being resolved", () => {
+  it("shows a loading progress bar only after the YAML source lookup is delayed", async () => {
+    vi.useFakeTimers();
     manifestApi.getSource.mockReturnValue(new Promise(() => undefined));
 
     render(<LiveResourceManifestEditor resourceId="resource-1" />);
 
+    expect(screen.queryByText("YAML 소스 확인 중")).toBeNull();
+
+    await act(async () => {
+      vi.advanceTimersByTime(399);
+    });
+    expect(screen.queryByText("YAML 소스 확인 중")).toBeNull();
+
+    await act(async () => {
+      vi.advanceTimersByTime(1);
+    });
     expect(screen.getByText("YAML 소스 확인 중")).not.toBeNull();
     expect(screen.getByRole("progressbar", { name: "YAML 소스 확인 중 진행 상태" })).not.toBeNull();
+  });
+
+  it("does not flash the loading notice when the YAML source resolves quickly", async () => {
+    manifestApi.getSource.mockResolvedValue(source(1));
+
+    render(<LiveResourceManifestEditor resourceId="resource-1" />);
+
+    expect(screen.queryByText("YAML 소스 확인 중")).toBeNull();
+    expect(await screen.findByRole("region", { name: "Live YAML 읽기 전용" })).not.toBeNull();
+    expect(screen.queryByText("YAML 소스 확인 중")).toBeNull();
   });
 
   it("shows only the editor after edit and restores a saved draft", async () => {
@@ -195,6 +217,9 @@ describe("LiveResourceManifestEditor read-only entry", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "편집" }));
     const editor = await screen.findByRole("textbox", { name: "Git YAML 원본 편집기" });
+    expect(editor.getAttribute("wrap")).toBe("off");
+    expect(editor.classList.contains("manifest-yaml-editor")).toBe(true);
+    expect((editor as HTMLElement).style.overflowX).toBe("scroll");
     expect(screen.queryByRole("region", { name: "Live YAML 읽기 전용" })).toBeNull();
     fireEvent.change(editor, { target: { value: EDITED_YAML } });
     fireEvent.click(screen.getByRole("button", { name: "저장" }));
@@ -206,6 +231,20 @@ describe("LiveResourceManifestEditor read-only entry", () => {
 
     expect((await screen.findByRole("textbox", { name: "Git YAML 원본 편집기" }) as HTMLTextAreaElement).value)
       .toBe(EDITED_YAML);
+  });
+
+  it("reuses a preloaded source when the side-by-side editor opens", async () => {
+    render(
+      <LiveResourceManifestEditor
+        resourceId="resource-1"
+        mode="edit"
+        initialSource={source(1)}
+      />,
+    );
+
+    expect(await screen.findByRole("textbox", { name: "Git YAML 원본 편집기" })).not.toBeNull();
+    expect(manifestApi.getSource).not.toHaveBeenCalled();
+    expect(screen.queryByText("YAML 소스 확인 중")).toBeNull();
   });
 
   it("opens the editor and reports editability only after the edit button is clicked", async () => {
