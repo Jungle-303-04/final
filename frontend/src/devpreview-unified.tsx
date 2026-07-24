@@ -2899,7 +2899,7 @@ function App() {
               <OpsiaMap key={drillCl ?? "root"} initialCluster={drillCl ?? undefined} pendingClusters={pendingCl} pendingRepos={pendingRepo} connectedRepos={connectedRepos}
                 repositoryGroups={repositoryGroups}
                 onRepositoryDisconnected={() => setManifestRefreshKey((key) => key + 1)}
-                embedded onScopeChange={setScope} onOpenResource={openFromMap} onOpenRca={setRcaIncident} lensTab={lensTabFor(kindId)}
+                embedded onScopeChange={setScope} onOpenResource={openFromMap} lensTab={lensTabFor(kindId)}
                 selectedNamespace={selectedNamespace}
                 onAddCluster={() => setConnectModal("cluster")}
                 onAddRepo={() => setConnectModal("repo")}

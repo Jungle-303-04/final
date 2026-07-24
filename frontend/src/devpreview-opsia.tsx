@@ -41,6 +41,7 @@ import {
   resolveHighlightedPodIdentities,
   type PodHighlightTarget,
 } from "./devpreview/podHighlight";
+import { podResourceSelection } from "./devpreview/podSelection";
 import "./styles/tokens.css";
 import "./styles/foundation.css";
 
@@ -909,13 +910,11 @@ function PodRow({ pod, onClick, onTip }: {
 
 // ── 앱 ─────────────────────────────
 // embedded: 셸(통합 리소스)에 내장될 때 자체 헤더·내비를 숨기고 스코프 변화를 알림
-export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOpenRca, lensTab, onAddCluster, onAddRepo, onOpenRepository, stickyTop, viewportTopInset = 0, initialCluster, selectedNamespace = null, pendingClusters, pendingRepos, connectedRepos, repositoryGroups, onRepositoryDisconnected }: {
+export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, lensTab, onAddCluster, onAddRepo, onOpenRepository, stickyTop, viewportTopInset = 0, initialCluster, selectedNamespace = null, pendingClusters, pendingRepos, connectedRepos, repositoryGroups, onRepositoryDisconnected }: {
   embedded?: boolean;
   onScopeChange?: (v: View) => void;
   /** 임베드 모드: 파드 클릭 시 셸의 통합 상세 오버레이를 연다 (내부 패널 대신) */
   onOpenResource?: (kind: "Pod", data: Record<string, unknown>) => void;
-  /** 장애(unhealthy) 파드 클릭 시 RCA 상세 사이드바를 연다 */
-  onOpenRca?: (incident: { name: string; symptom: string; cluster: string; svc: string; ns: string }) => void;
   /** 셸의 종류 선택과 연결 보기 탭 동기화 */
   lensTab?: "svc" | "cfg" | "git" | null;
   /** 실서비스 배치: 클러스터 뷰의 '+ 연결' 카드 / 배포 탭의 '+ 저장소 연결' */
@@ -1009,19 +1008,12 @@ export function OpsiaMap({ embedded = false, onScopeChange, onOpenResource, onOp
   const onTip = (t: TipData) => setTip(t ? { ...t, x: t.x / tipScale, y: t.y / tipScale } : null);
 
   const selectPod = (p: InvPod) => {
-    // 장애(unhealthy) 파드는 RCA 상세로 진입하는 게 자연스럽다.
-    if (embedded && isBadHealth(p.health) && onOpenRca) {
-      onOpenRca({ name: p.name, symptom: p.status || p.health, cluster: p.cluster, svc: "", ns: p.namespace ?? "" });
-      return;
-    }
     // 임베드 모드: 상세는 셸의 최상위 오버레이 하나로 일원화(내부 패널과 이원화 금지).
-    // 계약이 주는 필드만 전달 — 없는 값(CPU/MEM/재시작 등)은 상세가 "관측 안 됨"을 렌더한다.
+    // health는 행의 상태 표시만 바꾸며, incident identity가 없는 파드 행에서
+    // 임의의 RCA 객체를 만들지 않는다. 이슈 진입은 이슈/알림 화면이 소유한다.
     if (embedded && onOpenResource) {
-      onOpenResource("Pod", {
-        name: p.name, ns: p.namespace ?? undefined, kind: "Pod",
-        status: p.status, health: p.health, cluster: p.cluster, bad: isBadHealth(p.health),
-        _key: p.key,
-      });
+      const selection = podResourceSelection(p);
+      onOpenResource(selection.kind, selection.data);
     }
   };
 
