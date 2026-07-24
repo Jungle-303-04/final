@@ -207,9 +207,27 @@ def recovery_change_context(report: RcaCompletedBody) -> JsonObject:
     bundle = report.evidence_bundle
     if bundle is None:
         return {}
-    matches = [
+    change_context_matches = [
         item.value
         for item in bundle.items
         if item.source == "metadata" and item.name == "change_context"
     ]
-    return dict(matches[0]) if len(matches) == 1 else {}
+    context = (
+        dict(change_context_matches[0])
+        if len(change_context_matches) == 1
+        and isinstance(change_context_matches[0], dict)
+        else {}
+    )
+    snapshot_matches = [
+        item.value
+        for item in bundle.items
+        if item.source == "metadata" and item.name == "current_workload_snapshots"
+    ]
+    if len(snapshot_matches) != 1 or not isinstance(snapshot_matches[0], dict):
+        return context
+    snapshots = snapshot_matches[0].get("items")
+    if isinstance(snapshots, list):
+        context["current_workload_snapshots"] = [
+            dict(item) for item in snapshots if isinstance(item, dict)
+        ]
+    return context

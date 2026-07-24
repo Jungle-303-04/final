@@ -247,6 +247,33 @@ def report_with_controller_snapshot() -> RcaCompletedBody:
     )
 
 
+def report_with_promoted_controller_snapshot() -> RcaCompletedBody:
+    report = report_with_controller_snapshot()
+    assert report.evidence_bundle is not None
+    snapshots = report.evidence_bundle.items[0].value["current_workload_snapshots"]
+    return RcaCompletedBody(
+        root_cause=report.root_cause,
+        action=report.action,
+        evidence_ref=report.evidence_ref,
+        workspace_id=report.workspace_id,
+        incident=report.incident,
+        rca_detail=report.rca_detail,
+        evidence_bundle=EvidenceBundle(
+            incident_id=report.evidence_bundle.incident_id,
+            items=[
+                EvidenceItem(
+                    source="metadata",
+                    name="current_workload_snapshots",
+                    value={"items": snapshots},
+                    summary="promoted workload ownership",
+                )
+            ],
+            missing_evidence=[],
+            complete=True,
+        ),
+    )
+
+
 def selected_event(target: dict[str, object]) -> RecoveryActionSelectedBody:
     draft = HealingActionDraft(
         action_type="probe_fix",
@@ -297,6 +324,23 @@ def selected_event(target: dict[str, object]) -> RecoveryActionSelectedBody:
 
 def test_recovery_plan_and_dispatch_share_the_resolved_authority_target() -> None:
     report = report_with_controller_snapshot()
+    context = RecoveryContext(
+        report=report,
+        incident=report.incident,  # type: ignore[arg-type]
+        detail=report.rca_detail,  # type: ignore[arg-type]
+        evidence_ref=report.evidence_ref,
+    )
+
+    target = context.target
+    query = authority_query(selected_event(target), "correlation-1")
+
+    assert target["original_target"]["resource_kind"] == "ReplicaSet"
+    assert query.resource_kind == "Deployment"
+    assert query.resource_name == "game-room-0"
+
+
+def test_recovery_plan_resolves_controller_from_promoted_snapshot_evidence() -> None:
+    report = report_with_promoted_controller_snapshot()
     context = RecoveryContext(
         report=report,
         incident=report.incident,  # type: ignore[arg-type]
