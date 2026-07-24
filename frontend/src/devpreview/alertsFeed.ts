@@ -44,6 +44,12 @@ export interface AlertEventsFeed {
   transport: "connecting" | "http" | "sse" | "stale";
 }
 
+export function alertEventOccurrenceKey(
+  event: Pick<AlertEventView, "eventId" | "incidentId">,
+): string {
+  return `${event.eventId}\u0000${event.incidentId ?? ""}`;
+}
+
 export function isIncidentNotification(event: AlertEventView): boolean {
   return (
     (event.source === "incident" || event.source === "alertmanager")

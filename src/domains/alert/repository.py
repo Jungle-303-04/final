@@ -318,9 +318,15 @@ class AlertRuleRepository(DatabaseConnection):
         """
         table = AlertEvent.__table__
         insert = pg_insert(table).values(**payload, updated_at=func.now())
+        incident_changed = (
+            insert.excluded.incident_id.is_not(None)
+            & table.c.incident_id.is_not(None)
+            & (insert.excluded.incident_id != table.c.incident_id)
+        )
         resolved_is_terminal = (
             (table.c.status == "resolved")
             & (insert.excluded.status != "resolved")
+            & ~incident_changed
         )
         statement = insert.on_conflict_do_update(
             index_elements=[table.c.event_id],
@@ -359,6 +365,22 @@ class AlertRuleRepository(DatabaseConnection):
                     else_=insert.excluded.evidence,
                 ),
                 "incident_id": func.coalesce(insert.excluded.incident_id, table.c.incident_id),
+                "acknowledged_at": case(
+                    (incident_changed, None),
+                    else_=table.c.acknowledged_at,
+                ),
+                "acknowledged_by": case(
+                    (incident_changed, None),
+                    else_=table.c.acknowledged_by,
+                ),
+                "promoted_at": case(
+                    (incident_changed, None),
+                    else_=table.c.promoted_at,
+                ),
+                "promoted_by": case(
+                    (incident_changed, None),
+                    else_=table.c.promoted_by,
+                ),
                 "updated_at": func.now(),
             },
         ).returning(table)

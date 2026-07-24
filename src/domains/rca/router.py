@@ -652,6 +652,7 @@ async def agent_evidence(
 # 외부 모니터링 웹훅 — Alertmanager 가 firing 알림을 보내면 인시던트 파이프라인을 연다.
 ALERTMANAGER_WEBHOOK_TOKEN_ENV = "ALERTMANAGER_WEBHOOK_TOKEN"
 ALERTMANAGER_SOURCE_ID = "alertmanager-webhook"
+ALERTMANAGER_REOPEN_DISPOSITIONS = frozenset({"orphan", "terminal"})
 WEBHOOK_TOKEN_INVALID = "invalid webhook token"
 CLUSTER_NOT_REGISTERED = "cluster is not registered"
 STANDARD_SLI_ALERT_NAME = "OpsiaSliFailureRatioHigh"
@@ -1032,29 +1033,50 @@ async def alertmanager_webhook(
     )
     existing = await db_call(db.get_evidence_window, evidence_key)
     if existing:
-        await persist_alertmanager_alert_events(
-            db,
+        disposition = await db_call(
+            db.get_alertmanager_evidence_disposition,
             workspace_id,
-            cluster_id,
-            payload,
-            incident_id=str(existing["correlation_id"]),
+            str(existing["correlation_id"]),
+            str(existing["event_id"]),
         )
-        return AcceptedResponse(
-            accepted=True,
-            event_id=existing["event_id"],
-            correlation_id=existing["correlation_id"],
+        if disposition not in ALERTMANAGER_REOPEN_DISPOSITIONS:
+            await persist_alertmanager_alert_events(
+                db,
+                workspace_id,
+                cluster_id,
+                payload,
+                incident_id=str(existing["correlation_id"]),
+            )
+            return AcceptedResponse(
+                accepted=True,
+                event_id=existing["event_id"],
+                correlation_id=existing["correlation_id"],
+            )
+        recorded = await db_call(
+            db.rotate_alertmanager_evidence_window,
+            evidence_key=evidence_key,
+            expected_event_id=str(existing["event_id"]),
+            expected_correlation_id=str(existing["correlation_id"]),
+            workspace_id=workspace_id,
+            cluster_id=cluster_id,
+            source_id=ALERTMANAGER_SOURCE_ID,
+            window_start=evidence_body.window_start or evidence_key,
+            agent_id=None,
+            event_envelope=event_envelope,
+            payload=evidence_body.to_body(),
         )
-    recorded = await db_call(
-        db.record_evidence_event_once,
-        evidence_key=evidence_key,
-        workspace_id=workspace_id,
-        cluster_id=cluster_id,
-        source_id=ALERTMANAGER_SOURCE_ID,
-        window_start=evidence_body.window_start or evidence_key,
-        agent_id=None,
-        event_envelope=event_envelope,
-        payload=evidence_body.to_body(),
-    )
+    else:
+        recorded = await db_call(
+            db.record_evidence_event_once,
+            evidence_key=evidence_key,
+            workspace_id=workspace_id,
+            cluster_id=cluster_id,
+            source_id=ALERTMANAGER_SOURCE_ID,
+            window_start=evidence_body.window_start or evidence_key,
+            agent_id=None,
+            event_envelope=event_envelope,
+            payload=evidence_body.to_body(),
+        )
     await persist_alertmanager_alert_events(
         db,
         workspace_id,

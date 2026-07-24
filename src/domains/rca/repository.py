@@ -12,6 +12,7 @@ from sqlalchemy import Select, and_, case, cast, func, or_, select
 from sqlalchemy.dialects.postgresql import TIMESTAMP
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
+from domains.dashboard.models import RcaTimeline
 from domains.rca.events import RecoveryVerificationFailedBody
 from domains.rca.models import (
     Evidence,
@@ -63,6 +64,16 @@ RCA_REPORT_REPOSITORY_OWNED_COLUMNS = frozenset(
 )
 RCA_REPORT_STORAGE_PROJECTION_COLUMNS = frozenset(RcaReport.__table__.c.keys()).difference(
     RCA_REPORT_REPOSITORY_OWNED_COLUMNS
+)
+ALERTMANAGER_EVIDENCE_ACTIVE = "active"
+ALERTMANAGER_EVIDENCE_PENDING = "pending"
+ALERTMANAGER_EVIDENCE_TERMINAL = "terminal"
+ALERTMANAGER_EVIDENCE_ORPHAN = "orphan"
+ALERTMANAGER_TERMINAL_TIMELINE_STATUSES = frozenset(
+    {
+        "incident_resolved",
+        "incident_expired",
+    }
 )
 
 
@@ -123,6 +134,103 @@ class RcaRepository(DatabaseConnection):
         with self.connection() as conn:
             value = conn.execute(select(func.now())).scalar_one()
         return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+
+    def get_alertmanager_evidence_disposition(
+        self,
+        workspace_id: str,
+        correlation_id: str,
+        event_id: str,
+    ) -> str:
+        """Classify whether an Alertmanager evidence key can still deduplicate.
+
+        Evidence windows are durable idempotency records, not the incident
+        lifecycle itself. A manually removed incident must not leave a window
+        permanently pointing at a correlation that no longer has an origin
+        event or any incident projection.
+        """
+
+        timeline = RcaTimeline.__table__
+        reports = RcaReport.__table__
+        plans = RecoveryPlanRecord.__table__
+        claims = IncidentSignalClaim.__table__
+        events = EventModel.__table__
+        with self.connection() as conn:
+            latest_status = conn.execute(
+                select(timeline.c.status)
+                .where(
+                    timeline.c.workspace_id == workspace_id,
+                    or_(
+                        timeline.c.correlation_id == correlation_id,
+                        timeline.c.incident_id == correlation_id,
+                    ),
+                )
+                .order_by(timeline.c.updated_at.desc(), timeline.c.id.desc())
+                .limit(1)
+            ).scalar_one_or_none()
+            if latest_status is not None:
+                return (
+                    ALERTMANAGER_EVIDENCE_TERMINAL
+                    if str(latest_status) in ALERTMANAGER_TERMINAL_TIMELINE_STATUSES
+                    else ALERTMANAGER_EVIDENCE_ACTIVE
+                )
+
+            latest_plan_status = conn.execute(
+                select(plans.c.status)
+                .where(
+                    plans.c.workspace_id == workspace_id,
+                    or_(
+                        plans.c.correlation_id == correlation_id,
+                        plans.c.incident_id == correlation_id,
+                    ),
+                )
+                .order_by(plans.c.updated_at.desc(), plans.c.id.desc())
+                .limit(1)
+            ).scalar_one_or_none()
+            if latest_plan_status is not None:
+                return (
+                    ALERTMANAGER_EVIDENCE_TERMINAL
+                    if str(latest_plan_status) == RECOVERY_PLAN_STATUS_COMPLETED
+                    else ALERTMANAGER_EVIDENCE_ACTIVE
+                )
+
+            report_exists = conn.execute(
+                select(reports.c.id)
+                .where(
+                    reports.c.workspace_id == workspace_id,
+                    or_(
+                        reports.c.correlation_id == correlation_id,
+                        reports.c.incident_id == correlation_id,
+                    ),
+                )
+                .limit(1)
+            ).scalar_one_or_none()
+            if report_exists is not None:
+                return ALERTMANAGER_EVIDENCE_ACTIVE
+
+            claim_exists = conn.execute(
+                select(claims.c.id)
+                .where(
+                    claims.c.workspace_id == workspace_id,
+                    claims.c.first_correlation_id == correlation_id,
+                )
+                .limit(1)
+            ).scalar_one_or_none()
+            if claim_exists is not None:
+                return ALERTMANAGER_EVIDENCE_ACTIVE
+
+            origin_exists = conn.execute(
+                select(events.c.event_id)
+                .where(
+                    events.c.event_id == event_id,
+                    events.c.correlation_id == correlation_id,
+                )
+                .limit(1)
+            ).scalar_one_or_none()
+            return (
+                ALERTMANAGER_EVIDENCE_PENDING
+                if origin_exists is not None
+                else ALERTMANAGER_EVIDENCE_ORPHAN
+            )
 
     def save_evidence(
         self, correlation_id: str, workspace_id: str, kind: str, body: JsonObject

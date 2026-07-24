@@ -91,6 +91,7 @@ import {
 import { useChangeTimeline } from "./devpreview/changeTimelineFeed";
 import { useApplications, type ApplicationsFeed } from "./devpreview/deployFeed";
 import {
+  alertEventOccurrenceKey,
   isIncidentNotification,
   useAlertEvents,
   type AlertEventView,
@@ -2439,7 +2440,10 @@ function App() {
   );
   const unreadAlerts = useMemo(
     () => liveAlerts.filter(
-      (event) => event.status === "firing" && !readAlertIds.has(event.eventId),
+      (event) => (
+        event.status === "firing"
+        && !readAlertIds.has(alertEventOccurrenceKey(event))
+      ),
     ),
     [liveAlerts, readAlertIds],
   );
@@ -2461,15 +2465,16 @@ function App() {
     setBellRingVersion((version) => version + 1);
   }, []);
   const markAlertRead = useCallback((event: AlertEventView) => {
+    const occurrenceKey = alertEventOccurrenceKey(event);
     setReadAlertIds((current) => {
       const next = new Set(current);
-      next.add(event.eventId);
+      next.add(occurrenceKey);
       return next;
     });
     void acknowledgeAlertEvent(event.eventId).catch(() => {
       setReadAlertIds((current) => {
         const next = new Set(current);
-        next.delete(event.eventId);
+        next.delete(occurrenceKey);
         return next;
       });
       pushToast({
@@ -2480,7 +2485,7 @@ function App() {
     });
   }, [pushToast]);
   const markAllAlertsRead = useCallback(() => {
-    const allIds = unreadAlerts.map((event) => event.eventId);
+    const allIds = unreadAlerts.map(alertEventOccurrenceKey);
     setReadAlertIds((current) => new Set([...current, ...allIds]));
     setNotes([]);
     if (unreadAlerts.length === 0) return;
@@ -2488,7 +2493,9 @@ function App() {
       unreadAlerts.map((event) => acknowledgeAlertEvent(event.eventId)),
     ).then((results) => {
       const failedIds = results.flatMap((result, index) =>
-        result.status === "rejected" ? [unreadAlerts[index].eventId] : []
+        result.status === "rejected"
+          ? [alertEventOccurrenceKey(unreadAlerts[index])]
+          : []
       );
       if (failedIds.length === 0) return;
       setReadAlertIds((current) => {
@@ -2506,15 +2513,16 @@ function App() {
   const notifiedIncidentAlerts = useRef<Set<string> | null>(null);
   useEffect(() => {
     if (alertEvents.status !== "ready") return;
-    const currentIds = new Set(liveAlerts.map((event) => event.eventId));
+    const currentIds = new Set(liveAlerts.map(alertEventOccurrenceKey));
     if (notifiedIncidentAlerts.current === null) {
       notifiedIncidentAlerts.current = currentIds;
       return;
     }
     let receivedNewIncident = false;
     for (const event of liveAlerts) {
+      const occurrenceKey = alertEventOccurrenceKey(event);
       if (
-        notifiedIncidentAlerts.current.has(event.eventId)
+        notifiedIncidentAlerts.current.has(occurrenceKey)
         || !isIncidentNotification(event)
       ) continue;
       receivedNewIncident = true;

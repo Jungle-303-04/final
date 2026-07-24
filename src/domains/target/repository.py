@@ -56,6 +56,11 @@ def cluster_policy_lock_key(workspace_id: str, cluster_id: str) -> int:
     return int.from_bytes(hashlib.sha256(raw).digest()[:8], byteorder="big", signed=True)
 
 
+def evidence_window_lock_key(evidence_key_value: str) -> int:
+    raw = f"evidence-window\0{evidence_key_value}".encode()
+    return int.from_bytes(hashlib.sha256(raw).digest()[:8], byteorder="big", signed=True)
+
+
 def agent_status_retention_seconds() -> int:
     """종료된 agent pod 상태를 보존할 최대 시간을 반환한다."""
     try:
@@ -1225,6 +1230,131 @@ class TargetAgentRepository(DatabaseConnection):
                 .values(result=None, updated_at=func.now())
             )
         return {"duplicate": False, **dict(inserted)}
+
+    def rotate_alertmanager_evidence_window(
+        self,
+        *,
+        evidence_key: str,
+        expected_event_id: str,
+        expected_correlation_id: str,
+        workspace_id: str,
+        cluster_id: str,
+        source_id: str,
+        window_start: str,
+        agent_id: str | None,
+        event_envelope: EventEnvelope,
+        payload: JsonObject,
+    ) -> JsonObject:
+        """Atomically move a closed/orphaned Alertmanager key to a new incident.
+
+        The stable key remains the live dedupe pointer. Its previous value is
+        archived under a deterministic history key so incident evidence remains
+        inspectable without letting repeats reuse a dead correlation.
+        """
+
+        window_table = EvidenceWindow.__table__
+        event_table = EventModel.__table__
+        outbox_table = OutboxModel.__table__
+        trusted_envelope = replace(event_envelope, workspace_id=workspace_id)
+        new_values = {
+            "workspace_id": workspace_id,
+            "cluster_id": cluster_id,
+            "source_id": source_id,
+            "window_start": window_start,
+            "agent_id": agent_id,
+            "event_id": trusted_envelope.event_id,
+            "correlation_id": trusted_envelope.correlation_id,
+            "payload": payload,
+            "updated_at": func.now(),
+        }
+        with self.connection() as conn:
+            conn.execute(
+                select(func.pg_advisory_xact_lock(evidence_window_lock_key(evidence_key)))
+            )
+            current = (
+                conn.execute(
+                    select(window_table)
+                    .where(window_table.c.evidence_key == evidence_key)
+                    .with_for_update()
+                )
+                .mappings()
+                .first()
+            )
+            if current is None:
+                inserted = (
+                    conn.execute(
+                        pg_insert(window_table)
+                        .values(evidence_key=evidence_key, **new_values)
+                        .on_conflict_do_nothing(index_elements=[window_table.c.evidence_key])
+                        .returning(window_table.c.event_id, window_table.c.correlation_id)
+                    )
+                    .mappings()
+                    .first()
+                )
+                if inserted is None:
+                    existing = (
+                        conn.execute(
+                            select(
+                                window_table.c.event_id,
+                                window_table.c.correlation_id,
+                            ).where(window_table.c.evidence_key == evidence_key)
+                        )
+                        .mappings()
+                        .one()
+                    )
+                    return {"duplicate": True, **dict(existing)}
+                self.stage_event_envelope(conn, event_table, outbox_table, trusted_envelope)
+                return {"duplicate": False, **dict(inserted)}
+
+            if (
+                str(current["event_id"]) != expected_event_id
+                or str(current["correlation_id"]) != expected_correlation_id
+            ):
+                return {
+                    "duplicate": True,
+                    "event_id": str(current["event_id"]),
+                    "correlation_id": str(current["correlation_id"]),
+                }
+
+            history_digest = hashlib.sha256(
+                f"{expected_event_id}\0{expected_correlation_id}".encode()
+            ).hexdigest()[:24]
+            history_key = f"{evidence_key}:history:{history_digest}"
+            history_values = {
+                key: current[key]
+                for key in (
+                    "workspace_id",
+                    "cluster_id",
+                    "source_id",
+                    "window_start",
+                    "agent_id",
+                    "event_id",
+                    "correlation_id",
+                    "payload",
+                    "created_at",
+                    "updated_at",
+                )
+            }
+            conn.execute(
+                pg_insert(window_table)
+                .values(evidence_key=history_key, **history_values)
+                .on_conflict_do_nothing(index_elements=[window_table.c.evidence_key])
+            )
+            conn.execute(
+                update(window_table)
+                .where(
+                    window_table.c.evidence_key == evidence_key,
+                    window_table.c.event_id == expected_event_id,
+                    window_table.c.correlation_id == expected_correlation_id,
+                )
+                .values(**new_values)
+            )
+            self.stage_event_envelope(conn, event_table, outbox_table, trusted_envelope)
+        return {
+            "duplicate": False,
+            "event_id": trusted_envelope.event_id,
+            "correlation_id": trusted_envelope.correlation_id,
+        }
 
     def stage_event_envelope(
         self,
