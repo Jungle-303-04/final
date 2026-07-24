@@ -5,6 +5,7 @@ import {
   approveResourceManifestEdit,
   getCommandStatus,
   getResourceManifestSource,
+  isResourceManifestSourceStale,
   manifestIdempotencyKey,
   previewResourceManifestEdit,
   resourceManifestFailureRemediation,
@@ -23,6 +24,11 @@ import { BLUE, HP, MONO, TINT, TYPE, UI, inkA } from "./theme";
 import { DiffCodeView, YamlCodeView } from "./YamlCodeView";
 
 type Phase = "loading" | "ready" | "previewing" | "submitting" | "failed";
+type SourceRefreshNotice = {
+  title: string;
+  tone: "neutral" | "warn";
+  message: string;
+};
 
 interface LiveResourceManifestEditorProps {
   resourceId: string;
@@ -64,6 +70,7 @@ export function LiveResourceManifestEditor({
   const [applyReceipt, setApplyReceipt] = useState<ResourceManifestApplyEndpoint | null>(null);
   const [applyStatus, setApplyStatus] = useState<CommandStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [sourceRefreshNotice, setSourceRefreshNotice] = useState<SourceRefreshNotice | null>(null);
   const [failureRemediation, setFailureRemediation] = useState<ResourceManifestRemediation>("none");
   const controller = useRef<AbortController | null>(null);
 
@@ -73,6 +80,7 @@ export function LiveResourceManifestEditor({
     controller.current = next;
     setPhase("loading");
     setError(null);
+    setSourceRefreshNotice(null);
     setFailureRemediation("none");
     setPreview(null);
     setApproval(null);
@@ -112,6 +120,7 @@ export function LiveResourceManifestEditor({
         setApplyReceipt(null);
         setApplyStatus(null);
         setError(null);
+        setSourceRefreshNotice(null);
         setFailureRemediation("none");
         setPhase("ready");
       } catch (cause) {
@@ -173,12 +182,59 @@ export function LiveResourceManifestEditor({
     if (!editInput) return;
     setPhase("previewing");
     setError(null);
+    setSourceRefreshNotice(null);
     setApproval(null);
     setApplyReceipt(null);
     try {
       setPreview(await previewResourceManifestEdit(resourceId, editInput));
       setPhase("ready");
     } catch (cause) {
+      if (isResourceManifestSourceStale(cause)) {
+        try {
+          const loaded = await getResourceManifestSource(resourceId, applicationId);
+          if (
+            loaded.status !== "available"
+            || loaded.selected === null
+            || loaded.base_sha === null
+            || loaded.source_sha256 === null
+            || loaded.content === null
+          ) throw cause;
+
+          const manifestChanged = loaded.source_sha256 !== editInput.sourceSha256;
+          setSource(loaded);
+          setApplicationId(loaded.selected.application_id);
+          setPreview(null);
+          setConfirmed(false);
+
+          if (manifestChanged) {
+            setSourceRefreshNotice({
+              title: "Git 원본 변경 감지",
+              tone: "warn",
+              message: "편집 중인 YAML 파일도 변경되어 자동 재검증을 중단했습니다. 작성한 내용은 보존했습니다. 다시 검증하면 최신 Git 원본과의 diff를 확인할 수 있습니다.",
+            });
+          } else {
+            const refreshedInput = {
+              applicationId: loaded.selected.application_id,
+              baseSha: loaded.base_sha,
+              sourceSha256: loaded.source_sha256,
+              sourceRevisionToken: loaded.source_revision_token,
+              editedYaml: yaml,
+            };
+            setPreview(await previewResourceManifestEdit(resourceId, refreshedInput));
+            setSourceRefreshNotice({
+              title: "최신 Git 기준으로 재검증됨",
+              tone: "neutral",
+              message: "다른 파일의 변경으로 기준 commit만 이동했습니다. 작성한 YAML은 유지했고 최신 commit 기준 검증을 완료했습니다.",
+            });
+          }
+          setPhase("ready");
+          return;
+        } catch (refreshCause) {
+          setError(resourceManifestFailureText(refreshCause));
+          setPhase("failed");
+          return;
+        }
+      }
       setError(resourceManifestFailureText(cause));
       setPhase("failed");
     }
@@ -367,7 +423,7 @@ export function LiveResourceManifestEditor({
         <span style={{ marginLeft: "auto", fontFamily: MONO, color: UI.ink3 }}>commit {source.base_sha?.slice(0, 12)}</span>
       </div>
       <textarea aria-label="Git YAML 원본 편집기" value={yaml} disabled={busy || !!approval || !!emergencyApproval || !!applyReceipt}
-        onChange={(event) => { setYaml(event.currentTarget.value); setPreview(null); setConfirmed(false); }} spellCheck={false}
+        onChange={(event) => { setYaml(event.currentTarget.value); setPreview(null); setConfirmed(false); setSourceRefreshNotice(null); }} spellCheck={false}
         style={{ width: "100%", minHeight: wide ? 480 : 360, resize: "vertical", boxSizing: "border-box", border: `1px solid ${UI.line}`, borderRadius: 12, padding: 14, background: "#0d1117", color: "#e6edf3", fontFamily: MONO, fontSize: TYPE.code, lineHeight: 1.6, outline: "none" }} />
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
         <ActionButton disabled={busy} onClick={() => void runPreview()}>
@@ -382,6 +438,11 @@ export function LiveResourceManifestEditor({
       {preview?.errors.map((item) => <ManifestNotice key={item} tone="error" title="검증 오류">{item}</ManifestNotice>)}
       {preview?.warnings.map((item) => <ManifestNotice key={item} tone="warn" title="검토 필요">{item}</ManifestNotice>)}
       {preview?.apply_reason_codes.map((item) => <ManifestNotice key={item} tone="warn" title="즉시 적용 제한">{reasonLabel(item)}</ManifestNotice>)}
+      {sourceRefreshNotice && (
+        <ManifestNotice tone={sourceRefreshNotice.tone} title={sourceRefreshNotice.title}>
+          {sourceRefreshNotice.message}
+        </ManifestNotice>
+      )}
       {error && <ManifestNotice tone="error" title="YAML 요청 실패">{error}</ManifestNotice>}
       {preview?.valid && !approval && !applyReceipt && (
         <div style={{ display: "grid", gap: 9, borderTop: `1px solid ${UI.line2}`, paddingTop: 12 }}>

@@ -17,11 +17,16 @@ import { AiPanel, type RecoveryReviewState } from "./devpreview-ai";
 import type { AiRecoveryHandoff } from "./features/ai-assistant/aiRecoveryHandoff";
 import { isSafePrRoute } from "./devpreview/recoveryRoute";
 import { onAction, type DemoAction } from "./devpreview/bus";
-import { ConnectWizard, type RepositoryConnectionContext } from "./devpreview-connect";
+import {
+  ConnectWizard,
+  type RepositoryConnectionContext,
+  type ResumeClusterConnection,
+} from "./devpreview-connect";
 import { TopologyView } from "./devpreview-topology";
 import { GithubIcon } from "./devpreview/brandIcons";
 import { DevpreviewContractProvider, useDevpreviewContracts } from "./devpreview/contracts";
 import { ClusterLifecycleControl, toHomeClusterChoice } from "./devpreview/ClusterLifecycleControl";
+import { ConnectionControlCenter } from "./devpreview/ConnectionControlCenter";
 import { ClusterDisconnectDialog } from "./pages/clusters/ClusterDisconnectDialog";
 import { createClusterDisconnectPort } from "./app/composition/surfaces/clusters";
 import { DetailDrawer, DetailDrawerTabs } from "./devpreview/DetailDrawer";
@@ -1879,6 +1884,8 @@ function App() {
   const [drillCl, setDrillCl] = useState<string | null>(null); // 홈 카드 → 지도 드릴 스코프 전달(D21)
   const [connectView, setConnectView] = useState<null | "repo" | "cluster">(null); // 연결 위저드 딥오픈 대상 (설정 서피스)
   const [connectModal, setConnectModal] = useState<null | "repo" | "cluster">(null); // 문맥 진입 = 모달 팝업
+  const [connectionManagerOpen, setConnectionManagerOpen] = useState(false);
+  const [resumeClusterConnection, setResumeClusterConnection] = useState<ResumeClusterConnection | null>(null);
   const [repositoryConnectContext, setRepositoryConnectContext] = useState<RepositoryConnectionContext | null>(null);
   const showAi = useCallback(() => {
     if (!aiOpen && document.activeElement instanceof HTMLElement) {
@@ -2394,6 +2401,35 @@ function App() {
             style={{ width: 6, height: 6, borderRadius: 999, background: contract.status === "error" ? HP.crit : contract.status === "ready" ? HP.ok : HP.pending }} />
           <RefreshCw size={13} style={{ color: contract.status === "error" ? HP.crit : UI.ink3 }} />
         </button>
+        <button
+          type="button"
+          className="product-focusable product-control"
+          aria-label="전역 연결 관리 열기"
+          aria-haspopup="dialog"
+          aria-expanded={connectionManagerOpen}
+          onClick={() => {
+            setBellOpen(false);
+            setClusterOpen(false);
+            setNsOpen(false);
+            setConnectionManagerOpen(true);
+          }}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+            border: `1px solid ${connectionManagerOpen ? BLUE : UI.line}`,
+            borderRadius: 9,
+            background: connectionManagerOpen ? blueA(0.08) : UI.card,
+            color: connectionManagerOpen ? BLUE : UI.ink2,
+            padding: "6px 9px",
+            fontSize: TYPE.label,
+            fontWeight: 600,
+            cursor: "pointer",
+          }}
+        >
+          <Plug size={13} />
+          <span className="hide-narrow">연결 관리</span>
+        </button>
         {/* 현재 스코프 표시 — 물리 스코프가 실제 적용되는 관점(지도·목록)에서만. 흐름은 서비스 수준 */}
         {surface === "resources" && resView !== "flow" && (
         <span style={{ position: "relative" }}>
@@ -2904,6 +2940,50 @@ function App() {
 
       {/* 환경 연결 — 문맥 모달. 위저드가 자체 백드롭·중앙정렬·스크롤을 소유(이중 모달 금지) */}
       <AnimatePresence>
+        {connectionManagerOpen ? (
+          <ConnectionControlCenter
+            clusters={contract.clusters}
+            key="connection-control-center"
+            onClose={() => setConnectionManagerOpen(false)}
+            onConnectCluster={() => {
+              setConnectionManagerOpen(false);
+              setResumeClusterConnection(null);
+              setConnectModal("cluster");
+            }}
+            onConnectRepository={() => {
+              setConnectionManagerOpen(false);
+              setRepositoryConnectContext(null);
+              setConnectModal("repo");
+            }}
+            onDisconnected={(clusterId) => {
+              const disconnected = contract.clusters.find((cluster) => cluster.id === clusterId);
+              removePendingClusters(clusterId, disconnected?.name, disconnected?.displayName);
+              if (scope.cluster === clusterId) {
+                setScope({ level: "clusters" });
+                setDrillCl(null);
+              }
+              contract.refresh();
+            }}
+            onLifecyclePhase={reportClusterLifecyclePhase}
+            onRefresh={() => {
+              contract.refresh();
+              setManifestRefreshKey((current) => current + 1);
+            }}
+            onResumeCluster={(cluster) => {
+              setConnectionManagerOpen(false);
+              setResumeClusterConnection({
+                clusterId: cluster.id,
+                name: cluster.displayName,
+                provider: cluster.provider,
+              });
+              setConnectModal("cluster");
+            }}
+            roles={session.roles}
+          />
+        ) : null}
+      </AnimatePresence>
+
+      <AnimatePresence>
         {connectModal && (
           <motion.div key="cmw" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: DUR.fade }}
             style={{ position: "fixed", top: topH, left: navCollapsed ? 60 : 208, right: 0, bottom: 0, zIndex: 76 }}>
@@ -2912,12 +2992,14 @@ function App() {
               embedded
               initialView={connectModal}
               repositoryContext={repositoryConnectContext ?? undefined}
+              resumeCluster={resumeClusterConnection ?? undefined}
               onRepositoryComplete={() => {
                 setManifestRefreshKey((current) => current + 1);
                 setRepositoryConnectContext(null);
               }}
               onDismiss={() => {
                 setRepositoryConnectContext(null);
+                setResumeClusterConnection(null);
                 setConnectModal(null);
                 // 위저드를 어느 단계에서 닫든 목록을 즉시 재조회한다 — 명령 발급
                 // 단계까지 갔다면 가등록 클러스터가 이미 생겨 있으므로, 갱신 없이는

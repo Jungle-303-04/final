@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import pytest
+from fastapi import HTTPException
 
+from domains.manifest_editor.router import ensure_source_is_current
 from domains.manifest_editor.source_revision import SourceRevision, SourceRevisionCodec
+from domains.manifest_editor.validation import manifest_sha256
 
 
 def revision(**overrides: str) -> SourceRevision:
@@ -43,3 +46,30 @@ def test_source_revision_rejects_tampering_and_expiry() -> None:
     expired = SourceRevisionCodec("s" * 32, ttl_seconds=10, now=lambda: 111)
     with pytest.raises(ValueError, match="expired"):
         expired.inspect(token)
+
+
+def test_manifest_edit_allows_unrelated_branch_head_change() -> None:
+    content = "apiVersion: v1\nkind: Service\nmetadata:\n  name: api\n"
+
+    ensure_source_is_current(
+        "a" * 40,
+        manifest_sha256(content),
+        "b" * 40,
+        content,
+    )
+
+
+def test_manifest_edit_rejects_change_to_the_resolved_file() -> None:
+    original = "apiVersion: v1\nkind: Service\nmetadata:\n  name: api\n"
+    changed = "apiVersion: v1\nkind: Service\nmetadata:\n  name: api-v2\n"
+
+    with pytest.raises(HTTPException) as caught:
+        ensure_source_is_current(
+            "a" * 40,
+            manifest_sha256(original),
+            "b" * 40,
+            changed,
+        )
+
+    assert caught.value.status_code == 409
+    assert caught.value.detail["code"] == "manifest_source_stale"

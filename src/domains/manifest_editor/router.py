@@ -95,7 +95,7 @@ from packages.storage.engine import unit_of_work_or_null
 router = APIRouter()
 SAFE_PR_MANIFEST_EDIT_KIND = "safe_pr_manifest_edit"
 UNSUPPORTED_SOURCE = "Only a single raw YAML GitHub source can be edited safely."
-STALE_SOURCE = "The Git source changed after it was loaded. Reload before approving."
+STALE_SOURCE = "The manifest file changed after it was loaded. Reload before approving."
 SOURCE_NOT_FOUND = "No exact GitOps source binding was found for this live resource."
 SOURCE_PERMISSION_REQUIRED = "manifest_source_permission_required"
 OWNER_SOURCE_NOT_FOUND = (
@@ -1683,14 +1683,16 @@ async def read_pinned_source(
 
 
 def ensure_source_is_current(
-    approved_base_sha: str,
+    _approved_base_sha: str,
     approved_source_sha256: str,
-    current_base_sha: str,
+    _current_base_sha: str,
     current_source: str,
 ) -> None:
-    if approved_base_sha != current_base_sha or approved_source_sha256 != manifest_sha256(
-        current_source
-    ):
+    # A branch can advance because an unrelated file changed while this editor
+    # is open. The approval is scoped to the resolved manifest path and its
+    # content digest, so only a change to that file makes the edit stale. The
+    # current branch SHA is still used downstream when the Safe PR is created.
+    if approved_source_sha256 != manifest_sha256(current_source):
         raise HTTPException(
             status_code=409,
             detail={"code": "manifest_source_stale", "detail": STALE_SOURCE},

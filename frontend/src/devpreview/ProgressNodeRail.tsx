@@ -38,6 +38,24 @@ interface ProgressNodeRailProps {
   ariaLabel: string;
 }
 
+export interface ProgressRailMetrics {
+  completed: number;
+  failed: number;
+  total: number;
+}
+
+/**
+ * Progress is derived only from terminal backend steps. An active animation is
+ * intentionally not converted into a made-up percentage.
+ */
+export function progressRailMetrics(steps: readonly ProgressNode[]): ProgressRailMetrics {
+  return {
+    completed: steps.filter((step) => step.state === "complete").length,
+    failed: steps.filter((step) => step.state === "failed").length,
+    total: steps.length,
+  };
+}
+
 function nodePalette(step: ProgressNode) {
   if (step.state === "complete") return { fg: TINT.ok.fg, bg: TINT.ok.bg, border: TINT.ok.bd };
   if (step.state === "failed") return { fg: TINT.crit.fg, bg: TINT.crit.bg, border: TINT.crit.bd };
@@ -46,6 +64,131 @@ function nodePalette(step: ProgressNode) {
   }
   if (step.state === "active") return { fg: BLUE, bg: TINT.blue.bg, border: TINT.blue.bd };
   return { fg: UI.ink3, bg: UI.card, border: UI.line };
+}
+
+function ActivityGauge({ step }: { step: ProgressNode }) {
+  const reduceMotion = useReducedMotion();
+  const palette = nodePalette(step);
+  const active = step.state === "active";
+  const label = step.activity === "waiting" ? "외부 승인 대기 중" : "현재 단계 실행 중";
+
+  if (!active) {
+    return (
+      <span
+        aria-hidden="true"
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(14, minmax(0, 1fr))",
+          gap: 2,
+          width: "100%",
+          height: 4,
+        }}
+      >
+        {Array.from({ length: 14 }, (_, index) => (
+          <span
+            key={index}
+            style={{
+              borderRadius: 999,
+              background: step.state === "complete"
+                ? TINT.ok.bd
+                : step.state === "failed"
+                  ? TINT.crit.bd
+                  : UI.line2,
+            }}
+          />
+        ))}
+      </span>
+    );
+  }
+
+  return (
+    <span
+      aria-label={label}
+      role="status"
+      style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(14, minmax(0, 1fr))",
+        gap: 2,
+        width: "100%",
+        height: 4,
+      }}
+    >
+      {Array.from({ length: 14 }, (_, index) => (
+        <motion.span
+          aria-hidden="true"
+          key={index}
+          animate={reduceMotion ? { opacity: index < 5 ? 0.9 : 0.2 } : { opacity: [0.16, 1, 0.16] }}
+          transition={reduceMotion ? { duration: 0 } : {
+            duration: DUR.meter,
+            ease: "easeInOut",
+            repeat: Infinity,
+            delay: index * 0.055,
+          }}
+          style={{ borderRadius: 999, background: palette.fg }}
+        />
+      ))}
+    </span>
+  );
+}
+
+function OverallProgressGauge({ steps, ariaLabel }: { steps: ProgressNode[]; ariaLabel: string }) {
+  const reduceMotion = useReducedMotion();
+  const metrics = progressRailMetrics(steps);
+  return (
+    <div
+      aria-label={`${ariaLabel} · ${metrics.completed}/${metrics.total} 완료`}
+      aria-valuemax={Math.max(metrics.total, 1)}
+      aria-valuemin={0}
+      aria-valuenow={metrics.completed}
+      aria-valuetext={`${metrics.total}개 관측 단계 중 ${metrics.completed}개 완료${metrics.failed > 0 ? `, ${metrics.failed}개 실패` : ""}`}
+      role="progressbar"
+      style={{
+        display: "grid",
+        gridTemplateColumns: `repeat(${Math.max(metrics.total, 1)}, minmax(0, 1fr))`,
+        gap: 4,
+        height: 5,
+      }}
+    >
+      {(steps.length > 0 ? steps : [{ id: "empty", label: "", statusLabel: "", state: "pending" as const }]).map((step) => {
+        const palette = nodePalette(step);
+        return (
+          <span
+            aria-hidden="true"
+            key={step.id}
+            style={{
+              position: "relative",
+              overflow: "hidden",
+              borderRadius: 999,
+              background: step.state === "complete" ? HP.ok
+                : step.state === "failed" ? HP.crit
+                  : step.state === "active" ? palette.bg
+                    : UI.line2,
+            }}
+          >
+            {step.state === "active" ? (
+              <motion.span
+                initial={false}
+                animate={reduceMotion ? { x: "0%" } : { x: ["-100%", "280%"] }}
+                transition={reduceMotion ? { duration: 0 } : {
+                  duration: 1.55,
+                  ease: "easeInOut",
+                  repeat: Infinity,
+                }}
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  width: "38%",
+                  borderRadius: 999,
+                  background: palette.fg,
+                  opacity: reduceMotion ? 0.72 : 1,
+                }}
+              />
+            ) : null}
+          </span>
+        );
+      })}
+    </div>
+  );
 }
 
 function ProgressMarker({ step, index }: { step: ProgressNode; index: number }) {
@@ -137,7 +280,7 @@ function NodeCopy({ step, centered }: { step: ProgressNode; centered: boolean })
 export function ProgressNodeRail({ steps, ariaLabel }: ProgressNodeRailProps) {
   const narrow = useNarrowViewport(860);
   const reduceMotion = useReducedMotion();
-  const completedCount = steps.filter((step) => step.state === "complete").length;
+  const metrics = progressRailMetrics(steps);
   const current = steps.find((step) => step.state === "active" || step.state === "failed") ?? null;
 
   return (
@@ -145,17 +288,19 @@ export function ProgressNodeRail({ steps, ariaLabel }: ProgressNodeRailProps) {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
         <span style={{ color: UI.ink2, fontSize: TYPE.label, fontWeight: 600 }}>단계 진행</span>
         <span style={{ color: UI.ink3, fontFamily: MONO, fontSize: TYPE.caption, fontVariantNumeric: "tabular-nums" }}>
-          {completedCount}/{steps.length} 완료
+          {metrics.completed}/{metrics.total} 완료
         </span>
       </div>
 
+      <OverallProgressGauge ariaLabel={ariaLabel} steps={steps} />
+
       <div
         style={{
-          border: `1px solid ${UI.line2}`,
+          border: `1px solid ${UI.line}`,
           borderRadius: RADIUS.control,
           background: UI.bg2,
-          padding: narrow ? "14px 14px 12px" : "16px 18px 14px",
-          overflow: "hidden",
+          padding: narrow ? 10 : 12,
+          overflow: "visible",
         }}
       >
         <ol
@@ -179,6 +324,9 @@ export function ProgressNodeRail({ steps, ariaLabel }: ProgressNodeRailProps) {
               <>
                 <ProgressMarker step={step} index={index} />
                 {copy}
+                <span style={{ gridColumn: narrow ? "2" : "1", width: "100%", alignSelf: "end" }}>
+                  <ActivityGauge step={step} />
+                </span>
               </>
             );
             return (
@@ -190,21 +338,27 @@ export function ProgressNodeRail({ steps, ariaLabel }: ProgressNodeRailProps) {
                 transition={reduceMotion ? { duration: 0 } : { ...SOFT, delay: Math.min(index, 8) * 0.045 }}
                 style={{
                   minWidth: 0,
+                  minHeight: narrow ? 82 : 132,
                   position: "relative",
                   display: "grid",
                   gridTemplateColumns: narrow ? "32px minmax(0, 1fr)" : "minmax(0, 1fr)",
                   justifyItems: narrow ? "stretch" : "center",
                   alignItems: "center",
-                  gap: narrow ? 12 : 7,
-                  padding: narrow ? "0 0 2px" : "0 6px",
+                  alignContent: "center",
+                  gap: narrow ? "8px 12px" : 8,
+                  padding: narrow ? "12px" : "14px 10px 12px",
+                  border: `1px solid ${palette.border}`,
+                  borderRadius: RADIUS.control,
+                  background: step.state === "active" || step.state === "failed" ? palette.bg : UI.card,
+                  boxShadow: step.state === "active" ? `0 8px 24px -20px ${palette.fg}` : "none",
                 }}
               >
                 {next ? (
                   <span
                     aria-hidden="true"
                     style={narrow
-                      ? { position: "absolute", zIndex: 0, left: 15, top: 29, bottom: -13, width: 2, overflow: "hidden", background: UI.line }
-                      : { position: "absolute", zIndex: 0, left: "50%", top: 15, width: "100%", height: 2, overflow: "hidden", background: UI.line }}
+                      ? { position: "absolute", zIndex: 0, left: 27, top: 43, bottom: -12, width: 2, overflow: "hidden", background: UI.line }
+                      : { position: "absolute", zIndex: 0, left: "50%", top: 28, width: "100%", height: 2, overflow: "hidden", background: UI.line }}
                   >
                     <motion.span
                       initial={false}

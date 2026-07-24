@@ -113,6 +113,20 @@ const PLATFORMS = [
 ] as const;
 type PlatformId = (typeof PLATFORMS)[number]["id"];
 
+export interface ResumeClusterConnection {
+  clusterId: string;
+  name: string;
+  provider: string;
+}
+
+export function connectionPlatform(provider: string): PlatformId {
+  const normalized = provider.trim().toLowerCase();
+  if (normalized === "eks" || normalized === "aws") return "aws";
+  if (normalized === "gke" || normalized === "gcp") return "gcp";
+  if (normalized === "aks" || normalized === "azure") return "azure";
+  return "docker";
+}
+
 // Git 저장소 주소 검증 · 아니면 null (로컬 형식 확인 · 서버 확인 아님)
 type Repo = { full: string; visibility: "public" | "private"; branch: string };
 function parseRepo(v: string): Repo | null {
@@ -1313,12 +1327,14 @@ function ClusterInstallStep({
   platform,
   name,
   receipt,
+  resumeClusterId,
   onReceiptChange,
   onConnected,
 }: {
   platform: PlatformId;
   name: string;
   receipt: ClusterConnectResponseView | null;
+  resumeClusterId?: string;
   onReceiptChange: (receipt: ClusterConnectResponseView) => void;
   onConnected: (info: ConnectionStatusView) => void;
 }) {
@@ -1358,17 +1374,21 @@ function ClusterInstallStep({
       .finally(() => setReinstalling(false));
   };
 
-  // 이름 하나로 등록하고 OS별 설치 명령을 발급한다. 실제 대상 클러스터는 사용자가
-  // 이미 로그인한 터미널의 현재 kube-context에서 명령을 실행할 때 결정된다.
+  // 닫힌 설치 작업을 다시 열었을 때는 새 등록을 만들지 않는다. 서버가 이미 가진
+  // cluster_id에 대해 토큰을 회전하고 설치 명령만 재발급해 중복/덮어쓰기를 막는다.
+  // 새 작업일 때만 이름 하나로 등록하고 OS별 설치 명령을 발급한다.
   const runRegister = () => {
     ctrlRef.current?.abort();
     const controller = new AbortController();
     ctrlRef.current = controller;
     setPhase("registering"); setErrMsg(null);
-    void connectCluster({
-      name: name.trim(),
-      provider: platform === "docker" ? "onprem" : platform,
-    }, controller.signal)
+    const request = resumeClusterId
+      ? reissueClusterConnectCommand(resumeClusterId, controller.signal)
+      : connectCluster({
+          name: name.trim(),
+          provider: platform === "docker" ? "onprem" : platform,
+        }, controller.signal);
+    void request
       .then((res) => { if (controller.signal.aborted) return; onReceiptChange(res); setPhase("registered"); })
       .catch((cause: unknown) => { if (controller.signal.aborted || isAbortError(cause)) return; setErrMsg(errorText(cause)); setPhase("error"); });
   };
@@ -1384,7 +1404,11 @@ function ClusterInstallStep({
     <motion.div key="cinstall" {...swap} className="grid gap-5">
       {!receipt && (
         <button onClick={runRegister} disabled={phase === "registering"} className="btn-primary flex w-full items-center justify-center gap-1.5 text-section font-semibold disabled:opacity-50" style={{ borderRadius: 14, paddingTop: 14, paddingBottom: 14 }}>
-          {phase === "registering" ? <><Spin c="size-[17px]" /> 명령 생성 중…</> : <>설치 명령 생성</>}
+          {phase === "registering"
+            ? <><Spin c="size-[17px]" /> 명령 생성 중…</>
+            : resumeClusterId
+              ? <><RotateCw className="size-[17px]" /> 설치 명령 다시 발급</>
+              : <>설치 명령 생성</>}
         </button>
       )}
 
@@ -1450,10 +1474,16 @@ function ClusterDoneStep({ name, connection, onDone }: { name: string; connectio
   );
 }
 
-function ClusterWizard({ providers, onClose, onComplete }: { providers: ClusterProvidersView; onClose: () => void; onComplete: (name: string) => void }) {
-  const [step, setStep] = useState(0);
-  const [name, setName] = useState("game-server");
-  const [platform, setPlatform] = useState<PlatformId>("aws");
+function ClusterWizard({ providers, resumeCluster, onClose, onComplete }: {
+  providers: ClusterProvidersView;
+  resumeCluster?: ResumeClusterConnection;
+  onClose: () => void;
+  onComplete: (name: string) => void;
+}) {
+  const [step, setStep] = useState(resumeCluster ? 1 : 0);
+  const [name, setName] = useState(resumeCluster?.name ?? "game-server");
+  const [platform, setPlatform] = useState<PlatformId>(() =>
+    resumeCluster ? connectionPlatform(resumeCluster.provider) : "aws");
   const [connection, setConnection] = useState<ConnectionStatusView | null>(null);
   const [installSession, setInstallSession] = useState<{
     key: string;
@@ -1468,11 +1498,12 @@ function ClusterWizard({ providers, onClose, onComplete }: { providers: ClusterP
     0: <ClusterInfoStep key="c0" providers={providers} name={name} setName={setName} platform={platform} setPlatform={setPlatform}
       onNext={openInstallStep} />,
     1: <ClusterInstallStep key="c1" platform={platform} name={name} receipt={receipt}
+      resumeClusterId={resumeCluster?.clusterId}
       onReceiptChange={(nextReceipt) => setInstallSession({ key: installKey, receipt: nextReceipt })}
       onConnected={(info) => { setConnection(info); setStep(2); }} />,
     2: connection ? <ClusterDoneStep key="c2" name={name} connection={connection} onDone={() => onComplete(name)} /> : null,
   }[step];
-  return (<><ShellHeader icon={Server} title="클러스터 연결" sub="에이전트를 설치하면 클러스터가 안전하게 등록·관측됩니다" onClose={onClose} onBack={step === 1 ? () => setStep(0) : undefined} /><Steps steps={CLUSTER_STEPS} active={step} /><Body>{el}</Body></>);
+  return (<><ShellHeader icon={Server} title={resumeCluster ? "클러스터 연결 재개" : "클러스터 연결"} sub={resumeCluster ? `${resumeCluster.name} · 기존 등록에 새 설치 명령을 발급합니다` : "에이전트를 설치하면 클러스터가 안전하게 등록·관측됩니다"} onClose={onClose} onBack={!resumeCluster && step === 1 ? () => setStep(0) : undefined} /><Steps steps={CLUSTER_STEPS} active={step} /><Body>{el}</Body></>);
 }
 
 // ── 런처 ─────────────────────────────
@@ -1509,6 +1540,7 @@ interface ConnectWizardProps {
   initialView?: null | "repo" | "cluster";
   onDismiss?: () => void;
   repositoryContext?: RepositoryConnectionContext;
+  resumeCluster?: ResumeClusterConnection;
   onRepositoryComplete?: (repo: string) => void;
 }
 
@@ -1517,6 +1549,7 @@ export function ConnectWizard({
   initialView = null,
   onDismiss,
   repositoryContext,
+  resumeCluster,
   onRepositoryComplete,
 }: ConnectWizardProps = {}) {
   const [view, setView] = useState<null | "repo" | "cluster">(initialView);
@@ -1564,7 +1597,7 @@ export function ConnectWizard({
                   style={{ width: 580, maxWidth: "100%", maxHeight: "88vh", display: "flex", flexDirection: "column", borderRadius: 26, alignSelf: "flex-start", boxShadow: "0 44px 100px -30px rgba(0,0,0,0.4), 0 8px 24px -12px rgba(0,0,0,0.15)" }} className="modal-surface overflow-hidden">
                   {view === "repo"
                     ? <RepoWizard providers={providers} context={repositoryContext} onClose={closeView} onComplete={completeRepo} />
-                    : <ClusterWizard providers={providers} onClose={closeView} onComplete={completeCluster} />}
+                    : <ClusterWizard providers={providers} resumeCluster={resumeCluster} onClose={closeView} onComplete={completeCluster} />}
                 </motion.div>
               </div>
             </div>

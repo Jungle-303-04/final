@@ -25,10 +25,14 @@ const STATUS_STYLE: Record<
   unknown: { label: "알 수 없음", fg: "#6b7280", bg: "rgba(120,120,120,.12)" },
 };
 
-export function RepositoryStatusList({ onChanged }: { onChanged?: () => void }) {
+export function RepositoryStatusList({ onChanged, onConnect }: {
+  onChanged?: () => void;
+  onConnect?: (repoRef: string) => void;
+}) {
   const [items, setItems] = useState<RepositoryListItem[] | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [busyRef, setBusyRef] = useState<string | null>(null);
+  const [confirmingRef, setConfirmingRef] = useState<string | null>(null);
 
   const load = useCallback((signal?: AbortSignal) => {
     setStatus("loading");
@@ -46,7 +50,11 @@ export function RepositoryStatusList({ onChanged }: { onChanged?: () => void }) 
 
   useEffect(() => {
     const controller = new AbortController();
-    load(controller.signal);
+    // Start after the effect has subscribed so React does not receive a
+    // synchronous loading-state write from the effect body.
+    void Promise.resolve().then(() => {
+      if (!controller.signal.aborted) load(controller.signal);
+    });
     return () => controller.abort();
   }, [load]);
 
@@ -54,6 +62,7 @@ export function RepositoryStatusList({ onChanged }: { onChanged?: () => void }) 
     setBusyRef(repoRef);
     try {
       await disconnectRepository(repoRef);
+      setConfirmingRef(null);
       onChanged?.();
       load();
     } catch {
@@ -129,11 +138,68 @@ export function RepositoryStatusList({ onChanged }: { onChanged?: () => void }) 
             >
               {style.label}
             </span>
-            {!terminal && (
+            {terminal || item.repository_status !== "active" ? (
+              onConnect ? (
+                <button
+                  type="button"
+                  onClick={() => onConnect(item.repo_ref)}
+                  title="저장소 다시 연결"
+                  style={{
+                    flexShrink: 0,
+                    padding: "6px 10px",
+                    border: "1px solid #bfdbfe",
+                    borderRadius: 8,
+                    background: "#fff",
+                    color: "#0a84ff",
+                    fontSize: 11,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                  }}
+                >
+                  다시 연결
+                </button>
+              ) : null
+            ) : confirmingRef === item.repo_ref ? (
+              <span style={{ display: "inline-flex", flexShrink: 0, gap: 4 }}>
+                <button
+                  type="button"
+                  disabled={busyRef === item.repo_ref}
+                  onClick={() => void disconnect(item.repo_ref)}
+                  style={{
+                    padding: "6px 9px",
+                    border: 0,
+                    borderRadius: 8,
+                    background: "#b91c1c",
+                    color: "#fff",
+                    fontSize: 11,
+                    fontWeight: 700,
+                    cursor: busyRef === item.repo_ref ? "default" : "pointer",
+                  }}
+                >
+                  {busyRef === item.repo_ref ? "해제 중…" : "해제 확정"}
+                </button>
+                <button
+                  type="button"
+                  disabled={busyRef === item.repo_ref}
+                  onClick={() => setConfirmingRef(null)}
+                  style={{
+                    padding: "6px 9px",
+                    border: "1px solid #e5e7eb",
+                    borderRadius: 8,
+                    background: "#fff",
+                    color: "#6b7280",
+                    fontSize: 11,
+                    fontWeight: 600,
+                  }}
+                >
+                  취소
+                </button>
+              </span>
+            ) : (
               <button
                 type="button"
                 disabled={busyRef === item.repo_ref}
-                onClick={() => void disconnect(item.repo_ref)}
+                onClick={() => setConfirmingRef(item.repo_ref)}
                 title="연결 해제"
                 style={{
                   flexShrink: 0,
@@ -147,7 +213,7 @@ export function RepositoryStatusList({ onChanged }: { onChanged?: () => void }) 
                   cursor: busyRef === item.repo_ref ? "default" : "pointer",
                 }}
               >
-                {busyRef === item.repo_ref ? "해제 중…" : "해제"}
+                연결 해제
               </button>
             )}
           </div>
