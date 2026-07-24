@@ -24,11 +24,11 @@ import {
 export const RESOURCE_MANIFEST_COMMAND_POLL_MS = 1_500;
 import { grantApproval, rejectApproval } from "../api/approvals";
 import { reasonLabel } from "./statusLabel";
+import { Spinner } from "../shared/ui/primitives/spinner";
 import { BLUE, HP, MONO, TINT, TYPE, UI, inkA } from "./theme";
 import { DiffCodeView, YamlCodeView } from "./YamlCodeView";
 
 type Phase = "loading" | "ready" | "previewing" | "submitting" | "failed";
-const MANIFEST_LOADING_NOTICE_DELAY_MS = 400;
 
 interface LiveResourceManifestEditorProps {
   resourceId: string;
@@ -431,21 +431,13 @@ export function LiveResourceManifestEditor({
   };
 
   if (!resourceId && resolving) {
-    return (
-      <DelayedManifestLoadingNotice title="YAML 정체성 확인 중">
-        서버가 발급한 inventory key를 정확한 리소스 정체성으로 조회하고 있습니다.
-      </DelayedManifestLoadingNotice>
-    );
+    return <ManifestLoadingState label="YAML 정체성 확인 중" wide={wide} />;
   }
   if (!resourceId) {
     return <ManifestNotice tone="warn" title="YAML 정체성 확인 불가">이 행에는 서버가 발급한 inventory key가 없습니다.</ManifestNotice>;
   }
   if (phase === "loading" || (!sourceIsCurrent && phase !== "failed")) {
-    return (
-      <DelayedManifestLoadingNotice title="YAML 소스 확인 중">
-        Git에 고정된 실제 매니페스트와 편집 권한을 조회하고 있습니다.
-      </DelayedManifestLoadingNotice>
-    );
+    return <ManifestLoadingState label="YAML 소스 확인 중" wide={wide} />;
   }
   if (phase === "failed" && !source) {
     const title = failureRemediation === "reauthenticate"
@@ -904,42 +896,22 @@ function LiveManifestPanel({ source, action }: {
   );
 }
 
-function ManifestLoadingNotice({ title, children }: { title: string; children: React.ReactNode }) {
-  const palette = TINT.blue;
+function ManifestLoadingState({ label, wide }: { label: string; wide: boolean }) {
   return (
-    <div role="status" style={{ border: `1px solid ${palette.bd}`, background: palette.bg, borderRadius: 10, padding: "10px 12px", color: UI.ink2, fontSize: TYPE.label, lineHeight: 1.5 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, color: palette.fg, fontWeight: 700, marginBottom: 2 }}>
-        <svg role="progressbar" aria-label={`${title} 진행 상태`} width="16" height="16" viewBox="0 0 24 24">
-          <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="3" opacity=".25" />
-          <path d="M12 3a9 9 0 0 1 9 9" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round">
-            <animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur=".8s" repeatCount="indefinite" />
-          </path>
-        </svg>
-        <span>{title}</span>
-      </div>
-      {children}
+    <div
+      aria-busy="true"
+      aria-label={label}
+      role="status"
+      style={{
+        width: "100%",
+        minHeight: wide ? "clamp(360px, 58vh, 620px)" : "clamp(280px, 52vh, 520px)",
+        display: "grid",
+        placeItems: "center",
+      }}
+    >
+      <Spinner className="size-7" decorative style={{ color: BLUE }} />
     </div>
   );
-}
-
-function DelayedManifestLoadingNotice(
-  { title, children }: { title: string; children: React.ReactNode },
-) {
-  const [visible, setVisible] = useState(false);
-  useEffect(() => {
-    const timer = window.setTimeout(
-      () => setVisible(true),
-      MANIFEST_LOADING_NOTICE_DELAY_MS,
-    );
-    return () => window.clearTimeout(timer);
-  }, []);
-  return visible
-    ? <ManifestLoadingNotice title={title}>{children}</ManifestLoadingNotice>
-    : <ManifestLoadingPlaceholder />;
-}
-
-function ManifestLoadingPlaceholder() {
-  return <div aria-hidden="true" style={{ minHeight: 72 }} />;
 }
 
 function manifestDraftKey(resourceId: string): string {

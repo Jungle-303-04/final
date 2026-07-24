@@ -2,12 +2,16 @@
 // AI 대화와 복구 검토를 실제 대화·복구 계약에 연결한 제품 패널.
 import {
   Activity, ArrowUpRight, BellPlus, Boxes, Check, ChevronDown, CircleAlert,
-  CircleStop, FileText, GitBranch, Maximize2, Minimize2, Play, Send, Server, Sparkles, SquarePen, Trash2, X,
+  CircleStop, FileText, GitBranch, Play, Send, Server, Sparkles, SquarePen, Trash2, X,
 } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import "./styles/tokens.css";
 import "./styles/foundation.css";
 import { Spinner } from "./shared/ui/primitives/spinner";
+import {
+  SidePanelIconButton,
+  SidePanelWindowControls,
+} from "./devpreview/SidePanelShell";
 import { emitAction } from "./devpreview/bus";
 import {
   appendRecoveryConversationMessage, buildAiContext, createAiAlertRule,
@@ -946,31 +950,50 @@ export function AiPanel({ onClose, onCancelRecovery, onRecoveryReviewStateChange
   };
 
   return (
-    <div className={`opsia-ai relative flex ${embedded ? "h-full w-full min-w-0" : "h-screen w-[460px]"} flex-col overflow-hidden border-l border-black/[0.06] bg-gradient-to-b from-[oklch(0.99_0.002_255)] to-[oklch(0.97_0.003_255)] shadow-2xl`}>
+    <div className={`opsia-ai relative flex ${embedded ? "h-full w-full min-w-0" : "h-screen w-[460px]"} flex-col overflow-hidden bg-white`}>
       <header className="flex items-center gap-2.5 border-b border-black/[0.05] bg-white/60 px-3.5 py-3 backdrop-blur-xl">
         <span className="grid size-9 shrink-0 place-items-center rounded-[13px] bg-[linear-gradient(135deg,#0A84FF,#5AC8FA)] text-primary-foreground shadow-[0_2px_8px_-2px_color-mix(in_oklch,var(--primary)_55%,transparent)]"><Sparkles className="size-4" /></span>
         <div className="min-w-0 flex-1"><h2 className="text-body font-semibold leading-tight tracking-[-0.01em] text-heading">Kyro AI</h2></div>
-        {onToggleFull && (
-          <button className="grid size-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" onClick={onToggleFull} title={full ? "패널로 축소" : "전체 화면"} type="button" aria-label={full ? "AI 패널 축소" : "AI 패널 전체 화면"}>
-            {full ? <Minimize2 className="size-[17px]" /> : <Maximize2 className="size-[17px]" />}
-          </button>
-        )}
-        {recoveryRequest === null ? (
-          <button className="grid size-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" onClick={() => newChat()} title="새 대화" type="button"><Play className="size-[17px]" /></button>
-        ) : null}
-        <button className="grid size-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" onClick={() => setListOpen((v) => !v)} title="대화 목록" type="button"><SquarePen className="size-[17px]" /></button>
-        {recoveryRequest !== null && recoveryReviewState !== "executing" && recoveryReviewState !== "executed" ? (
-          <button
-            aria-label="복구 검토 중단"
-            className="grid size-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-600"
-            onClick={cancelRecoveryReview}
-            title="복구 검토 중단"
-            type="button"
-          >
-            <CircleStop className="size-[17px]" />
-          </button>
-        ) : null}
-        <button className="grid size-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" onClick={onClose} title="숨기기" type="button"><X className="size-[17px]" /></button>
+        <SidePanelWindowControls
+          actions={(
+            <>
+              {recoveryRequest === null ? (
+                <SidePanelIconButton
+                  ariaLabel="새 대화"
+                  onClick={() => newChat()}
+                  title="새 대화"
+                >
+                  <Play size={14} strokeWidth={2.2} />
+                </SidePanelIconButton>
+              ) : null}
+              <SidePanelIconButton
+                ariaLabel="대화 목록"
+                onClick={() => setListOpen((value) => !value)}
+                title="대화 목록"
+              >
+                <SquarePen size={14} strokeWidth={2.2} />
+              </SidePanelIconButton>
+              {recoveryRequest !== null && recoveryReviewState !== "executing" && recoveryReviewState !== "executed" ? (
+                <SidePanelIconButton
+                  ariaLabel="복구 검토 중단"
+                  onClick={cancelRecoveryReview}
+                  title="복구 검토 중단"
+                  tone="danger"
+                >
+                  <CircleStop size={14} strokeWidth={2.2} />
+                </SidePanelIconButton>
+              ) : null}
+            </>
+          )}
+          actionsPlacement="after-toggle"
+          closeLabel="AI 패널 닫기"
+          closeTitle="숨기기"
+          expanded={full}
+          onClose={onClose ?? noop}
+          onExpandedChange={() => onToggleFull?.()}
+          panelLabel="AI 패널"
+          showExpandedControl={onToggleFull !== undefined}
+        />
       </header>
       <div className="flex items-center gap-1.5 border-b border-black/[0.04] bg-white/30 px-3.5 py-2 text-black backdrop-blur">
         <span className="text-caption font-medium text-black">맥락</span>

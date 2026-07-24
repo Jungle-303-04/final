@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "../api/client";
@@ -181,24 +181,15 @@ describe("LiveResourceManifestEditor stale source recovery", () => {
 });
 
 describe("LiveResourceManifestEditor read-only entry", () => {
-  it("shows a loading progress bar only after the YAML source lookup is delayed", async () => {
-    vi.useFakeTimers();
+  it("shows only a centered spinner while the YAML source is loading", () => {
     manifestApi.getSource.mockReturnValue(new Promise(() => undefined));
 
-    render(<LiveResourceManifestEditor resourceId="resource-1" />);
+    const { container } = render(<LiveResourceManifestEditor resourceId="resource-1" wide />);
 
+    expect(screen.getByRole("status", { name: "YAML 소스 확인 중" })).not.toBeNull();
+    expect(container.querySelector('[data-slot="spinner"]')).not.toBeNull();
     expect(screen.queryByText("YAML 소스 확인 중")).toBeNull();
-
-    await act(async () => {
-      vi.advanceTimersByTime(399);
-    });
-    expect(screen.queryByText("YAML 소스 확인 중")).toBeNull();
-
-    await act(async () => {
-      vi.advanceTimersByTime(1);
-    });
-    expect(screen.getByText("YAML 소스 확인 중")).not.toBeNull();
-    expect(screen.getByRole("progressbar", { name: "YAML 소스 확인 중 진행 상태" })).not.toBeNull();
+    expect(screen.queryByText(/Git에 고정된 실제 매니페스트/u)).toBeNull();
   });
 
   it("does not flash the loading notice when the YAML source resolves quickly", async () => {
@@ -209,6 +200,17 @@ describe("LiveResourceManifestEditor read-only entry", () => {
     expect(screen.queryByText("YAML 소스 확인 중")).toBeNull();
     expect(await screen.findByRole("region", { name: "Live YAML 읽기 전용" })).not.toBeNull();
     expect(screen.queryByText("YAML 소스 확인 중")).toBeNull();
+  });
+
+  it("shows the same spinner-only state while resolving resource identity", () => {
+    const { container } = render(
+      <LiveResourceManifestEditor resourceId="" resolving />,
+    );
+
+    expect(screen.getByRole("status", { name: "YAML 정체성 확인 중" })).not.toBeNull();
+    expect(container.querySelector('[data-slot="spinner"]')).not.toBeNull();
+    expect(screen.queryByText("YAML 정체성 확인 중")).toBeNull();
+    expect(screen.queryByText(/inventory key/u)).toBeNull();
   });
 
   it("shows only the editor after edit and restores a saved draft", async () => {

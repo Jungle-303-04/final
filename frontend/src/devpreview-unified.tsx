@@ -9,7 +9,6 @@ import {
   HardDrive, Cpu, Folder, Activity, UserCog, Eye, Radio, ChevronDown, Pin,
   Home, ListTree, AlertTriangle, Clock, Coins, Settings, Sparkles, PanelLeftClose, PanelLeftOpen,
   Bell, Pencil, Check, Hourglass, Webhook, SignalHigh, Building2, LogOut, RefreshCw,
-  X,
 } from "lucide-react";
 import { HomeClustersWidget, OpsiaMap } from "./devpreview-opsia";
 import { DASHBOARD_WIDGET_GRID_CLASS, DASHBOARD_WIDGET_GRID_ITEM_CLASS, WidgetFrame, RatioBar, Donut, RankList, MultiLine, MiniTimeline, dashboardWidgetGridStyle, dashboardWidgetItemStyle, type DashboardWidgetSpan } from "./devpreview/widgets";
@@ -32,6 +31,16 @@ import { ConnectionControlCenter } from "./devpreview/ConnectionControlCenter";
 import { ClusterDisconnectDialog } from "./pages/clusters/ClusterDisconnectDialog";
 import { createClusterDisconnectPort } from "./app/composition/surfaces/clusters";
 import { DetailDrawer, DetailDrawerTabs } from "./devpreview/DetailDrawer";
+import {
+  SIDE_PANEL_ENTER_TRANSITION,
+  SIDE_PANEL_EXIT_TRANSITION,
+  SIDE_PANEL_SURFACE_STYLE,
+  SIDE_PANEL_WIDTH_TRANSITION,
+  SidePanelResizeHandle,
+  SidePanelWindowControls,
+  clampSidePanelWidth,
+  sidePanelWidthFromKeyboard,
+} from "./devpreview/SidePanelShell";
 import { useFleetSummaryFeed } from "./devpreview/fleetSummaryFeed";
 import { fleetHeaderGroups } from "./devpreview/fleetSummaryPresentation";
 import { type ProductSurfaceId } from "./devpreview/realtimeContractMatrix";
@@ -112,6 +121,7 @@ import {
 import { SegmentedControl } from "./devpreview/SegmentedControl";
 import { EventMessageText } from "./devpreview/EventMessageText";
 import { usePodResourceDetail } from "./devpreview/podResourceDetailFeed";
+import { projectPodOperationalCause } from "./devpreview/podOperationalCause";
 import { PodContainerDetail } from "./devpreview/PodContainerDetail";
 import { ResourceConditionsPanel } from "./devpreview/ResourceConditionsPanel";
 import {
@@ -922,22 +932,77 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
   const [tab, setTab] = useState<DetailTab>(tabs[0]);
   const [fullSelf, setFull] = useState(false);   // 전체 화면 (원본 레퍼런스의 ⤢)
   const [yamlEditorOpen, setYamlEditorOpen] = useState(false);
+  const [yamlEditorExpanded, setYamlEditorExpanded] = useState(false);
+  const [yamlEditorWidth, setYamlEditorWidth] = useState(() =>
+    Math.max(380, Math.min(560, (viewportW - leftInset - rightInset) * 0.52))
+  );
+  const [yamlEditorDragging, setYamlEditorDragging] = useState(false);
+  const yamlEditorDragCleanupRef = useRef<() => void>(() => undefined);
   const [manifestSource, setManifestSource] = useState<ResourceManifestSourceEndpoint | null>(null);
   // AI 또는 YAML 보조 편집 패널이 열리면 읽기 전용 상세도 남은 영역을 채운다.
   // 편집 패널로 교체하지 않고 두 화면을 나란히 비교하기 위한 확장이다.
   const full = forceFull || fullSelf || yamlEditorOpen;
-  const yamlEditorWidth = Math.max(
-    360,
-    Math.min(560, (viewportW - leftInset - rightInset) * 0.52),
+  const yamlEditorAvailableWidth = Math.max(
+    0,
+    viewportW - leftInset - rightInset,
+  );
+  const yamlEditorRenderedWidth = yamlEditorExpanded
+    ? yamlEditorAvailableWidth
+    : clampSidePanelWidth(
+        yamlEditorWidth,
+        380,
+        yamlEditorAvailableWidth,
+      );
+  const closeYamlEditor = useCallback(() => {
+    setYamlEditorOpen(false);
+    setYamlEditorExpanded(false);
+  }, [setYamlEditorExpanded, setYamlEditorOpen]);
+  useEffect(
+    () => () => yamlEditorDragCleanupRef.current(),
+    [],
   );
   useEffect(() => {
     if (!forceFull) return;
-    const timer = window.setTimeout(() => setYamlEditorOpen(false), 0);
+    const timer = window.setTimeout(closeYamlEditor, 0);
     return () => window.clearTimeout(timer);
-  }, [forceFull]);
+  }, [closeYamlEditor, forceFull]);
   const switchTab = (next: DetailTab) => {
-    if (next !== "yaml") setYamlEditorOpen(false);
+    if (next !== "yaml") closeYamlEditor();
     setTab(next);
+  };
+  const onYamlEditorEdgeDown = (event: React.PointerEvent) => {
+    if (yamlEditorExpanded) return;
+    event.preventDefault();
+    setYamlEditorDragging(true);
+    const move = (pointerEvent: PointerEvent) => {
+      const nextWidth =
+        viewportW - rightInset - pointerEvent.clientX / PRESENT_SCALE;
+      setYamlEditorWidth(
+        clampSidePanelWidth(nextWidth, 380, yamlEditorAvailableWidth),
+      );
+    };
+    const cleanup = () => {
+      setYamlEditorDragging(false);
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", cleanup);
+      yamlEditorDragCleanupRef.current = () => undefined;
+    };
+    yamlEditorDragCleanupRef.current();
+    yamlEditorDragCleanupRef.current = cleanup;
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", cleanup);
+  };
+  const onYamlEditorEdgeKeyDown = (event: React.KeyboardEvent) => {
+    const nextWidth = sidePanelWidthFromKeyboard({
+      currentWidth: yamlEditorWidth,
+      key: event.key,
+      maximumWidth: yamlEditorAvailableWidth,
+      minimumWidth: 380,
+      shiftKey: event.shiftKey,
+    });
+    if (nextWidth === null) return;
+    event.preventDefault();
+    setYamlEditorWidth(nextWidth);
   };
   const name = String(row.name ?? "");
   const ns = String(row.ns ?? "–");
@@ -1017,6 +1082,16 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
     retry: podResourceDetail.retry,
   }), [podResourceDetail.retry, podResourceDetail.status, podResourceDetail.summary.conditions]);
   const conditionView = isPodKind ? podConditions : resourceConditions;
+  const operationalCause = useMemo(
+    () => projectPodOperationalCause(
+      { conditions: conditionView.primary },
+      resourceEvents.items,
+    ),
+    [conditionView.primary, resourceEvents.items],
+  );
+  const operationalCauseStatus = isPodKind
+    ? podResourceDetail.status
+    : conditionView.status;
   // 합성 YAML은 만들지 않는다. 실제 인벤토리 key로 원본을 조회하고, 원본이 없는 리소스는
   // Git 바인딩 누락 상태를 명시해 잘못된 매니페스트를 편집·적용하지 않도록 한다.
 
@@ -1057,7 +1132,10 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
       )}
       onClose={onClose}
       onExpandedChange={setFull}
-      rightInset={rightInset + (yamlEditorOpen ? yamlEditorWidth : 0)}
+      rightInset={
+        rightInset
+        + (yamlEditorOpen && !yamlEditorExpanded ? yamlEditorRenderedWidth : 0)
+      }
       topInset={topInset}
       viewportWidth={viewportW}
     >
@@ -1067,10 +1145,54 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
               {/* 운영 이슈 */}
               {bad && (
                 <Sec title="운영 이슈" icon={Activity}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 9, border: `1px solid ${TINT.crit.bd}`, background: TINT.crit.bg, borderRadius: 10, padding: "10px 12px" }}>
+                  <div style={{ display: "flex", alignItems: "flex-start", gap: 9, border: `1px solid ${TINT.crit.bd}`, background: TINT.crit.bg, borderRadius: 10, padding: "10px 12px" }}>
                     <Badge text={statusLabel("critical")} tone="red" />
-                    <span style={{ fontSize: TYPE.body, fontWeight: 600, color: UI.ink }}>{phase}</span>
-                    <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>상세 원인 없음</span>
+                    <div style={{ minWidth: 0, display: "grid", gap: 5 }}>
+                      <span style={{ fontSize: TYPE.body, fontWeight: 600, color: UI.ink }}>
+                        {phase}
+                        {operationalCause?.condition?.status
+                          ? ` · ${operationalCause.condition.type}=${operationalCause.condition.status}`
+                          : ""}
+                      </span>
+                      {operationalCauseStatus === "loading" ? (
+                        <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>상세 원인 확인 중…</span>
+                      ) : operationalCauseStatus === "error" ? (
+                        <button
+                          type="button"
+                          className="product-focusable product-control"
+                          onClick={isPodKind ? podResourceDetail.retry : conditionView.retry}
+                          style={{ justifySelf: "start", border: 0, padding: 0, background: "transparent", color: BLUE, fontSize: TYPE.label, fontWeight: 600, cursor: "pointer" }}
+                        >
+                          상세 원인 다시 확인
+                        </button>
+                      ) : operationalCause ? (
+                        <>
+                          <span style={{ fontSize: TYPE.label, fontWeight: 650, color: UI.ink2 }}>
+                            {statusLabel(operationalCause.reason)}
+                          </span>
+                          {operationalCause.message && (
+                            <span style={{ fontSize: TYPE.label, color: UI.ink2, lineHeight: 1.55 }}>
+                              {operationalMessageLabel(operationalCause.message)}
+                            </span>
+                          )}
+                          {operationalCause.source === "condition" && operationalCause.supportingEvent && (
+                            <span style={{ fontSize: TYPE.caption, color: UI.ink3, lineHeight: 1.5 }}>
+                              최근 경고 · {statusLabel(operationalCause.supportingEvent.reason)}
+                              {operationalCause.supportingEvent.count != null && operationalCause.supportingEvent.count > 1
+                                ? ` ×${operationalCause.supportingEvent.count}`
+                                : ""}
+                              {operationalCause.supportingEvent.message
+                                ? ` · ${operationalMessageLabel(operationalCause.supportingEvent.message)}`
+                                : ""}
+                            </span>
+                          )}
+                        </>
+                      ) : (
+                        <span style={{ fontSize: TYPE.label, color: UI.ink3 }}>
+                          현재 관측에서 상세 원인 근거 없음
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </Sec>
               )}
@@ -1327,23 +1449,33 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
             aria-label={`${kind.label} ${name} YAML 편집`}
             initial={{ x: 36, opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
-            exit={{ x: 24, opacity: 0 }}
-            transition={{ type: "spring", bounce: 0.05, visualDuration: 0.34 }}
+            exit={{ x: 24, opacity: 0, transition: SIDE_PANEL_EXIT_TRANSITION }}
+            transition={SIDE_PANEL_ENTER_TRANSITION}
             style={{
+              ...SIDE_PANEL_SURFACE_STYLE,
               position: "fixed",
               top: topInset,
               right: rightInset,
               bottom: 0,
-              width: yamlEditorWidth,
-              maxWidth: `calc(100vw - ${leftInset + rightInset}px)`,
+              width: yamlEditorRenderedWidth,
+              maxWidth: yamlEditorAvailableWidth,
               zIndex: 72,
-              display: "flex",
-              flexDirection: "column",
-              background: UI.card,
-              borderLeft: `1px solid ${UI.line}`,
-              boxShadow: `-24px 0 60px -30px ${inkA(0.3)}`,
+              transition: yamlEditorDragging
+                ? "none"
+                : SIDE_PANEL_WIDTH_TRANSITION,
             }}
           >
+            {!yamlEditorExpanded && (
+              <SidePanelResizeHandle
+                ariaLabel="YAML 편집 패널 폭 조절"
+                dragging={yamlEditorDragging}
+                maximumWidth={yamlEditorAvailableWidth}
+                minimumWidth={380}
+                onKeyDown={onYamlEditorEdgeKeyDown}
+                onPointerDown={onYamlEditorEdgeDown}
+                value={yamlEditorRenderedWidth}
+              />
+            )}
             <div style={{ flexShrink: 0, display: "flex", alignItems: "flex-start", gap: 12, padding: "16px 20px", borderBottom: `1px solid ${UI.line}` }}>
               <div style={{ minWidth: 0, flex: 1 }}>
                 <div style={{ fontSize: TYPE.section, fontWeight: 700, color: UI.ink }}>YAML 편집</div>
@@ -1351,15 +1483,13 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
                   {kind.label} · {name}
                 </div>
               </div>
-              <button
-                type="button"
-                className="product-focusable product-control"
-                aria-label="YAML 편집 패널 닫기"
-                onClick={() => setYamlEditorOpen(false)}
-                style={{ width: 28, height: 28, padding: 0, border: "none", borderRadius: 999, background: inkA(0.06), color: UI.ink2, cursor: "pointer", display: "grid", placeItems: "center" }}
-              >
-                <X size={15} strokeWidth={2.2} />
-              </button>
+              <SidePanelWindowControls
+                closeLabel="YAML 편집 패널 닫기"
+                expanded={yamlEditorExpanded}
+                onClose={closeYamlEditor}
+                onExpandedChange={setYamlEditorExpanded}
+                panelLabel="YAML 편집 패널"
+              />
             </div>
             <div style={{ flex: 1, minHeight: 0, overflowY: "auto", overflowX: "hidden", overscrollBehavior: "contain", scrollbarGutter: "stable", padding: "0 20px 28px" }}>
               <LiveResourceManifestEditor
@@ -1368,6 +1498,7 @@ function DetailOverlay({ kind, row, onClose, onOpenRef: _onOpenRef, onShowPods, 
                 refreshKey={manifestRefreshKey}
                 mode="edit"
                 initialSource={manifestSource}
+                wide={yamlEditorExpanded || yamlEditorRenderedWidth >= 720}
                 onOpenDeploySurface={onOpenDeploySurface}
                 onReauthenticate={() => window.location.reload()}
                 onRequestAccess={onRequestManifestAccess}
@@ -2152,25 +2283,25 @@ function App() {
   }, [pendingRepo]);
   const onAiHandleDown = (e: React.PointerEvent) => {
     e.preventDefault(); setAiDragging(true);
-    const move = (ev: PointerEvent) => setAiW(Math.min(560, Math.max(380, (document.documentElement.clientWidth - ev.clientX) / PRESENT_SCALE)));
+    const move = (ev: PointerEvent) => setAiW(clampSidePanelWidth(
+      (document.documentElement.clientWidth - ev.clientX) / PRESENT_SCALE,
+      380,
+      560,
+    ));
     const up = () => { setAiDragging(false); window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
     window.addEventListener("pointermove", move); window.addEventListener("pointerup", up);
   };
   const onAiHandleKeyDown = (event: React.KeyboardEvent) => {
-    const step = event.shiftKey ? 40 : 16;
-    if (event.key === "ArrowLeft") {
-      event.preventDefault();
-      setAiW((current) => Math.min(560, current + step));
-    } else if (event.key === "ArrowRight") {
-      event.preventDefault();
-      setAiW((current) => Math.max(380, current - step));
-    } else if (event.key === "Home") {
-      event.preventDefault();
-      setAiW(560);
-    } else if (event.key === "End") {
-      event.preventDefault();
-      setAiW(380);
-    }
+    const nextWidth = sidePanelWidthFromKeyboard({
+      currentWidth: aiW,
+      key: event.key,
+      maximumWidth: 560,
+      minimumWidth: 380,
+      shiftKey: event.shiftKey,
+    });
+    if (nextWidth === null) return;
+    event.preventDefault();
+    setAiW(nextWidth);
   };
   const scopeLabel = scope.level === "clusters" ? "전체 클러스터" : scope.level === "nodes" ? `클러스터 ${scope.cluster}` : `노드 ${scope.node}`;
   const kind = KINDS.find((k) => k.id === kindId)!;
@@ -2983,20 +3114,36 @@ function App() {
       {/* AI 어시스턴트 — 상세 페이지 위까지 덮는 우측 오버레이 + 폭 조절 핸들 */}
       <AnimatePresence>
         {aiMounted && (
-          <motion.div ref={aiPanelRef} data-ai-panel="true" key="ai" initial={{ x: aiW + 30 }} animate={{ x: aiOpen ? 0 : (aiFull ? window.innerWidth / PRESENT_SCALE : aiW) + 30 }} transition={{ type: "spring", bounce: 0.06, visualDuration: 0.34 }}
+          <motion.div ref={aiPanelRef} data-ai-panel="true" key="ai" initial={{ x: aiW + 30 }} animate={{ x: aiOpen ? 0 : (aiFull ? window.innerWidth / PRESENT_SCALE : aiW) + 30 }} transition={SIDE_PANEL_ENTER_TRANSITION}
             aria-hidden={!aiOpen}
             inert={!aiOpen}
-            style={{ position: "fixed", top: topH, right: 0, bottom: 0, width: aiFull ? `calc(100vw / ${PRESENT_SCALE} - ${navCollapsed ? 60 : 208}px)` : aiW, zIndex: 72, display: "flex", pointerEvents: aiOpen ? "auto" : "none", boxShadow: aiOpen ? `-28px 0 70px -32px ${inkA(0.3)}` : "none", transition: "width .28s cubic-bezier(0.32,0.72,0,1)" }}>
+            style={{
+              ...SIDE_PANEL_SURFACE_STYLE,
+              position: "fixed",
+              top: topH,
+              right: 0,
+              bottom: 0,
+              width: aiFull
+                ? `calc(100vw / ${PRESENT_SCALE} - ${navCollapsed ? 60 : 208}px)`
+                : aiW,
+              zIndex: 72,
+              pointerEvents: aiOpen ? "auto" : "none",
+              boxShadow: aiOpen ? SIDE_PANEL_SURFACE_STYLE.boxShadow : "none",
+              transition: aiDragging ? "none" : SIDE_PANEL_WIDTH_TRANSITION,
+            }}>
             {/* 전체 화면 중에는 폭 조절 핸들 비활성 — 핸들 규약은 상세·RCA와 동일한
                 투명 6px 엣지(경계선 1px은 시각 유지, 히트 영역만 넓힘) */}
             {!aiFull && (
-              <div role="separator" aria-label="AI 패널 폭 조절" aria-orientation="vertical"
-                aria-valuemin={380} aria-valuemax={560} aria-valuenow={Math.round(aiW)}
-                tabIndex={0} className="product-focusable"
-                onPointerDown={onAiHandleDown} onKeyDown={onAiHandleKeyDown} title="드래그하거나 방향키로 폭 조절"
-                style={{ position: "relative", width: 1, flexShrink: 0, background: aiDragging ? blueA(0.35) : UI.line, transition: "background .15s" }}>
-                <span aria-hidden="true" style={{ position: "absolute", left: -3, top: 0, bottom: 0, width: 7, cursor: "col-resize", background: "transparent" }} />
-              </div>
+              <SidePanelResizeHandle
+                ariaLabel="AI 패널 폭 조절"
+                dragging={aiDragging}
+                maximumWidth={560}
+                minimumWidth={380}
+                onKeyDown={onAiHandleKeyDown}
+                onPointerDown={onAiHandleDown}
+                placement="inline"
+                value={aiW}
+              />
             )}
             <div style={{ flex: 1, minWidth: 0 }}>
               <AiPanel embedded full={aiFull} recoveryRequest={aiRecoveryRequest}
