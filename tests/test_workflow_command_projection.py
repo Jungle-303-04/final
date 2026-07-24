@@ -7,8 +7,14 @@ from domains.command.events import (
     CommandQueuedForAgentBody,
     CommandRequestedBody,
 )
-from domains.gitops.events import ApprovalGrantedBody
+from domains.gitops.events import (
+    ApprovalGrantedBody,
+    ApprovalRequestedBody,
+    Diff,
+    DiffAnalyzedBody,
+)
 from domains.timeline.repository import TimelineLedgerAppend
+from packages.config.constants import RiskLevel
 from packages.contracts.gitops import WorkflowMutation
 from packages.contracts.timeline import TimelineEvent
 
@@ -89,6 +95,109 @@ class MultiApprovalWorkflowDb:
         assert workflow_run_id == "workflow-a"
         self.snapshots_recorded += 1
         return self.snapshot_handled
+
+
+class DiffApprovalDb(MultiApprovalWorkflowDb):
+    def __init__(self) -> None:
+        super().__init__(transition_applied=True)
+
+    async def update_workflow_run(self, payload: dict[str, object]) -> WorkflowMutation:
+        return WorkflowMutation(applied=True)
+
+
+def analyzed_diff(resource: str, artifact: str) -> DiffAnalyzedBody:
+    return DiffAnalyzedBody(
+        diff=Diff(
+            resource=resource,
+            namespace="sandbox",
+            desired_image="",
+            actual_image="",
+            risk=RiskLevel.REVIEW_REQUIRED,
+            workspace_id="workspace-a",
+            repository_id="repository-a",
+            application_id="application-a",
+            workflow_run_id="workflow-a",
+            binding_id="binding-a",
+            environment="production",
+            cluster_id="cluster-a",
+            manifest_path="deploy/k8s",
+            desired_manifest={
+                "apiVersion": "apps/v1",
+                "kind": resource.split("/", 1)[0],
+                "metadata": {
+                    "name": resource.split("/", 1)[1],
+                    "namespace": "sandbox",
+                },
+            },
+            basis={"artifact_digest": artifact},
+        ),
+        safe=False,
+        risk="review-required",
+        reason="operator approval required",
+    )
+
+
+def test_diff_analysis_creates_resource_scoped_approvals_and_commands() -> None:
+    service = load_service("gitops/workflow-controller")
+    analyzer = load_service("gitops/diff-analyze-worker")
+    db = DiffApprovalDb()
+    first_diff = analyzed_diff(
+        "Deployment/api-server",
+        "sha256:" + "a" * 64,
+    )
+    second_diff = analyzed_diff(
+        "Service/api-server",
+        "sha256:" + "b" * 64,
+    )
+
+    first = run_handler(
+        service.on_diff_analyzed,
+        first_diff,
+        db,
+    )
+    second = run_handler(
+        service.on_diff_analyzed,
+        second_diff,
+        db,
+    )
+    approvals = [
+        body
+        for body in (*first, *second)
+        if isinstance(body, ApprovalRequestedBody)
+    ]
+
+    assert len(approvals) == 2
+    assert approvals[0].approval_id != approvals[1].approval_id
+    first_policy = analyzer.evaluate_safe_pr_policy(first_diff.diff)
+    second_policy = analyzer.evaluate_safe_pr_policy(second_diff.diff)
+    assert approvals[0].approval_id == first_policy.approval_ref
+    assert approvals[1].approval_id == second_policy.approval_ref
+    safe_pr = analyzer.build_safe_pr_request_body(first_diff.diff, first_policy)
+    assert safe_pr.cluster_id == "cluster-a"
+    assert safe_pr.target_namespace == "sandbox"
+    assert safe_pr.target_resource == "Deployment/api-server"
+    assert safe_pr.target_authority == "policy_approval"
+    assert approvals[0].details["diff"]["resource"] == "Deployment/api-server"
+    assert approvals[1].details["diff"]["resource"] == "Service/api-server"
+
+    commands = []
+    for approval in approvals:
+        emitted = run_handler(
+            service.on_approval_granted,
+            approval_granted(
+                approval.approval_id,
+                str(approval.details["diff"]["resource"]),
+            ),
+            db,
+        )
+        commands.extend(
+            body for body in emitted if isinstance(body, CommandRequestedBody)
+        )
+
+    assert [command.approval_ref for command in commands] == [
+        approvals[0].approval_id,
+        approvals[1].approval_id,
+    ]
 
 
 def approval_granted(approval_id: str, resource: str) -> ApprovalGrantedBody:

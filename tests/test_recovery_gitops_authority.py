@@ -440,6 +440,41 @@ class AuthorityDb:
             "changes": [],
         }
 
+    async def get_completed_workload_resource_diff(
+        self,
+        workspace_id: str,
+        workflow_run_id: str,
+        binding_id: str,
+        cluster_id: str,
+        namespace: str,
+        resource_kind: str,
+        resource_name: str,
+    ) -> dict[str, object]:
+        diff = {
+            **self.identity,
+            "namespace": namespace,
+            "resource": f"{resource_kind}/{resource_name}",
+            "desired_manifest": self.desired,
+            "basis": {
+                "artifact_digest": self.digest,
+                "old_desired_source": "last_approved_snapshot",
+            },
+            "changes": [],
+        }
+        return {
+            "workspace_id": workspace_id,
+            "workflow_run_id": workflow_run_id,
+            "binding_id": binding_id,
+            "cluster_id": cluster_id,
+            "namespace": namespace,
+            "resource_kind": resource_kind.casefold(),
+            "resource_name": resource_name,
+            "repository_id": "repo-1",
+            "manifest_path": "deploy/app.yaml",
+            "commit_sha": "a" * 40,
+            "diff_details": diff,
+        }
+
     async def get_application(
         self,
         workspace_id: str,
@@ -521,6 +556,27 @@ def test_authority_uses_rca_bundle_identity_when_exact_correlation_is_absent() -
     assert authority is not None
     assert authority.resource == "Deployment/checkout"
     assert db.calls == ["gitops_change_context", "rca_bundle"]
+
+
+def test_authority_uses_exact_resource_diff_not_singleton_workflow_step() -> None:
+    db = AuthorityDb()
+
+    async def wrong_singleton(*args: object) -> dict[str, object]:
+        return {
+            **db.identity,
+            "namespace": "sandbox",
+            "resource": "Service/unrelated",
+            "desired_manifest": manifest("Service", "unrelated"),
+            "basis": {"artifact_digest": "wrong"},
+            "changes": [],
+        }
+
+    db.get_workflow_step_details = wrong_singleton  # type: ignore[method-assign]
+
+    authority = load_authority(db, query())
+
+    assert authority is not None
+    assert authority.resource == "Deployment/checkout"
 
 
 def test_invalid_exact_authority_cannot_be_bypassed_by_valid_rca_fallback() -> None:

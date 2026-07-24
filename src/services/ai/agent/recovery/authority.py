@@ -72,12 +72,30 @@ class DatabaseGitOpsAuthorityReadPort(GitOpsAuthorityReadPort):
         run = dict(run)
         identity = enriched_identity(identity, run)
         application_id = text(identity, "application_id")
-        diff = await self.db.get_workflow_step_details(workflow_run_id, "diff")
+        resource_diff = await self.db.get_completed_workload_resource_diff(
+            query.workspace_id,
+            workflow_run_id,
+            binding_id,
+            query.cluster_id,
+            query.namespace,
+            query.resource_kind,
+            query.resource_name,
+        )
         application = await self.db.get_application(query.workspace_id, application_id)
         binding = await self.db.get_deployment_binding(query.workspace_id, binding_id)
-        if not all(isinstance(value, Mapping) for value in (diff, application, binding)):
+        if not all(
+            isinstance(value, Mapping)
+            for value in (resource_diff, application, binding)
+        ):
             return None
-        diff = dict(diff)
+        resource_diff = dict(resource_diff)
+        diff = mapping(resource_diff.get("diff_details"))
+        if not completed_resource_diff_matches_identity(
+            resource_diff,
+            identity,
+            query,
+        ):
+            return None
         application = dict(application)
         binding = dict(binding)
         identity = enriched_identity(identity, application)
@@ -143,6 +161,26 @@ class DatabaseGitOpsAuthorityReadPort(GitOpsAuthorityReadPort):
             changes=tuple(dict(item) for item in changes if isinstance(item, Mapping)),
             evidence=evidence,
         )
+
+
+def completed_resource_diff_matches_identity(
+    record: Mapping[str, object],
+    identity: Mapping[str, object],
+    query: GitOpsAuthorityQuery,
+) -> bool:
+    return bool(
+        text(record, "workspace_id") == query.workspace_id
+        and text(record, "workflow_run_id") == text(identity, "workflow_run_id")
+        and text(record, "binding_id") == text(identity, "binding_id")
+        and text(record, "cluster_id") == query.cluster_id
+        and text(record, "namespace") == query.namespace
+        and text(record, "resource_kind").casefold()
+        == query.resource_kind.casefold()
+        and text(record, "resource_name") == query.resource_name
+        and text(record, "repository_id") == text(identity, "repository_id")
+        and text(record, "manifest_path") == text(identity, "manifest_path")
+        and text(record, "commit_sha") == text(identity, "commit_sha")
+    )
 
 
 def identity_from_evidence(payload: Mapping[str, object]) -> dict[str, object]:

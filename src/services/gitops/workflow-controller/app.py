@@ -15,6 +15,7 @@ from domains.command.events import (
     CommandRejectedBody,
     CommandRequestedBody,
 )
+from domains.gitops.approvals import resource_approval_qualifier
 from domains.gitops.events import (
     ApprovalGrantedBody,
     ApprovalRejectedBody,
@@ -429,7 +430,23 @@ async def append_git_changed_timeline(
 
 def approval_payload(payload: JsonObject, reason: str, status: str) -> JsonObject:
     run = normalize_payload(payload)
-    approval_id = derive_approval_id(str(run["workflow_run_id"]))
+    resource = str(run.get("resource") or "").strip()
+    namespace = str(run.get("namespace") or "").strip()
+    basis = run.get("basis")
+    artifact_digest = (
+        str(basis.get("artifact_digest") or "").strip()
+        if isinstance(basis, Mapping)
+        else ""
+    )
+    qualifier = resource_approval_qualifier(
+        namespace,
+        resource,
+        artifact_digest,
+    )
+    approval_id = derive_approval_id(
+        str(run["workflow_run_id"]),
+        qualifier if resource else None,
+    )
     return {
         **run,
         "approval_id": approval_id,

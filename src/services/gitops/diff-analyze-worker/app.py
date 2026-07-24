@@ -17,6 +17,7 @@ import yaml
 
 from domains.alert.events import AlertRequestedBody
 from domains.command.events import CommandRequestedBody
+from domains.gitops.approvals import resource_approval_qualifier
 from domains.gitops.diffing import MISSING
 from domains.gitops.events import DesiredDesiredDiffDetectedBody, Diff, DiffAnalyzedBody
 from domains.gitops.repository import derive_approval_id
@@ -97,9 +98,12 @@ def policy_decision_ref(approval_ref: str, route: str) -> str:
 
 
 def approval_qualifier(diff: Diff) -> str:
-    namespace = diff.namespace or "cluster"
-    resource = diff.resource or "resource"
-    return f"{namespace}/{resource}"
+    basis = diff.basis if isinstance(diff.basis, dict) else {}
+    return resource_approval_qualifier(
+        diff.namespace,
+        diff.resource,
+        basis.get("artifact_digest"),
+    )
 
 
 async def persist_policy_decision(
@@ -161,6 +165,10 @@ def build_safe_pr_request_body(
         environment=diff.environment,
         manifest_path=diff.manifest_path,
         commit_sha=str(diff.basis.get("commit_sha") or ""),
+        cluster_id=diff.cluster_id,
+        target_namespace=diff.namespace,
+        target_resource=diff.resource,
+        target_authority="policy_approval",
         patches=build_manifest_patches(diff),
         approval_ref=decision.approval_ref,
         policy_decision_ref=decision.policy_decision_ref,

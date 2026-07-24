@@ -257,6 +257,17 @@ class ReleaseFlowStore(Protocol):
 
 
 class RcaChangesStore(Protocol):
+    async def get_completed_workload_resource_diff(
+        self,
+        workspace_id: str,
+        workflow_run_id: str,
+        binding_id: str,
+        cluster_id: str,
+        namespace: str,
+        resource_kind: str,
+        resource_name: str,
+    ) -> JsonObject | None: ...
+
     async def get_completed_workload_change_contexts(
         self,
         workspace_id: str,
@@ -333,6 +344,23 @@ class PolicyDecisionStore(Protocol):
 
 
 class PullRequestStore(Protocol):
+    async def get_workflow_approval(
+        self,
+        approval_id: str,
+        workspace_id: str = "default",
+    ) -> JsonObject | None: ...
+
+    async def get_completed_workload_resource_diff(
+        self,
+        workspace_id: str,
+        workflow_run_id: str,
+        binding_id: str,
+        cluster_id: str,
+        namespace: str,
+        resource_kind: str,
+        resource_name: str,
+    ) -> JsonObject | None: ...
+
     async def save_pull_request(
         self, correlation_id: str, pr_url: str, title: str, body: str, status: str
     ) -> None: ...

@@ -579,6 +579,12 @@ def build_safe_pr_request_body(
         repo_ref=authority.repo_ref,
         base_branch=authority.base_branch,
         commit_sha=authority.commit_sha,
+        cluster_id=authority.cluster_id,
+        target_namespace=first_str(
+            nested_value(authority.desired_manifest, "metadata", "namespace")
+        ),
+        target_resource=authority.resource,
+        target_authority="completed_workload_change",
         approval_ref=as_optional_str(draft.params.get("approval_ref")),
         policy_decision_ref=as_optional_str(draft.params.get("policy_decision_ref")),
     )

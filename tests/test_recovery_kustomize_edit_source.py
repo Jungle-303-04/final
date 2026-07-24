@@ -438,3 +438,153 @@ def test_scm_materializes_unique_kustomize_source_without_repository_contract() 
     assert contents[0][0] == "deploy/base/lobby.yaml"
     assert "replicas: 2" in contents[0][1]
     assert "replicas: 1" not in contents[0][1]
+
+
+def test_scm_validates_recovery_against_exact_resource_diff_not_workflow_step() -> None:
+    provider_module = load_file(
+        Path(ROOT) / "src/services/gitops/scm-worker/github_provider.py",
+        "test_resource_scoped_recovery_github_provider",
+    )
+    desired = {
+        "apiVersion": "apps/v1",
+        "kind": "Deployment",
+        "metadata": {"name": "api-server", "namespace": "sandbox"},
+        "spec": {"replicas": 1},
+    }
+    digest = canonical_manifest_digest(desired)
+    plan = ManifestScalarPatchPlan(
+        action_type="replica_scale",
+        source_type="raw-yaml",
+        source_manifest_sha256="sha256:" + "b" * 64,
+        expected_base_sha="a" * 40,
+        manifest_path="deploy/k8s",
+        replacements=(ScalarFieldReplacement("spec.replicas", 1, 2),),
+        rollback_replacements=(ScalarFieldReplacement("spec.replicas", 2, 1),),
+    )
+    request = SafePrRequestedBody(
+        title="restore api capacity",
+        body="restore",
+        provider="github",
+        patches=[
+            SafePrFilePatch(
+                path=".gitops/safe-pr/patches/recovery.yaml",
+                content=scalar_patch_content(plan),
+            )
+        ],
+        workspace_id="workspace-1",
+        repository_id="repo-1",
+        binding_id="binding-1",
+        application_id="app-1",
+        workflow_run_id="workflow-1",
+        environment="sandbox",
+        manifest_path=plan.manifest_path,
+        repo_ref="org/repo",
+        base_branch="dev",
+        commit_sha=plan.expected_base_sha,
+        cluster_id="cluster-1",
+        target_namespace="sandbox",
+        target_resource="Deployment/api-server",
+        target_authority="completed_workload_change",
+    )
+
+    class Db:
+        async def get_workflow_run(self, workflow_run_id: str):
+            return {
+                "workflow_run_id": workflow_run_id,
+                "workspace_id": "workspace-1",
+                "application_id": "app-1",
+                "binding_id": "binding-1",
+                "environment": "sandbox",
+                "commit_sha": "a" * 40,
+            }
+
+        async def get_workflow_step_details(self, *args: object):
+            raise AssertionError("resource-scoped recovery must not read singleton diff")
+
+        async def get_completed_workload_resource_diff(self, *args: object):
+            assert args == (
+                "workspace-1",
+                "workflow-1",
+                "binding-1",
+                "cluster-1",
+                "sandbox",
+                "Deployment",
+                "api-server",
+            )
+            diff = {
+                "workspace_id": "workspace-1",
+                "repository_id": "repo-1",
+                "binding_id": "binding-1",
+                "application_id": "app-1",
+                "workflow_run_id": "workflow-1",
+                "environment": "sandbox",
+                "cluster_id": "cluster-1",
+                "commit_sha": "a" * 40,
+                "manifest_path": "deploy/k8s",
+                "namespace": "sandbox",
+                "resource": "Deployment/api-server",
+                "desired_manifest": desired,
+                "basis": {
+                    "artifact_digest": digest,
+                    "old_desired_source": "last_approved_snapshot",
+                },
+                "changes": [
+                    {
+                        "field_path": "spec.replicas",
+                        "old_desired": 2,
+                        "new_desired": 1,
+                    }
+                ],
+            }
+            return {
+                "workspace_id": "workspace-1",
+                "workflow_run_id": "workflow-1",
+                "binding_id": "binding-1",
+                "cluster_id": "cluster-1",
+                "namespace": "sandbox",
+                "resource_kind": "deployment",
+                "resource_name": "api-server",
+                "repository_id": "repo-1",
+                "manifest_path": "deploy/k8s",
+                "commit_sha": "a" * 40,
+                "diff_details": diff,
+            }
+
+        async def get_manifest_artifact_provenance(self, *args: object):
+            assert args[-2:] == ("Deployment/api-server", digest)
+            return {
+                "workspace_id": "workspace-1",
+                "repository_id": "repo-1",
+                "binding_id": "binding-1",
+                "commit_sha": "a" * 40,
+                "manifest_path": "deploy/k8s",
+                "artifact_digest": digest,
+                "source_manifest_sha256": "sha256:" + "b" * 64,
+                "repo_ref": "org/repo",
+                "branch": "dev",
+            }
+
+    db = Db()
+    context = type("Context", (), {"db": db})()
+    authority = asyncio.run(
+        provider_module.GithubScmProvider().validate_structured_patch_authority(
+            request,
+            [plan],
+            context,
+        )
+    )
+
+    assert authority["desired_manifest"]["metadata"]["name"] == "api-server"
+
+    async def missing_resource(*args: object):
+        return None
+
+    db.get_completed_workload_resource_diff = missing_resource  # type: ignore[method-assign]
+    with pytest.raises(RuntimeError, match="workflow authority"):
+        asyncio.run(
+            provider_module.GithubScmProvider().validate_structured_patch_authority(
+                request,
+                [plan],
+                context,
+            )
+        )
