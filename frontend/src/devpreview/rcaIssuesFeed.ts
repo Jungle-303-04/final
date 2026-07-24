@@ -30,6 +30,21 @@ export interface RcaIssuesFeed {
 
 export type RcaIssueItem = RcaIssueList["items"][number];
 export const RCA_ISSUES_REFRESH_MS = 10_000;
+export const RCA_RECENT_ATTEMPT_LIMIT = 3;
+
+export interface RcaIssueAttemptSummary {
+  correlationId: string;
+  status: string;
+  updatedAt: string | null;
+}
+
+export interface RcaIssueRepresentativeItem {
+  item: RcaIssueItem;
+  latestItem: RcaIssueItem;
+  attemptCount: number;
+  newerAttemptCount: number;
+  recentAttempts: RcaIssueAttemptSummary[];
+}
 
 const OBSERVED_TARGET_STAGES = new Set(["agent_connected", "snapshot_received", "ready"]);
 const TERMINAL_ISSUE_STATUSES = new Set([
@@ -97,6 +112,74 @@ export async function loadRcaIssueItems(
   clusterIds: readonly string[] | undefined,
   signal: AbortSignal,
 ): Promise<RcaIssueItem[]> {
+  const representatives = await loadRcaIssueRepresentativeItems(clusterIds, signal);
+  return representatives.map((representative) => representative.item);
+}
+
+export async function loadRcaIssueRepresentativeItems(
+  clusterIds: readonly string[] | undefined,
+  signal: AbortSignal,
+  pinnedCorrelationIds: readonly string[] = [],
+): Promise<RcaIssueRepresentativeItem[]> {
+  const candidates = await loadRcaIssueCandidateItems(clusterIds, signal);
+  return selectRcaIssueRepresentativeItems(candidates, pinnedCorrelationIds);
+}
+
+export function selectRcaIssueRepresentativeItems(
+  candidates: readonly RcaIssueItem[],
+  pinnedCorrelationIds: readonly string[] = [],
+): RcaIssueRepresentativeItem[] {
+  const pinnedIds = normalizedPinnedCorrelationIds(pinnedCorrelationIds);
+  const grouped = new Map<string, { item: RcaIssueItem; index: number; updatedMs: number }[]>();
+  candidates.forEach((item, index) => {
+    const identity = rcaIssueIdentity(item);
+    const group = grouped.get(identity) ?? [];
+    group.push({ item, index, updatedMs: parseUpdatedMs(item.updated_at) });
+    grouped.set(identity, group);
+  });
+  return [...grouped.values()]
+    .map((entries) => {
+      const ordered = [...entries].sort(compareRcaIssueEntries);
+      const latest = ordered[0];
+      const pinned = findPinnedEntry(ordered, pinnedIds);
+      const activePinned = pinned && !isPinnedEntrySuperseded(ordered, pinned)
+        ? pinned
+        : null;
+      // A terminal row newer than the user's pin ends that repair attempt. The
+      // pin only prevents newer in-progress attempts from replacing the
+      // correlation the operator is currently repairing.
+      const representative = !isActiveRcaIssue(latest.item)
+        ? latest
+        : activePinned ?? latest;
+      return {
+        representative: {
+          item: representative.item,
+          latestItem: latest.item,
+          attemptCount: ordered.length,
+          newerAttemptCount: Math.max(0, ordered.indexOf(representative)),
+          recentAttempts: ordered.slice(0, RCA_RECENT_ATTEMPT_LIMIT).map(({ item }) => ({
+            correlationId: item.correlation_id,
+            status: item.status,
+            updatedAt: item.updated_at,
+          })),
+        },
+        latestUpdatedMs: latest.updatedMs,
+        representativeUpdatedMs: representative.updatedMs,
+        firstIndex: latest.index,
+      };
+    })
+    .sort((a, b) => (
+      b.latestUpdatedMs - a.latestUpdatedMs
+      || b.representativeUpdatedMs - a.representativeUpdatedMs
+      || a.firstIndex - b.firstIndex
+    ))
+    .map(({ representative }) => representative);
+}
+
+async function loadRcaIssueCandidateItems(
+  clusterIds: readonly string[] | undefined,
+  signal: AbortSignal,
+): Promise<RcaIssueItem[]> {
   const scopedClusterIds = clusterIds === undefined
     ? null
     : [...new Set(clusterIds.filter((clusterId) => clusterId.trim() !== ""))].sort();
@@ -108,18 +191,7 @@ export async function loadRcaIssueItems(
   const candidates = responses
     .flatMap((response) => response.items)
     .filter((item) => allowedClusters === null || (item.cluster_id !== null && allowedClusters.has(item.cluster_id)));
-  const latestByIdentity = new Map<string, { item: RcaIssueItem; index: number; updatedMs: number }>();
-  candidates.forEach((item, index) => {
-    const identity = rcaIssueIdentity(item);
-    const updatedMs = parseUpdatedMs(item.updated_at);
-    const previous = latestByIdentity.get(identity);
-    if (previous === undefined || updatedMs > previous.updatedMs) {
-      latestByIdentity.set(identity, { item, index, updatedMs });
-    }
-  });
-  return [...latestByIdentity.values()]
-    .sort((a, b) => b.updatedMs - a.updatedMs || a.index - b.index)
-    .map(({ item }) => item);
+  return candidates;
 }
 
 export async function loadActiveRcaIssueItems(
@@ -204,4 +276,36 @@ function parseUpdatedMs(value: string | null): number {
   if (value === null) return Number.NEGATIVE_INFINITY;
   const parsed = Date.parse(value);
   return Number.isFinite(parsed) ? parsed : Number.NEGATIVE_INFINITY;
+}
+
+function normalizedPinnedCorrelationIds(correlationIds: readonly string[]): string[] {
+  return [...new Set(correlationIds.map((correlationId) => correlationId.trim()).filter(Boolean))];
+}
+
+function findPinnedEntry<T extends { item: Pick<RcaIssueItem, "correlation_id"> }>(
+  entries: readonly T[],
+  pinnedCorrelationIds: readonly string[],
+): T | null {
+  for (const correlationId of pinnedCorrelationIds) {
+    const entry = entries.find((candidate) => candidate.item.correlation_id === correlationId);
+    if (entry !== undefined) return entry;
+  }
+  return null;
+}
+
+function isPinnedEntrySuperseded(
+  orderedEntries: readonly { item: Pick<RcaIssueItem, "status"> }[],
+  pinnedEntry: { item: Pick<RcaIssueItem, "status"> },
+): boolean {
+  const pinnedIndex = orderedEntries.indexOf(pinnedEntry);
+  return pinnedIndex > 0 && orderedEntries
+    .slice(0, pinnedIndex)
+    .some((entry) => !isActiveRcaIssue(entry.item));
+}
+
+function compareRcaIssueEntries(
+  a: { index: number; updatedMs: number },
+  b: { index: number; updatedMs: number },
+): number {
+  return b.updatedMs - a.updatedMs || a.index - b.index;
 }

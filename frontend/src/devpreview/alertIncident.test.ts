@@ -53,6 +53,10 @@ function rcaIssue(overrides: Partial<RcaIssueDetailView> = {}): RcaIssueDetailVi
     errorReason: null,
     updatedAt: "2026-07-23T22:38:09Z",
     ...overrides,
+    attemptCount: overrides.attemptCount ?? 1,
+    newerAttemptCount: overrides.newerAttemptCount ?? 0,
+    latestAttempt: overrides.latestAttempt ?? null,
+    recentAttempts: overrides.recentAttempts ?? [],
   };
 }
 

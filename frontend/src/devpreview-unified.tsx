@@ -61,6 +61,14 @@ import { AuthSessionGateProvider } from "./features/auth/AuthSessionGate";
 import { I18nProvider } from "./shared/i18n";
 import { activeIncidentClusterIds, useRcaIssues } from "./devpreview/rcaIssuesFeed";
 import {
+  rcaIssuePinGroupKey,
+  rcaIssuePinStorageKey,
+  readStoredRcaIssuePins,
+  upsertStoredRcaIssuePin,
+  writeStoredRcaIssuePins,
+  type StoredRcaIssuePin,
+} from "./devpreview/rcaPinnedIssueStore";
+import {
   useRcaIssueDetails,
   type RcaIssueDetailView,
 } from "./devpreview/rcaDetailFeed";
@@ -1925,6 +1933,14 @@ function isClusterLifecycleNote(note: SessionNote, clusterId: string): boolean {
     || (note.icon === "connect" && note.title.startsWith(`${clusterId} · `));
 }
 
+function shouldPinRcaRecovery(update: RecoveryProgressOverride): boolean {
+  return update.selectionPending
+    || update.selectionAccepted
+    || update.selectionFailed
+    || Boolean(update.actionRoute?.trim())
+    || Boolean(update.reasonCode?.trim());
+}
+
 function App() {
   const contract = useDevpreviewContracts();
   // 헤더 계정/워크스페이스/로그아웃 — 실 GET /api/auth/session(하드코딩 세션 제거).
@@ -1933,6 +1949,21 @@ function App() {
   // 도착할 수 있으므로 보조 근거로만 사용하고, 값이 확정되기 전에는 운영 스모크가
   // 완성된 identity로 오인하지 않도록 별도의 loading slot을 노출한다.
   const workspaceIdentityId = session.workspaceId ?? contract.workspaceId;
+  const rcaIssuePinsStorageKey = useMemo(
+    () => rcaIssuePinStorageKey(workspaceIdentityId),
+    [workspaceIdentityId],
+  );
+  const [rcaIssuePinsSnapshot, setRcaIssuePinsSnapshot] = useState<{ storageKey: string; pins: StoredRcaIssuePin[] }>(() => {
+    const storageKey = rcaIssuePinStorageKey(workspaceIdentityId);
+    return { storageKey, pins: readStoredRcaIssuePins(storageKey) };
+  });
+  const rcaIssuePins = rcaIssuePinsSnapshot.storageKey === rcaIssuePinsStorageKey
+    ? rcaIssuePinsSnapshot.pins
+    : readStoredRcaIssuePins(rcaIssuePinsStorageKey);
+  const pinnedIssueCorrelationIds = useMemo(
+    () => rcaIssuePins.map((pin) => pin.correlationId),
+    [rcaIssuePins],
+  );
   const clusterIds = useMemo(() => contract.clusters.map((cluster) => cluster.id), [contract.clusters]);
   const incidentClusterIds = useMemo(
     () => activeIncidentClusterIds(contract.clusters),
@@ -2780,7 +2811,7 @@ function App() {
           onOpenIssues={() => setSurface("issues")} onAskAi={showAi} onAddRepo={() => setConnectModal("repo")}
           topInset={topH} leftInset={navCollapsed ? 60 : 208} rightInset={aiOpen ? aiW : 0} />
       ) : surface === "issues" ? (
-        <IssuesSurface incidentClusterIds={incidentClusterIds} recoveryProgressOverrides={recoveryProgressOverrides} sessionRules={notes.filter((n) => n.icon === "rule").map((n) => n.body.split(" · ")[0])} onOpenRef={openRef} onOpenRca={setRcaIncident} />
+        <IssuesSurface incidentClusterIds={incidentClusterIds} recoveryProgressOverrides={recoveryProgressOverrides} pinnedIssueCorrelationIds={pinnedIssueCorrelationIds} sessionRules={notes.filter((n) => n.icon === "rule").map((n) => n.body.split(" · ")[0])} onOpenRef={openRef} onOpenRca={setRcaIncident} />
       ) : surface === "timeline" ? (
         <TimelineSurface
           workspaceId={workspaceIdentityId}
@@ -3139,7 +3170,7 @@ function App() {
         {detail ? (
           <DetailOverlay key={`resource-${detail.kind.id}-${String(detail.row.cluster ?? "")}-${String(detail.row._key ?? detail.row.name)}`} kind={detail.kind} row={detail.row} onClose={() => setDetail(null)} onToast={pushToast} onOpenRef={openRef} onShowPods={(b) => { setDetail(null); setSurface("resources"); setResView("list"); setKindId("Pod"); setQ(b); }} onConnectRepository={(context) => { setRepositoryConnectContext(context); setConnectModal("repo"); }} onRequestManifestAccess={() => { setDetail(null); setSurface("settings"); }} onOpenDeploySurface={() => { setDetail(null); setSurface("deploy"); }} manifestRefreshKey={manifestRefreshKey} forceFull={aiOpen} rightInset={aiOpen ? aiW : 0} leftInset={navCollapsed ? 60 : 208} topInset={topH} viewportW={vwCss} />
         ) : rcaIncident ? (
-          <IssueDetail key={`rca-${rcaIncident.incidentId ?? rcaIncident.correlationId ?? rcaIncident.name}`} {...rcaIncident} topInset={topH} leftInset={navCollapsed ? 60 : 208}
+          <IssueDetail key={`rca-${rcaIncident.correlationId ?? rcaIncident.incidentId ?? rcaIncident.name}`} {...rcaIncident} topInset={topH} leftInset={navCollapsed ? 60 : 208}
           onClose={() => setRcaIncident(null)}
           onOpenRef={(k, n) => {
             setRcaIncident(null);
@@ -3152,6 +3183,24 @@ function App() {
               next.set(correlationId, update);
               return next;
             });
+            if (shouldPinRcaRecovery(update)) {
+              const pin = {
+                groupKey: rcaIssuePinGroupKey({
+                  ...(rcaIncident ?? {}),
+                  correlationId,
+                }),
+                correlationId,
+                touchedAt: new Date().toISOString(),
+              };
+              setRcaIssuePinsSnapshot((current) => {
+                const currentPins = current.storageKey === rcaIssuePinsStorageKey
+                  ? current.pins
+                  : readStoredRcaIssuePins(rcaIssuePinsStorageKey);
+                const next = upsertStoredRcaIssuePin(currentPins, pin);
+                writeStoredRcaIssuePins(rcaIssuePinsStorageKey, next);
+                return { storageKey: rcaIssuePinsStorageKey, pins: next };
+              });
+            }
             if (source === "direct" && update.selectionAccepted) {
               setAiOpen(false);
               setAiMounted(false);

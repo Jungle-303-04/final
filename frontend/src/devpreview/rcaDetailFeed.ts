@@ -12,7 +12,7 @@ import type { RecentChangeItem } from "../api/recent-changes-schemas";
 import { getEvidenceWindowPayload, listEvidence, listRcaReports } from "../api/evidence";
 import type { EvidenceRecord, EvidenceWindowPayload, RcaReport } from "../api/evidence-schemas";
 import type { RcaIssueList } from "../api/schemas";
-import { loadRcaIssueItems } from "./rcaIssuesFeed";
+import { loadRcaIssueRepresentativeItems, type RcaIssueAttemptSummary, type RcaIssueRepresentativeItem } from "./rcaIssuesFeed";
 import { operationalMessageLabel } from "./statusLabel";
 
 // UI-PHASE2-001: typed live adapters for the RCA Issue *detail* drawer. Unlike
@@ -26,7 +26,7 @@ import { operationalMessageLabel } from "./statusLabel";
 export type RcaDetailStatus = "loading" | "ready" | "stale" | "unavailable";
 export const RCA_DETAIL_REFRESH_MS = 4_000;
 
-export interface RcaIssueDetailView {
+export interface RcaIssueAttemptDetail {
   correlationId: string;
   incidentId: string | null;
   currentSubject: string;
@@ -53,6 +53,13 @@ export interface RcaIssueDetailView {
   updatedAt: string | null;
 }
 
+export interface RcaIssueDetailView extends RcaIssueAttemptDetail {
+  attemptCount: number;
+  newerAttemptCount: number;
+  latestAttempt: RcaIssueAttemptDetail | null;
+  recentAttempts: RcaIssueAttemptSummary[];
+}
+
 export interface RcaIssueDetailsFeed {
   status: RcaDetailStatus;
   items: RcaIssueDetailView[];
@@ -60,7 +67,7 @@ export interface RcaIssueDetailsFeed {
 
 type RcaIssueItem = RcaIssueList["items"][number];
 
-export function toRcaIssueDetailView(item: RcaIssueItem): RcaIssueDetailView {
+export function toRcaIssueAttemptDetail(item: RcaIssueItem): RcaIssueAttemptDetail {
   return {
     correlationId: item.correlation_id,
     incidentId: item.incident_id,
@@ -89,6 +96,29 @@ export function toRcaIssueDetailView(item: RcaIssueItem): RcaIssueDetailView {
   };
 }
 
+export function toRcaIssueDetailView(item: RcaIssueItem | RcaIssueRepresentativeItem): RcaIssueDetailView {
+  if (!isRcaIssueRepresentativeItem(item)) {
+    return {
+      ...toRcaIssueAttemptDetail(item),
+      attemptCount: 1,
+      newerAttemptCount: 0,
+      latestAttempt: null,
+      recentAttempts: [],
+    };
+  }
+  const base = toRcaIssueAttemptDetail(item.item);
+  const latestAttempt = item.latestItem.correlation_id !== item.item.correlation_id
+    ? toRcaIssueAttemptDetail(item.latestItem)
+    : null;
+  return {
+    ...base,
+    attemptCount: item.attemptCount,
+    newerAttemptCount: item.newerAttemptCount,
+    latestAttempt,
+    recentAttempts: item.recentAttempts,
+  };
+}
+
 function isAbortError(error: unknown): boolean {
   return typeof error === "object" && error !== null && "name" in error
     && (error as { name?: unknown }).name === "AbortError";
@@ -103,10 +133,12 @@ export function useRcaIssueDetails(
   clusterIds?: readonly string[],
   pollMs = 0,
   onItems?: (items: RcaIssueDetailView[]) => void,
+  pinnedCorrelationIds: readonly string[] = [],
 ): RcaIssueDetailsFeed {
   const scopeKey = clusterIds === undefined
     ? null
     : [...new Set(clusterIds.filter((clusterId) => clusterId.trim() !== ""))].sort().join("\u0000");
+  const pinnedKey = [...new Set(pinnedCorrelationIds.map((correlationId) => correlationId.trim()).filter(Boolean))].join("\u0000");
   const [snapshot, setSnapshot] = useState<{ scopeKey: string | null; feed: RcaIssueDetailsFeed }>({
     scopeKey,
     feed: { status: "loading", items: [] },
@@ -116,7 +148,8 @@ export function useRcaIssueDetails(
     const scopedClusterIds = scopeKey === null ? undefined : scopeKey === "" ? [] : scopeKey.split("\u0000");
     let timer: number | undefined;
     const load = () => {
-      void loadRcaIssueItems(scopedClusterIds, controller.signal)
+      const pinnedIds = pinnedKey === "" ? [] : pinnedKey.split("\u0000");
+      void loadRcaIssueRepresentativeItems(scopedClusterIds, controller.signal, pinnedIds)
         .then((items) => {
           if (controller.signal.aborted) return;
           const views = items.map(toRcaIssueDetailView);
@@ -147,10 +180,14 @@ export function useRcaIssueDetails(
       controller.abort();
       if (timer !== undefined) window.clearTimeout(timer);
     };
-  }, [scopeKey, pollMs, onItems]);
+  }, [scopeKey, pollMs, onItems, pinnedKey]);
   return snapshot.scopeKey === scopeKey
     ? snapshot.feed
     : { status: "loading", items: [] };
+}
+
+function isRcaIssueRepresentativeItem(item: RcaIssueItem | RcaIssueRepresentativeItem): item is RcaIssueRepresentativeItem {
+  return "item" in item && "latestItem" in item;
 }
 
 export type RecoveryPlanStatus = "idle" | "loading" | "pending" | "ready" | "unavailable";
