@@ -510,31 +510,29 @@ PY
         2>/dev/null || true
     )"
     if ALERTMANAGER_RUNTIME_STATUS="${runtime_status}" \
-      ALERTMANAGER_WEBHOOK_URL="${ALERTMANAGER_WEBHOOK_URL}" \
-      ALERTMANAGER_AGENT_TOKEN="${ALERTMANAGER_AGENT_TOKEN}" \
       python3 - <<'PY'
-import hmac
 import json
 import os
+import re
 
 try:
     status = json.loads(os.environ["ALERTMANAGER_RUNTIME_STATUS"])
-    config = json.loads(status["config"]["original"])
-    receiver = next(
-        item for item in config["receivers"] if item["name"] == "kyro-rca"
+    # Alertmanager returns its active config as redacted YAML even when the
+    # mounted source is JSON. The Secret check above already verifies the exact
+    # URL and bearer credential; this verifies that receiver is active without
+    # adding a YAML package dependency to the operator terminal.
+    config = status["config"]["original"]
+    required = (
+        r"(?m)^\s*receiver:\s+kyro-rca\s*$",
+        r"(?m)^\s*-\s+name:\s+kyro-rca\s*$",
+        r"(?m)^\s*(?:-\s+)?send_resolved:\s+true\s*$",
+        r"(?m)^\s*authorization:\s*$",
+        r"(?m)^\s*type:\s+Bearer\s*$",
+        r"(?m)^\s*credentials:\s+<secret>\s*$",
+        r"(?m)^\s*url:\s+<secret>\s*$",
     )
-    hook = receiver["webhook_configs"][0]
-    authorization = hook["http_config"]["authorization"]
-    valid = (
-        hook["url"] == os.environ["ALERTMANAGER_WEBHOOK_URL"]
-        and hook["send_resolved"] is True
-        and authorization["type"] == "Bearer"
-        and hmac.compare_digest(
-            authorization["credentials"],
-            os.environ["ALERTMANAGER_AGENT_TOKEN"],
-        )
-    )
-except (KeyError, ValueError, TypeError, StopIteration, json.JSONDecodeError):
+    valid = isinstance(config, str) and all(re.search(pattern, config) for pattern in required)
+except (KeyError, ValueError, TypeError, json.JSONDecodeError):
     valid = False
 raise SystemExit(0 if valid else 1)
 PY

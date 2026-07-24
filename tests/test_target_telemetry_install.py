@@ -1,4 +1,5 @@
 import asyncio
+import re
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -275,6 +276,82 @@ def test_telemetry_installers_verify_recording_and_alert_rules_from_runtime_api(
         assert 'outcome="failure"' in source
         assert "sumby(namespace,resource_kind,resource_name,service,sli,symptom)" in source
         assert "OpsiaSliFailureRatioHigh" in source
+        assert "credentials:" in source
+        assert "<secret>" in source
+
+
+def test_alertmanager_runtime_validation_accepts_v033_redacted_yaml() -> None:
+    status = {
+        "config": {
+            "original": """\
+global:
+  resolve_timeout: 5m
+route:
+  receiver: kyro-rca
+receivers:
+- name: kyro-rca
+  webhook_configs:
+  - send_resolved: true
+    url: <secret>
+    http_config:
+      authorization:
+        type: Bearer
+        credentials: <secret>
+"""
+        }
+    }
+    runtime_config = status["config"]["original"]
+
+    shell = script("install-telemetry.sh")
+    shell_block = shell.split("    required = (\n", 1)[1].split(
+        "    )\n    valid = ", 1
+    )[0]
+    shell_patterns = re.findall(r'r"([^"]+)"', shell_block)
+
+    powershell = script("install-telemetry.ps1")
+    powershell_block = powershell.split("        $required = @(\n", 1)[1].split(
+        "        )\n        $validRuntime", 1
+    )[0]
+    powershell_patterns = re.findall(r"'([^']+)'", powershell_block)
+
+    assert len(shell_patterns) == 7
+    assert len(powershell_patterns) == 7
+    assert all(re.search(pattern, runtime_config) for pattern in shell_patterns)
+    assert all(re.search(pattern, runtime_config) for pattern in powershell_patterns)
+
+
+def test_agent_api_proxy_exposes_authenticated_alertmanager_webhook_only() -> None:
+    source = (ROOT / "deploy" / "management" / "agent-api-proxy.yaml").read_text(
+        encoding="utf-8"
+    )
+
+    assert "location = /api/webhooks/alertmanager {" in source
+    assert (
+        "proxy_pass "
+        "http://api-gateway.management.svc.cluster.local:8000/webhooks/alertmanager;"
+    ) in source
+    assert "location ^~ /api/webhooks/" not in source
+
+
+def test_dev_deploy_reconciles_and_reloads_exact_agent_api_proxy_runtime() -> None:
+    workflow = (ROOT / ".github" / "workflows" / "dev-deploy.yml").read_text(
+        encoding="utf-8"
+    )
+    step = workflow.split(
+        "      - name: Reconcile agent API proxy runtime\n",
+        1,
+    )[1].split("      - name: ", 1)[0]
+
+    assert "--kind ConfigMap" in step
+    assert "--name agent-api-proxy-config" in step
+    assert "--kind Deployment" in step
+    assert "--kind PodDisruptionBudget" in step
+    assert "--kind Service" in step
+    assert step.count("--name agent-api-proxy") == 4
+    assert 'annotations:{"opsia.dev/config-sha256":$checksum}' in step
+    assert "patch deployment agent-api-proxy" in step
+    assert "rollout status deployment/agent-api-proxy --timeout=300s" in step
+    assert "apply -f deploy/management" not in step
 
 
 def test_ui_connect_command_installs_telemetry_before_agent_manifest() -> None:
@@ -293,6 +370,8 @@ def test_ui_connect_command_installs_telemetry_before_agent_manifest() -> None:
     assert "WORKSPACE_ID=default" in command
     assert "MANAGEMENT_API_BASE_URL=https://ops.example.test/api" in command
     assert "ALERTMANAGER_AGENT_TOKEN=agent-token" in command
+    assert '-o "$telemetry_script" || exit 1' in command
+    assert 'bash "$telemetry_script" || exit 1' in command
     assert "cluster-agent-uninstall" in command
     assert "kubectl config current-context" in command
 

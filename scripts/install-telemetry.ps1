@@ -413,19 +413,27 @@ function Require-AlertmanagerWebhookConfig {
     if ($LASTEXITCODE -eq 0 -and $raw) {
       try {
         $status = ($raw -join "`n") | ConvertFrom-Json
-        $runtimeConfig = $status.config.original | ConvertFrom-Json
-        $receiver = @(
-          $runtimeConfig.receivers |
-          Where-Object { $_.name -eq "kyro-rca" }
+        # Alertmanager exposes its active config as redacted YAML. The Secret
+        # check above already proves the exact URL/token, so this runtime check
+        # only verifies that the authenticated receiver was actually loaded.
+        $runtimeConfig = [string]$status.config.original
+        $required = @(
+          '(?m)^\s*receiver:\s+kyro-rca\s*$',
+          '(?m)^\s*-\s+name:\s+kyro-rca\s*$',
+          '(?m)^\s*(?:-\s+)?send_resolved:\s+true\s*$',
+          '(?m)^\s*authorization:\s*$',
+          '(?m)^\s*type:\s+Bearer\s*$',
+          '(?m)^\s*credentials:\s+<secret>\s*$',
+          '(?m)^\s*url:\s+<secret>\s*$'
         )
-        $hook = @($receiver[0].webhook_configs)[0]
-        if (
-          $receiver.Count -eq 1 -and
-          $hook.url -eq $script:AlertmanagerWebhookUrl -and
-          $hook.send_resolved -eq $true -and
-          $hook.http_config.authorization.type -eq "Bearer" -and
-          $hook.http_config.authorization.credentials -ceq $AgentToken
-        ) {
+        $validRuntime = $true
+        foreach ($pattern in $required) {
+          if ($runtimeConfig -notmatch $pattern) {
+            $validRuntime = $false
+            break
+          }
+        }
+        if ($validRuntime) {
           return
         }
       }
