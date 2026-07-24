@@ -108,20 +108,6 @@ class OomKilledRecoveryActions:
             params={"document_type": "recovery_review"},
         ),
         RecoveryActionSpec(
-            action_type="deployment_scale",
-            title="임시 replica 증설",
-            description="장애 중인 sandbox Deployment를 3 replicas로 증설해 요청 처리 여유를 확보합니다.",
-            route=routes.auto,
-            risk_level="medium",
-            score=0.6,
-            blast_radius="target_workload",
-            approval_required=True,
-            prerequisites=("sandbox 워크로드이고 리소스 여유가 있음",),
-            validation_checks=("pod 수 증가", "Ready replica 3 도달", "5xx/timeout 감소"),
-            rollback_plan="replica 수를 기존 값으로 되돌립니다.",
-            params={"command": "deployment_scale", "replicas": 3},
-        ),
-        RecoveryActionSpec(
             action_type="rollout_restart",
             title="대상 워크로드 재시작",
             description="최근 5xx/timeout을 내는 대상 워크로드를 재시작해 연결과 런타임 상태를 초기화합니다.",
@@ -160,20 +146,6 @@ class Application5xxRecoveryActions:
             params={"command": "rollout_restart"},
             approval_required_outside_sandbox=True,
         ),
-        RecoveryActionSpec(
-            action_type="deployment_scale",
-            title="임시 replica 증설",
-            description="장애 중인 sandbox Deployment를 3 replicas로 증설해 요청 처리 여유를 확보합니다.",
-            route=routes.auto,
-            risk_level="medium",
-            score=0.6,
-            blast_radius="target_workload",
-            approval_required=True,
-            prerequisites=("sandbox 워크로드이고 리소스 여유가 있음",),
-            validation_checks=("pod 수 증가", "Ready replica 3 도달", "5xx/timeout 감소"),
-            rollback_plan="replica 수를 기존 값으로 되돌립니다.",
-            params={"command": "deployment_scale", "replicas": 3},
-        ),
     ),
 )
 class NetworkRecoveryActions:
@@ -204,7 +176,10 @@ class NetworkRecoveryActions:
                 "매치메이킹 실패율 하락 유지",
             ),
             rollback_plan="생성된 PR 또는 merge commit 을 revert 합니다.",
-            params={"strategy": "last_approved_snapshot"},
+            params={
+                "strategy": "last_approved_snapshot",
+                "verification_contract": "protected_workload_continuity",
+            },
         ),
     ),
 )

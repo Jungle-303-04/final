@@ -280,7 +280,8 @@ class ApiGateway:
         self.app.state.password_auth = self.password_auth
         self.app.state.rca_rule_profiles = registered_cause_profiles()
         self.app.state.recovery_action_preflight = RecoveryActionPreflight(
-            DatabaseGitOpsAuthorityReadPort(AsyncDb(self.db))
+            DatabaseGitOpsAuthorityReadPort(AsyncDb(self.db)),
+            AsyncDb(self.db),
         )
         self.configure_routes()
 

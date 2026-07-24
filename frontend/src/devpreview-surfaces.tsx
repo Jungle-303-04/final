@@ -29,7 +29,7 @@ import type { RcaReport } from "./api/evidence-schemas";
 import type { RecoveryActionAccepted, RecoveryActionCandidate, RecoveryPlan } from "./api/recovery-schemas";
 import type { RemediationBundleActionDraft } from "./api/rca-bundle-schemas";
 import { isApiError } from "./api/client";
-import { selectRecoveryAction } from "./api/recovery";
+import { retryRecovery, selectRecoveryAction } from "./api/recovery";
 import type { AiRecoveryHandoff, AiRecoveryPreview, AiRecoveryPreviewLine } from "./features/ai-assistant/aiRecoveryHandoff";
 import { isActiveRcaIssue } from "./devpreview/rcaIssuesFeed";
 import { useSession, sessionInitial } from "./devpreview/sessionFeed";
@@ -56,7 +56,7 @@ import { RepositoryStatusList } from "./devpreview/RepositoryStatusList";
 import { SegmentedControl } from "./devpreview/SegmentedControl";
 import { groupApplicationsByRepository } from "./devpreview/repositoryRegistry";
 import { selectScenarioRuns } from "./devpreview/scenarioGateSelection";
-import { recoveryDisplayedStep, recoveryProgressState, withCreatedPullRequest, type RecoveryProgressState } from "./devpreview/recoveryProgress";
+import { currentRecoveryAttemptPrUrl, recoveryDisplayedStep, recoveryProgressState, withCreatedPullRequest, type RecoveryProgressState } from "./devpreview/recoveryProgress";
 import { issueAnalysisState } from "./devpreview/issueAnalysisState";
 import { canOpenRecoveryPlan, canStartRecoveryReview } from "./devpreview/recoveryAccess";
 import { pullRequestReference } from "./devpreview/pullRequestReference";
@@ -137,6 +137,11 @@ const LOCAL_STATUS_KO: Record<string, string> = {
   pr_requested: "복구 PR 요청됨",
   pr_created: "복구 PR 생성됨",
   pr_failed: "복구 PR 생성 실패",
+  pr_open: "복구 PR 검토 대기",
+  deploy_pending: "복구 배포 중",
+  verification_pending: "안정화 검증 중",
+  failed: "복구 실패",
+  incident_resolved: "복구 완료",
 };
 function koLabel(raw: string | null | undefined): string {
   const key = raw?.trim().toLowerCase();
@@ -783,6 +788,129 @@ function RecoveryPlanProgress({ progress, prUrl = null }: { progress: RecoveryPr
   );
 }
 
+const RECOVERY_CHECK_LABELS: Record<string, string> = {
+  failure_ratio_below_threshold: "접속 실패율 정상화",
+  request_rate_near_baseline: "장애 전과 동일한 요청 부하",
+  desired_replicas_restored: "승인된 replica 수 복원",
+  ready_replicas_restored: "복구 Pod Ready",
+  updated_replicas_restored: "복구 버전 반영",
+  available_replicas_restored: "복구 Pod 가용",
+  unavailable_replicas_zero: "비가용 Pod 없음",
+  deployment_generation_observed: "Deployment 최신 세대 반영",
+  protected_workloads_present: "기존 실행 workload 유지",
+  protected_workloads_healthy: "기존 실행 workload 정상",
+  protected_workloads_uninterrupted: "기존 실행 workload 무중단",
+  protected_active_session_series_present: "활성 세션 근거 연속 수집",
+  protected_active_sessions_maintained: "활성 세션 수 무중단 유지",
+  alertmanager_resolved: "원래 알림 해소",
+  alertmanager_no_refire: "검증 중 알림 재발 없음",
+};
+
+function recoveryLifecycleObject(value: unknown): Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+function RecoveryLifecycleEvidence({ lifecycle }: { lifecycle?: Record<string, unknown> | null }) {
+  if (!lifecycle) return null;
+  const verification = recoveryLifecycleObject(lifecycle.verification);
+  const before = recoveryLifecycleObject(verification.before);
+  const after = recoveryLifecycleObject(verification.after);
+  const deployment = recoveryLifecycleObject(after.deployment);
+  const checks = recoveryLifecycleObject(after.checks);
+  const failure = recoveryLifecycleObject(lifecycle.failure);
+  const reason = typeof failure.reason === "string" && failure.reason.trim()
+    ? failure.reason
+    : typeof verification.last_reason === "string" && verification.last_reason.trim()
+      ? verification.last_reason
+      : null;
+  const checkItems = Object.entries(checks)
+    .filter(([, value]) => typeof value === "boolean" || value === null)
+    .map(([key, value]) => ({
+      key,
+      label: RECOVERY_CHECK_LABELS[key] ?? key,
+      value,
+    }));
+  const beforeFailure = typeof before.failure_ratio === "number" ? before.failure_ratio : null;
+  const afterFailure = typeof after.failure_ratio === "number" ? after.failure_ratio : null;
+  const beforeRate = typeof before.request_rate === "number" ? before.request_rate : null;
+  const afterRate = typeof after.request_rate === "number" ? after.request_rate : null;
+  const readyReplicas = typeof deployment.ready_replicas === "number" ? deployment.ready_replicas : null;
+  const protectedWorkloads = Array.isArray(after.protected_workloads)
+    ? after.protected_workloads.length
+    : null;
+  const activeSessionCount = Array.isArray(after.protected_active_sessions)
+    ? after.protected_active_sessions.reduce((total, item) => {
+        const value = recoveryLifecycleObject(item).value;
+        return total + (typeof value === "number" ? value : 0);
+      }, 0)
+    : null;
+  return (
+    <section aria-label="복구 안정화 검증" style={{ display: "grid", gap: 11, border: `1px solid ${UI.line}`, borderRadius: RADIUS.card, background: UI.card, padding: SPACE.card }}>
+      <div style={{ display: "grid", gap: 3 }}>
+        <strong style={{ fontSize: ISSUE_DETAIL_TYPE.sectionTitle, color: UI.heading }}>복구 안정화 검증</strong>
+        <span style={{ fontSize: TYPE.caption, color: UI.ink3 }}>서버에 저장된 배포 후 before/after 근거입니다.</span>
+      </div>
+      {reason && (
+        <div role={lifecycle.phase === "failed" ? "alert" : undefined} style={{ borderRadius: 8, background: lifecycle.phase === "failed" ? TINT.crit.bg : UI.bg2, color: lifecycle.phase === "failed" ? TINT.crit.fg : UI.ink2, padding: 10, fontSize: TYPE.caption, lineHeight: 1.5 }}>
+          {reason}
+        </div>
+      )}
+      <dl style={{ display: "grid", gridTemplateColumns: "108px minmax(0, 1fr)", gap: "7px 10px", margin: 0, fontSize: TYPE.caption }}>
+        {(beforeFailure !== null || afterFailure !== null) && <><dt style={{ color: UI.ink3 }}>접속 실패율</dt><dd style={{ margin: 0, color: UI.ink2 }}>{beforeFailure === null ? "미확인" : `${(beforeFailure * 100).toFixed(1)}%`} → {afterFailure === null ? "검증 대기" : `${(afterFailure * 100).toFixed(1)}%`}</dd></>}
+        {(beforeRate !== null || afterRate !== null) && <><dt style={{ color: UI.ink3 }}>동일 부하 확인</dt><dd style={{ margin: 0, color: UI.ink2 }}>{beforeRate === null ? "미확인" : beforeRate.toFixed(1)} → {afterRate === null ? "검증 대기" : afterRate.toFixed(1)} req/s</dd></>}
+        {readyReplicas !== null && <><dt style={{ color: UI.ink3 }}>Ready replica</dt><dd style={{ margin: 0, color: UI.ink2 }}>{readyReplicas}</dd></>}
+        {protectedWorkloads !== null && <><dt style={{ color: UI.ink3 }}>기존 workload</dt><dd style={{ margin: 0, color: UI.ink2 }}>{protectedWorkloads}개 연속 관측</dd></>}
+        {activeSessionCount !== null && <><dt style={{ color: UI.ink3 }}>활성 세션</dt><dd style={{ margin: 0, color: UI.ink2 }}>{activeSessionCount}개 이상 유지</dd></>}
+      </dl>
+      {checkItems.length > 0 && (
+        <ul style={{ display: "grid", gap: 6, margin: 0, padding: 0, listStyle: "none" }}>
+          {checkItems.map((item) => (
+            <li key={item.key} style={{ display: "flex", alignItems: "center", gap: 7, fontSize: TYPE.caption, color: item.value === false ? TINT.crit.fg : item.value === true ? TINT.ok.fg : UI.ink3 }}>
+              {item.value === true ? <CircleCheck size={13} /> : item.value === false ? <CircleAlert size={13} /> : <Clock size={13} />}
+              <span>{item.label}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function RecoveryRetryControl({
+  visible,
+  pending,
+  error,
+  onRetry,
+}: {
+  visible: boolean;
+  pending: boolean;
+  error: string | null;
+  onRetry: () => void;
+}) {
+  if (!visible) return null;
+  return (
+    <section style={{ display: "grid", gap: 9, border: `1px solid ${TINT.warn.bd}`, borderRadius: RADIUS.card, background: TINT.warn.bg, padding: SPACE.card }}>
+      <div style={{ display: "grid", gap: 3 }}>
+        <strong style={{ fontSize: ISSUE_DETAIL_TYPE.itemTitle, color: TINT.warn.fg }}>실패한 단계 다시 시도</strong>
+        <span style={{ fontSize: TYPE.caption, color: UI.ink2, lineHeight: 1.5 }}>새 PR을 임의로 만들지 않고, 서버가 저장한 현재 시도의 배포 또는 검증 identity만 이어서 실행합니다.</span>
+      </div>
+      {error && <div role="alert" style={{ fontSize: TYPE.caption, color: TINT.crit.fg, lineHeight: 1.5 }}>{error}</div>}
+      <button
+        type="button"
+        className="product-focusable product-control"
+        disabled={pending}
+        onClick={onRetry}
+        style={{ justifySelf: "end", display: "inline-flex", alignItems: "center", gap: 6, border: `1px solid ${TINT.warn.bd}`, borderRadius: 8, background: UI.card, color: pending ? UI.ink3 : TINT.warn.fg, padding: "7px 11px", fontSize: TYPE.caption, fontWeight: 600, cursor: pending ? "wait" : "pointer" }}
+      >
+        <RefreshCw size={13} className={pending ? "spin" : undefined} />
+        {pending ? "재시도 접수 중…" : "실패 단계 재시도"}
+      </button>
+    </section>
+  );
+}
+
 function RecoveryCandidateDetails({
   candidate,
   recommended = false,
@@ -1045,16 +1173,26 @@ function RecoveryAlternativeCandidate({
 
 function RecoveryPlanPanel({
   plan,
+  progress,
+  prUrl,
   selectedActionId,
   pendingActionId,
   selectionError,
+  retryPending,
+  retryError,
+  onRetry,
   onSelect,
   onOpenTarget,
 }: {
   plan: RecoveryPlan;
+  progress: RecoveryProgressState;
+  prUrl?: string | null;
   selectedActionId: string | null;
   pendingActionId: string | null;
   selectionError: string | null;
+  retryPending: boolean;
+  retryError: string | null;
+  onRetry: () => void;
   onSelect: (actionId: string) => void;
   onOpenTarget?: (() => void) | null;
 }) {
@@ -1062,6 +1200,18 @@ function RecoveryPlanPanel({
   const alternatives = plan.candidates.filter((candidate) => candidate.action_id !== recommended?.action_id);
   return (
     <div style={{ display: "grid", gap: 16 }}>
+      {(plan.selected_action_id || plan.lifecycle) && (
+        <>
+          <RecoveryPlanProgress progress={progress} prUrl={prUrl} />
+          <RecoveryLifecycleEvidence lifecycle={plan.lifecycle} />
+          <RecoveryRetryControl
+            visible={plan.status === "failed"}
+            pending={retryPending}
+            error={retryError}
+            onRetry={onRetry}
+          />
+        </>
+      )}
       {selectionError && <div role="alert" style={{ display: "flex", alignItems: "flex-start", gap: 7, border: `1px solid ${TINT.crit.bd}`, borderRadius: 8, background: TINT.crit.bg, color: TINT.crit.fg, padding: 11, fontSize: TYPE.caption, lineHeight: 1.45 }}><CircleAlert size={14} style={{ flexShrink: 0, marginTop: 1 }} />{selectionError}</div>}
       {recommended ? (
         <RcaCardSection title="권장 복구 조치">
@@ -1251,11 +1401,15 @@ function RecoveryConfirmation({
   draft,
   bundleStatus,
   progress,
+  lifecycle,
   prUrl,
+  retryPending,
+  retryError,
   pending,
   selected,
   onBack,
   onConfirm,
+  onRetry,
   onAskAi,
   onOpenTarget,
 }: {
@@ -1263,11 +1417,15 @@ function RecoveryConfirmation({
   draft: RemediationBundleActionDraft | null;
   bundleStatus: "idle" | "loading" | "ready" | "unavailable";
   progress: RecoveryProgressState;
+  lifecycle?: Record<string, unknown> | null;
   prUrl?: string | null;
+  retryPending: boolean;
+  retryError: string | null;
   pending: boolean;
   selected: boolean;
   onBack: () => void;
   onConfirm: () => void;
+  onRetry: () => void;
   onAskAi: () => void;
   onOpenTarget?: (() => void) | null;
 }) {
@@ -1295,8 +1453,17 @@ function RecoveryConfirmation({
       </div>
 
       <RecoveryReveal index={0}><RecoveryPlanProgress progress={progress} prUrl={prUrl} /></RecoveryReveal>
+      <RecoveryReveal index={1}><RecoveryLifecycleEvidence lifecycle={lifecycle} /></RecoveryReveal>
+      <RecoveryReveal index={2}>
+        <RecoveryRetryControl
+          visible={progress.phase === "failed"}
+          pending={retryPending}
+          error={retryError}
+          onRetry={onRetry}
+        />
+      </RecoveryReveal>
 
-      <RecoveryReveal index={1}><RcaCardSection title="선택한 복구 조치">
+      <RecoveryReveal index={3}><RcaCardSection title="선택한 복구 조치">
         <div style={{ display: "grid", gap: 14, padding: 15 }}>
           <div style={{ minWidth: 0, display: "flex", alignItems: "center", gap: 8 }}>
             <Lightbulb size={15} style={{ flexShrink: 0, color: UI.ink3 }} />
@@ -1631,6 +1798,8 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
   const [recoverySelectionPendingId, setRecoverySelectionPendingId] = useState<string | null>(null);
   const [recoverySelectionAccepted, setRecoverySelectionAccepted] = useState(false);
   const [recoverySelectionError, setRecoverySelectionError] = useState<string | null>(null);
+  const [recoveryRetryPending, setRecoveryRetryPending] = useState(false);
+  const [recoveryRetryError, setRecoveryRetryError] = useState<string | null>(null);
   const [recoveryReviewActionId, setRecoveryReviewActionId] = useState<string | null>(null);
   const evidenceSummaryRef = useRef<HTMLElement | null>(null);
   const detailScrollRef = useRef<HTMLDivElement | null>(null);
@@ -1757,11 +1926,12 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
     recoveryProgress.latestEvent?.event_id,
     recoveryProgress.latestEvent?.payload_summary.reason,
   ]);
-  const auditPrUrl = recoveryAudit.items.find((event) => event.subject === "safe_pr.created")
-    ?.payload_summary.pr_url;
-  const effectiveRecoveryPrUrl = typeof auditPrUrl === "string" && auditPrUrl.trim()
-    ? auditPrUrl
-    : prUrl?.trim() || null;
+  useEffect(() => {
+    if (recovery.plan?.status === "failed") return;
+    setRecoveryRetryPending(false);
+    setRecoveryRetryError(null);
+  }, [recovery.plan?.status]);
+  const effectiveRecoveryPrUrl = currentRecoveryAttemptPrUrl(recovery.plan);
   const displayedRecoveryProgress = withCreatedPullRequest(
     recoveryProgress,
     effectiveRecoveryPrUrl,
@@ -1807,6 +1977,32 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
       return null;
     } finally {
       setRecoverySelectionPendingId(null);
+    }
+  };
+  const handleRecoveryRetry = async (): Promise<void> => {
+    if (
+      !correlationId
+      || !recovery.plan
+      || recovery.plan.status !== "failed"
+      || recoveryRetryPending
+    ) return;
+    setRecoveryRetryPending(true);
+    setRecoveryRetryError(null);
+    try {
+      const receipt = await retryRecovery(
+        correlationId,
+        recovery.plan.plan_id,
+        { reason: "operator requested failed recovery stage retry" },
+      );
+      if (!receipt.accepted) throw new Error("recovery retry was not accepted");
+      setRecoverySelectionAccepted(true);
+    } catch (cause: unknown) {
+      setRecoveryRetryPending(false);
+      setRecoveryRetryError(
+        isApiError(cause)
+          ? cause.detail ?? cause.message
+          : "실패한 복구 단계를 다시 시작하지 못했습니다. 저장된 배포 identity와 현재 상태를 확인해 주세요.",
+      );
     }
   };
   const openEvidenceDetail = (item: string) => {
@@ -2025,11 +2221,15 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
                 draft={reviewedRecoveryDraft}
                 bundleStatus={remediationBundle.status}
                 progress={displayedRecoveryProgress}
+                lifecycle={recovery.plan?.lifecycle}
                 prUrl={effectiveRecoveryPrUrl}
+                retryPending={recoveryRetryPending}
+                retryError={recoveryRetryError}
                 pending={recoverySelectionPendingId === reviewedRecoveryCandidate.action_id}
                 selected={effectiveSelectedActionId === reviewedRecoveryCandidate.action_id}
                 onBack={closeRecoveryReview}
                 onConfirm={() => void handleRecoverySelection(reviewedRecoveryCandidate.action_id)}
+                onRetry={() => void handleRecoveryRetry()}
                 onAskAi={() => {
                   if (!correlationId || !recovery.plan) return;
                   const actionId = reviewedRecoveryCandidate.action_id;
@@ -2084,9 +2284,14 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
               ) : (
                 <RecoveryPlanPanel
                   plan={recovery.plan}
+                  progress={displayedRecoveryProgress}
+                  prUrl={effectiveRecoveryPrUrl}
                   selectedActionId={effectiveSelectedActionId}
                   pendingActionId={recoverySelectionPendingId}
                   selectionError={recoverySelectionError}
+                  retryPending={recoveryRetryPending}
+                  retryError={recoveryRetryError}
+                  onRetry={() => void handleRecoveryRetry()}
                   onSelect={beginRecoveryReview}
                   onOpenTarget={recoveryTargetKind && recoveryTargetName ? () => onOpenRef(recoveryTargetKind, recoveryTargetName) : null}
                 />

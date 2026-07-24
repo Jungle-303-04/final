@@ -10,6 +10,7 @@ from domains.identity.dependencies import hash_agent_token
 from domains.rca.router import (
     ALERTMANAGER_WEBHOOK_TOKEN_ENV,
     STANDARD_SLI_LABELS_INVALID,
+    STANDARD_SLI_MEASUREMENT_INVALID,
     WEBHOOK_TOKEN_INVALID,
     require_alertmanager_token,
     validate_alertmanager_sli_labels,
@@ -142,7 +143,11 @@ def test_webhook_authentication_fails_closed(
     assert exc.value.detail == WEBHOOK_TOKEN_INVALID
 
 
-def standard_sli_payload(labels: dict[str, str]) -> AlertmanagerWebhookRequest:
+def standard_sli_payload(
+    labels: dict[str, str],
+    *,
+    annotations: dict[str, str] | None = None,
+) -> AlertmanagerWebhookRequest:
     return AlertmanagerWebhookRequest(
         receiver="kyro-rca",
         status="firing",
@@ -153,6 +158,14 @@ def standard_sli_payload(labels: dict[str, str]) -> AlertmanagerWebhookRequest:
                     "alertname": "OpsiaSliFailureRatioHigh",
                     **labels,
                 },
+                annotations=(
+                    {
+                        "opsia_observed_value": "0.79",
+                        "opsia_threshold": "0.2",
+                    }
+                    if annotations is None
+                    else annotations
+                ),
                 startsAt="2026-07-24T01:00:00Z",
                 fingerprint="sli-alert",
             )
@@ -168,6 +181,8 @@ def test_standard_sli_alert_requires_complete_resource_identity() -> None:
                 "opsia_namespace": "sandbox",
                 "opsia_resource_kind": "Deployment",
                 "opsia_resource_name": "matchmaking-api",
+                "opsia_service": "matchmaking",
+                "opsia_sli": "admission",
                 "opsia_symptom": "admission_failure",
             }
         )
@@ -180,6 +195,8 @@ def test_standard_sli_alert_requires_complete_resource_identity() -> None:
         "opsia_namespace",
         "opsia_resource_kind",
         "opsia_resource_name",
+        "opsia_service",
+        "opsia_sli",
         "opsia_symptom",
     ),
 )
@@ -190,6 +207,8 @@ def test_standard_sli_alert_rejects_blank_resource_identity(
         "opsia_namespace": "sandbox",
         "opsia_resource_kind": "Deployment",
         "opsia_resource_name": "matchmaking-api",
+        "opsia_service": "matchmaking",
+        "opsia_sli": "admission",
         "opsia_symptom": "admission_failure",
     }
     labels[missing_label] = ""
@@ -199,3 +218,35 @@ def test_standard_sli_alert_rejects_blank_resource_identity(
 
     assert exc.value.status_code == 422
     assert exc.value.detail == STANDARD_SLI_LABELS_INVALID
+
+
+@pytest.mark.parametrize(
+    "annotations",
+    (
+        {},
+        {"opsia_observed_value": "not-a-number", "opsia_threshold": "0.2"},
+        {"opsia_observed_value": "0.8", "opsia_threshold": ""},
+        {"opsia_observed_value": "nan", "opsia_threshold": "0.2"},
+        {"opsia_observed_value": "1.1", "opsia_threshold": "0.2"},
+        {"opsia_observed_value": "0.1", "opsia_threshold": "0.2"},
+    ),
+)
+def test_standard_sli_alert_rejects_missing_or_unbounded_measurements(
+    annotations: dict[str, str],
+) -> None:
+    labels = {
+        "opsia_namespace": "sandbox",
+        "opsia_resource_kind": "Deployment",
+        "opsia_resource_name": "matchmaking-api",
+        "opsia_service": "matchmaking",
+        "opsia_sli": "admission",
+        "opsia_symptom": "admission_failure",
+    }
+
+    with pytest.raises(HTTPException) as exc:
+        validate_alertmanager_sli_labels(
+            standard_sli_payload(labels, annotations=annotations)
+        )
+
+    assert exc.value.status_code == 422
+    assert exc.value.detail == STANDARD_SLI_MEASUREMENT_INVALID

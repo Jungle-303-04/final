@@ -1960,13 +1960,29 @@ class RepoChangeRepository(GitOpsOverviewRepository):
         summaries = [row.get("source_summary") for row in rows]
         if any(not isinstance(summary, dict) for summary in summaries):
             return None
-        source_summary = dict(summaries[0])
+        target_summary = target.get("source_summary")
+        if not isinstance(target_summary, dict):
+            return None
+        source_summary = dict(target_summary)
         source_document_count = source_summary.get("source_document_count")
+        common_summary = {
+            key: value
+            for key, value in source_summary.items()
+            if key not in {"resource", "source_manifest_sha256"}
+        }
         if (
             isinstance(source_document_count, bool)
             or not isinstance(source_document_count, int)
             or source_document_count != len(rows)
-            or any(dict(summary) != source_summary for summary in summaries[1:])
+            or any(
+                {
+                    key: value
+                    for key, value in dict(summary).items()
+                    if key not in {"resource", "source_manifest_sha256"}
+                }
+                != common_summary
+                for summary in summaries
+            )
         ):
             return None
 

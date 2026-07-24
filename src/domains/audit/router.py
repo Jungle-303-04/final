@@ -118,6 +118,13 @@ _AUDIT_JOURNEY_SUBJECT_GROUPS: tuple[tuple[AuditJourneyStage, frozenset[EventSub
                 EventSubject.RECOVERY_PLANNED,
                 EventSubject.RECOVERY_SELECTION_REQUESTED,
                 EventSubject.RECOVERY_ACTION_SELECTED,
+                EventSubject.RECOVERY_PR_TRACKED,
+                EventSubject.RECOVERY_PR_MERGED,
+                EventSubject.RECOVERY_VERIFICATION_STARTED,
+                EventSubject.RECOVERY_VERIFICATION_UPDATED,
+                EventSubject.RECOVERY_VERIFICATION_FAILED,
+                EventSubject.RECOVERY_RETRY_REQUESTED,
+                EventSubject.INCIDENT_RESOLVED,
                 EventSubject.ROLLOUT_DIAGNOSED,
                 EventSubject.APPROVAL_RECOMMENDED,
             }

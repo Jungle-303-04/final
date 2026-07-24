@@ -13,10 +13,29 @@ export type RecoveryProgressPhase =
 
 export interface RecoveryProgressState {
   phase: RecoveryProgressPhase;
-  label: "복구 대기" | "자동 복구 요청됨" | "PR 생성 요청됨" | "복구 요청됨" | "복구 실행 중" | "검증 중" | "PR 생성됨" | "PR 검토 필요" | "추가 설정 필요" | "복구 완료" | "복구 실패";
+  label: "복구 대기" | "자동 복구 요청됨" | "PR 생성 요청됨" | "복구 요청됨" | "복구 실행 중" | "복구 배포 중" | "검증 중" | "안정화 검증 중" | "PR 생성됨" | "PR 검토 필요" | "추가 설정 필요" | "복구 완료" | "복구 실패";
   step: number;
   tone: "waiting" | "approval" | "active" | "completed" | "failed";
   latestEvent: AuditTimelineItem | null;
+}
+
+function lifecycleObject(value: unknown): Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+/** Returns only the PR durably bound to the plan's current selection attempt. */
+export function currentRecoveryAttemptPrUrl(
+  plan: RecoveryPlan | null | undefined,
+): string | null {
+  const lifecycle = lifecycleObject(plan?.lifecycle);
+  const attempt = lifecycleObject(lifecycle.attempt);
+  const pr = lifecycleObject(lifecycle.pr);
+  const attemptId = typeof attempt.id === "string" ? attempt.id.trim() : "";
+  const prAttemptId = typeof pr.attempt_id === "string" ? pr.attempt_id.trim() : "";
+  const url = typeof pr.url === "string" ? pr.url.trim() : "";
+  return attemptId && prAttemptId === attemptId && url ? url : null;
 }
 
 export function recoveryDisplayedStep(progress: RecoveryProgressState): number {
@@ -32,9 +51,7 @@ export function withCreatedPullRequest(
 ): RecoveryProgressState {
   if (
     !prUrl?.trim()
-    || progress.phase === "completed"
-    || progress.phase === "failed"
-    || progress.phase === "blocked"
+    || !["waiting", "submitting", "approval"].includes(progress.phase)
   ) {
     return progress;
   }
@@ -56,8 +73,8 @@ const ANALYSIS_COMPLETED_STATUSES = new Set([
   "recovery_selected",
   "approval_recommended",
 ]);
-const FAILED_STATUSES = new Set(["command_rejected", "pr_failed"]);
-const COMPLETED_STATUSES = new Set(["incident_resolved", "resolved", "completed", "closed"]);
+const FAILED_STATUSES = new Set(["command_rejected", "pr_failed", "failed"]);
+const COMPLETED_STATUSES = new Set(["incident_resolved"]);
 const VERIFYING_STATUSES = new Set([
   "command_completed",
   "pr_requested",
@@ -68,12 +85,16 @@ const VERIFYING_STATUSES = new Set([
 ]);
 const EXECUTING_STATUSES = new Set(["command_requested", "command_dispatched", "command_queued"]);
 const SELECTED_STATUSES = new Set(["recovery_selected", "approval_recommended"]);
+const PR_OPEN_STATUSES = new Set(["pr_open"]);
+const DEPLOY_PENDING_STATUSES = new Set(["deploy_pending"]);
+const VERIFICATION_PENDING_STATUSES = new Set(["verification_pending"]);
 
 const FAILED_SUBJECTS = new Set([
   "command.rejected",
   "safe_pr.failed",
   "workflow.failed",
   "workflow.run.failed",
+  "recovery.verification.failed",
 ]);
 const BLOCKED_SUBJECTS = new Set([
   "rca.action_required",
@@ -86,8 +107,15 @@ const RETRYABLE_BLOCKER_CODES = new Set([
   "safe_pr_patch_unsupported",
   "safe_pr_preflight_failed",
   "safe_pr_preflight_unavailable",
+  "pre_recovery_continuity_baseline_missing",
 ]);
 const COMPLETED_SUBJECTS = new Set(["incident.resolved"]);
+const PR_OPEN_SUBJECTS = new Set(["recovery.pr.tracked"]);
+const DEPLOY_PENDING_SUBJECTS = new Set(["recovery.pr.merged"]);
+const VERIFICATION_PENDING_SUBJECTS = new Set([
+  "recovery.verification.started",
+  "recovery.verification.updated",
+]);
 const VERIFYING_SUBJECTS = new Set([
   "command.completed",
   "rollout.diagnosed",
@@ -124,6 +152,8 @@ export function recoveryProgressState({
   selectionFailed?: boolean;
 }): RecoveryProgressState {
   const normalizedStatus = normalize(status);
+  const planStatus = normalize(plan?.status);
+  const effectiveStatus = planStatus || normalizedStatus;
   const normalizedSubject = normalize(currentSubject);
   const normalizedRoute = normalize(actionRoute);
   const currentAudit = currentRecoveryAttemptAudit(audit);
@@ -143,28 +173,49 @@ export function recoveryProgressState({
   }
   if (
     selectionFailed
-    || FAILED_STATUSES.has(normalizedStatus)
+    || FAILED_STATUSES.has(effectiveStatus)
     || FAILED_SUBJECTS.has(normalizedSubject)
     || subjects.some((subject) => FAILED_SUBJECTS.has(subject))
   ) {
     return state("failed", "복구 실패", failureStep(normalizedStatus, normalizedSubject, subjects), "failed", latestEvent);
   }
   if (
-    COMPLETED_STATUSES.has(normalizedStatus)
+    COMPLETED_STATUSES.has(effectiveStatus)
     || COMPLETED_SUBJECTS.has(normalizedSubject)
     || subjects.some((subject) => COMPLETED_SUBJECTS.has(subject))
   ) {
     return state("completed", "복구 완료", 5, "completed", latestEvent);
   }
   if (
-    VERIFYING_STATUSES.has(normalizedStatus)
+    VERIFICATION_PENDING_STATUSES.has(effectiveStatus)
+    || VERIFICATION_PENDING_SUBJECTS.has(normalizedSubject)
+    || subjects.some((subject) => VERIFICATION_PENDING_SUBJECTS.has(subject))
+  ) {
+    return state("verifying", "안정화 검증 중", 3, "active", latestEvent);
+  }
+  if (
+    DEPLOY_PENDING_STATUSES.has(effectiveStatus)
+    || DEPLOY_PENDING_SUBJECTS.has(normalizedSubject)
+    || subjects.some((subject) => DEPLOY_PENDING_SUBJECTS.has(subject))
+  ) {
+    return state("executing", "복구 배포 중", 2, "active", latestEvent);
+  }
+  if (
+    PR_OPEN_STATUSES.has(effectiveStatus)
+    || PR_OPEN_SUBJECTS.has(normalizedSubject)
+    || subjects.some((subject) => PR_OPEN_SUBJECTS.has(subject))
+  ) {
+    return state("approval", "PR 검토 필요", 2, "approval", latestEvent);
+  }
+  if (
+    VERIFYING_STATUSES.has(effectiveStatus)
     || VERIFYING_SUBJECTS.has(normalizedSubject)
     || subjects.some((subject) => VERIFYING_SUBJECTS.has(subject))
   ) {
     return state("verifying", "검증 중", 3, "active", latestEvent);
   }
   if (
-    EXECUTING_STATUSES.has(normalizedStatus)
+    EXECUTING_STATUSES.has(effectiveStatus)
     || EXECUTING_SUBJECTS.has(normalizedSubject)
     || subjects.some((subject) => EXECUTING_SUBJECTS.has(subject))
   ) {
@@ -174,7 +225,7 @@ export function recoveryProgressState({
     selectionPending
     || selectionAccepted
     || plan?.selected_action_id
-    || SELECTED_STATUSES.has(normalizedStatus)
+    || SELECTED_STATUSES.has(effectiveStatus)
     || SELECTED_SUBJECTS.has(normalizedSubject)
     || subjects.some((subject) => SELECTED_SUBJECTS.has(subject))
   ) {
@@ -191,7 +242,7 @@ export function recoveryProgressState({
   }
   if (
     plan
-    || ANALYSIS_COMPLETED_STATUSES.has(normalizedStatus)
+    || ANALYSIS_COMPLETED_STATUSES.has(effectiveStatus)
     || normalizedSubject === "recovery_review_required"
   ) {
     return state("waiting", "복구 대기", 0, "waiting", latestEvent);

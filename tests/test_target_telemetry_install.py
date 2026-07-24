@@ -92,6 +92,17 @@ def test_telemetry_installer_pins_and_verifies_every_provider() -> None:
         assert "send_resolved" in source
         assert "Bearer" in source
         assert "api/v2/status" in source
+        for identity_label in (
+            "opsia_namespace",
+            "opsia_resource_kind",
+            "opsia_resource_name",
+            "opsia_service",
+            "opsia_sli",
+            "opsia_symptom",
+        ):
+            assert identity_label in source
+        assert "opsia_observed_value" in source
+        assert "opsia_threshold" in source
         assert "rollout restart" in source
 
     assert "umask 077" in installer
@@ -128,10 +139,30 @@ def test_prometheus_values_define_generic_application_sli_alert() -> None:
     assert server["global"]["scrape_interval"] == "15s"
     assert server["global"]["evaluation_interval"] == "15s"
 
-    rule = values["serverFiles"]["alerting_rules.yml"]["groups"][0]["rules"][0]
+    rules = values["serverFiles"]["alerting_rules.yml"]["groups"][0]["rules"]
+    recording_rule = next(
+        item for item in rules if item.get("record") == "opsia_sli_failure_ratio"
+    )
+    recording_expr = recording_rule["expr"]
+    assert "opsia_sli_requests_total" in recording_expr
+    assert 'outcome="failure"' in recording_expr
+    assert recording_expr.count(
+        "sum by (namespace, resource_kind, resource_name, service, sli, symptom)"
+    ) == 2
+    assert "pod" not in recording_expr
+    assert "instance" not in recording_expr
+
+    rule = next(item for item in rules if item.get("alert") == "OpsiaSliFailureRatioHigh")
     assert rule["alert"] == "OpsiaSliFailureRatioHigh"
     assert "opsia_sli_failure_ratio{" in rule["expr"]
-    for required_label in ("namespace", "resource_kind", "resource_name", "symptom"):
+    for required_label in (
+        "namespace",
+        "resource_kind",
+        "resource_name",
+        "service",
+        "sli",
+        "symptom",
+    ):
         assert f'{required_label}!=""' in rule["expr"]
     assert rule["expr"].strip().endswith("> 0.2")
     assert rule["for"] == "20s"
@@ -139,10 +170,111 @@ def test_prometheus_values_define_generic_application_sli_alert() -> None:
     assert rule["labels"]["opsia_resource_kind"] == "{{ $labels.resource_kind }}"
     assert rule["labels"]["opsia_resource_name"] == "{{ $labels.resource_name }}"
     assert rule["labels"]["opsia_namespace"] == "{{ $labels.namespace }}"
+    assert rule["labels"]["opsia_service"] == "{{ $labels.service }}"
+    assert rule["labels"]["opsia_sli"] == "{{ $labels.sli }}"
 
     rendered = (ROOT / "deploy" / "target" / "prometheus.yaml").read_text(encoding="utf-8")
     assert "DemoGame" not in rendered
     assert "find_game" not in rendered
+
+
+def test_prometheus_sli_recording_rule_collapses_two_pods_to_one_identity() -> None:
+    values = yaml.safe_load(
+        (ROOT / "deploy" / "target" / "prometheus.yaml").read_text(encoding="utf-8")
+    )
+    rules = values["serverFiles"]["alerting_rules.yml"]["groups"][0]["rules"]
+    expression = next(
+        item["expr"] for item in rules if item.get("record") == "opsia_sli_failure_ratio"
+    )
+    identity_labels = (
+        "namespace",
+        "resource_kind",
+        "resource_name",
+        "service",
+        "sli",
+        "symptom",
+    )
+    group_clause = f"sum by ({', '.join(identity_labels)})"
+
+    assert expression.count(group_clause) == 2
+    assert 'outcome="failure"' in expression
+    assert "pod" not in expression
+    assert "instance" not in expression
+
+    # Two Pods expose independent success/failure counter rates. The recording
+    # rule deliberately groups both numerator and denominator by only the six
+    # durable RCA labels, so rollout/scaling still produces one ratio series.
+    pod_rates = [
+        {
+            **dict.fromkeys(identity_labels, ""),
+            "namespace": "target",
+            "resource_kind": "Deployment",
+            "resource_name": "lobby",
+            "service": "lobby",
+            "sli": "admission",
+            "symptom": "admission_failure_rate",
+            "pod": "lobby-a",
+            "outcome": "success",
+            "rate": 80.0,
+        },
+        {
+            **dict.fromkeys(identity_labels, ""),
+            "namespace": "target",
+            "resource_kind": "Deployment",
+            "resource_name": "lobby",
+            "service": "lobby",
+            "sli": "admission",
+            "symptom": "admission_failure_rate",
+            "pod": "lobby-a",
+            "outcome": "failure",
+            "rate": 20.0,
+        },
+        {
+            **dict.fromkeys(identity_labels, ""),
+            "namespace": "target",
+            "resource_kind": "Deployment",
+            "resource_name": "lobby",
+            "service": "lobby",
+            "sli": "admission",
+            "symptom": "admission_failure_rate",
+            "pod": "lobby-b",
+            "outcome": "success",
+            "rate": 80.0,
+        },
+        {
+            **dict.fromkeys(identity_labels, ""),
+            "namespace": "target",
+            "resource_kind": "Deployment",
+            "resource_name": "lobby",
+            "service": "lobby",
+            "sli": "admission",
+            "symptom": "admission_failure_rate",
+            "pod": "lobby-b",
+            "outcome": "failure",
+            "rate": 20.0,
+        },
+    ]
+    grouped: dict[tuple[str, ...], dict[str, float]] = {}
+    for sample in pod_rates:
+        identity = tuple(str(sample[label]) for label in identity_labels)
+        totals = grouped.setdefault(identity, {"failure": 0.0, "total": 0.0})
+        totals["total"] += float(sample["rate"])
+        if sample["outcome"] == "failure":
+            totals["failure"] += float(sample["rate"])
+
+    assert len(grouped) == 1
+    assert next(iter(grouped.values())) == {"failure": 40.0, "total": 200.0}
+    assert next(iter(grouped.values()))["failure"] / next(iter(grouped.values()))["total"] == 0.2
+
+
+def test_telemetry_installers_verify_recording_and_alert_rules_from_runtime_api() -> None:
+    for source in (script("install-telemetry.sh"), script("install-telemetry.ps1")):
+        assert "api/v1/rules" in source
+        assert "opsia_sli_failure_ratio" in source
+        assert "opsia_sli_requests_total" in source
+        assert 'outcome="failure"' in source
+        assert "sumby(namespace,resource_kind,resource_name,service,sli,symptom)" in source
+        assert "OpsiaSliFailureRatioHigh" in source
 
 
 def test_ui_connect_command_installs_telemetry_before_agent_manifest() -> None:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from typing import Any
 
@@ -18,7 +19,10 @@ from services.ai.agent.workload_target import (
 
 GITOPS_CHANGE_CONTEXT_EVIDENCE_KIND = "gitops_change_context"
 RCA_EVIDENCE_KIND = "rca_bundle"
-TRUSTED_SOURCE_ORIGINS = frozenset({"git_cache", "github_contents", "git_repo_path"})
+TRUSTED_SOURCE_ORIGINS = frozenset(
+    {"git_cache", "github_contents", "github_tree", "git_repo_path"}
+)
+KUSTOMIZE = "kustomize"
 
 
 class DatabaseGitOpsAuthorityReadPort(GitOpsAuthorityReadPort):
@@ -115,6 +119,7 @@ class DatabaseGitOpsAuthorityReadPort(GitOpsAuthorityReadPort):
         changes = diff.get("changes")
         if not isinstance(changes, list):
             return None
+        source_type = text(provenance, "source_type")
         return GitOpsAuthorityContext(
             workspace_id=query.workspace_id,
             repository_id=text(identity, "repository_id"),
@@ -127,7 +132,11 @@ class DatabaseGitOpsAuthorityReadPort(GitOpsAuthorityReadPort):
             repo_ref=text(identity, "repo_ref"),
             base_branch=text(identity, "branch"),
             commit_sha=commit_sha,
-            source_type=text(provenance, "source_type"),
+            # Structured recovery patches describe the selected rendered
+            # object's semantic field paths. The SCM worker independently
+            # resolves a Kustomize binding to one exact raw file at commit_sha
+            # before materializing those paths.
+            source_type=RAW_YAML if source_type == KUSTOMIZE else source_type,
             source_manifest_sha256=text(provenance, "source_manifest_sha256"),
             resource=resource,
             desired_manifest=desired,
@@ -325,6 +334,21 @@ def authority_rows_match(
     }
     source_count = provenance.get("source_document_count")
     artifact_count = provenance.get("artifact_count")
+    trusted_source_shape = (
+        text(provenance, "source_type") == RAW_YAML
+        and provenance.get("source_is_file") is True
+        and type(source_count) is int
+        and source_count == 1
+        and type(artifact_count) is int
+        and artifact_count == 1
+    ) or (
+        text(provenance, "source_type") == KUSTOMIZE
+        and provenance.get("source_is_file") is False
+        and type(source_count) is int
+        and source_count >= 1
+        and type(artifact_count) is int
+        and artifact_count == source_count
+    )
     return bool(
         text(desired, "kind").casefold() == query.resource_kind.casefold()
         and canonical_manifest_digest(desired) == artifact_digest
@@ -357,14 +381,13 @@ def authority_rows_match(
         and text(provenance, "artifact_digest") == artifact_digest
         and text(provenance, "repo_ref") == text(identity, "repo_ref")
         and text(provenance, "branch") == text(identity, "branch")
-        and text(provenance, "source_type") == RAW_YAML
         and text(provenance, "source_origin") in TRUSTED_SOURCE_ORIGINS
-        and provenance.get("source_is_file") is True
-        and type(source_count) is int
-        and source_count == 1
-        and type(artifact_count) is int
-        and artifact_count == 1
-        and text(provenance, "source_manifest_sha256").startswith("sha256:")
+        and trusted_source_shape
+        and re.fullmatch(
+            r"sha256:[0-9a-f]{64}",
+            text(provenance, "source_manifest_sha256"),
+        )
+        is not None
     )
 
 

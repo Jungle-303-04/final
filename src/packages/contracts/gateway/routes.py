@@ -342,6 +342,9 @@ RCA_RECOVERY_ACTION_SELECT_BY_CORRELATION_PATH = (
     "/rca/recovery-plans/by-correlation/{correlation_id}/actions/select"
 )
 RCA_RECOVERY_ACTION_SELECT_PATH = "/rca/recovery-plans/{plan_id}/actions/{action_id}/select"
+RCA_RECOVERY_RETRY_BY_CORRELATION_PATH = (
+    "/rca/recovery-plans/by-correlation/{correlation_id}/retry"
+)
 
 
 def agent_command_result_path(command_id: str) -> str:

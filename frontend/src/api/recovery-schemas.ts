@@ -37,6 +37,7 @@ export const recoveryPlanSchema = z.strictObject({
   selected_by: z.string().nullable(),
   selected_action: recoveryActionCandidateSchema.nullable(),
   candidates: z.array(recoveryActionCandidateSchema),
+  lifecycle: jsonMapSchema.nullable().optional(),
 });
 
 export const recoveryActionAcceptedSchema = z.strictObject({

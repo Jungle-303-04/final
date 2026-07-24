@@ -82,6 +82,10 @@ class SafePrCreatedBody(EventBody):
     base_branch: str = ""
     commit_sha: str = ""
     patch_sha256: str = ""
+    pr_number: int | None = None
+    pr_node_id: str = ""
+    head_ref: str = ""
+    head_sha: str = ""
 
 
 @event(EventSubject.SAFE_PR_READY_FOR_CREATION)

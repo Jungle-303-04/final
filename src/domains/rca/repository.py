@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from uuid import uuid4
 
-from sqlalchemy import Select, and_, case, func, or_, select
+from sqlalchemy import Select, and_, case, cast, func, or_, select
+from sqlalchemy.dialects.postgresql import TIMESTAMP
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
+from domains.rca.events import RecoveryVerificationFailedBody
 from domains.rca.models import (
     Evidence,
     IncidentSignalClaim,
@@ -23,11 +27,25 @@ from domains.rca.report_narrative import (
 from domains.rca.report_projection import rca_report_projection
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.event_bus.subjects import EventSubject
+from packages.events.envelope import event
 from packages.storage.engine import DatabaseConnection, iso_or_none
 from packages.storage.schema import EventModel
 
 RECOVERY_PLAN_STATUS_SELECTION_REQUESTED = "selection_requested"
 RECOVERY_PLAN_STATUS_SELECTED = "selected"
+RECOVERY_PLAN_STATUS_PR_OPEN = "pr_open"
+RECOVERY_PLAN_STATUS_DEPLOY_PENDING = "deploy_pending"
+RECOVERY_PLAN_STATUS_VERIFICATION_PENDING = "verification_pending"
+RECOVERY_PLAN_STATUS_COMPLETED = "completed"
+RECOVERY_PLAN_STATUS_FAILED = "failed"
+RECOVERY_PLAN_MONOTONIC_STATUSES = (
+    RECOVERY_PLAN_STATUS_SELECTED,
+    RECOVERY_PLAN_STATUS_PR_OPEN,
+    RECOVERY_PLAN_STATUS_DEPLOY_PENDING,
+    RECOVERY_PLAN_STATUS_VERIFICATION_PENDING,
+    RECOVERY_PLAN_STATUS_COMPLETED,
+    RECOVERY_PLAN_STATUS_FAILED,
+)
 BACKLOG_STATUS_OPEN = "open"
 BACKLOG_STATUS_RESOLVED = "resolved"
 BACKLOG_RULE_RESOLVED_REASON = "matching RCA rule is now available"
@@ -101,6 +119,11 @@ def _rca_report_summary_columns() -> tuple[Any, ...]:
 
 
 class RcaRepository(DatabaseConnection):
+    def current_database_time(self) -> datetime:
+        with self.connection() as conn:
+            value = conn.execute(select(func.now())).scalar_one()
+        return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+
     def save_evidence(
         self, correlation_id: str, workspace_id: str, kind: str, body: JsonObject
     ) -> None:
@@ -380,26 +403,32 @@ class RcaRepository(DatabaseConnection):
                 "evidence_ref": insert.excluded.evidence_ref,
                 "status": case(
                     (
-                        table.c.status == RECOVERY_PLAN_STATUS_SELECTED,
+                        table.c.status.in_(RECOVERY_PLAN_MONOTONIC_STATUSES),
                         table.c.status,
                     ),
                     else_=insert.excluded.status,
                 ),
                 "selected_action_id": case(
                     (
-                        table.c.status == RECOVERY_PLAN_STATUS_SELECTED,
+                        table.c.status.in_(RECOVERY_PLAN_MONOTONIC_STATUSES),
                         table.c.selected_action_id,
                     ),
                     else_=insert.excluded.selected_action_id,
                 ),
                 "selected_by": case(
                     (
-                        table.c.status == RECOVERY_PLAN_STATUS_SELECTED,
+                        table.c.status.in_(RECOVERY_PLAN_MONOTONIC_STATUSES),
                         table.c.selected_by,
                     ),
                     else_=insert.excluded.selected_by,
                 ),
-                "payload": insert.excluded.payload,
+                "payload": case(
+                    (
+                        table.c.status.in_(RECOVERY_PLAN_MONOTONIC_STATUSES),
+                        table.c.payload,
+                    ),
+                    else_=insert.excluded.payload,
+                ),
                 "updated_at": func.now(),
             },
         )
@@ -462,23 +491,66 @@ class RcaRepository(DatabaseConnection):
         selected_by: str,
     ) -> JsonObject | None:
         table = RecoveryPlanRecord.__table__
-        statement = (
-            table.update()
-            .where(
-                table.c.plan_id == plan_id,
-                table.c.workspace_id == workspace_id,
-                table.c.status.in_(OPEN_RECOVERY_PLAN_STATUSES),
+        with self.unit_of_work() as conn:
+            current = (
+                conn.execute(
+                    select(table)
+                    .where(
+                        table.c.plan_id == plan_id,
+                        table.c.workspace_id == workspace_id,
+                        table.c.status.in_(OPEN_RECOVERY_PLAN_STATUSES),
+                    )
+                    .with_for_update()
+                )
+                .mappings()
+                .first()
             )
-            .values(
-                status=RECOVERY_PLAN_STATUS_SELECTED,
-                selected_action_id=action_id,
-                selected_by=selected_by,
-                updated_at=func.now(),
+            if current is None:
+                return None
+            payload = deepcopy(dict(current["payload"]))
+            previous_lifecycle = (
+                payload.get("lifecycle")
+                if isinstance(payload.get("lifecycle"), Mapping)
+                else {}
             )
-            .returning(table.c.payload, table.c.correlation_id)
-        )
-        with self.connection() as conn:
-            row = conn.execute(statement).mappings().first()
+            previous_attempt = (
+                previous_lifecycle.get("attempt")
+                if isinstance(previous_lifecycle.get("attempt"), Mapping)
+                else {}
+            )
+            try:
+                attempt_number = max(0, int(previous_attempt.get("number") or 0)) + 1
+            except (TypeError, ValueError):
+                attempt_number = 1
+            payload["lifecycle"] = {
+                "phase": RECOVERY_PLAN_STATUS_SELECTED,
+                "attempt": {
+                    "id": f"recovery-attempt-{uuid4()}",
+                    "number": attempt_number,
+                    "action_id": action_id,
+                    "selected_by": selected_by,
+                    "selected_at": datetime.now(UTC).isoformat(),
+                },
+            }
+            row = (
+                conn.execute(
+                    table.update()
+                    .where(
+                        table.c.id == current["id"],
+                        table.c.status.in_(OPEN_RECOVERY_PLAN_STATUSES),
+                    )
+                    .values(
+                        status=RECOVERY_PLAN_STATUS_SELECTED,
+                        selected_action_id=action_id,
+                        selected_by=selected_by,
+                        payload=payload,
+                        updated_at=func.now(),
+                    )
+                    .returning(table.c.payload, table.c.correlation_id)
+                )
+                .mappings()
+                .first()
+            )
         return dict(row) if row else None
 
     def reopen_recovery_plan_action(
@@ -508,6 +580,366 @@ class RcaRepository(DatabaseConnection):
         )
         with self.connection() as conn:
             return conn.execute(statement).scalar_one_or_none() is not None
+
+    def update_recovery_plan_lifecycle_if_status(
+        self,
+        plan_id: str,
+        workspace_id: str,
+        *,
+        expected_statuses: tuple[str, ...],
+        status: str,
+        lifecycle: JsonObject,
+        clear_selection: bool = False,
+    ) -> JsonObject | None:
+        """CAS recovery lifecycle transition while preserving the immutable plan.
+
+        The lifecycle is additive JSON inside the existing payload.  The status
+        predicate prevents a stale webhook/workflow/evidence replay from moving a
+        later recovery attempt backwards.
+        """
+
+        table = RecoveryPlanRecord.__table__
+        with self.unit_of_work() as conn:
+            current = (
+                conn.execute(
+                    select(table)
+                    .where(
+                        table.c.plan_id == plan_id,
+                        table.c.workspace_id == workspace_id,
+                        table.c.status.in_(expected_statuses),
+                    )
+                    .with_for_update()
+                )
+                .mappings()
+                .first()
+            )
+            if current is None:
+                return None
+            payload = deepcopy(dict(current["payload"]))
+            payload["lifecycle"] = deepcopy(lifecycle)
+            update_values: dict[str, Any] = {
+                "status": status,
+                "payload": payload,
+                "updated_at": func.now(),
+            }
+            if clear_selection:
+                update_values.update(
+                    {
+                        "selected_action_id": None,
+                        "selected_by": None,
+                    }
+                )
+            row = (
+                conn.execute(
+                    table.update()
+                    .where(
+                        table.c.id == current["id"],
+                        table.c.status.in_(expected_statuses),
+                    )
+                    .values(**update_values)
+                    .returning(
+                        table.c.plan_id,
+                        table.c.workspace_id,
+                        table.c.correlation_id,
+                        table.c.incident_id,
+                        table.c.evidence_ref,
+                        table.c.status,
+                        table.c.selected_action_id,
+                        table.c.selected_by,
+                        table.c.payload,
+                    )
+                )
+                .mappings()
+                .first()
+            )
+        return dict(row) if row else None
+
+    def find_open_recovery_plan_for_pull_request(
+        self,
+        *,
+        pr_url: str,
+        repo_ref: str,
+        base_branch: str,
+        pr_number: int,
+        pr_node_id: str,
+        head_ref: str,
+        head_sha: str,
+    ) -> JsonObject | None:
+        """Match one signed merge webhook to one exact tracked Safe PR.
+
+        No workspace is accepted from the webhook.  Tenant scope comes only from
+        the unique stored row, and ambiguous matches fail closed.
+        """
+
+        table = RecoveryPlanRecord.__table__
+        lifecycle = table.c.payload["lifecycle"]
+        pr = lifecycle["pr"]
+        statement = (
+            select(
+                table.c.plan_id,
+                table.c.workspace_id,
+                table.c.correlation_id,
+                table.c.incident_id,
+                table.c.evidence_ref,
+                table.c.status,
+                table.c.selected_action_id,
+                table.c.selected_by,
+                table.c.payload,
+            )
+            .where(
+                table.c.status == RECOVERY_PLAN_STATUS_PR_OPEN,
+                pr["url"].astext == pr_url,
+                pr["repo_ref"].astext == repo_ref,
+                pr["base_branch"].astext == base_branch,
+                pr["number"].astext == str(pr_number),
+                pr["node_id"].astext == pr_node_id,
+                pr["head_ref"].astext == head_ref,
+                pr["head_sha"].astext == head_sha,
+            )
+            .limit(2)
+        )
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        return dict(rows[0]) if len(rows) == 1 else None
+
+    def find_open_recovery_plan_for_pull_request_base_identity(
+        self,
+        *,
+        pr_url: str,
+        repo_ref: str,
+        base_branch: str,
+        pr_number: int,
+        pr_node_id: str,
+        head_ref: str,
+    ) -> JsonObject | None:
+        """Resolve a tracked PR without head SHA to detect force-push/synchronize."""
+
+        table = RecoveryPlanRecord.__table__
+        pr = table.c.payload["lifecycle"]["pr"]
+        statement = (
+            select(
+                table.c.plan_id,
+                table.c.workspace_id,
+                table.c.correlation_id,
+                table.c.incident_id,
+                table.c.evidence_ref,
+                table.c.status,
+                table.c.selected_action_id,
+                table.c.selected_by,
+                table.c.payload,
+            )
+            .where(
+                table.c.status == RECOVERY_PLAN_STATUS_PR_OPEN,
+                pr["url"].astext == pr_url,
+                pr["repo_ref"].astext == repo_ref,
+                pr["base_branch"].astext == base_branch,
+                pr["number"].astext == str(pr_number),
+                pr["node_id"].astext == pr_node_id,
+                pr["head_ref"].astext == head_ref,
+            )
+            .limit(2)
+        )
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        return dict(rows[0]) if len(rows) == 1 else None
+
+    def get_recovery_plan_for_workflow(
+        self,
+        workspace_id: str,
+        workflow_run_id: str,
+        binding_id: str,
+        application_id: str,
+    ) -> JsonObject | None:
+        """Resolve only the merge-derived exact binding deployment."""
+
+        table = RecoveryPlanRecord.__table__
+        merge = table.c.payload["lifecycle"]["merge"]
+        statement = (
+            select(
+                table.c.plan_id,
+                table.c.workspace_id,
+                table.c.correlation_id,
+                table.c.incident_id,
+                table.c.evidence_ref,
+                table.c.status,
+                table.c.selected_action_id,
+                table.c.selected_by,
+                table.c.payload,
+            )
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.status.in_(
+                    (
+                        RECOVERY_PLAN_STATUS_DEPLOY_PENDING,
+                        RECOVERY_PLAN_STATUS_VERIFICATION_PENDING,
+                    )
+                ),
+                merge["workflow_run_id"].astext == workflow_run_id,
+                merge["binding_id"].astext == binding_id,
+                merge["application_id"].astext == application_id,
+            )
+            .limit(2)
+        )
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        return dict(rows[0]) if len(rows) == 1 else None
+
+    def list_recovery_verification_plans(
+        self,
+        workspace_id: str,
+        cluster_id: str,
+        *,
+        limit: int = 100,
+    ) -> list[JsonObject]:
+        table = RecoveryPlanRecord.__table__
+        target = table.c.payload["target"]
+        statement = (
+            select(
+                table.c.plan_id,
+                table.c.workspace_id,
+                table.c.correlation_id,
+                table.c.incident_id,
+                table.c.evidence_ref,
+                table.c.status,
+                table.c.selected_action_id,
+                table.c.selected_by,
+                table.c.payload,
+            )
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.status == RECOVERY_PLAN_STATUS_VERIFICATION_PENDING,
+                target["cluster_id"].astext == cluster_id,
+            )
+            .order_by(table.c.updated_at.asc(), table.c.id.asc())
+            .limit(max(1, min(limit, 500)))
+        )
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        return [dict(row) for row in rows]
+
+    def expire_recovery_verifications(
+        self,
+        *,
+        now: datetime | None = None,
+        limit: int = 100,
+    ) -> list[JsonObject]:
+        """Fail overdue verification plans even when evidence delivery stops.
+
+        The state transition and failure event outbox entry share one database
+        transaction, so a janitor crash cannot leave a silently failed plan.
+        ``now`` is injectable for boundary tests; production uses DB time.
+        """
+
+        table = RecoveryPlanRecord.__table__
+        bounded_limit = max(1, min(int(limit), 500))
+        expired: list[JsonObject] = []
+        with self.unit_of_work() as conn:
+            effective_now = now or conn.execute(select(func.now())).scalar_one()
+            if effective_now.tzinfo is None:
+                effective_now = effective_now.replace(tzinfo=UTC)
+            deadline = cast(
+                table.c.payload["lifecycle"]["verification"]["deadline_at"].astext,
+                TIMESTAMP(timezone=True),
+            )
+            rows = (
+                conn.execute(
+                    select(table)
+                    .where(
+                        table.c.status == RECOVERY_PLAN_STATUS_VERIFICATION_PENDING,
+                        deadline <= effective_now,
+                    )
+                    .order_by(deadline.asc(), table.c.id.asc())
+                    .limit(bounded_limit)
+                    .with_for_update(skip_locked=True)
+                )
+                .mappings()
+                .all()
+            )
+            staged = []
+            for row in rows:
+                payload = deepcopy(dict(row["payload"]))
+                lifecycle = dict(payload.get("lifecycle") or {})
+                verification = dict(lifecycle.get("verification") or {})
+                reason = (
+                    "최대 검증 시간 안에 연속 정상화 근거가 충족되지 않아 "
+                    "복구 완료로 판정하지 않았습니다."
+                )
+                verification.update(
+                    {
+                        "status": RECOVERY_PLAN_STATUS_FAILED,
+                        "last_reason_code": "verification_window_expired",
+                        "last_reason": reason,
+                        "expired_at": effective_now.isoformat(),
+                    }
+                )
+                lifecycle.update(
+                    {
+                        "phase": RECOVERY_PLAN_STATUS_FAILED,
+                        "verification": verification,
+                        "failure": {
+                            "reason_code": "verification_window_expired",
+                            "reason": reason,
+                        },
+                    }
+                )
+                payload["lifecycle"] = lifecycle
+                updated = (
+                    conn.execute(
+                        table.update()
+                        .where(
+                            table.c.id == row["id"],
+                            table.c.status
+                            == RECOVERY_PLAN_STATUS_VERIFICATION_PENDING,
+                        )
+                        .values(
+                            status=RECOVERY_PLAN_STATUS_FAILED,
+                            payload=payload,
+                            updated_at=func.now(),
+                        )
+                        .returning(
+                            table.c.plan_id,
+                            table.c.workspace_id,
+                            table.c.correlation_id,
+                            table.c.incident_id,
+                            table.c.evidence_ref,
+                            table.c.status,
+                            table.c.payload,
+                        )
+                    )
+                    .mappings()
+                    .first()
+                )
+                if updated is None:
+                    continue
+                body = RecoveryVerificationFailedBody(
+                    plan_id=str(updated["plan_id"]),
+                    incident_id=str(updated["incident_id"]),
+                    reason_code="verification_window_expired",
+                    reason=reason,
+                    evidence_ref=str(updated["evidence_ref"]),
+                    before=dict(verification.get("before") or {}),
+                    after=dict(verification.get("after") or {}),
+                    workspace_id=str(updated["workspace_id"]),
+                )
+                staged.append(
+                    event(
+                        body.__subject__.value,
+                        "rca-timeline-janitor",
+                        body.to_body(),
+                        correlation_id=str(updated["correlation_id"]),
+                        workspace_id=str(updated["workspace_id"]),
+                    )
+                )
+                expired.append(dict(updated))
+            if staged:
+                record_event = getattr(self, "record_event", None)
+                stage_events = getattr(self, "stage_events", None)
+                if not callable(record_event) or not callable(stage_events):
+                    raise RuntimeError("recovery verification outbox support unavailable")
+                for envelope in staged:
+                    record_event(envelope)
+                stage_events(conn, staged)
+        return expired
 
     def save_rca_report(
         self,

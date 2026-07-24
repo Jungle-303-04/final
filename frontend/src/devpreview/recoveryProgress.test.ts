@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
+import type { RecoveryPlan } from "../api/recovery-schemas";
 import {
+  currentRecoveryAttemptPrUrl,
   recoveryDisplayedStep,
   recoveryProgressState,
   withCreatedPullRequest,
@@ -64,6 +66,42 @@ describe("recoveryProgressState", () => {
     expect(recoveryProgressState({ status: "command_completed" })).toMatchObject({
       phase: "verifying",
       step: 3,
+    });
+  });
+
+  it("shows durable Safe PR lifecycle states without claiming completion", () => {
+    expect(recoveryProgressState({ status: "pr_open" })).toMatchObject({
+      phase: "approval",
+      label: "PR 검토 필요",
+    });
+    expect(recoveryProgressState({ status: "deploy_pending" })).toMatchObject({
+      phase: "executing",
+      label: "복구 배포 중",
+    });
+    expect(recoveryProgressState({ status: "verification_pending" })).toMatchObject({
+      phase: "verifying",
+      label: "안정화 검증 중",
+    });
+    expect(recoveryProgressState({ status: "failed" })).toMatchObject({
+      phase: "failed",
+      label: "복구 실패",
+    });
+  });
+
+  it("uses lifecycle events when a snapshot status has not refreshed yet", () => {
+    expect(recoveryProgressState({
+      audit: [{
+        event_id: "verification-started",
+        subject: "recovery.verification.started",
+        source: "rca-feedback-worker",
+        created_at: "2026-07-24T01:00:00Z",
+        causation_id: null,
+        journey_stage: "recovery",
+        payload_summary: {},
+      }],
+    })).toMatchObject({
+      phase: "verifying",
+      label: "안정화 검증 중",
     });
   });
 
@@ -250,5 +288,55 @@ describe("recoveryProgressState", () => {
       step: 3,
       tone: "approval",
     });
+  });
+
+  it("does not let an old PR URL overwrite deploy or stabilization truth", () => {
+    const deploying = recoveryProgressState({ status: "deploy_pending" });
+    expect(withCreatedPullRequest(
+      deploying,
+      "https://github.com/kyro/platform/pull/17",
+      "PR 생성됨",
+    )).toBe(deploying);
+  });
+});
+
+describe("currentRecoveryAttemptPrUrl", () => {
+  const planWithLifecycle = (
+    lifecycle: Record<string, unknown>,
+  ): RecoveryPlan => ({
+    lifecycle,
+  } as unknown as RecoveryPlan);
+  const plan = planWithLifecycle({
+      attempt: { id: "attempt-2", number: 2 },
+      pr: {
+        url: "https://github.com/kyro/platform/pull/22",
+        attempt_id: "attempt-2",
+      },
+  });
+
+  it("returns only the PR bound to the current attempt", () => {
+    expect(currentRecoveryAttemptPrUrl(plan)).toBe(
+      "https://github.com/kyro/platform/pull/22",
+    );
+  });
+
+  it("does not reuse a PR from an older attempt", () => {
+    expect(currentRecoveryAttemptPrUrl(
+      planWithLifecycle({
+        attempt: { id: "attempt-3", number: 3 },
+        pr: {
+          url: "https://github.com/kyro/platform/pull/22",
+          attempt_id: "attempt-2",
+        },
+      }),
+    )).toBeNull();
+  });
+
+  it("does not fall back to an unscoped legacy URL", () => {
+    expect(currentRecoveryAttemptPrUrl(
+      planWithLifecycle({
+        pr: { url: "https://github.com/kyro/platform/pull/17" },
+      }),
+    )).toBeNull();
   });
 });

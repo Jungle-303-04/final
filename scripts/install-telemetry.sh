@@ -246,6 +246,9 @@ json.dump(
                 "opsia_namespace",
                 "opsia_resource_kind",
                 "opsia_resource_name",
+                "opsia_service",
+                "opsia_sli",
+                "opsia_symptom",
             ],
             "group_wait": "5s",
             "group_interval": "15s",
@@ -315,6 +318,7 @@ require_prometheus_sli_rule_loaded() {
       python3 - <<'PY'
 import json
 import os
+import re
 
 try:
     body = json.loads(os.environ["PROMETHEUS_RULES_JSON"])
@@ -328,26 +332,63 @@ rules = (
     for group in body.get("data", {}).get("groups", [])
     for rule in group.get("rules", [])
 )
+rules = list(rules)
+record_query = next(
+    (
+        str(rule.get("query") or "")
+        for rule in rules
+        if rule.get("name") == "opsia_sli_failure_ratio"
+    ),
+    "",
+)
+normalized_record_query = re.sub(r"\s+", "", record_query)
+six_label_sum = "sumby(namespace,resource_kind,resource_name,service,sli,symptom)"
+recording_rule_valid = (
+    "opsia_sli_requests_total" in normalized_record_query
+    and 'outcome="failure"' in normalized_record_query
+    and normalized_record_query.count(six_label_sum) == 2
+    and "pod" not in normalized_record_query
+    and "instance" not in normalized_record_query
+)
 required_query_parts = (
     'namespace!=""',
     'resource_kind!=""',
     'resource_name!=""',
+    'service!=""',
+    'sli!=""',
     'symptom!=""',
     "> 0.2",
 )
-valid = any(
+required_labels = (
+    "opsia_namespace",
+    "opsia_resource_kind",
+    "opsia_resource_name",
+    "opsia_service",
+    "opsia_sli",
+    "opsia_symptom",
+)
+required_annotations = (
+    "opsia_observed_value",
+    "opsia_threshold",
+)
+alert_rule_valid = any(
     rule.get("name") == expected
     and all(part in str(rule.get("query") or "") for part in required_query_parts)
+    and all(str((rule.get("labels") or {}).get(key) or "").strip() for key in required_labels)
+    and all(
+        str((rule.get("annotations") or {}).get(key) or "").strip()
+        for key in required_annotations
+    )
     for rule in rules
 )
-raise SystemExit(0 if valid else 1)
+raise SystemExit(0 if recording_rule_valid and alert_rule_valid else 1)
 PY
     then
       return
     fi
     sleep 2
   done
-  echo "Prometheus did not load alert rule ${PROMETHEUS_SLI_ALERT_NAME}" >&2
+  echo "Prometheus did not load SLI recording rule opsia_sli_failure_ratio and alert rule ${PROMETHEUS_SLI_ALERT_NAME}" >&2
   return 1
 }
 

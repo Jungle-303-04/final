@@ -69,6 +69,21 @@ class EventSubject(StrEnum):
     RECOVERY_PLANNED = "recovery.planned"  # 복구 조치 계획 수립
     RECOVERY_SELECTION_REQUESTED = "recovery.selection_requested"  # 사용자 복구 후보 선택 요청
     RECOVERY_ACTION_SELECTED = "recovery.action_selected"  # 복구 후보 선택 완료
+    RECOVERY_PR_TRACKED = "recovery.pr.tracked"  # 생성된 Safe PR과 원 RCA 연결
+    RECOVERY_PR_MERGED = "recovery.pr.merged"  # 서명된 GitHub webhook으로 merge 확인
+    RECOVERY_VERIFICATION_STARTED = (
+        "recovery.verification.started"  # exact binding 배포 성공 후 안정화 검증 시작
+    )
+    RECOVERY_VERIFICATION_UPDATED = (
+        "recovery.verification.updated"  # 안정화 창의 최신 판정/근거 저장
+    )
+    RECOVERY_VERIFICATION_FAILED = (
+        "recovery.verification.failed"  # 배포 실패·검증 시간 초과/회귀
+    )
+    RECOVERY_RETRY_REQUESTED = (
+        "recovery.retry.requested"  # 사용자가 실패 단계에 맞는 복구 재시도를 명시적으로 요청
+    )
+    INCIDENT_RESOLVED = "incident.resolved"  # 복구 검증 완료 후 장애 종결
     SAFE_PR_PATCH_PREPARED = "safe_pr.patch_prepared"  # Safe PR 패치 초안 준비
     DIFF_EXPLAINED = "diff.explained"  # 패치 diff 와 위험 설명
     SAFE_PR_READY_FOR_CREATION = "safe_pr.ready_for_creation"  # 검증된 Safe PR 생성 요청

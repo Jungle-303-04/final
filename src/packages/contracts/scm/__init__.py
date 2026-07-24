@@ -2,6 +2,6 @@
 
 from __future__ import annotations
 
-from packages.contracts.scm.provider import ScmProvider
+from packages.contracts.scm.provider import ScmProvider, ScmPullRequestResult
 
-__all__ = ["ScmProvider"]
+__all__ = ["ScmProvider", "ScmPullRequestResult"]

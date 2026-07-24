@@ -152,7 +152,10 @@ function Configure-AlertmanagerWebhook([string]$Directory) {
         "alertname",
         "opsia_namespace",
         "opsia_resource_kind",
-        "opsia_resource_name"
+        "opsia_resource_name",
+        "opsia_service",
+        "opsia_sli",
+        "opsia_symptom"
       )
       group_wait = "5s"
       group_interval = "15s"
@@ -219,22 +222,78 @@ function Require-PrometheusSliRuleLoaded {
           'namespace!=""',
           'resource_kind!=""',
           'resource_name!=""',
+          'service!=""',
+          'sli!=""',
           'symptom!=""',
           "> 0.2"
         )
-        $loaded = @(
+        $requiredLabels = @(
+          "opsia_namespace",
+          "opsia_resource_kind",
+          "opsia_resource_name",
+          "opsia_service",
+          "opsia_sli",
+          "opsia_symptom"
+        )
+        $requiredAnnotations = @(
+          "opsia_observed_value",
+          "opsia_threshold"
+        )
+        $allRules = @(
           $body.data.groups |
-          ForEach-Object { $_.rules } |
+          ForEach-Object { $_.rules }
+        )
+        $recordingRules = @(
+          $allRules |
+          Where-Object { $_.name -eq "opsia_sli_failure_ratio" }
+        )
+        $recordingRuleLoaded = $false
+        foreach ($recordingRule in $recordingRules) {
+          $normalizedRecordQuery = ([string]$recordingRule.query) -replace '\s+', ''
+          $sixLabelSum = "sumby(namespace,resource_kind,resource_name,service,sli,symptom)"
+          if (
+            $normalizedRecordQuery.Contains("opsia_sli_requests_total") -and
+            $normalizedRecordQuery.Contains('outcome="failure"') -and
+            [regex]::Matches(
+              $normalizedRecordQuery,
+              [regex]::Escape($sixLabelSum)
+            ).Count -eq 2 -and
+            -not $normalizedRecordQuery.Contains("pod") -and
+            -not $normalizedRecordQuery.Contains("instance")
+          ) {
+            $recordingRuleLoaded = $true
+          }
+        }
+        $alertRules = @(
+          $allRules |
           Where-Object {
             $rule = $_
             $rule.name -eq $PrometheusSliAlertName -and
             @(
               $requiredQueryParts |
               Where-Object { -not ([string]$rule.query).Contains($_) }
+            ).Count -eq 0 -and
+            @(
+              $requiredLabels |
+              Where-Object {
+                $property = $rule.labels.PSObject.Properties[$_]
+                $null -eq $property -or [string]::IsNullOrWhiteSpace([string]$property.Value)
+              }
+            ).Count -eq 0 -and
+            @(
+              $requiredAnnotations |
+              Where-Object {
+                $property = $rule.annotations.PSObject.Properties[$_]
+                $null -eq $property -or [string]::IsNullOrWhiteSpace([string]$property.Value)
+              }
             ).Count -eq 0
           }
         )
-        if ($body.status -eq "success" -and $loaded.Count -gt 0) {
+        if (
+          $body.status -eq "success" -and
+          $recordingRuleLoaded -and
+          $alertRules.Count -gt 0
+        ) {
           return
         }
       }
@@ -244,7 +303,10 @@ function Require-PrometheusSliRuleLoaded {
     }
     Start-Sleep -Seconds 2
   }
-  throw "Prometheus did not load alert rule $PrometheusSliAlertName"
+  throw (
+    "Prometheus did not load SLI recording rule opsia_sli_failure_ratio " +
+    "and alert rule $PrometheusSliAlertName"
+  )
 }
 
 function Restart-AlertmanagerForWebhookConfig {

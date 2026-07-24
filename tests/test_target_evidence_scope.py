@@ -6,6 +6,8 @@ control 네임스페이스(sandbox 등)에 배포된 워크로드가 인벤토�
 
 from __future__ import annotations
 
+from conftest import ROOT, load_file
+
 from domains.target.evidence_policy import (
     control_namespace_tuple,
     default_agent_policy,
@@ -47,6 +49,46 @@ def test_standard_profile_collects_control_namespaces() -> None:
     assert "color_turf_namespace_snapshot" in names
 
 
+def test_metrics_collect_raw_exact_active_session_continuity_series() -> None:
+    queries = evidence_provider_queries(
+        "metrics",
+        cluster_id="c-1",
+        evidence_profile="standard",
+    )
+    query = next(
+        item
+        for item in queries
+        if item["name"] == "opsia_continuity_active_sessions"
+    )
+
+    assert query["query"] == (
+        'opsia_continuity_active_sessions{namespace!="",resource_kind!="",'
+        'resource_name!="",continuity_id!="",pod_uid!=""}'
+    )
+    assert "sum by" not in str(query["query"])
+    assert "max by" not in str(query["query"])
+
+
+def test_recovery_continuity_label_survives_bounded_metadata_snapshot() -> None:
+    kubernetes_utils = load_file(
+        ROOT
+        / "src"
+        / "services"
+        / "target"
+        / "cluster-agent"
+        / "providers"
+        / "kubernetes_utils.py",
+        "test_recovery_kubernetes_utils",
+    )
+    labels = {f"chart.example/label-{index:02d}": str(index) for index in range(20)}
+    labels["opsia.dev/recovery-continuity"] = "protected"
+
+    safe = kubernetes_utils.safe_metadata_labels(labels)
+
+    assert len(safe) == 12
+    assert safe["opsia.dev/recovery-continuity"] == "protected"
+
+
 def test_standard_profile_collects_control_namespace_logs() -> None:
     queries = evidence_provider_queries(
         "logs",
@@ -82,6 +124,24 @@ def test_demo_profile_does_not_duplicate_covered_namespaces() -> None:
     names = [str(query["name"]) for query in queries]
     assert names.count("sandbox_namespace_snapshot") == 1  # demo 기본과 중복 금지
     assert "game_live_namespace_snapshot" in names
+
+
+def test_demo_log_policy_collects_configured_namespace_without_app_hardcoding() -> None:
+    queries = evidence_provider_queries(
+        "logs",
+        cluster_id="c-1",
+        evidence_profile="demo",
+        control_namespaces=("sandbox",),
+    )
+    by_name = {str(query["name"]): query for query in queries}
+
+    related = by_name["sandbox_namespace_related_logs"]
+    assert related["query"] == '{k8s_namespace_name="sandbox"}'
+    assert related["provenance"]["namespaces"] == ["sandbox"]
+    assert related["provenance"]["cluster_id"] == "c-1"
+    serialized = "\n".join(str(query["query"]) for query in queries)
+    assert "api-server" not in serialized
+    assert "find_game_rejected" not in serialized
 
 
 def test_default_agent_policy_threads_control_namespaces() -> None:

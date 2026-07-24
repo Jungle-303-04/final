@@ -295,6 +295,11 @@ class RecoveryActionSelectByCorrelationRequest(StrictModel):
     reason: str | None = Field(default=None, max_length=500)
 
 
+class RecoveryRetryRequest(StrictModel):
+    expected_plan_id: str = Field(min_length=1, max_length=2048)
+    reason: str | None = Field(default=None, max_length=500)
+
+
 class RcaTestRunCreateRequest(StrictModel):
     """등록된 RCA 장애 시나리오 실행 요청 — manifest/evidence는 서버 카탈로그 소유."""
 

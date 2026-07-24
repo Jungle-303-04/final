@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
+import pytest
 from conftest import load_service, make_context
 
 from domains.gitops.source_patch import canonical_manifest_digest
@@ -592,3 +593,52 @@ def test_authority_rejects_desired_manifest_kind_that_differs_from_query() -> No
     db.digest = canonical_manifest_digest(db.desired)
 
     assert load_authority(db, query("StatefulSet", "tempo")) is None
+
+
+@pytest.mark.parametrize("source_origin", ["git_cache", "github_tree"])
+def test_authority_accepts_commit_pinned_kustomize_render_provenance(
+    source_origin: str,
+) -> None:
+    db = AuthorityDb()
+
+    async def kustomize_provenance(*args: object) -> dict[str, object]:
+        return {
+            **db.identity,
+            "artifact_digest": db.digest,
+            "source_type": "kustomize",
+            "source_origin": source_origin,
+            "source_is_file": False,
+            "source_document_count": 3,
+            "artifact_count": 3,
+            "source_manifest_sha256": db.digest,
+        }
+
+    db.get_manifest_artifact_provenance = kustomize_provenance  # type: ignore[method-assign]
+
+    authority = load_authority(db, query())
+
+    assert authority is not None
+    # The semantic patch remains raw-yaml; SCM independently resolves the
+    # Kustomize graph to one exact raw object file at this commit.
+    assert authority.source_type == "raw-yaml"
+    assert authority.manifest_path == "deploy/app.yaml"
+
+
+def test_authority_rejects_incomplete_kustomize_render_provenance() -> None:
+    db = AuthorityDb()
+
+    async def truncated_kustomize_provenance(*args: object) -> dict[str, object]:
+        return {
+            **db.identity,
+            "artifact_digest": db.digest,
+            "source_type": "kustomize",
+            "source_origin": "git_cache",
+            "source_is_file": False,
+            "source_document_count": 3,
+            "artifact_count": 2,
+            "source_manifest_sha256": db.digest,
+        }
+
+    db.get_manifest_artifact_provenance = truncated_kustomize_provenance  # type: ignore[method-assign]
+
+    assert load_authority(db, query()) is None

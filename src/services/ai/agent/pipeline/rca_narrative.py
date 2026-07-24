@@ -11,6 +11,11 @@ from domains.rca.report_narrative import RCA_NARRATIVE_SCHEMA, normalize_rca_nar
 from packages.ai.llm import LlmClient
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.security.log_lines import redact_log_line
+from services.ai.agent.causes.signals import (
+    FACT_REPLICA_REDUCTION_TIME_ALIGNED,
+    declared_structured_rejection_reasons,
+    extract_matchmaking_correlation_attestation,
+)
 
 MAX_PROMPT_TEXT_LENGTH = 1000
 MAX_PROMPT_EVIDENCE_ITEMS = 20
@@ -93,7 +98,7 @@ def sanitized_rca_narrative_input(report: RcaCompletedBody) -> JsonObject:
                 summary=item.summary,
             )
 
-    return {
+    safe_input: JsonObject = {
         "incident": {
             "symptom": _safe_text(incident.symptom) if incident else None,
             "secondary_symptoms": _safe_list(incident.secondary_symptoms) if incident else [],
@@ -114,6 +119,205 @@ def sanitized_rca_narrative_input(report: RcaCompletedBody) -> JsonObject:
         "missing_evidence": _safe_list(detail.missing_evidence) if detail else [],
         "evidence_summaries": evidence_summaries,
         "candidate_summaries": candidates,
+    }
+    findings = structured_rca_findings(report)
+    if findings:
+        safe_input["structured_findings"] = findings
+    return safe_input
+
+
+def structured_rca_findings(report: RcaCompletedBody) -> JsonObject:
+    """Expose only allowlisted, cross-source facts that passed RCA correlation."""
+
+    detail = report.rca_detail
+    if detail is None or report.evidence_bundle is None:
+        return {}
+    selected = next(
+        (
+            candidate
+            for candidate in report.candidates or []
+            if candidate.candidate_id == detail.selected_candidate_id
+        ),
+        None,
+    )
+    if selected is None:
+        return {}
+    declared_facts = declared_candidate_facts(selected)
+    accepted_reasons = declared_structured_rejection_reasons(declared_facts)
+    if not accepted_reasons:
+        return {}
+    attestation = extract_matchmaking_correlation_attestation(
+        report.evidence_bundle,
+        selected.candidate_id,
+        accepted_reasons=accepted_reasons,
+        require_replica_change=(
+            FACT_REPLICA_REDUCTION_TIME_ALIGNED in declared_facts
+        ),
+    )
+    if attestation is None:
+        return {}
+    findings: JsonObject = {
+        "candidate_id": attestation.candidate_id,
+        "workload": {
+            "namespace": _safe_text(attestation.namespace),
+            "resource_kind": _safe_text(attestation.resource_kind),
+            "resource_name": _safe_text(attestation.resource_name),
+            "service": _safe_text(attestation.service),
+            "sli": _safe_text(attestation.sli),
+        },
+        "symptom": _safe_text(attestation.symptom),
+        "failure_started_at": _safe_text(attestation.failure_started_at),
+        "failure_ratio": {
+            "observed": attestation.observed_failure_ratio,
+            "threshold": attestation.failure_ratio_threshold,
+        },
+        "structured_log": {
+            "event": "find_game_rejected",
+            "reason": _safe_text(attestation.rejection_reason),
+            "matched_count": attestation.rejection_log_count,
+        },
+    }
+    if (
+        attestation.deployment_changed_at is not None
+        and attestation.replica_before is not None
+        and attestation.replica_after is not None
+    ):
+        findings["deployment_changed_at"] = _safe_text(
+            attestation.deployment_changed_at
+        )
+        findings["replica_change"] = {
+            "field_path": "spec.replicas",
+            "before": attestation.replica_before,
+            "after": attestation.replica_after,
+        }
+    return findings
+
+
+def declared_candidate_facts(candidate: object) -> set[str]:
+    signals = getattr(candidate, "signals", [])
+    return {
+        str(matcher.get("fact") or "")
+        for group in signals
+        if isinstance(group, dict)
+        for matcher in group.get("any_of", [])
+        if isinstance(matcher, dict)
+    }
+
+
+def deterministic_rca_narrative(report: RcaCompletedBody) -> JsonObject | None:
+    """Build a Korean fallback from accepted evidence, never from raw candidate ids."""
+
+    detail = report.rca_detail
+    incident = report.incident
+    if detail is None or incident is None or detail.missing_evidence:
+        return None
+    selected = next(
+        (
+            candidate
+            for candidate in report.candidates or []
+            if candidate.candidate_id == detail.selected_candidate_id
+        ),
+        None,
+    )
+    if selected is None or not selected.title.strip():
+        return None
+    findings = structured_rca_findings(report)
+    if findings and "replica_change" in findings:
+        workload = findings["workload"]
+        replicas = findings["replica_change"]
+        log = findings["structured_log"]
+        namespace = str(workload["namespace"])
+        kind = str(workload["resource_kind"])
+        name = str(workload["resource_name"])
+        service = str(workload["service"])
+        sli = str(workload["sli"])
+        symptom = str(findings["symptom"])
+        before = int(replicas["before"])
+        after = int(replicas["after"])
+        field_path = str(replicas["field_path"])
+        ratio = findings["failure_ratio"]
+        observed_ratio = float(ratio["observed"])
+        threshold = float(ratio["threshold"])
+        log_count = int(log["matched_count"])
+        log_event = str(log["event"])
+        rejection_reason = str(log["reason"])
+        action_route = _safe_text(report.action)
+        deployment_changed_at = str(findings["deployment_changed_at"])
+        failure_started_at = str(findings["failure_started_at"])
+        return {
+            "locale": "ko",
+            "executive_summary": (
+                f"{namespace}의 {kind} {name}에서 {symptom}이 시작된 시점과 "
+                f"{field_path}를 {before}에서 {after}로 변경한 배포 시점이 맞물렸습니다. "
+                f"확인된 원인은 {selected.title}입니다."
+            ),
+            "impact": (
+                f"{service}/{sli} 표준 SLI 실패율이 {_percentage(observed_ratio)}로 "
+                f"임계값 {_percentage(threshold)}를 초과했습니다. 영향 범위는 이 SLI가 "
+                "측정하는 요청 경로이며, 다른 경로의 중단 여부는 별도 근거가 필요합니다."
+            ),
+            "reasoning": (
+                f"동일한 {namespace}/{kind}/{name} 범위에서 GitOps spec.replicas "
+                f"{before}→{after} 변경({deployment_changed_at}), {symptom} 시작 "
+                f"({failure_started_at})과 실패율 {_percentage(observed_ratio)} "
+                f"(임계값 {_percentage(threshold)}), {log_event} "
+                f"reason={rejection_reason} 구조화 로그 {log_count}건이 시간상 함께 "
+                "확인됐습니다. 다른 클러스터·워크로드·service/SLI의 근거는 판정에서 "
+                "제외했습니다."
+            ),
+            "recommended_action": (
+                f"복구 경로 {action_route}에서 해당 GitOps manifest의 {field_path}를 "
+                f"변경 전 값 {before}로 되돌리는 변경을 검토·병합하고, 같은 부하에서 "
+                f"{service}/{sli} 실패율이 임계값 아래로 유지되는지 확인합니다."
+            ),
+            "recurrence_prevention": [
+                "처리 용량 축소 전 피크 요청량을 기준으로 부하 검증을 수행합니다.",
+                f"{field_path} 변경과 {service}/{sli} SLI를 동일 워크로드 단위로 연계 감시합니다.",
+            ],
+            "limitations": [
+                "수집된 SLI가 측정하지 않는 경로의 무중단 여부는 이 근거만으로 단정하지 않습니다.",
+                "복구 완료는 PR 배포 후 지속적인 SLI 재검증 결과로 별도 판정합니다.",
+            ],
+        }
+    if not findings:
+        return None
+    workload = findings["workload"]
+    ratio = findings["failure_ratio"]
+    structured_log = findings["structured_log"]
+    namespace = str(workload["namespace"])
+    kind = str(workload["resource_kind"])
+    name = str(workload["resource_name"])
+    service = str(workload["service"])
+    sli = str(workload["sli"])
+    observed_ratio = float(ratio["observed"])
+    threshold = float(ratio["threshold"])
+    log_event = str(structured_log["event"])
+    rejection_reason = str(structured_log["reason"])
+    log_count = int(structured_log["matched_count"])
+    return {
+        "locale": "ko",
+        "executive_summary": (
+            f"{namespace}의 {kind} {name}에서 확인된 원인은 {selected.title}입니다."
+        ),
+        "impact": (
+            f"{service}/{sli} 표준 SLI 실패율이 {_percentage(observed_ratio)}로 "
+            f"임계값 {_percentage(threshold)}를 초과했습니다."
+        ),
+        "reasoning": (
+            f"동일한 사건 식별자와 시간 범위의 {log_event} "
+            f"reason={rejection_reason} 구조화 로그 {log_count}건이 표준 SLI 알림과 "
+            "일치했습니다. 다른 워크로드나 일반 문자열 로그는 판정에서 제외했습니다."
+        ),
+        "recommended_action": (
+            "복구 플랜의 변경 대상과 구조화 근거를 검토한 뒤 승인하고, 같은 부하에서 "
+            f"{service}/{sli} 실패율이 임계값 아래로 유지되는지 검증합니다."
+        ),
+        "recurrence_prevention": [
+            f"{service}/{sli} 알림과 구조화 거절 사유를 동일 워크로드 단위로 감시합니다."
+        ],
+        "limitations": [
+            "수집된 표준 SLI와 구조화 거절 로그가 측정하지 않는 영향 범위는 확인되지 않았습니다."
+        ],
     }
 
 
@@ -143,3 +347,7 @@ def _safe_text(value: Any) -> str:
         return ""
     text = " ".join(str(value).split())
     return redact_log_line(text)[:MAX_PROMPT_TEXT_LENGTH]
+
+
+def _percentage(value: float) -> str:
+    return f"{value * 100:.1f}%"

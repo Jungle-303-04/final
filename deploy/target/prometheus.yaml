@@ -25,12 +25,44 @@ serverFiles:
     groups:
       - name: opsia-application-sli
         rules:
+          # Application Pods expose the monotonic request counter. Aggregate
+          # away Pod/instance labels so every workload SLI has exactly one
+          # six-label ratio series before Alertmanager and RCA consume it.
+          - record: opsia_sli_failure_ratio
+            expr: >-
+              sum by (namespace, resource_kind, resource_name, service, sli, symptom) (
+                rate(opsia_sli_requests_total{
+                  namespace!="",
+                  resource_kind!="",
+                  resource_name!="",
+                  service!="",
+                  sli!="",
+                  symptom!="",
+                  outcome="failure"
+                }[1m])
+              )
+              /
+              clamp_min(
+                sum by (namespace, resource_kind, resource_name, service, sli, symptom) (
+                  rate(opsia_sli_requests_total{
+                    namespace!="",
+                    resource_kind!="",
+                    resource_name!="",
+                    service!="",
+                    sli!="",
+                    symptom!=""
+                  }[1m])
+                ),
+                0.000001
+              )
           - alert: OpsiaSliFailureRatioHigh
             expr: >-
               opsia_sli_failure_ratio{
                 namespace!="",
                 resource_kind!="",
                 resource_name!="",
+                service!="",
+                sli!="",
                 symptom!=""
               } > 0.2
             for: 20s
@@ -40,6 +72,8 @@ serverFiles:
               opsia_namespace: '{{ $labels.namespace }}'
               opsia_resource_kind: '{{ $labels.resource_kind }}'
               opsia_resource_name: '{{ $labels.resource_name }}'
+              opsia_service: '{{ $labels.service }}'
+              opsia_sli: '{{ $labels.sli }}'
               opsia_symptom: '{{ $labels.symptom }}'
             annotations:
               summary: >-
@@ -48,6 +82,9 @@ serverFiles:
               description: >-
                 opsia_sli_failure_ratio={{ $value }} (threshold=0.2)
               opsia_symptom: '{{ $labels.symptom }}'
+              # 사람이 읽는 문장에서 숫자를 재파싱하지 않는 기계 판독 계약.
+              opsia_observed_value: '{{ $value }}'
+              opsia_threshold: '0.2'
 
 kube-state-metrics:
   # Kubernetes object 상태를 kube_pod_info 같은 metric으로 변환

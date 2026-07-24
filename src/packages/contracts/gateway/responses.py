@@ -721,6 +721,7 @@ class RecoveryPlanStatusResponse(StrictModel):
     selected_by: str | None = None
     selected_action: RecoveryActionCandidateItem | None = None
     candidates: list[RecoveryActionCandidateItem] = Field(default_factory=list)
+    lifecycle: JsonMap | None = None
 
 
 class RemediationBundleMeta(StrictModel):

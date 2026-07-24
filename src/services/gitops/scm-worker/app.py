@@ -27,7 +27,7 @@ from domains.scm.policy import (
 )
 from packages.config.settings import env
 from packages.contracts.event_bus.bodies import EventBody
-from packages.contracts.scm.provider import ScmProvider
+from packages.contracts.scm.provider import ScmProvider, ScmPullRequestResult
 from packages.contracts.stores import PullRequestStore
 from packages.runtime.app import App, EventContext
 from packages.runtime.outbound import deliver
@@ -64,7 +64,10 @@ SCM_PROVIDER: ScmProvider = build_scm_provider()
 PREFLIGHT_POLICY = DefaultSafePrPreflightPolicy()
 
 
-async def create_safe_pr(evt: SafePrRequestedBody, ctx: EventContext[PullRequestStore]) -> str:
+async def create_safe_pr(
+    evt: SafePrRequestedBody,
+    ctx: EventContext[PullRequestStore],
+) -> ScmPullRequestResult:
     if evt.provider != ACTIVE_SCM_PROVIDER:
         raise RuntimeError(
             f"safe_pr provider mismatch: event={evt.provider}, worker={ACTIVE_SCM_PROVIDER}"
@@ -141,12 +144,12 @@ async def on_safe_pr_ready_for_creation(
         yield preflight_failed
         return
 
-    async def create_pr() -> str:
+    async def create_pr() -> ScmPullRequestResult:
         return await asyncio.wait_for(create_safe_pr(request, ctx), create_pr_deadline_seconds())
 
-    def created_body(pr_url: str) -> SafePrCreatedBody:
+    def created_body(result: ScmPullRequestResult) -> SafePrCreatedBody:
         return SafePrCreatedBody(
-            pr_url=pr_url,
+            pr_url=result.url,
             provider=request.provider,
             mode=PR_MODE,
             workspace_id=request.workspace_id,
@@ -160,6 +163,10 @@ async def on_safe_pr_ready_for_creation(
             base_branch=created_base_branch(request),
             commit_sha=request.commit_sha,
             patch_sha256=request.patch_sha256,
+            pr_number=result.number,
+            pr_node_id=result.node_id,
+            head_ref=result.head_ref,
+            head_sha=result.head_sha,
         )
 
     async for out in deliver(

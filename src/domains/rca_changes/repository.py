@@ -411,6 +411,7 @@ class RcaChangesRepository(DatabaseConnection):
             return []
         change = WorkloadChange.__table__
         reference = WorkflowPrReference.__table__
+        diff_step = WorkflowRunStep.__table__.alias("evidence_diff_step")
         statement = (
             select(
                 change.c.event_id,
@@ -429,6 +430,7 @@ class RcaChangesRepository(DatabaseConnection):
                 change.c.resource_kind,
                 change.c.resource_name,
                 change.c.manifest_path,
+                diff_step.c.details.label("diff_details"),
             )
             .select_from(
                 change.outerjoin(
@@ -440,6 +442,15 @@ class RcaChangesRepository(DatabaseConnection):
                         reference.c.workflow_run_id == change.c.workflow_run_id,
                         reference.c.commit_sha == change.c.commit_sha,
                         reference.c.manifest_path == change.c.manifest_path,
+                    ),
+                ).outerjoin(
+                    diff_step,
+                    and_(
+                        diff_step.c.workspace_id == change.c.workspace_id,
+                        diff_step.c.workflow_run_id == change.c.workflow_run_id,
+                        diff_step.c.binding_id == change.c.binding_id,
+                        diff_step.c.name == WorkflowStepName.DIFF.value,
+                        diff_step.c.status == WorkflowStepStatus.SUCCEEDED.value,
                     ),
                 )
             )

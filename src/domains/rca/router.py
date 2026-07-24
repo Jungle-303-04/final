@@ -4,14 +4,16 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import secrets
 import uuid
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 
+from domains.gitops.events import GitWebhookReceivedBody
 from domains.identity.dependencies import (
     ClusterAgentIdentity,
     hash_agent_token,
@@ -25,7 +27,14 @@ from domains.rca.events import (
     RecoveryActionCandidate,
     RecoveryActionSelectedBody,
     RecoveryPlan,
+    RecoveryRetryRequestedBody,
     compact_cluster_evidence_payload,
+)
+from domains.rca.recovery_verification import (
+    DEFAULT_MAXIMUM_SECONDS,
+    normalized_utc,
+    standard_sli_series_identity,
+    verification_deadline,
 )
 from domains.rca.test_runtime import (
     RCA_TEST_FIXTURE_RESOURCE_KIND,
@@ -53,6 +62,7 @@ from packages.contracts.gateway.requests import (
     RcaTestRunCreateRequest,
     RecoveryActionSelectByCorrelationRequest,
     RecoveryActionSelectRequest,
+    RecoveryRetryRequest,
 )
 from packages.contracts.gateway.responses import (
     AcceptedResponse,
@@ -87,6 +97,8 @@ RECOVERY_ACTION_NOT_FOUND = "recovery action not found"
 RECOVERY_PLAN_ALREADY_RESOLVED = "recovery plan already resolved"
 RECOVERY_PLAN_CHANGED = "recovery plan changed"
 RECOVERY_SELECTION_ACCESS_DENIED = "recovery selection access denied"
+RECOVERY_RETRY_UNAVAILABLE = "recovery retry is unavailable"
+RECOVERY_RETRY_IDENTITY_INVALID = "recovery retry identity is invalid"
 HTTP_NOT_FOUND = 404
 HTTP_CONFLICT = 409
 HTTP_UNAUTHORIZED = 401
@@ -102,6 +114,11 @@ RCA_TEST_TARGET_NOT_FOUND = "RCA test target cluster is not registered"
 RCA_TEST_TARGET_ENVIRONMENT_DENIED = "RCA test runs require a test or aws-test target"
 RCA_TEST_RUN_CONFLICT = "RCA test target already has an active run"
 SAFE_PR_ROUTES = frozenset({"draft_pr", "safe_pr"})
+RECOVERY_STATUS_DEPLOY_PENDING = "deploy_pending"
+RECOVERY_STATUS_VERIFICATION_PENDING = "verification_pending"
+RECOVERY_STATUS_FAILED = "failed"
+RECOVERY_DEPLOY_FAILED_REASON = "recovery_deploy_failed"
+RECOVERY_VERIFICATION_EXPIRED_REASON = "verification_window_expired"
 
 
 class RcaRuleCandidateView(Protocol):
@@ -641,9 +658,14 @@ STANDARD_SLI_REQUIRED_LABELS = (
     "opsia_namespace",
     "opsia_resource_kind",
     "opsia_resource_name",
+    "opsia_service",
+    "opsia_sli",
     "opsia_symptom",
 )
 STANDARD_SLI_LABELS_INVALID = "standard SLI alert is missing required resource labels"
+STANDARD_SLI_MEASUREMENT_INVALID = (
+    "standard SLI alert is missing valid machine-readable measurements"
+)
 HTTP_UNAUTHORIZED = 401
 
 
@@ -689,6 +711,37 @@ def validate_alertmanager_sli_labels(payload: AlertmanagerWebhookRequest) -> Non
             continue
         if any(not str(labels.get(key) or "").strip() for key in STANDARD_SLI_REQUIRED_LABELS):
             raise HTTPException(status_code=422, detail=STANDARD_SLI_LABELS_INVALID)
+        measurements = standard_sli_measurements(alert)
+        if (
+            measurements is None
+            or (
+                alert.status.strip().lower() == "firing"
+                and measurements[0] <= measurements[1]
+            )
+        ):
+            raise HTTPException(status_code=422, detail=STANDARD_SLI_MEASUREMENT_INVALID)
+
+
+def standard_sli_measurements(
+    alert: AlertmanagerAlert,
+) -> tuple[float, float] | None:
+    """Read bounded numeric evidence only from dedicated annotations."""
+
+    labels = alert.labels if isinstance(alert.labels, dict) else {}
+    if str(labels.get("alertname") or "").strip() != STANDARD_SLI_ALERT_NAME:
+        return None
+    annotations = alert.annotations if isinstance(alert.annotations, dict) else {}
+    values: list[float] = []
+    for key in ("opsia_observed_value", "opsia_threshold"):
+        raw = annotations.get(key)
+        try:
+            value = float(raw)
+        except (TypeError, ValueError):
+            return None
+        if not math.isfinite(value) or value < 0 or value > 1:
+            return None
+        values.append(value)
+    return values[0], values[1]
 
 
 def alertmanager_evidence_key(
@@ -851,6 +904,23 @@ def build_alertmanager_alert_event(
     subject_key = hashlib.sha256(
         json.dumps(subject, ensure_ascii=True, separators=(",", ":"), sort_keys=True).encode()
     ).hexdigest()
+    measurements = standard_sli_measurements(alert)
+    observed_value = measurements[0] if measurements is not None else None
+    threshold = measurements[1] if measurements is not None else None
+    series_identity = (
+        standard_sli_series_identity(
+            {
+                "namespace": labels.get("opsia_namespace"),
+                "resource_kind": labels.get("opsia_resource_kind"),
+                "resource_name": labels.get("opsia_resource_name"),
+                "service": labels.get("opsia_service"),
+                "sli": labels.get("opsia_sli"),
+                "symptom": labels.get("opsia_symptom"),
+            }
+        )
+        if alert_name == STANDARD_SLI_ALERT_NAME
+        else None
+    )
     return {
         "event_id": alertmanager_alert_event_id(workspace_id, cluster_id, alert),
         "workspace_id": workspace_id,
@@ -863,15 +933,16 @@ def build_alertmanager_alert_event(
         "fired_at": fired_at,
         "resolved_at": resolved_at,
         "status": status,
-        "observed_value": None,
-        "threshold": None,
+        "observed_value": observed_value,
+        "threshold": threshold,
+        "series_identity": series_identity,
         "evidence": [
             {
                 "type": "alertmanager",
                 "metric": alert_name,
                 "observed_at": fired_at.isoformat(),
                 "subject": subject,
-                "value": None,
+                "value": observed_value,
                 "summary": summary,
                 "link": None,
             }
@@ -1267,12 +1338,344 @@ async def select_recovery_action_by_correlation(
     )
 
 
+def recovery_object(value: object) -> dict[str, Any]:
+    return dict(value) if isinstance(value, dict) else {}
+
+
+def recovery_text(value: object) -> str:
+    return value.strip() if isinstance(value, str) else ""
+
+
+def recovery_retry_number(container: dict[str, Any]) -> int:
+    value = container.get("retry_attempt")
+    return value + 1 if type(value) is int and value >= 0 else 1
+
+
+def recovery_workflow_matches(
+    workflow: object,
+    *,
+    workspace_id: str,
+    workflow_run_id: str,
+    binding_id: str,
+    application_id: str,
+    cluster_id: str,
+    commit_sha: str,
+    status: str,
+) -> bool:
+    row = recovery_object(workflow)
+    return bool(
+        workflow_run_id
+        and binding_id
+        and application_id
+        and cluster_id
+        and commit_sha
+        and recovery_text(row.get("workflow_run_id")) == workflow_run_id
+        and recovery_text(row.get("workspace_id")) == workspace_id
+        and recovery_text(row.get("binding_id")) == binding_id
+        and recovery_text(row.get("application_id")) == application_id
+        and recovery_text(row.get("cluster_id")) == cluster_id
+        and recovery_text(row.get("commit_sha")) == commit_sha
+        and recovery_text(row.get("status")) == status
+    )
+
+
+def deploy_retry_body(
+    *,
+    record: dict[str, Any],
+    lifecycle: dict[str, Any],
+    workflow: object,
+) -> tuple[GitWebhookReceivedBody, int] | None:
+    merge = recovery_object(lifecycle.get("merge"))
+    pr = recovery_object(lifecycle.get("pr"))
+    request = recovery_object(merge.get("deployment_request"))
+    old_workflow_run_id = recovery_text(merge.get("workflow_run_id"))
+    workspace_id = recovery_text(record.get("workspace_id"))
+    correlation_id = recovery_text(record.get("correlation_id"))
+    binding_id = recovery_text(merge.get("binding_id"))
+    application_id = recovery_text(merge.get("application_id"))
+    cluster_id = recovery_text(merge.get("cluster_id"))
+    commit_sha = recovery_text(merge.get("merge_commit_sha"))
+    if not recovery_workflow_matches(
+        workflow,
+        workspace_id=workspace_id,
+        workflow_run_id=old_workflow_run_id,
+        binding_id=binding_id,
+        application_id=application_id,
+        cluster_id=cluster_id,
+        commit_sha=commit_sha,
+        status="failed",
+    ):
+        return None
+    try:
+        original = cast(
+            GitWebhookReceivedBody,
+            GitWebhookReceivedBody.from_body(request),
+        )
+    except (TypeError, ValueError):
+        return None
+    if (
+        original.workspace_id != workspace_id
+        or original.correlation_id != correlation_id
+        or original.workflow_run_id != old_workflow_run_id
+        or original.commit_sha != commit_sha
+        or original.repository_id != recovery_text(pr.get("repository_id"))
+        or original.repo_ref != recovery_text(pr.get("repo_ref"))
+        or original.branch != recovery_text(pr.get("base_branch"))
+        or original.binding_id != binding_id
+        or original.application_id != application_id
+        or original.cluster_id != cluster_id
+        or original.manifest_path != recovery_text(pr.get("manifest_path"))
+        or not original.image.strip()
+        or type(original.replicas) is not int
+        or original.replicas <= 0
+    ):
+        return None
+    attempt = recovery_retry_number(merge)
+    raw = f"{record['plan_id']}|{commit_sha}|deploy-retry|{attempt}"
+    workflow_run_id = f"workflow-{hashlib.sha256(raw.encode()).hexdigest()[:32]}"
+    return replace(
+        original,
+        workflow_run_id=workflow_run_id,
+        force=True,
+    ), attempt
+
+
+def verification_retry_lifecycle(
+    *,
+    record: dict[str, Any],
+    lifecycle: dict[str, Any],
+    workflow: object,
+    now: datetime,
+    requested_by: str,
+    reason: str,
+) -> tuple[dict[str, Any], int] | None:
+    merge = recovery_object(lifecycle.get("merge"))
+    verification = recovery_object(lifecycle.get("verification"))
+    workflow_run_id = recovery_text(merge.get("workflow_run_id"))
+    if not recovery_workflow_matches(
+        workflow,
+        workspace_id=recovery_text(record.get("workspace_id")),
+        workflow_run_id=workflow_run_id,
+        binding_id=recovery_text(merge.get("binding_id")),
+        application_id=recovery_text(merge.get("application_id")),
+        cluster_id=recovery_text(merge.get("cluster_id")),
+        commit_sha=recovery_text(merge.get("merge_commit_sha")),
+        status="succeeded",
+    ):
+        return None
+    maximum = verification.get("maximum_seconds")
+    maximum_seconds = (
+        maximum
+        if type(maximum) is int and 0 < maximum <= DEFAULT_MAXIMUM_SECONDS
+        else DEFAULT_MAXIMUM_SECONDS
+    )
+    attempt = recovery_retry_number(verification)
+    verification.update(
+        {
+            "status": RECOVERY_STATUS_VERIFICATION_PENDING,
+            "started_at": now.isoformat(),
+            "deadline_at": verification_deadline(now, maximum_seconds).isoformat(),
+            "healthy_since": None,
+            "last_healthy_observed_at": None,
+            "distinct_evidence_count": 0,
+            "last_evidence_key": None,
+            "last_session_samples": verification.get("protected_session_baseline"),
+            "after": {},
+            "last_reason_code": "waiting_for_post_deploy_evidence",
+            "last_reason": "동일 배포 identity로 안정화 검증을 다시 시작했습니다.",
+            "retry_attempt": attempt,
+        }
+    )
+    retried = dict(lifecycle)
+    retried.pop("failure", None)
+    retried.update(
+        {
+            "phase": RECOVERY_STATUS_VERIFICATION_PENDING,
+            "verification": verification,
+            "retry": {
+                "stage": "verification",
+                "attempt": attempt,
+                "requested_by": requested_by,
+                "requested_at": now.isoformat(),
+                "reason": reason,
+                "workflow_run_id": workflow_run_id,
+            },
+        }
+    )
+    return retried, attempt
+
+
+@router.post(
+    gateway_routes.RCA_RECOVERY_RETRY_BY_CORRELATION_PATH,
+    response_model=AcceptedResponse,
+    status_code=202,
+)
+async def retry_recovery_by_correlation(
+    correlation_id: str,
+    payload: RecoveryRetryRequest,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+    events: Any = Depends(get_events),
+) -> AcceptedResponse:
+    workspace_id = current.workspace_id
+    record = await db_call(
+        db.get_recovery_plan_by_correlation,
+        correlation_id,
+        workspace_id,
+    )
+    if record is None:
+        raise HTTPException(status_code=HTTP_NOT_FOUND, detail=RECOVERY_PLAN_NOT_FOUND)
+    if recovery_text(record.get("plan_id")) != payload.expected_plan_id:
+        raise HTTPException(status_code=HTTP_CONFLICT, detail=RECOVERY_PLAN_CHANGED)
+    record_payload = recovery_object(record.get("payload"))
+    plan = RecoveryPlan.from_body(record_payload)
+    cluster_id = recovery_text(plan.target.get("cluster_id"))
+    require_cluster_access(
+        db,
+        current,
+        workspace_id,
+        cluster_id,
+        Permission.DEPLOY_RUN.value,
+        detail=RECOVERY_SELECTION_ACCESS_DENIED,
+    )
+    if recovery_text(record.get("status")) != RECOVERY_STATUS_FAILED:
+        raise HTTPException(status_code=HTTP_CONFLICT, detail=RECOVERY_RETRY_UNAVAILABLE)
+    lifecycle = recovery_object(record_payload.get("lifecycle"))
+    failure = recovery_object(lifecycle.get("failure"))
+    reason_code = recovery_text(failure.get("reason_code"))
+    merge = recovery_object(lifecycle.get("merge"))
+    old_workflow_run_id = recovery_text(merge.get("workflow_run_id"))
+    if not old_workflow_run_id:
+        raise HTTPException(status_code=HTTP_CONFLICT, detail=RECOVERY_RETRY_IDENTITY_INVALID)
+    workflow = await db_call(db.get_workflow_run, old_workflow_run_id)
+    now = normalized_utc(await db_call(db.current_database_time))
+    retry_reason = payload.reason or f"operator retried {reason_code}"
+    action_id = recovery_text(record.get("selected_action_id"))
+    if not action_id:
+        raise HTTPException(status_code=HTTP_CONFLICT, detail=RECOVERY_RETRY_IDENTITY_INVALID)
+
+    deploy_body: GitWebhookReceivedBody | None = None
+    if reason_code == RECOVERY_DEPLOY_FAILED_REASON:
+        prepared = deploy_retry_body(
+            record=record,
+            lifecycle=lifecycle,
+            workflow=workflow,
+        )
+        if prepared is None:
+            raise HTTPException(
+                status_code=HTTP_CONFLICT,
+                detail=RECOVERY_RETRY_IDENTITY_INVALID,
+            )
+        deploy_body, attempt = prepared
+        merge.update(
+            {
+                "previous_workflow_run_id": old_workflow_run_id,
+                "workflow_run_id": deploy_body.workflow_run_id,
+                "deployment_request": deploy_body.to_body(),
+                "retry_attempt": attempt,
+            }
+        )
+        verification = recovery_object(lifecycle.get("verification"))
+        verification.update(
+            {
+                "status": "waiting_for_deploy",
+                "started_at": None,
+                "deadline_at": None,
+                "healthy_since": None,
+                "last_healthy_observed_at": None,
+                "distinct_evidence_count": 0,
+                "last_evidence_key": None,
+                "after": {},
+            }
+        )
+        next_lifecycle = dict(lifecycle)
+        next_lifecycle.pop("failure", None)
+        next_lifecycle.update(
+            {
+                "phase": RECOVERY_STATUS_DEPLOY_PENDING,
+                "merge": merge,
+                "verification": verification,
+                "retry": {
+                    "stage": "deploy",
+                    "attempt": attempt,
+                    "requested_by": current.user_id,
+                    "requested_at": now.isoformat(),
+                    "reason": retry_reason,
+                    "workflow_run_id": deploy_body.workflow_run_id,
+                },
+            }
+        )
+        next_status = RECOVERY_STATUS_DEPLOY_PENDING
+        retry_stage = "deploy"
+        retry_workflow_run_id = deploy_body.workflow_run_id
+    elif reason_code == RECOVERY_VERIFICATION_EXPIRED_REASON:
+        prepared_verification = verification_retry_lifecycle(
+            record=record,
+            lifecycle=lifecycle,
+            workflow=workflow,
+            now=now,
+            requested_by=current.user_id,
+            reason=retry_reason,
+        )
+        if prepared_verification is None:
+            raise HTTPException(
+                status_code=HTTP_CONFLICT,
+                detail=RECOVERY_RETRY_IDENTITY_INVALID,
+            )
+        next_lifecycle, attempt = prepared_verification
+        next_status = RECOVERY_STATUS_VERIFICATION_PENDING
+        retry_stage = "verification"
+        retry_workflow_run_id = old_workflow_run_id
+    else:
+        raise HTTPException(status_code=HTTP_CONFLICT, detail=RECOVERY_RETRY_UNAVAILABLE)
+
+    retry_body = RecoveryRetryRequestedBody(
+        plan_id=payload.expected_plan_id,
+        incident_id=recovery_text(record.get("incident_id")),
+        action_id=action_id,
+        retry_stage=retry_stage,
+        attempt=attempt,
+        requested_by=current.user_id,
+        reason=retry_reason,
+        workflow_run_id=retry_workflow_run_id,
+        workspace_id=workspace_id,
+    )
+    with unit_of_work_or_null(db):
+        saved = db.update_recovery_plan_lifecycle_if_status(
+            payload.expected_plan_id,
+            workspace_id,
+            expected_statuses=(RECOVERY_STATUS_FAILED,),
+            status=next_status,
+            lifecycle=next_lifecycle,
+        )
+        if saved is None:
+            raise HTTPException(status_code=HTTP_CONFLICT, detail=RECOVERY_RETRY_UNAVAILABLE)
+        accepted = await events.accept_body(
+            retry_body,
+            correlation_id=correlation_id,
+            actor=Actor(current.user_id, tuple(current.roles)),
+        )
+        if deploy_body is not None:
+            await events.accept_body(
+                deploy_body,
+                correlation_id=correlation_id,
+                causation_id=accepted.event.event_id,
+            )
+    return AcceptedResponse(
+        accepted=True,
+        event_id=accepted.event.event_id,
+        correlation_id=accepted.event.correlation_id,
+    )
+
+
 @router.get(
     gateway_routes.RCA_RECOVERY_PLAN_BY_CORRELATION_PATH,
     response_model=RecoveryPlanStatusResponse,
+    response_model_exclude_none=True,
 )
 async def recovery_plan_by_correlation(
     correlation_id: str,
+    include_lifecycle: bool = Query(False),
     current: Any = Depends(require_session),
     db: Any = Depends(get_db),
 ) -> RecoveryPlanStatusResponse:
@@ -1291,7 +1694,11 @@ async def recovery_plan_by_correlation(
             Permission.RCA_READ.value,
             detail=RECOVERY_SELECTION_ACCESS_DENIED,
         )
-    return recovery_plan_status_response(record, plan)
+    return recovery_plan_status_response(
+        record,
+        plan,
+        include_lifecycle=include_lifecycle,
+    )
 
 
 def recovery_action_candidate_item(
@@ -1321,6 +1728,8 @@ def recovery_action_candidate_item(
 def recovery_plan_status_response(
     record: dict[str, Any],
     plan: RecoveryPlan,
+    *,
+    include_lifecycle: bool = False,
 ) -> RecoveryPlanStatusResponse:
     candidates = [recovery_action_candidate_item(candidate) for candidate in plan.candidates]
     selected_action_id = record.get("selected_action_id")
@@ -1343,6 +1752,13 @@ def recovery_plan_status_response(
         selected_by=str(record["selected_by"]) if record.get("selected_by") else None,
         selected_action=selected_action,
         candidates=candidates,
+        lifecycle=(
+            dict(record.get("payload", {}).get("lifecycle", {}))
+            if include_lifecycle
+            and isinstance(record.get("payload"), dict)
+            and isinstance(record["payload"].get("lifecycle"), dict)
+            else None
+        ),
     )
 
 
