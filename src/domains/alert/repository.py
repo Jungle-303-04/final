@@ -493,6 +493,30 @@ class AlertRuleRepository(DatabaseConnection):
             )
         return serialize_alert_event(dict(row))
 
+    def resolve_incident_alert_events(
+        self,
+        workspace_id: str,
+        incident_id: str,
+    ) -> int:
+        """Resolve every durable notification linked to one terminal incident."""
+        table = AlertEvent.__table__
+        statement = (
+            table.update()
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.incident_id == incident_id,
+                table.c.status.in_(("firing", "acked")),
+            )
+            .values(
+                status="resolved",
+                resolved_at=func.now(),
+                updated_at=func.now(),
+            )
+        )
+        with self.connection() as conn:
+            result = conn.execute(statement)
+        return int(result.rowcount or 0)
+
     def promote_alert_event(
         self,
         workspace_id: str,

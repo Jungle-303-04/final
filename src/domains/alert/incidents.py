@@ -8,7 +8,7 @@ import json
 from datetime import UTC, datetime
 from typing import Any
 
-from domains.rca.events import IncidentDetectedBody, IncidentRecord
+from domains.rca.events import IncidentDetectedBody, IncidentRecord, IncidentResolvedBody
 from packages.contracts.event_bus.interfaces import JsonObject
 
 ALERT_EVENT_SEVERITIES = {
@@ -37,6 +37,20 @@ async def persist_incident_alert_event(
     if not isinstance(result, dict):
         raise TypeError("incident alert event repository returned an invalid result")
     return result
+
+
+async def resolve_incident_alert_event(
+    db: object,
+    evt: IncidentResolvedBody,
+) -> int:
+    """Close the in-app alert when its incident lifecycle is terminal."""
+    resolver = getattr(db, "resolve_incident_alert_events", None)
+    if not callable(resolver):
+        raise RuntimeError("incident alert event repository is unavailable")
+    result = resolver(evt.workspace_id, evt.incident_id)
+    if inspect.isawaitable(result):
+        result = await result
+    return int(result)
 
 
 def incident_alert_event_id(workspace_id: str, incident_id: str) -> str:

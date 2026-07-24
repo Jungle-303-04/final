@@ -11,10 +11,11 @@ from domains.alert.incidents import (
     build_incident_alert_event,
     incident_alert_event_id,
     persist_incident_alert_event,
+    resolve_incident_alert_event,
 )
 from domains.alert.repository import AlertRuleRepository
 from domains.alert.service import alert_event_response
-from domains.rca.events import IncidentDetectedBody, IncidentRecord
+from domains.rca.events import IncidentDetectedBody, IncidentRecord, IncidentResolvedBody
 
 INCIDENT_SIGNALS = (
     "ImagePullBackOff",
@@ -117,6 +118,20 @@ class AsyncIncidentAlertRepository:
         self.payloads.append(payload)
         return payload
 
+    async def resolve_incident_alert_events(
+        self,
+        workspace_id: str,
+        incident_id: str,
+    ) -> int:
+        self.payloads.append(
+            {
+                "workspace_id": workspace_id,
+                "incident_id": incident_id,
+                "status": "resolved",
+            }
+        )
+        return 1
+
 
 def test_confirmed_incident_is_persisted_once_through_async_repository() -> None:
     repository = AsyncIncidentAlertRepository()
@@ -140,6 +155,31 @@ def test_non_incident_does_not_touch_repository() -> None:
 
     assert persisted is None
     assert repository.payloads == []
+
+
+def test_incident_resolution_closes_the_linked_alert() -> None:
+    repository = AsyncIncidentAlertRepository()
+    resolved = IncidentResolvedBody(
+        incident_id="incident-1",
+        cluster_id="game-server",
+        reason="recovery verified",
+        evidence_ref="evidence-1",
+        recovery_plan_id="plan-1",
+        before={},
+        after={},
+        workspace_id="workspace-1",
+    )
+
+    count = asyncio.run(resolve_incident_alert_event(repository, resolved))
+
+    assert count == 1
+    assert repository.payloads == [
+        {
+            "workspace_id": "workspace-1",
+            "incident_id": "incident-1",
+            "status": "resolved",
+        }
+    ]
 
 
 class FakeMappingsResult:

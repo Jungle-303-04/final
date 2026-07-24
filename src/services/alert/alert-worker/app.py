@@ -13,13 +13,13 @@ import httpx
 from domains.alert.delivery import post_alert_webhook
 from domains.alert.evaluation import AlertEvaluationEngine
 from domains.alert.events import AlertDispatchedBody, AlertRejectedBody, AlertRequestedBody
-from domains.alert.incidents import persist_incident_alert_event
+from domains.alert.incidents import persist_incident_alert_event, resolve_incident_alert_event
 from domains.alert.measurements import (
     DEFAULT_MEASUREMENT_MAX_AGE_SECONDS,
     AlertRuleMeasurementLoader,
 )
 from domains.alert.repository import severity_matches
-from domains.rca.events import IncidentDetectedBody
+from domains.rca.events import IncidentDetectedBody, IncidentResolvedBody
 from packages.config.environments import normalize_environment
 from packages.config.logs import CONTEXT_KEY, get_logger
 from packages.config.settings import env
@@ -175,6 +175,15 @@ async def on_incident_detected(
 ) -> None:
     """Store one in-app notification after RCA confirms an actual incident."""
     await persist_incident_alert_event(ctx.db, evt)
+
+
+@app.on(IncidentResolvedBody)
+async def on_incident_resolved(
+    evt: IncidentResolvedBody,
+    ctx: EventContext[object],
+) -> None:
+    """Close the matching app notification only after recovery is verified."""
+    await resolve_incident_alert_event(ctx.db, evt)
 
 
 async def dispatch_to_channel(

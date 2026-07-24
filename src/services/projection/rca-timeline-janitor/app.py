@@ -58,7 +58,14 @@ async def resolve_recovered_ephemeral_incidents(db: Any) -> int:
         grace_minutes=int(env(EPHEMERAL_RESOLVE_MINUTES_ENV, DEFAULT_EPHEMERAL_RESOLVE_MINUTES)),
         limit=int(env(EPHEMERAL_RESOLVE_LIMIT_ENV, DEFAULT_EPHEMERAL_RESOLVE_LIMIT)),
     )
-    return len(resolved or [])
+    rows = resolved or []
+    for row in rows:
+        workspace_id = str(row.get("workspace_id") or "").strip()
+        incident_id = str(row.get("incident_id") or "").strip()
+        if not workspace_id or not incident_id:
+            continue
+        await db.resolve_incident_alert_events(workspace_id, incident_id)
+    return len(rows)
 
 
 async def expire_recovery_verifications(
