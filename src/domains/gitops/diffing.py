@@ -173,16 +173,49 @@ def build_adoption_required_changes(
 
 def classify_field_change(old_desired: Any, live: Any, new_desired: Any) -> str:
     if old_desired == MISSING:
-        return "already_converged" if live == new_desired else "adoption_required"
-    if old_desired == live == new_desired:
+        return (
+            "already_converged"
+            if _declared_value_matches_live(new_desired, live)
+            else "adoption_required"
+        )
+    old_matches_live = _declared_value_matches_live(old_desired, live)
+    new_matches_live = _declared_value_matches_live(new_desired, live)
+    desired_unchanged = old_desired == new_desired
+    if old_matches_live and new_matches_live and desired_unchanged:
         return "no_change"
-    if live == new_desired:
+    if new_matches_live:
         return "already_converged"
-    if old_desired == live:
+    if old_matches_live:
         return "intended_change"
-    if old_desired == new_desired:
+    if desired_unchanged:
         return "drift"
     return "conflict_or_manual_change"
+
+
+def _declared_value_matches_live(declared: Any, live: Any) -> bool:
+    """Return whether the API-observed value satisfies the declared value.
+
+    Kubernetes adds defaults to nested objects after admission.  Those extra
+    mapping keys are not Git drift because the repository never declared them.
+    Declared list membership remains exact, however, so an extra port,
+    container, or environment entry is still surfaced for review.
+    """
+
+    if isinstance(declared, Mapping):
+        if not isinstance(live, Mapping):
+            return False
+        return all(
+            key in live and _declared_value_matches_live(value, live[key])
+            for key, value in declared.items()
+        )
+    if isinstance(declared, list):
+        if not isinstance(live, list) or len(declared) != len(live):
+            return False
+        return all(
+            _declared_value_matches_live(declared_item, live_item)
+            for declared_item, live_item in zip(declared, live, strict=True)
+        )
+    return declared == live
 
 
 def summarize_status(changes: list[JsonObject]) -> str:

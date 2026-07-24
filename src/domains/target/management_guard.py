@@ -11,6 +11,7 @@ from packages.contracts.gateway.requests import (
     DesiredStatePolicy,
     SchedulingPolicy,
 )
+from packages.contracts.target import KUBERNETES_QUERY_SCOPE_CLUSTER_EVENTS
 
 TARGET_CLUSTER_ROLE = "target"
 MANAGEMENT_CLUSTER_ROLE = "management"
@@ -56,15 +57,43 @@ def is_management_registration(registration: dict[str, Any] | None) -> bool:
 
 def freeze_management_policy(policy: AgentPolicy) -> AgentPolicy:
     """management 정책에서 제어/재조정/스케줄링 자원은 항상 비운다."""
+    providers = dict(policy.evidence.providers)
+    kubernetes = providers.get("kubernetes")
+    if kubernetes is not None:
+        providers["kubernetes"] = kubernetes.model_copy(
+            update={
+                "queries": [
+                    query
+                    for query in kubernetes.queries
+                    if query.get("collection_scope")
+                    != KUBERNETES_QUERY_SCOPE_CLUSTER_EVENTS
+                ]
+            }
+        )
     return policy.model_copy(
         update={
             "cluster_role": MANAGEMENT_CLUSTER_ROLE,
-            "evidence": policy.evidence.model_copy(update={"profile": "management"}),
+            "evidence": policy.evidence.model_copy(
+                update={"profile": "management", "providers": providers}
+            ),
             "bootstrap": BootstrapPolicy(mode=MANAGEMENT_BOOTSTRAP_MODE, resources=[]),
             "desired_state": DesiredStatePolicy(resources=[]),
             "scheduling": SchedulingPolicy(),
         },
     )
+
+
+def refresh_management_policy(policy: AgentPolicy) -> AgentPolicy:
+    """Return a new generation only when a stored management policy violates invariants."""
+
+    frozen = freeze_management_policy(policy)
+    current = policy.model_dump(mode="json")
+    normalized = frozen.model_dump(mode="json")
+    current.pop("generation", None)
+    normalized.pop("generation", None)
+    if current == normalized:
+        return policy
+    return frozen.model_copy(update={"generation": policy.generation + 1})
 
 
 def desired_resources(policy: AgentPolicy) -> list[DesiredResource]:

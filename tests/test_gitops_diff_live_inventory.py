@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import pytest
 from conftest import load_service
 
+from domains.gitops.diffing import classify_field_change
 from domains.gitops.events import (
     Diff,
     ManifestRenderedBody,
@@ -13,6 +14,33 @@ from domains.gitops.events import (
     RenderedMetadata,
     RenderedSpec,
 )
+
+
+def test_api_defaulted_nested_fields_are_semantically_unchanged() -> None:
+    desired_ports = [{"name": "http", "port": 8081, "targetPort": "http"}]
+    live_ports = [
+        {
+            "name": "http",
+            "port": 8081,
+            "protocol": "TCP",
+            "targetPort": "http",
+        }
+    ]
+
+    assert (
+        classify_field_change(desired_ports, live_ports, desired_ports)
+        == "no_change"
+    )
+
+
+def test_declared_list_members_still_detect_real_drift() -> None:
+    desired_ports = [{"name": "http", "port": 8081, "targetPort": "http"}]
+    live_ports = [
+        {"name": "http", "port": 8081, "targetPort": "http"},
+        {"name": "metrics", "port": 9090, "targetPort": "metrics"},
+    ]
+
+    assert classify_field_change(desired_ports, live_ports, desired_ports) == "drift"
 
 
 def rendered_deployment(*, desired_replicas: int) -> RenderedManifest:

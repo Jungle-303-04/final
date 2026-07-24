@@ -613,8 +613,8 @@ def replica_field_change(value: object) -> tuple[int, int] | None:
             continue
         if str(change.get("field_path") or "") != "spec.replicas":
             continue
-        before = change.get("old_desired", change.get("before"))
-        after = change.get("new_desired", change.get("after"))
+        before = change.get("before", change.get("live", change.get("old_desired")))
+        after = change.get("after", change.get("new_desired"))
         if isinstance(before, bool) or isinstance(after, bool):
             continue
         try:

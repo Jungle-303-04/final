@@ -349,6 +349,11 @@ def evidence_provider_queries(
     if evidence_profile == MANAGEMENT_EVIDENCE_PROFILE:
         if provider_key != "kubernetes":
             return []
+        cluster_queries = [
+            query
+            for query in _cluster_kubernetes_queries(cluster_id, evidence_profile)
+            if query.get("collection_scope") != KUBERNETES_QUERY_SCOPE_CLUSTER_EVENTS
+        ]
         return [
             _namespace_query(
                 source="kubernetes",
@@ -359,7 +364,7 @@ def evidence_provider_queries(
                 cluster_id=cluster_id,
                 evidence_profile=evidence_profile,
             ),
-            *_cluster_kubernetes_queries(cluster_id, evidence_profile),
+            *cluster_queries,
         ]
 
     if provider_key == "kubernetes":

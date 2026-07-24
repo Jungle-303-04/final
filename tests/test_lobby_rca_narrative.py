@@ -380,6 +380,27 @@ def test_alert_selects_nearest_identity_window_without_inspecting_outcome() -> N
     )
 
 
+def test_replica_change_uses_applied_before_after_when_snapshot_is_stale() -> None:
+    worker = load_service("ai/evidence-worker")
+
+    assert worker.replica_field_change(
+        {
+            "basis": {"old_desired_source": "last_approved_snapshot"},
+            "changes": [
+                {
+                    "field_path": "spec.replicas",
+                    "classification": "drift",
+                    "old_desired": 1,
+                    "live": 2,
+                    "new_desired": 1,
+                    "before": 2,
+                    "after": 1,
+                }
+            ],
+        }
+    ) == (2, 1)
+
+
 def test_alert_fails_closed_when_identity_windows_are_equally_near() -> None:
     worker = load_service("ai/evidence-worker")
     before = aligned_payload()

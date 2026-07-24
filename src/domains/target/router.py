@@ -70,6 +70,7 @@ from domains.target.management_guard import (
     is_management_role,
     management_policy_update_is_forbidden,
     management_readonly_detail,
+    refresh_management_policy,
 )
 from domains.target.policy_upgrade import target_desired_components
 from domains.target.reconciler import desired_state_version
@@ -2280,10 +2281,33 @@ async def agent_policy(
 ) -> AgentPolicyResponse:
     if cluster_id != identity.cluster_id:
         raise HTTPException(status_code=403, detail="cluster_id does not match agent identity")
-    policy = db.get_cluster_policy(identity.workspace_id, identity.cluster_id)
-    if policy is None or int(policy.get("generation", 0)) <= generation:
+    stored = db.get_cluster_policy(identity.workspace_id, identity.cluster_id)
+    if stored is None:
         return AgentPolicyResponse(policy=None)
-    return AgentPolicyResponse(policy=AgentPolicy.model_validate(policy))
+    policy = AgentPolicy.model_validate(stored)
+    registration_getter = getattr(db, "get_cluster_registration", None)
+    registration = (
+        registration_getter(identity.workspace_id, identity.cluster_id)
+        if callable(registration_getter)
+        else None
+    )
+    if is_management_registration(registration) or is_management_role(policy.cluster_role):
+        refreshed = refresh_management_policy(policy)
+        if refreshed.generation > policy.generation:
+            try:
+                stored = db.upsert_cluster_policy(
+                    identity.workspace_id,
+                    identity.cluster_id,
+                    refreshed.model_dump(mode="json"),
+                )
+            except ValueError:
+                stored = db.get_cluster_policy(identity.workspace_id, identity.cluster_id)
+                if stored is None:
+                    return AgentPolicyResponse(policy=None)
+            policy = AgentPolicy.model_validate(stored)
+    if policy.generation <= generation:
+        return AgentPolicyResponse(policy=None)
+    return AgentPolicyResponse(policy=policy)
 
 
 @agent_router.post(gateway_routes.AGENT_POLICY_STATUS_PATH)

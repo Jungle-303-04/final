@@ -13,6 +13,7 @@ from domains.target.evidence_policy import (
     default_agent_policy,
     evidence_provider_queries,
 )
+from domains.target.management_guard import freeze_management_policy, refresh_management_policy
 
 
 def _kubernetes_namespaces(queries: list[dict[str, object]]) -> list[str]:
@@ -47,6 +48,60 @@ def test_standard_profile_collects_control_namespaces() -> None:
     names = [str(query["name"]) for query in queries]
     # 이름 슬러그: 하이픈 → 언더스코어(정책 이름 규칙 유지).
     assert "color_turf_namespace_snapshot" in names
+
+
+def test_management_profile_does_not_promote_control_plane_events() -> None:
+    queries = evidence_provider_queries(
+        "kubernetes",
+        cluster_id="management-server",
+        evidence_profile="management",
+    )
+    names = [str(query["name"]) for query in queries]
+
+    assert "management_namespace_snapshot" in names
+    assert "cluster_api_discovery" in names
+    assert "cluster_access_snapshot" in names
+    assert "cluster_wide_event_capture" not in names
+    assert all(query.get("collection_scope") != "cluster_events" for query in queries)
+
+
+def test_management_policy_freeze_removes_legacy_event_capture() -> None:
+    policy = default_agent_policy(
+        cluster_id="management-server",
+        cluster_role="management",
+    )
+    payload = policy.model_dump()
+    payload["evidence"]["providers"]["kubernetes"]["queries"].append(
+        {
+            "source": "kubernetes",
+            "name": "legacy_event_capture",
+            "description": "legacy management event capture",
+            "query": "*",
+            "collection_scope": "cluster_events",
+            "provenance": {
+                "cluster_id": "management-server",
+                "backend_scope": "cluster_local",
+                "query_scope": "cluster",
+                "evidence_profile": "management",
+                "namespaces": [],
+                "required_matchers": [],
+            },
+        }
+    )
+    policy = type(policy).model_validate(payload)
+    assert any(
+        query.get("collection_scope") == "cluster_events"
+        for query in policy.evidence.providers["kubernetes"].queries
+    )
+
+    frozen = freeze_management_policy(policy)
+
+    assert all(
+        query.get("collection_scope") != "cluster_events"
+        for query in frozen.evidence.providers["kubernetes"].queries
+    )
+    assert refresh_management_policy(policy).generation == policy.generation + 1
+    assert refresh_management_policy(frozen).generation == frozen.generation
 
 
 def test_metrics_collect_raw_exact_active_session_continuity_series() -> None:
