@@ -12,6 +12,7 @@ from domains.target.evidence_policy import (
     control_namespace_tuple,
     default_agent_policy,
     evidence_provider_queries,
+    preserve_server_owned_evidence_queries,
 )
 from domains.target.management_guard import freeze_management_policy, refresh_management_policy
 
@@ -242,3 +243,48 @@ def test_empty_control_namespaces_keeps_existing_query_set() -> None:
         control_namespaces=(),
     )
     assert [q["name"] for q in baseline] == [q["name"] for q in with_empty]
+
+
+def test_policy_update_cannot_erase_server_owned_collection_queries() -> None:
+    """A partial policy PUT must not disconnect a healthy target from inventory."""
+
+    policy = default_agent_policy(
+        cluster_id="battlegrounds-8352",
+        evidence_profile="demo",
+        control_namespaces=("sandbox",),
+    )
+    payload = policy.model_dump()
+    payload["evidence"]["providers"]["kubernetes"]["queries"] = []
+    payload["evidence"]["providers"]["kubernetes"]["enabled"] = False
+    payload["evidence"]["providers"]["logs"]["queries"].append(
+        {
+            "source": "loki",
+            "name": "operator_custom_logs",
+            "description": "Operator-owned log query.",
+            "query": '{k8s_namespace_name="custom"}',
+        }
+    )
+
+    repaired = preserve_server_owned_evidence_queries(
+        type(policy).model_validate(payload),
+        cluster_id="battlegrounds-8352",
+        evidence_profile="demo",
+        control_namespaces=("sandbox",),
+    )
+
+    kubernetes = repaired.evidence.providers["kubernetes"]
+    names = {str(query["name"]) for query in kubernetes.queries}
+    assert {
+        "target_namespace_snapshot",
+        "sandbox_namespace_snapshot",
+        "cluster_api_discovery",
+        "cluster_access_snapshot",
+        "cluster_wide_event_capture",
+    }.issubset(names)
+    # Disabling a provider remains an operator choice; its canonical contract is
+    # retained so a later re-enable cannot resume with an empty collection scope.
+    assert kubernetes.enabled is False
+    assert any(
+        query.get("name") == "operator_custom_logs"
+        for query in repaired.evidence.providers["logs"].queries
+    )
