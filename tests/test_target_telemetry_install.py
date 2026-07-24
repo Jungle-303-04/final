@@ -38,6 +38,10 @@ def test_target_registration_issues_receipt_then_installs_telemetry_before_agent
     assert "/integrations/prometheus" in register
     assert "clusterrole/cluster-agent-uninstall" in register
     assert "OTEL_TRACES_ENDPOINT" in register
+    assert 'TARGET_CLUSTER_ID="${TARGET_CLUSTER_ID}"' in register
+    assert 'WORKSPACE_ID="${WORKSPACE_ID}"' in register
+    assert 'MANAGEMENT_API_BASE_URL="${API_BASE_URL}"' in register
+    assert 'ALERTMANAGER_AGENT_TOKEN="${registration_agent_token}"' in register
 
 
 def test_aws_target_registration_keeps_telemetry_required_by_default() -> None:
@@ -83,6 +87,21 @@ def test_telemetry_installer_pins_and_verifies_every_provider() -> None:
     for source in (installer, powershell):
         assert "mem-ballast-size-mbs=0" in source
         assert "max_concurrent_queries: 4" in source
+        assert "OpsiaSliFailureRatioHigh" in source
+        assert "kyro-alertmanager-config" in source
+        assert "send_resolved" in source
+        assert "Bearer" in source
+        assert "api/v2/status" in source
+        assert "rollout restart" in source
+
+    assert "umask 077" in installer
+    assert 'chmod 600 "${config_file}"' in installer
+    assert "trap cleanup EXIT" in installer
+    assert 'create secret generic "${ALERTMANAGER_CONFIG_SECRET}"' in installer
+    assert 'if [[ "${configured_count}" -eq 0 ]]' in installer
+    assert 'Protect-TemporaryPath $configFile "600"' in powershell
+    assert "Remove-Item -LiteralPath $assetDirectory" in powershell
+    assert "if ($configured.Count -eq 0)" in powershell
 
 
 def test_tempo_values_bound_ballast_blocks_queries_and_retention() -> None:
@@ -101,6 +120,31 @@ def test_tempo_values_bound_ballast_blocks_queries_and_retention() -> None:
     assert tempo["queryFrontend"]["search"]["concurrent_jobs"] == 32
 
 
+def test_prometheus_values_define_generic_application_sli_alert() -> None:
+    values = yaml.safe_load(
+        (ROOT / "deploy" / "target" / "prometheus.yaml").read_text(encoding="utf-8")
+    )
+    server = values["server"]
+    assert server["global"]["scrape_interval"] == "15s"
+    assert server["global"]["evaluation_interval"] == "15s"
+
+    rule = values["serverFiles"]["alerting_rules.yml"]["groups"][0]["rules"][0]
+    assert rule["alert"] == "OpsiaSliFailureRatioHigh"
+    assert "opsia_sli_failure_ratio{" in rule["expr"]
+    for required_label in ("namespace", "resource_kind", "resource_name", "symptom"):
+        assert f'{required_label}!=""' in rule["expr"]
+    assert rule["expr"].strip().endswith("> 0.2")
+    assert rule["for"] == "20s"
+    assert rule["labels"]["opsia_symptom"] == "{{ $labels.symptom }}"
+    assert rule["labels"]["opsia_resource_kind"] == "{{ $labels.resource_kind }}"
+    assert rule["labels"]["opsia_resource_name"] == "{{ $labels.resource_name }}"
+    assert rule["labels"]["opsia_namespace"] == "{{ $labels.namespace }}"
+
+    rendered = (ROOT / "deploy" / "target" / "prometheus.yaml").read_text(encoding="utf-8")
+    assert "DemoGame" not in rendered
+    assert "find_game" not in rendered
+
+
 def test_ui_connect_command_installs_telemetry_before_agent_manifest() -> None:
     payload = TargetRegisterRequest(
         cluster_id="cluster-1",
@@ -113,6 +157,10 @@ def test_ui_connect_command_installs_telemetry_before_agent_manifest() -> None:
     manifest = command.index("/install/agent-token | kubectl apply")
     assert telemetry < manifest
     assert "TELEMETRY_ASSET_BASE_URL=" in command
+    assert "TARGET_CLUSTER_ID=cluster-1" in command
+    assert "WORKSPACE_ID=default" in command
+    assert "MANAGEMENT_API_BASE_URL=https://ops.example.test/api" in command
+    assert "ALERTMANAGER_AGENT_TOKEN=agent-token" in command
     assert "cluster-agent-uninstall" in command
     assert "kubectl config current-context" in command
 
@@ -129,7 +177,27 @@ def test_ui_powershell_connect_command_installs_telemetry_before_agent_manifest(
     manifest = command.index("/install/agent-token'")
     assert telemetry < manifest
     assert "-AssetBaseUrl" in command
+    assert "-ClusterId 'cluster-1'" in command
+    assert "-WorkspaceId 'default'" in command
+    assert "-ManagementApiBaseUrl 'https://ops.example.test/api'" in command
+    assert "-AgentToken $kyroAgentToken" in command
+    assert "Remove-Variable kyroAgentToken" in command
     assert "cluster-agent-uninstall" in command
+
+
+def test_connect_command_normalizes_management_api_base_for_telemetry() -> None:
+    payload = TargetRegisterRequest(
+        cluster_id="cluster-1",
+        workspace_id="workspace-1",
+        management_base_url="https://ops.example.test/",
+    )
+
+    shell = install_command_for(payload, "agent-token")
+    powershell = powershell_install_command_for(payload, "agent-token")
+
+    for command in (shell, powershell):
+        assert "https://ops.example.test/api" in command
+        assert "workspace-1" in command
 
 
 def test_management_agent_install_does_not_install_target_telemetry() -> None:

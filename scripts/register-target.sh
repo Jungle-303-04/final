@@ -190,8 +190,16 @@ registration_response="$(curl -fsS -X POST "${API_BASE_URL}/targets" \
   -d "${registration_body}")"
 
 if is_true "${INSTALL_TELEMETRY}"; then
+  registration_agent_token="$(
+    printf "%s" "${registration_response}" \
+      | python3 -c 'import json, sys; print(json.load(sys.stdin)["agent_token"])'
+  )"
   echo "==> installing required target telemetry before cluster-agent manifest"
   TARGET_CONTEXT="${TARGET_CONTEXT}" \
+  TARGET_CLUSTER_ID="${TARGET_CLUSTER_ID}" \
+  WORKSPACE_ID="${WORKSPACE_ID}" \
+  MANAGEMENT_API_BASE_URL="${API_BASE_URL}" \
+  ALERTMANAGER_AGENT_TOKEN="${registration_agent_token}" \
   bash "${SCRIPT_DIR}/install-telemetry.sh"
 else
   echo "==> skipping target telemetry installation (INSTALL_TELEMETRY=${INSTALL_TELEMETRY})"

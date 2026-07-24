@@ -75,3 +75,33 @@ def test_alertmanager_resolved_updates_same_event_identity() -> None:
     ) == alertmanager_alert_event_id("workspace-1", "game-server", resolved)
     assert event["status"] == "resolved"
     assert event["resolved_at"] == datetime(2026, 7, 23, 5, 2, tzinfo=UTC)
+
+
+def test_standard_sli_alert_uses_opsia_workload_identity() -> None:
+    alert = AlertmanagerAlert(
+        status="firing",
+        labels={
+            "alertname": "OpsiaSliFailureRatioHigh",
+            "severity": "warning",
+            "opsia_namespace": "sandbox",
+            "opsia_resource_kind": "Deployment",
+            "opsia_resource_name": "api-server",
+            "opsia_symptom": "admission_failure",
+        },
+        startsAt="2026-07-24T01:00:00Z",
+        fingerprint="standard-sli",
+    )
+
+    event = build_alertmanager_alert_event(
+        "workspace-1",
+        "game-server",
+        alert,
+        incident_id="incident-1",
+    )
+
+    assert event["subject"] == {
+        "cluster": "game-server",
+        "namespace": "sandbox",
+        "kind": "Deployment",
+        "name": "api-server",
+    }

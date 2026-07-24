@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request
 
 from domains.identity.dependencies import (
     ClusterAgentIdentity,
+    hash_agent_token,
     require_cluster_access,
     require_cluster_agent,
     require_session,
@@ -633,21 +634,61 @@ async def agent_evidence(
 # 외부 모니터링 웹훅 — Alertmanager 가 firing 알림을 보내면 인시던트 파이프라인을 연다.
 ALERTMANAGER_WEBHOOK_TOKEN_ENV = "ALERTMANAGER_WEBHOOK_TOKEN"
 ALERTMANAGER_SOURCE_ID = "alertmanager-webhook"
-WEBHOOK_NOT_CONFIGURED = "alertmanager webhook is not configured"
 WEBHOOK_TOKEN_INVALID = "invalid webhook token"
 CLUSTER_NOT_REGISTERED = "cluster is not registered"
+STANDARD_SLI_ALERT_NAME = "OpsiaSliFailureRatioHigh"
+STANDARD_SLI_REQUIRED_LABELS = (
+    "opsia_namespace",
+    "opsia_resource_kind",
+    "opsia_resource_name",
+    "opsia_symptom",
+)
+STANDARD_SLI_LABELS_INVALID = "standard SLI alert is missing required resource labels"
 HTTP_UNAUTHORIZED = 401
-HTTP_SERVICE_UNAVAILABLE = 503
 
 
-def require_alertmanager_token(request: Request) -> None:
-    """Bearer 토큰 대조 — 토큰 미설정이면 입구 자체를 잠근다(fail-closed)."""
-    configured = env(ALERTMANAGER_WEBHOOK_TOKEN_ENV, "")
-    if not configured:
-        raise HTTPException(status_code=HTTP_SERVICE_UNAVAILABLE, detail=WEBHOOK_NOT_CONFIGURED)
-    supplied = request.headers.get("authorization", "").removeprefix("Bearer ").strip()
-    if not supplied or not secrets.compare_digest(supplied, configured):
+async def require_alertmanager_token(
+    request: Request,
+    db: Any,
+    *,
+    workspace_id: str,
+    cluster_id: str,
+) -> None:
+    """Alertmanager Bearer 인증 — 전역 secret 또는 정확히 일치하는 cluster agent.
+
+    전역 webhook secret은 기존 설치와의 호환 경로다. 클러스터 설치기가 쓰는
+    per-cluster agent token은 저장된 해시로만 인증하고, 인증 결과의
+    workspace/cluster가 query scope와 정확히 같을 때만 허용한다.
+    """
+    configured = env(ALERTMANAGER_WEBHOOK_TOKEN_ENV, "").strip()
+    scheme, separator, raw_token = request.headers.get("authorization", "").partition(" ")
+    supplied = raw_token.strip() if separator and scheme.casefold() == "bearer" else ""
+    if not supplied:
         raise HTTPException(status_code=HTTP_UNAUTHORIZED, detail=WEBHOOK_TOKEN_INVALID)
+    if configured and secrets.compare_digest(supplied, configured):
+        return
+
+    authenticate = getattr(db, "authenticate_cluster_agent", None)
+    if not callable(authenticate):
+        raise HTTPException(status_code=HTTP_UNAUTHORIZED, detail=WEBHOOK_TOKEN_INVALID)
+    identity = await db_call(authenticate, hash_agent_token(supplied))
+    if (
+        not isinstance(identity, dict)
+        or str(identity.get("workspace_id") or "") != workspace_id
+        or str(identity.get("cluster_id") or "") != cluster_id
+    ):
+        # 토큰이 다른 tenant/cluster에 속하는지도 외부에 노출하지 않는다.
+        raise HTTPException(status_code=HTTP_UNAUTHORIZED, detail=WEBHOOK_TOKEN_INVALID)
+
+
+def validate_alertmanager_sli_labels(payload: AlertmanagerWebhookRequest) -> None:
+    """표준 SLI 알림은 RCA 대상 신원을 빈 문자열 없이 제공해야 한다."""
+    for alert in payload.alerts:
+        labels = alert.labels if isinstance(alert.labels, dict) else {}
+        if str(labels.get("alertname") or "").strip() != STANDARD_SLI_ALERT_NAME:
+            continue
+        if any(not str(labels.get(key) or "").strip() for key in STANDARD_SLI_REQUIRED_LABELS):
+            raise HTTPException(status_code=422, detail=STANDARD_SLI_LABELS_INVALID)
 
 
 def alertmanager_evidence_key(
@@ -767,8 +808,13 @@ def build_alertmanager_alert_event(
     labels = {str(key): str(value) for key, value in alert.labels.items()}
     annotations = {str(key): str(value) for key, value in alert.annotations.items()}
     alert_name = (labels.get("alertname") or "External alert")[:120]
-    namespace = (labels.get("namespace") or "").strip()[:253] or None
-    if labels.get("pod"):
+    namespace = (
+        labels.get("opsia_namespace") or labels.get("namespace") or ""
+    ).strip()[:253] or None
+    if labels.get("opsia_resource_name"):
+        kind = labels.get("opsia_resource_kind") or "Workload"
+        name = labels["opsia_resource_name"]
+    elif labels.get("pod"):
         kind, name = "Pod", labels["pod"]
     elif labels.get("deployment"):
         kind, name = "Deployment", labels["deployment"]
@@ -880,10 +926,16 @@ async def alertmanager_webhook(
     events: Any = Depends(get_events),
     db: Any = Depends(get_db),
 ) -> AcceptedResponse:
-    require_alertmanager_token(request)
+    await require_alertmanager_token(
+        request,
+        db,
+        workspace_id=workspace_id,
+        cluster_id=cluster_id,
+    )
     registration = await db_call(db.get_cluster_registration, workspace_id, cluster_id)
     if registration is None:
         raise HTTPException(status_code=HTTP_NOT_FOUND, detail=CLUSTER_NOT_REGISTERED)
+    validate_alertmanager_sli_labels(payload)
 
     if not any(alert.status.strip().lower() == "firing" for alert in payload.alerts):
         await persist_alertmanager_alert_events(

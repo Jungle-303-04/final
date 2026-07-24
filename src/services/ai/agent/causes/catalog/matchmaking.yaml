@@ -1,11 +1,10 @@
 # RCA 원인 룰 카탈로그 — 매치메이킹/로비 입장 실패 계열.
-# 트리거: 대상 클러스터 Alertmanager 의 매치메이킹 실패율 알림
-# (예: demo-game DemoGameJoinStorm, expr find_game_fail_ratio > 0.2).
+# 트리거: 대상 클러스터 Alertmanager 의 표준 애플리케이션 SLI 실패율 알림.
 # 판별: 알림 fact(alert_name)와 로비 로그의 거절 사유(find_game_rejected reason)로
 # "로비 처리 용량 포화 / 게임 룸 부족 / 룸 디렉터리 장애"를 구별한다.
 rules:
   - id: "matchmaking_join_failure"
-    symptoms: ["Matchmaking join failure", "DemoGameJoinStorm"]
+    symptoms: ["Matchmaking join failure", "admission_failure", "DemoGameJoinStorm"]
     required_sources: ["metrics"]
     candidates:
       - candidate_id: "lobby_capacity_saturation"
@@ -25,6 +24,7 @@ rules:
         signals:
           - id: "join_rejection_observed"
             any_of:
+              - fact: "alert_name=OpsiaSliFailureRatioHigh"
               - fact: "alert_name=DemoGameJoinStorm"
               - log_pattern: "find_game_rejected"
               - log_pattern: "rate_limited"
