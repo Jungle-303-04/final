@@ -130,8 +130,49 @@ def test_missing_or_ambiguous_resource_fails_closed() -> None:
     assert ambiguous is None
 
 
-def test_multi_document_and_anchor_sources_are_not_editable() -> None:
-    multi_document = deployment("lobby") + "\n---\n" + deployment("api")
+def test_resolves_one_selected_document_in_multi_document_source() -> None:
+    multi_document = (
+        deployment("lobby")
+        + "\n---\n"
+        + """\
+apiVersion: v1
+kind: Service
+metadata:
+  name: lobby
+  namespace: target
+spec:
+  selector:
+    app: lobby
+"""
+    )
+    source = resolve(
+        {
+            "deploy/overlays/game-server/kustomization.yaml": (
+                "resources:\n  - ../../base/lobby.yaml\n"
+            ),
+            "deploy/base/lobby.yaml": multi_document,
+        }
+    )
+
+    assert source is not None
+    assert source.path == "deploy/base/lobby.yaml"
+    assert source.document_identity == ManifestIdentity(
+        "apps/v1",
+        "Deployment",
+        "target",
+        "lobby",
+    )
+
+
+def test_duplicate_multi_document_identity_and_anchor_fail_closed() -> None:
+    duplicate = deployment("lobby") + "\n---\n" + deployment("lobby", replicas=2)
+    list_item = deployment("lobby").replace("\n", "\n    ").rstrip()
+    list_wrapper = f"""\
+apiVersion: v1
+kind: List
+items:
+  - {list_item}
+"""
     anchored = deployment("lobby").replace(
         "replicas: 1",
         "replicas: &replicas 1",
@@ -143,7 +184,33 @@ def test_multi_document_and_anchor_sources_are_not_editable() -> None:
                 "deploy/overlays/game-server/kustomization.yaml": (
                     "resources:\n  - ../../base/lobby.yaml\n"
                 ),
-                "deploy/base/lobby.yaml": multi_document,
+                "deploy/base/lobby.yaml": duplicate,
+            }
+        )
+        is None
+    )
+    assert (
+        resolve(
+            {
+                "deploy/overlays/game-server/kustomization.yaml": (
+                    "resources:\n  - ../../base/lobby.yaml\n"
+                ),
+                "deploy/base/lobby.yaml": (
+                    deployment("lobby")
+                    + "\n---\n"
+                    + list_wrapper
+                ),
+            }
+        )
+        is None
+    )
+    assert (
+        resolve(
+            {
+                "deploy/overlays/game-server/kustomization.yaml": (
+                    "resources:\n  - ../../base/lobby.yaml\n"
+                ),
+                "deploy/base/lobby.yaml": list_wrapper,
             }
         )
         is None
@@ -331,7 +398,20 @@ def test_scm_materializes_unique_kustomize_source_without_repository_contract() 
         "test_recovery_kustomize_github_provider",
     )
     base_sha = "a" * 40
-    raw = deployment("lobby")
+    raw = (
+        deployment("lobby")
+        + "\n---\n"
+        + """\
+apiVersion: v1
+kind: Service
+metadata:
+  name: lobby
+  namespace: target
+spec:
+  selector:
+    app: lobby
+"""
+    )
     desired = {
         "apiVersion": "apps/v1",
         "kind": "Deployment",
@@ -438,6 +518,8 @@ def test_scm_materializes_unique_kustomize_source_without_repository_contract() 
     assert contents[0][0] == "deploy/base/lobby.yaml"
     assert "replicas: 2" in contents[0][1]
     assert "replicas: 1" not in contents[0][1]
+    assert "kind: Service" in contents[0][1]
+    assert "selector:\n    app: lobby" in contents[0][1]
 
 
 def test_scm_validates_recovery_against_exact_resource_diff_not_workflow_step() -> None:

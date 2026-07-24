@@ -15,6 +15,7 @@ import yaml
 from yaml.nodes import MappingNode, Node, ScalarNode, SequenceNode
 from yaml.tokens import AliasToken, AnchorToken
 
+from domains.manifest_editor.validation import ManifestIdentity, manifest_identity
 from packages.contracts.remediation_source import (
     RemediationSourceContract,
     RemediationSourceDeclaration,
@@ -32,6 +33,9 @@ PLAIN_IMAGE_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/@:+-]*$")
 FIELD_PATH_SEGMENT_PATTERN = re.compile(r"^([A-Za-z0-9_-]+)(?:\[name=([^\]]+)\])?$")
 MEMORY_QUANTITY_PATTERN = re.compile(r"^(\d+)(Ki|Mi|Gi)$")
 ScalarValue = str | int | float | bool | None
+DECLARED_SOURCE_STALE_VALUE_MESSAGE = (
+    "declared source scalar does not match approved value"
+)
 
 
 class ManifestSourcePatchError(ValueError):
@@ -81,6 +85,7 @@ class DeclaredScalarPatch:
     source_type: str
     source_path: str
     replacements: tuple[ScalarFieldReplacement, ...]
+    document_identity: ManifestIdentity | None = None
 
 
 @dataclass(frozen=True)
@@ -583,20 +588,39 @@ def materialize_declared_scalar_patch(source: str, patch: DeclaredScalarPatch) -
         if any(isinstance(token, AnchorToken | AliasToken) for token in yaml.scan(source)):
             raise ManifestSourcePatchError("declared source anchors and aliases are not patchable")
         nodes = list(yaml.compose_all(source))
+        originals = list(yaml.safe_load_all(source))
     except yaml.YAMLError as exc:
         raise ManifestSourcePatchError("declared source is invalid") from exc
-    original = parse_single_manifest(source, RAW_YAML)
-    if len(nodes) != 1 or not isinstance(nodes[0], MappingNode):
+    if len(nodes) != len(originals):
+        raise ManifestSourcePatchError("declared source document structure is invalid")
+    if patch.document_identity is None:
+        if len(nodes) != 1:
+            raise ManifestSourcePatchError("declared source must contain one object")
+        document_index = 0
+    else:
+        matches = [
+            index
+            for index, document in enumerate(originals)
+            if isinstance(document, Mapping)
+            and manifest_identity(document) == patch.document_identity
+        ]
+        if len(matches) != 1:
+            raise ManifestSourcePatchError("declared source document is missing or ambiguous")
+        document_index = matches[0]
+    original = originals[document_index]
+    node_root = nodes[document_index]
+    if not isinstance(original, dict) or not isinstance(node_root, MappingNode):
         raise ManifestSourcePatchError("declared source must contain one object")
 
-    expected = deepcopy(original)
+    expected_documents = deepcopy(originals)
+    expected = expected_documents[document_index]
     spans: list[tuple[int, int, str]] = []
     for replacement in patch.replacements:
         segments = field_path_segments(replacement.field_path)
         current = object_value_at(original, segments)
         if not same_scalar(current, replacement.current_value):
-            raise ManifestSourcePatchError("declared source scalar does not match approved value")
-        node = node_value_at(nodes[0], segments)
+            raise ManifestSourcePatchError(DECLARED_SOURCE_STALE_VALUE_MESSAGE)
+        node = node_value_at(node_root, segments)
         if not isinstance(node, ScalarNode):
             raise ManifestSourcePatchError("declared source target is not one scalar")
         spans.append(
@@ -613,7 +637,11 @@ def materialize_declared_scalar_patch(source: str, patch: DeclaredScalarPatch) -
     patched = source
     for start, end, encoded in sorted(spans, reverse=True):
         patched = f"{patched[:start]}{encoded}{patched[end:]}"
-    if parse_single_manifest(patched, RAW_YAML) != expected:
+    try:
+        patched_documents = list(yaml.safe_load_all(patched))
+    except yaml.YAMLError as exc:
+        raise ManifestSourcePatchError("declared patch produced invalid YAML") from exc
+    if patched_documents != expected_documents:
         raise ManifestSourcePatchError("declared patch changed fields outside approved scalars")
     return patched
 

@@ -44,6 +44,7 @@ class KustomizeEditSource:
     path: str
     source_type: str
     manifest_sha256: str
+    document_identity: ManifestIdentity | None = None
 
 
 class KustomizeSourceClient(GitHubClient, Protocol):
@@ -90,25 +91,33 @@ async def resolve_unique_kustomize_edit_source(
         except UnicodeDecodeError:
             continue
         errors, documents = parse_documents(content, label=path)
-        # A structured recovery patch mutates one exact object. Multi-document
-        # sources and List wrappers remain unsupported even if one child looks
-        # like the selected resource.
-        if errors or documents is None or len(documents) != 1:
+        if errors or documents is None:
             continue
-        resources = flattened_resources(documents[0])
-        if len(resources) != 1:
-            continue
-        resource = resources[0]
-        identity = manifest_identity(resource)
-        if identity is None or not identity_matches_selected(identity, selected_identity):
-            continue
-        matches.append(
-            KustomizeEditSource(
-                path=path,
-                source_type=RAW_YAML,
-                manifest_sha256=canonical_manifest_digest(resource),
+        for document in documents:
+            # List wrappers remain unsupported because editing one child while
+            # preserving the wrapper's raw byte layout is not yet provable.
+            if not isinstance(document, Mapping):
+                continue
+            if str(document.get("kind") or "") == "List":
+                if any(
+                    (identity := manifest_identity(resource)) is not None
+                    and identity_matches_selected(identity, selected_identity)
+                    for resource in flattened_resources(document)
+                ):
+                    return None
+                continue
+            resource = document
+            identity = manifest_identity(resource)
+            if identity is None or not identity_matches_selected(identity, selected_identity):
+                continue
+            matches.append(
+                KustomizeEditSource(
+                    path=path,
+                    source_type=RAW_YAML,
+                    manifest_sha256=canonical_manifest_digest(resource),
+                    document_identity=(identity if len(documents) > 1 else None),
+                )
             )
-        )
     return matches[0] if len(matches) == 1 else None
 
 
