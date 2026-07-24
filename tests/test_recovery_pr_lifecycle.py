@@ -247,10 +247,16 @@ class SafePrDb:
         self,
         workspace_id: str,
         *,
+        rule_name: str | None = None,
+        source: str | None = None,
+        incident_ids: tuple[str, ...] | None = None,
         limit: int,
     ) -> list[dict[str, Any]]:
         assert workspace_id == "workspace-1"
-        assert limit == 200
+        assert rule_name == "OpsiaSliFailureRatioHigh"
+        assert source == "alertmanager"
+        assert set(incident_ids or ()) == {"correlation-1", "incident-1"}
+        assert limit == 10
         return [
             {
                 "event_id": "alert-1",

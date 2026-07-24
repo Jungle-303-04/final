@@ -260,6 +260,11 @@ class AlertRuleRepository(DatabaseConnection):
         from_time: object | None = None,
         to_time: object | None = None,
         rule_id: str | None = None,
+        rule_name: str | None = None,
+        source: str | None = None,
+        incident_ids: tuple[str, ...] | None = None,
+        event_ids: tuple[str, ...] | None = None,
+        subject_key: str | None = None,
         severity: str | None = None,
         status: str | None = None,
         limit: int = 100,
@@ -273,6 +278,28 @@ class AlertRuleRepository(DatabaseConnection):
             statement = statement.where(table.c.fired_at <= to_time)
         if rule_id is not None:
             statement = statement.where(table.c.rule_id == rule_id)
+        if rule_name is not None:
+            statement = statement.where(table.c.rule_name == rule_name)
+        if source is not None:
+            statement = statement.where(table.c.source == source)
+        if incident_ids is not None:
+            normalized_incident_ids = tuple(
+                sorted({value.strip() for value in incident_ids if value.strip()})
+            )
+            if not normalized_incident_ids:
+                return []
+            statement = statement.where(
+                table.c.incident_id.in_(normalized_incident_ids)
+            )
+        if event_ids is not None:
+            normalized_event_ids = tuple(
+                sorted({value.strip() for value in event_ids if value.strip()})
+            )
+            if not normalized_event_ids:
+                return []
+            statement = statement.where(table.c.event_id.in_(normalized_event_ids))
+        if subject_key is not None:
+            statement = statement.where(table.c.subject_key == subject_key)
         if severity is not None:
             statement = statement.where(table.c.severity == severity)
         if status is not None:
