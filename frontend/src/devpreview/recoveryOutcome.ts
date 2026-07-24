@@ -55,7 +55,7 @@ export function recoveryOutcomeNotices({
       tone: "critical",
       title: "복구 조치를 완료하지 못했습니다.",
       summary: failureSummary(failed),
-      detail: summaryString(failed, "reason"),
+      detail: failureDetail(failed),
       prUrl: null,
     });
     return notices;
@@ -150,6 +150,15 @@ function failureSummary(item: AuditTimelineItem): string {
   if (subject === "safe_pr_failed") return "복구 PR을 생성하지 못했습니다.";
   if (subject === "command_rejected") return "복구 명령이 정책 또는 실행 조건에 의해 거부되었습니다.";
   return "복구 실행 워크플로가 실패했습니다.";
+}
+
+function failureDetail(item: AuditTimelineItem): string | null {
+  const reasonCode = summaryString(item, "reason_code");
+  const reason = summaryString(item, "reason");
+  if (reasonCode === "control_namespace_not_allowed") {
+    return "대상 네임스페이스가 클러스터 연결 시 허용한 제어 범위 밖입니다. 클러스터 설정의 제어 네임스페이스를 확인해 주세요.";
+  }
+  return reason;
 }
 
 function summaryString(item: AuditTimelineItem, key: string): string | null {

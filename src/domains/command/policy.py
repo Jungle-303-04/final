@@ -67,6 +67,7 @@ class ModelLookup:
 
 
 class Rule(Protocol):
+    name: str
     reason: str
 
     def allows(self, target: Lookup) -> bool: ...
@@ -123,6 +124,7 @@ class NamespaceAllowlistRule:
     env 를 평가 시점마다 읽으므로 재기동 없이 정책이 반영되고 테스트가 쉽다.
     """
 
+    name: str
     field: str
     default_namespace: str
     reason: str
@@ -135,14 +137,15 @@ class NamespaceAllowlistRule:
 class Result:
     allowed: bool
     reason: str | None = None
+    reason_code: str | None = None
 
     @classmethod
     def allow(cls) -> Result:
         return cls(True)
 
     @classmethod
-    def reject(cls, reason: str) -> Result:
-        return cls(False, reason)
+    def reject(cls, reason: str, reason_code: str | None = None) -> Result:
+        return cls(False, reason, reason_code)
 
     def require_reason(self) -> str:
         require(self.reason is not None, "정책 거부에 reason 필요")
@@ -167,5 +170,5 @@ class Policy:
     def evaluate(self, target: Lookup) -> Result:
         for rule in self.rules:
             if not rule.allows(target):
-                return Result.reject(rule.reason)
+                return Result.reject(rule.reason, rule.name)
         return Result.allow()

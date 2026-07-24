@@ -37,3 +37,18 @@ def test_recovery_audit_summary_keeps_operator_result_fields() -> None:
         "next_action": "observe",
         "summary": "rollout health completed",
     }
+
+
+def test_command_rejection_summary_keeps_stable_reason_code() -> None:
+    summary = summarize_payload(
+        "command.rejected",
+        {
+            "reason_code": "control_namespace_not_allowed",
+            "reason": "backend wording can change independently",
+        },
+    )
+
+    assert summary == {
+        "reason_code": "control_namespace_not_allowed",
+        "reason": "backend wording can change independently",
+    }

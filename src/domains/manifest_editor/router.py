@@ -24,8 +24,12 @@ from domains.command.router import (
 )
 from domains.gitops.events import Diff
 from domains.gitops.repository_discovery import (
+    KUSTOMIZATION_FILES,
+    ManifestRenderValidationError,
     RepositoryDiscoveryError,
     RepositoryDiscoveryService,
+    collect_kustomize_source_contents,
+    render_source_directory,
     source_type_from_path,
 )
 from domains.gitops.repository_discovery_router import (
@@ -135,7 +139,6 @@ async def get_resource_manifest_source(
         context,
         application_id=application_id,
     )
-    choices = [source_choice(source) for source in sources]
     if not sources:
         return ResourceManifestSourceResponse(
             resource_id=resource_id,
@@ -144,6 +147,17 @@ async def get_resource_manifest_source(
             reason=(SOURCE_PERMISSION_REQUIRED if source_permission_denied else SOURCE_NOT_FOUND),
             **projection,
         )
+    sources = [
+        await resolve_bound_editable_source(
+            db,
+            current,
+            source,
+            context["identity"],
+            fallback_service,
+        )
+        for source in sources
+    ]
+    choices = [source_choice(source) for source in sources]
     if application_id is None and len(sources) > 1:
         return ResourceManifestSourceResponse(
             resource_id=resource_id,
@@ -200,7 +214,13 @@ async def preview_resource_manifest_edit(
     fallback_service: RepositoryDiscoveryService = Depends(discovery_service),
 ) -> ResourceManifestPreviewResponse:
     context = resource_context(db, current, resource_id, write=True)
-    source = exact_source(db, current, context, payload.application_id)
+    source = await exact_source(
+        db,
+        current,
+        context,
+        payload.application_id,
+        fallback_service,
+    )
     base_sha, content = await read_pinned_source(db, current, source, fallback_service)
     ensure_source_is_current(payload.base_sha, payload.source_sha256, base_sha, content)
     validation = validate_manifest_edit(
@@ -243,7 +263,13 @@ async def apply_resource_manifest_now(
     if IDEMPOTENCY_KEY_PATTERN.fullmatch(idempotency_key) is None:
         raise HTTPException(status_code=422, detail="invalid Idempotency-Key")
     context = resource_context(db, current, resource_id, write=True)
-    source = exact_source(db, current, context, payload.application_id)
+    source = await exact_source(
+        db,
+        current,
+        context,
+        payload.application_id,
+        fallback_service,
+    )
     base_sha, content = await read_pinned_source(db, current, source, fallback_service)
     ensure_source_is_current(payload.base_sha, payload.source_sha256, base_sha, content)
     validation = validate_manifest_edit(
@@ -515,7 +541,13 @@ async def approve_resource_manifest_edit(
     fallback_service: RepositoryDiscoveryService = Depends(discovery_service),
 ) -> ResourceManifestApproveResponse:
     context = resource_context(db, current, resource_id, write=True)
-    source = exact_source(db, current, context, payload.application_id)
+    source = await exact_source(
+        db,
+        current,
+        context,
+        payload.application_id,
+        fallback_service,
+    )
     base_sha, content = await read_pinned_source(db, current, source, fallback_service)
     ensure_source_is_current(payload.base_sha, payload.source_sha256, base_sha, content)
     validation = validate_manifest_edit(
@@ -1308,18 +1340,25 @@ def authorized_sources_with_access(
     return sources, permission_denied
 
 
-def exact_source(
+async def exact_source(
     db: Any,
     current: Any,
     context: dict[str, Any],
     application_id: str,
+    fallback: RepositoryDiscoveryService,
 ) -> dict[str, Any]:
     if context.get("edit_unavailable_reason") is not None:
         raise HTTPException(status_code=409, detail=str(context["edit_unavailable_reason"]))
     sources = authorized_sources(db, current, context, application_id=application_id)
     if len(sources) != 1:
         raise HTTPException(status_code=409, detail=SOURCE_NOT_FOUND)
-    source = sources[0]
+    source = await resolve_bound_editable_source(
+        db,
+        current,
+        sources[0],
+        context["identity"],
+        fallback,
+    )
     require_resource_access(
         db,
         current,
@@ -1331,6 +1370,83 @@ def exact_source(
     if not editable_source(source):
         raise HTTPException(status_code=422, detail=UNSUPPORTED_SOURCE)
     return source
+
+
+async def resolve_bound_editable_source(
+    db: Any,
+    current: Any,
+    source: dict[str, Any],
+    selected_identity: ManifestIdentity,
+    fallback: RepositoryDiscoveryService,
+) -> dict[str, Any]:
+    if editable_source(source):
+        return source
+    inferred = str(source.get("source_type") or "") or source_type_from_path(
+        str(source.get("manifest_path") or "")
+    )
+    if str(source.get("provider") or "") != "github" or inferred != "kustomize":
+        return source
+    try:
+        service = wizard_discovery_service(db, current, str(source["repo_ref"]), fallback)
+        return await resolve_kustomize_edit_source(source, selected_identity, service.client)
+    except (ManifestRenderValidationError, RepositoryDiscoveryError, ValueError):
+        # Source lookup remains fail-closed. The caller projects the existing
+        # unsupported-source state instead of guessing a repository file.
+        return source
+
+
+async def resolve_kustomize_edit_source(
+    source: dict[str, Any],
+    selected_identity: ManifestIdentity,
+    client: Any,
+) -> dict[str, Any]:
+    """Resolve one rendered Kustomize resource back to its exact Git YAML file.
+
+    Only files reachable through the bounded local Kustomize reference graph
+    are considered. A missing or ambiguous identity remains unsupported rather
+    than allowing an edit against a guessed file.
+    """
+
+    repo_ref = str(source["repo_ref"])
+    branch = str(source["branch"])
+    base_sha = await client.branch_sha(repo_ref, branch)
+    tree, _warnings = await client.tree_at_revision(repo_ref, base_sha)
+    source_dir = render_source_directory(str(source["manifest_path"]), "kustomize")
+    contents, _dependency_warnings = await collect_kustomize_source_contents(
+        client,
+        repo_ref,
+        base_sha,
+        source_dir,
+        tree,
+    )
+    matches: list[str] = []
+    for path, raw in sorted(contents.items()):
+        if path.rsplit("/", 1)[-1] in KUSTOMIZATION_FILES:
+            continue
+        if not path.casefold().endswith((".yaml", ".yml", ".json")):
+            continue
+        try:
+            content = raw.decode("utf-8")
+        except UnicodeDecodeError:
+            continue
+        errors, documents = parse_documents(content, label=path)
+        if errors or documents is None:
+            continue
+        if any(
+            identity is not None and identity_matches_selected(identity, selected_identity)
+            for document in documents
+            for resource in flattened_resources(document)
+            for identity in [manifest_identity(resource)]
+        ):
+            matches.append(path)
+    if len(matches) != 1:
+        return source
+    return {
+        **source,
+        "manifest_path": matches[0],
+        "source_type": "raw-yaml",
+        "render_source_type": "kustomize",
+    }
 
 
 def editable_source(source: dict[str, Any]) -> bool:

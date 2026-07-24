@@ -151,6 +151,7 @@ class CommandRejectedBody(EventBody):
 
     reason: str
     requested: JsonObject
+    reason_code: str | None = None
 
 
 @event(EventSubject.COMMAND_CANCEL_REQUESTED)

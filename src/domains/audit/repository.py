@@ -41,6 +41,7 @@ AUDIT_TIMELINE_SUMMARY_FIELDS = (
     "patch_sha256",
     "evidence_ref",
     "confidence",
+    "reason_code",
     "reason",
     "diagnosis",
     "next_action",

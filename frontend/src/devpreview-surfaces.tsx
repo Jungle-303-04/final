@@ -57,7 +57,7 @@ import { groupApplicationsByRepository } from "./devpreview/repositoryRegistry";
 import { selectScenarioRuns } from "./devpreview/scenarioGateSelection";
 import { recoveryDisplayedStep, recoveryProgressState, withCreatedPullRequest, type RecoveryProgressState } from "./devpreview/recoveryProgress";
 import { issueAnalysisState } from "./devpreview/issueAnalysisState";
-import { canOpenRecoveryPlan } from "./devpreview/recoveryAccess";
+import { canOpenRecoveryPlan, canStartRecoveryReview } from "./devpreview/recoveryAccess";
 import { pullRequestReference } from "./devpreview/pullRequestReference";
 import { isSafePrRoute, recoveryRouteLabel } from "./devpreview/recoveryRoute";
 import {
@@ -1270,6 +1270,7 @@ function RecoveryConfirmation({
   onAskAi: () => void;
   onOpenTarget?: (() => void) | null;
 }) {
+  const reviewEnabled = canStartRecoveryReview({ selected, pending });
   return (
     <motion.div
       key="recovery-confirmation"
@@ -1335,10 +1336,11 @@ function RecoveryConfirmation({
               <strong style={{ fontSize: TYPE.label, fontWeight: 600 }}>{selected ? "요청됨" : pending ? "요청 중…" : "직접 진행"}</strong>
               <span style={{ fontSize: TYPE.caption, fontWeight: 400, lineHeight: 1.4, color: selected ? TINT.ok.fg : UI.ink3 }}>{recoveryActionModeSummary(candidate.route)}</span>
             </button>
-            <button type="button" className="product-focusable product-action" onClick={onAskAi}
-              style={{ minWidth: 0, minHeight: 64, display: "grid", gap: 4, alignContent: "center", border: "none", borderRadius: 8, background: BLUE, color: UI.card, padding: "9px 11px", textAlign: "left", cursor: "pointer", boxShadow: `0 2px 6px ${blueA(0.2)}` }}>
-              <strong style={{ display: "flex", alignItems: "center", gap: 5, fontSize: TYPE.label, fontWeight: 600 }}><Sparkles size={14} />AI와 진행하기</strong>
-              <span style={{ fontSize: TYPE.caption, fontWeight: 400, lineHeight: 1.4, color: UI.card, opacity: 0.82 }}>AI가 안전 조건을 검토한 뒤 같은 복구 절차로 이어집니다.</span>
+            <button type="button" className={reviewEnabled ? "product-focusable product-action" : undefined}
+              disabled={!reviewEnabled} onClick={onAskAi}
+              style={{ minWidth: 0, minHeight: 64, display: "grid", gap: 4, alignContent: "center", border: "none", borderRadius: 8, background: reviewEnabled ? BLUE : UI.bg2, color: reviewEnabled ? UI.card : UI.ink3, padding: "9px 11px", textAlign: "left", cursor: reviewEnabled ? "pointer" : "not-allowed", boxShadow: reviewEnabled ? `0 2px 6px ${blueA(0.2)}` : "none" }}>
+              <strong style={{ display: "flex", alignItems: "center", gap: 5, fontSize: TYPE.label, fontWeight: 600 }}><Sparkles size={14} />{selected ? "이미 요청됨" : pending ? "요청 중…" : "AI와 진행하기"}</strong>
+              <span style={{ fontSize: TYPE.caption, fontWeight: 400, lineHeight: 1.4, color: reviewEnabled ? UI.card : UI.ink3, opacity: 0.82 }}>{selected ? "실행 결과와 정책 판단을 진행 상태에서 확인해 주세요." : "AI가 안전 조건을 검토한 뒤 같은 복구 절차로 이어집니다."}</span>
             </button>
           </div>
         </div>

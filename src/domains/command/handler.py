@@ -39,7 +39,10 @@ from domains.target.management_guard import (
     management_readonly_detail,
 )
 from packages.config.constants import Command, CommandStatus, Sandbox, Target
-from packages.config.control import CONTROL_NAMESPACE_DENIED_MESSAGE
+from packages.config.control import (
+    CONTROL_NAMESPACE_DENIED_CODE,
+    CONTROL_NAMESPACE_DENIED_MESSAGE,
+)
 from packages.config.environments import is_sandbox_environment, normalize_environment
 from packages.config.logs import CONTEXT_KEY, get_logger
 from packages.config.security import env_enabled
@@ -79,6 +82,7 @@ COMMAND_CONFIG = CommandConfig(
 POLICY = Policy(
     (
         NamespaceAllowlistRule(
+            name=CONTROL_NAMESPACE_DENIED_CODE,
             field=Gateway.NAMESPACE,
             default_namespace=Sandbox.NAMESPACE,
             reason=CONTROL_NAMESPACE_DENIED_MESSAGE,
@@ -497,11 +501,18 @@ async def close_operation(ctx: EventContext[AgentCommandStore], plan: Plan, reas
 
 
 async def reject_operation(
-    ctx: EventContext[AgentCommandStore], command: CommandRequestedBody, reason: str
+    ctx: EventContext[AgentCommandStore],
+    command: CommandRequestedBody,
+    reason: str,
+    reason_code: str | None = None,
 ) -> CommandRejectedBody:
     """Close the receipt's immutable operation stream for every worker rejection."""
     await close_operation(ctx, build_plan(command, ctx.correlation_id), reason)
-    return CommandRejectedBody(reason=reason, requested=command.to_body())
+    return CommandRejectedBody(
+        reason=reason,
+        reason_code=reason_code,
+        requested=command.to_body(),
+    )
 
 
 async def sweep_expired_agent_commands(
@@ -529,19 +540,34 @@ async def handle_command_requested(
         return
     management_result = await evaluate_management_guard(evt, ctx.db)
     if not management_result.allowed:
-        yield await reject_operation(ctx, evt, management_result.require_reason())
+        yield await reject_operation(
+            ctx,
+            evt,
+            management_result.require_reason(),
+            management_result.reason_code,
+        )
         return
     direct_execution_result = evaluate_direct_execution_confirmation(evt)
     if not direct_execution_result.allowed:
-        yield await reject_operation(ctx, evt, direct_execution_result.require_reason())
+        yield await reject_operation(
+            ctx,
+            evt,
+            direct_execution_result.require_reason(),
+            direct_execution_result.reason_code,
+        )
         return
     result = evaluate_command_policy(evt)
     if not result.allowed:
-        yield await reject_operation(ctx, evt, result.require_reason())
+        yield await reject_operation(ctx, evt, result.require_reason(), result.reason_code)
         return
     approval_result, approval_evidence = await evaluate_recorded_approval(evt, ctx.db)
     if not approval_result.allowed:
-        yield await reject_operation(ctx, evt, approval_result.require_reason())
+        yield await reject_operation(
+            ctx,
+            evt,
+            approval_result.require_reason(),
+            approval_result.reason_code,
+        )
         return
 
     plan = build_plan(evt, ctx.correlation_id, approval_evidence)

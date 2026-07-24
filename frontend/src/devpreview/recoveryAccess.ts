@@ -17,3 +17,13 @@ export function canOpenRecoveryPlan(
 ): boolean {
   return hasRcaCauseOrCandidate(rootCause, report) && (plan?.candidates.length ?? 0) > 0;
 }
+
+export function canStartRecoveryReview({
+  selected,
+  pending,
+}: {
+  selected: boolean;
+  pending: boolean;
+}): boolean {
+  return !selected && !pending;
+}

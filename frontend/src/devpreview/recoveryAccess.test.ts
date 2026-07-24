@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import type { RcaReport } from "../api/evidence-schemas";
 import type { RecoveryPlan } from "../api/recovery-schemas";
-import { canOpenRecoveryPlan, hasRcaCauseOrCandidate } from "./recoveryAccess";
+import {
+  canOpenRecoveryPlan,
+  canStartRecoveryReview,
+  hasRcaCauseOrCandidate,
+} from "./recoveryAccess";
 
 const reportWithCandidate = {
   root_cause: "insufficient_evidence",
@@ -29,5 +33,11 @@ describe("recovery access", () => {
 
   it("allows recovery for an observed RCA candidate with a real recovery candidate", () => {
     expect(canOpenRecoveryPlan(null, reportWithCandidate, planWithCandidate)).toBe(true);
+  });
+
+  it("does not start another AI review after the recovery was selected", () => {
+    expect(canStartRecoveryReview({ selected: true, pending: false })).toBe(false);
+    expect(canStartRecoveryReview({ selected: false, pending: true })).toBe(false);
+    expect(canStartRecoveryReview({ selected: false, pending: false })).toBe(true);
   });
 });

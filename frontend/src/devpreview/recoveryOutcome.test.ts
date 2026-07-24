@@ -101,4 +101,24 @@ describe("recoveryOutcomeNotices", () => {
       }),
     ]);
   });
+
+  it("turns a control namespace rejection into an actionable operator message", () => {
+    const notices = recoveryOutcomeNotices({
+      actionRoute: "auto",
+      audit: [
+        event("selected", "recovery.action_selected", {}, "2026-07-24T01:00:00Z"),
+        event("rejected", "command.rejected", {
+          reason_code: "control_namespace_not_allowed",
+          reason: "backend wording can change independently",
+        }),
+      ],
+      issueStatus: "command_rejected",
+      selectionEventId: "selected",
+      submittedAt: "2026-07-24T01:00:00Z",
+    });
+
+    expect(notices[0]?.detail).toBe(
+      "대상 네임스페이스가 클러스터 연결 시 허용한 제어 범위 밖입니다. 클러스터 설정의 제어 네임스페이스를 확인해 주세요.",
+    );
+  });
 });

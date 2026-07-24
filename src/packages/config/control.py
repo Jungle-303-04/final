@@ -18,6 +18,7 @@ from packages.config.constants import Sandbox
 from packages.config.settings import env
 
 CONTROL_ALLOWED_NAMESPACES_ENV = "CONTROL_ALLOWED_NAMESPACES"
+CONTROL_NAMESPACE_DENIED_CODE = "control_namespace_not_allowed"
 CONTROL_NAMESPACE_DENIED_MESSAGE = "namespace is not allowed by control policy"
 CONTROL_PROTECTED_NAMESPACES = ("management",)
 
