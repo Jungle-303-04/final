@@ -12,6 +12,7 @@ from domains.rca.router import (
     STANDARD_SLI_LABELS_INVALID,
     STANDARD_SLI_MEASUREMENT_INVALID,
     WEBHOOK_TOKEN_INVALID,
+    alertmanager_webhook,
     require_alertmanager_token,
     validate_alertmanager_sli_labels,
 )
@@ -37,6 +38,61 @@ class AgentAuthDb:
     def authenticate_cluster_agent(self, token_hash: str) -> dict[str, str] | None:
         self.seen_hashes.append(token_hash)
         return self.identity if token_hash == self.expected_hash else None
+
+
+class AlertmanagerLifecycleDb(AgentAuthDb):
+    def __init__(self, disposition: str) -> None:
+        super().__init__(None)
+        self.disposition = disposition
+        self.alert_events: list[dict[str, object]] = []
+        self.rotations: list[dict[str, object]] = []
+
+    def get_cluster_registration(
+        self,
+        workspace_id: str,
+        cluster_id: str,
+    ) -> dict[str, str]:
+        return {"workspace_id": workspace_id, "cluster_id": cluster_id}
+
+    def get_evidence_window(self, evidence_key: str) -> dict[str, str]:
+        return {
+            "evidence_key": evidence_key,
+            "event_id": "event-old",
+            "correlation_id": "incident-old",
+        }
+
+    def get_alertmanager_evidence_disposition(
+        self,
+        workspace_id: str,
+        correlation_id: str,
+        event_id: str,
+    ) -> str:
+        assert workspace_id == "workspace-1"
+        assert correlation_id == "incident-old"
+        assert event_id == "event-old"
+        return self.disposition
+
+    def rotate_alertmanager_evidence_window(
+        self,
+        **values: object,
+    ) -> dict[str, object]:
+        self.rotations.append(values)
+        return {
+            "duplicate": False,
+            "event_id": "event-new",
+            "correlation_id": "incident-new",
+        }
+
+    def upsert_external_alert_event(
+        self,
+        payload: dict[str, object],
+    ) -> dict[str, object]:
+        self.alert_events.append(payload)
+        return payload
+
+
+class AlertmanagerEvents:
+    source = "api-gateway"
 
 
 def authorize(
@@ -187,6 +243,72 @@ def test_standard_sli_alert_requires_complete_resource_identity() -> None:
             }
         )
     )
+
+
+@pytest.mark.parametrize("disposition", ("orphan", "terminal"))
+def test_alertmanager_webhook_starts_new_occurrence_for_closed_lineage(
+    monkeypatch: pytest.MonkeyPatch,
+    disposition: str,
+) -> None:
+    monkeypatch.setenv(ALERTMANAGER_WEBHOOK_TOKEN_ENV, "global-webhook-token")
+    db = AlertmanagerLifecycleDb(disposition)
+
+    response = asyncio.run(
+        alertmanager_webhook(
+            standard_sli_payload(
+                {
+                    "opsia_namespace": "sandbox",
+                    "opsia_resource_kind": "Deployment",
+                    "opsia_resource_name": "api-server",
+                    "opsia_service": "api-server",
+                    "opsia_sli": "admission",
+                    "opsia_symptom": "admission_failure",
+                }
+            ),
+            webhook_request("Bearer global-webhook-token"),
+            cluster_id="cluster-1",
+            workspace_id="workspace-1",
+            events=AlertmanagerEvents(),
+            db=db,
+        )
+    )
+
+    assert response.correlation_id == "incident-new"
+    assert len(db.rotations) == 1
+    assert db.alert_events[0]["incident_id"] == "incident-new"
+
+
+@pytest.mark.parametrize("disposition", ("active", "pending"))
+def test_alertmanager_webhook_deduplicates_live_lineage(
+    monkeypatch: pytest.MonkeyPatch,
+    disposition: str,
+) -> None:
+    monkeypatch.setenv(ALERTMANAGER_WEBHOOK_TOKEN_ENV, "global-webhook-token")
+    db = AlertmanagerLifecycleDb(disposition)
+
+    response = asyncio.run(
+        alertmanager_webhook(
+            standard_sli_payload(
+                {
+                    "opsia_namespace": "sandbox",
+                    "opsia_resource_kind": "Deployment",
+                    "opsia_resource_name": "api-server",
+                    "opsia_service": "api-server",
+                    "opsia_sli": "admission",
+                    "opsia_symptom": "admission_failure",
+                }
+            ),
+            webhook_request("Bearer global-webhook-token"),
+            cluster_id="cluster-1",
+            workspace_id="workspace-1",
+            events=AlertmanagerEvents(),
+            db=db,
+        )
+    )
+
+    assert response.correlation_id == "incident-old"
+    assert db.rotations == []
+    assert db.alert_events[0]["incident_id"] == "incident-old"
 
 
 @pytest.mark.parametrize(
