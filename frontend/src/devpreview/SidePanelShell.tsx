@@ -37,6 +37,20 @@ export const SIDE_PANEL_SURFACE_STYLE: CSSProperties = {
   outline: "none",
 };
 
+/**
+ * Flex child that owns a full-height panel body.
+ *
+ * `minHeight: 0` is essential here: without it, long panel content contributes
+ * its min-content height and can grow past the fixed side-panel viewport.
+ */
+export const SIDE_PANEL_CONTENT_HOST_STYLE: CSSProperties = {
+  display: "flex",
+  flex: 1,
+  minWidth: 0,
+  minHeight: 0,
+  overflow: "hidden",
+};
+
 export function clampSidePanelWidth(
   width: number,
   minimumWidth: number,
