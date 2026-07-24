@@ -3,10 +3,10 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const loadRcaIssueRepresentativeItems = vi.fn();
+const loadRcaIssueItems = vi.fn();
 
 vi.mock("./rcaIssuesFeed", () => ({
-  loadRcaIssueRepresentativeItems: (...args: unknown[]) => loadRcaIssueRepresentativeItems(...args),
+  loadRcaIssueItems: (...args: unknown[]) => loadRcaIssueItems(...args),
 }));
 
 import { useRcaIssueDetails } from "./rcaDetailFeed";
@@ -39,13 +39,13 @@ const rawIssue = {
 
 afterEach(() => {
   vi.useRealTimers();
-  loadRcaIssueRepresentativeItems.mockReset();
+  loadRcaIssueItems.mockReset();
 });
 
 describe("useRcaIssueDetails polling", () => {
   it("delivers a matching projection and cancels the next poll on cleanup", async () => {
     vi.useFakeTimers();
-    loadRcaIssueRepresentativeItems.mockResolvedValue([rawIssue]);
+    loadRcaIssueItems.mockResolvedValue([rawIssue]);
     const onItems = vi.fn();
     const { unmount } = renderHook(() => useRcaIssueDetails(["cluster-1"], 4000, onItems));
 
@@ -53,7 +53,7 @@ describe("useRcaIssueDetails polling", () => {
       await Promise.resolve();
       await Promise.resolve();
     });
-    expect(loadRcaIssueRepresentativeItems).toHaveBeenCalledTimes(1);
+    expect(loadRcaIssueItems).toHaveBeenCalledTimes(1);
     expect(onItems).toHaveBeenCalledWith([
       expect.objectContaining({
         correlationId: "correlation-1",
@@ -66,6 +66,6 @@ describe("useRcaIssueDetails polling", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(8000);
     });
-    expect(loadRcaIssueRepresentativeItems).toHaveBeenCalledTimes(1);
+    expect(loadRcaIssueItems).toHaveBeenCalledTimes(1);
   });
 });

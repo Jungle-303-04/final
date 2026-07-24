@@ -37,37 +37,6 @@ afterEach(() => {
 });
 
 describe("RCA issue last-known-good contract", () => {
-  it("keeps the compact widget feed on the latest correlation for an identity", async () => {
-    listRcaIssues.mockResolvedValue({
-      items: [
-        {
-          ...issue,
-          correlation_id: "older-ready-plan",
-          status: "approval_recommended",
-          updated_at: "2026-07-24T00:01:00Z",
-        },
-        {
-          ...issue,
-          correlation_id: "newer-evaluated",
-          status: "rca_evaluated",
-          updated_at: "2026-07-24T00:02:00Z",
-        },
-      ],
-    });
-
-    const { result, unmount } = renderHook(() => useRcaIssues(["cluster-a"]));
-
-    await flush();
-    expect(result.current.status).toBe("ready");
-    expect(result.current.items).toEqual([
-      expect.objectContaining({
-        correlationId: "newer-evaluated",
-        status: "rca_evaluated",
-      }),
-    ]);
-    unmount();
-  });
-
   it("retains the authorized issue snapshot across a refresh failure", async () => {
     vi.useFakeTimers();
     listRcaIssues

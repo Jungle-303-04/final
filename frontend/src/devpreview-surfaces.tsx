@@ -33,7 +33,6 @@ import { isApiError } from "./api/client";
 import { retryRecovery, selectRecoveryAction } from "./api/recovery";
 import type { AiRecoveryHandoff, AiRecoveryPreview, AiRecoveryPreviewLine } from "./features/ai-assistant/aiRecoveryHandoff";
 import { isActiveRcaIssue } from "./devpreview/rcaIssuesFeed";
-import { RCA_RECENT_ATTEMPT_LIMIT, type RcaIssueAttemptSummary } from "./devpreview/rcaIssueGrouping";
 import { sessionInitial, type SessionView } from "./devpreview/sessionFeed";
 import {
   deleteAllStoredAiConversations,
@@ -2421,14 +2420,7 @@ function RecoveryProgress({ progress }: { progress: RecoveryProgressState }) {
   );
 }
 
-const ISSUE_ATTEMPT_COPY = {
-  newerDetected: "새 에러 감지됨",
-  repeatedDetected: "반복 감지",
-  latestCorrelation: "최신 correlation 보기",
-  recentAttempts: (count: number) => `최근 시도 ${count}개`,
-} as const;
-
-function IssueCard({ issue, recoveryProgressOverride, recoveryCompleted, onOpen, onOpenLatest, onOpenTarget }: { issue: RcaIssueDetailView; recoveryProgressOverride: RecoveryProgressOverride | null; recoveryCompleted: boolean; onOpen: () => void; onOpenLatest: (() => void) | null; onOpenTarget: (() => void) | null }) {
+function IssueCard({ issue, recoveryProgressOverride, recoveryCompleted, onOpen, onOpenTarget }: { issue: RcaIssueDetailView; recoveryProgressOverride: RecoveryProgressOverride | null; recoveryCompleted: boolean; onOpen: () => void; onOpenTarget: (() => void) | null }) {
   const [targetActive, setTargetActive] = useState(false);
   const state = issueAnalysisState({ ...issue, status: recoveryCompleted ? "resolved" : issue.status });
   const recovery = recoveryProgressState({
@@ -2456,18 +2448,6 @@ function IssueCard({ issue, recoveryProgressOverride, recoveryCompleted, onOpen,
   const evidenceCount = issue.supportingEvidence.length;
   const target = [issue.resourceKind, issue.resourceName].filter(Boolean).join(" · ") || "대상 미확인";
   const scope = [issue.clusterId, issue.namespace].filter(Boolean).join(" · ") || "범위 미확인";
-  const attemptCount = issue.attemptCount ?? 1;
-  const recentAttempts = issue.recentAttempts ?? [];
-  const latestAttempt = recentAttempts[0] ?? null;
-  const hasNewerAttempt = latestAttempt !== null && latestAttempt.correlationId !== issue.correlationId;
-  const displayUpdatedAt = latestAttempt?.updatedAt ?? issue.updatedAt;
-  const attemptTitle = recentAttempts
-    .map((attempt) => [
-      attempt.correlationId.slice(0, 8),
-      statusLabel(attempt.status),
-      fromNow(attempt.updatedAt),
-    ].join(" · "))
-    .join("\n");
 
   return (
     <motion.article
@@ -2495,8 +2475,8 @@ function IssueCard({ issue, recoveryProgressOverride, recoveryCompleted, onOpen,
             <span role="img" aria-label={`상태: ${indicatorLabel}`} title={`상태: ${indicatorLabel}`} style={{ width: 12, height: 12, flexShrink: 0, alignSelf: "center", cursor: "help", borderRadius: 999, background: indicatorColor }} />
             <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: TYPE.body, lineHeight: 1.35, fontWeight: 600 }}>{title}</span>
           </span>
-          <time dateTime={displayUpdatedAt ?? undefined} style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 4, fontSize: TYPE.caption, color: UI.ink3 }}>
-            <Clock size={12} />{fromNow(displayUpdatedAt)}
+          <time dateTime={issue.updatedAt ?? undefined} style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 4, fontSize: TYPE.caption, color: UI.ink3 }}>
+            <Clock size={12} />{fromNow(issue.updatedAt)}
           </time>
         </span>
 
@@ -2546,30 +2526,6 @@ function IssueCard({ issue, recoveryProgressOverride, recoveryCompleted, onOpen,
         <span style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", paddingTop: 9, borderTop: `1px dashed ${UI.line}`, fontSize: TYPE.caption, color: UI.ink3 }}>
           <span style={{ minWidth: 0, display: "inline-flex", alignItems: "center", gap: 4 }}><MapPin size={12} /><span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{scope}</span></span>
           <span>판단 근거 {evidenceCount}개</span>
-          {attemptCount > 1 && (
-            <span
-              title={attemptTitle || undefined}
-              style={{ minWidth: 0, display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap", color: hasNewerAttempt ? TINT.warn.fg : UI.ink3 }}
-            >
-              <CircleAlert size={12} />
-              <span>{hasNewerAttempt ? ISSUE_ATTEMPT_COPY.newerDetected : ISSUE_ATTEMPT_COPY.repeatedDetected}</span>
-              <span>{ISSUE_ATTEMPT_COPY.recentAttempts(Math.min(attemptCount, RCA_RECENT_ATTEMPT_LIMIT))}</span>
-              {hasNewerAttempt && onOpenLatest && (
-                <button
-                  type="button"
-                  className="product-focusable product-control"
-                  onClick={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    onOpenLatest();
-                  }}
-                  style={{ position: "relative", zIndex: 3, pointerEvents: "auto", border: "none", borderRadius: 7, background: TINT.warn.bg, color: TINT.warn.fg, padding: "2px 7px", fontSize: TYPE.caption, fontWeight: 600, lineHeight: 1.35, cursor: "pointer" }}
-                >
-                  {ISSUE_ATTEMPT_COPY.latestCorrelation}
-                </button>
-              )}
-            </span>
-          )}
         </span>
 
         <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -2596,35 +2552,31 @@ export function IssuesSurface({ incidentClusterIds, recoveryProgressOverrides = 
   const visibleIssues = tab === "해결됨"
     ? resolvedIssues
     : activeIssues.filter((issue) => severityFilter === "all" || issue.severity === severityFilter);
-  const setRca = (iss: RcaIssueDetailView, attempt: RcaIssueAttemptSummary | null = null) => {
-    const correlationId = attempt?.correlationId ?? iss.correlationId;
-    const rawSymptom = attempt ? attempt.rawSymptom : iss.rawSymptom;
-    onOpenRca?.({
-      name: attempt?.resourceName ?? iss.resourceName ?? correlationId.slice(0, 12),
-      symptom: rawSymptom ? operationalMessageLabel(rawSymptom) : attempt ? attempt.status : iss.symptom ?? iss.status,
-      rawSymptom,
-      cluster: attempt?.clusterId ?? iss.clusterId ?? "-",
-      svc: attempt?.resourceName ?? iss.resourceName ?? correlationId.slice(0, 12),
-      ns: attempt?.namespace ?? iss.namespace ?? "-",
-      resourceKind: attempt?.resourceKind ?? iss.resourceKind,
-      correlationId,
-      incidentId: attempt ? attempt.incidentId : iss.incidentId,
-      currentSubject: attempt ? attempt.currentSubject : iss.currentSubject,
-      updatedAt: attempt ? attempt.updatedAt : iss.updatedAt,
-      status: attempt ? attempt.status : iss.status,
-      severity: attempt ? attempt.severity : iss.severity,
-      rootCause: attempt ? attempt.rootCause : iss.rootCause,
-      confidence: attempt ? attempt.confidence : iss.confidence,
-      supportingEvidence: attempt ? attempt.supportingEvidence : iss.supportingEvidence,
-      missingEvidence: attempt ? attempt.missingEvidence : iss.missingEvidence,
-      situationSummary: attempt ? attempt.situationSummary : iss.situationSummary,
-      recommendedActionSummary: attempt ? attempt.recommendedActionSummary : iss.recommendedActionSummary,
-      evidenceSummary: attempt ? attempt.evidenceSummary : iss.evidenceSummary,
-      evidenceBundleSummary: attempt ? attempt.evidenceBundleSummary : iss.evidenceBundleSummary,
-      recoveryReasonCode: attempt ? attempt.recoveryReasonCode : iss.recoveryReasonCode,
-      prUrl: attempt ? attempt.prUrl : iss.prUrl,
-    });
-  };
+  const setRca = (iss: RcaIssueDetailView) => onOpenRca?.({
+    name: iss.resourceName ?? iss.correlationId.slice(0, 12),
+    symptom: iss.symptom ?? iss.status,
+    rawSymptom: iss.rawSymptom,
+    cluster: iss.clusterId ?? "-",
+    svc: iss.resourceName ?? (iss.resourceName ?? iss.correlationId.slice(0, 12)),
+    ns: iss.namespace ?? "-",
+    resourceKind: iss.resourceKind,
+    correlationId: iss.correlationId,
+    incidentId: iss.incidentId,
+    currentSubject: iss.currentSubject,
+    updatedAt: iss.updatedAt,
+    status: iss.status,
+    severity: iss.severity,
+    rootCause: iss.rootCause,
+    confidence: iss.confidence,
+    supportingEvidence: iss.supportingEvidence,
+    missingEvidence: iss.missingEvidence,
+    situationSummary: iss.situationSummary,
+    recommendedActionSummary: iss.recommendedActionSummary,
+    evidenceSummary: iss.evidenceSummary,
+    evidenceBundleSummary: iss.evidenceBundleSummary,
+    recoveryReasonCode: iss.recoveryReasonCode,
+    prUrl: iss.prUrl,
+  });
   return (
     <Page
       title="이슈"
@@ -2662,10 +2614,6 @@ export function IssuesSurface({ incidentClusterIds, recoveryProgressOverrides = 
           ) : visibleIssues.map((iss) => {
             const resourceKind = iss.resourceKind;
             const resourceName = iss.resourceName;
-            const latestAttempt = iss.recentAttempts?.[0] ?? null;
-            const onOpenLatest = latestAttempt && latestAttempt.correlationId !== iss.correlationId
-              ? () => setRca(iss, latestAttempt)
-              : null;
             return (
               <IssueCard
                 key={iss.correlationId}
@@ -2673,7 +2621,6 @@ export function IssuesSurface({ incidentClusterIds, recoveryProgressOverrides = 
                 recoveryProgressOverride={recoveryProgressOverrides.get(iss.correlationId) ?? null}
                 recoveryCompleted={!isActiveRcaIssue(iss)}
                 onOpen={() => setRca(iss)}
-                onOpenLatest={onOpenLatest}
                 onOpenTarget={resourceKind && resourceName ? () => onOpenRef(resourceKind, resourceName) : null}
               />
             );

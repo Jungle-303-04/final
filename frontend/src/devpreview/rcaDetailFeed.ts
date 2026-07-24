@@ -11,8 +11,8 @@ import { getIncidentRecentChanges } from "../api/recent-changes";
 import type { RecentChangeItem } from "../api/recent-changes-schemas";
 import { getEvidenceWindowPayload, listEvidence, listRcaReports } from "../api/evidence";
 import type { EvidenceRecord, EvidenceWindowPayload, RcaReport } from "../api/evidence-schemas";
-import { loadRcaIssueRepresentativeItems } from "./rcaIssuesFeed";
-import type { RcaIssueAttemptSummary, RcaIssueRepresentativeItem } from "./rcaIssueGrouping";
+import type { RcaIssueList } from "../api/schemas";
+import { loadRcaIssueItems } from "./rcaIssuesFeed";
 import { operationalMessageLabel } from "./statusLabel";
 
 // UI-PHASE2-001: typed live adapters for the RCA Issue *detail* drawer. Unlike
@@ -51,8 +51,6 @@ export interface RcaIssueDetailView {
   errorReason: string | null;
   recoveryReasonCode?: string | null;
   updatedAt: string | null;
-  attemptCount?: number;
-  recentAttempts?: RcaIssueAttemptSummary[];
 }
 
 export interface RcaIssueDetailsFeed {
@@ -60,7 +58,7 @@ export interface RcaIssueDetailsFeed {
   items: RcaIssueDetailView[];
 }
 
-type RcaIssueItem = RcaIssueRepresentativeItem;
+type RcaIssueItem = RcaIssueList["items"][number];
 
 export function toRcaIssueDetailView(item: RcaIssueItem): RcaIssueDetailView {
   return {
@@ -88,8 +86,6 @@ export function toRcaIssueDetailView(item: RcaIssueItem): RcaIssueDetailView {
     errorReason: item.error_reason,
     recoveryReasonCode: item.recovery_reason_code,
     updatedAt: item.updated_at,
-    attemptCount: item.attemptCount,
-    recentAttempts: item.recentAttempts,
   };
 }
 
@@ -120,7 +116,7 @@ export function useRcaIssueDetails(
     const scopedClusterIds = scopeKey === null ? undefined : scopeKey === "" ? [] : scopeKey.split("\u0000");
     let timer: number | undefined;
     const load = () => {
-      void loadRcaIssueRepresentativeItems(scopedClusterIds, controller.signal)
+      void loadRcaIssueItems(scopedClusterIds, controller.signal)
         .then((items) => {
           if (controller.signal.aborted) return;
           const views = items.map(toRcaIssueDetailView);
