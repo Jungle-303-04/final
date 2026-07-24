@@ -1671,7 +1671,6 @@ async def retry_recovery_by_correlation(
 @router.get(
     gateway_routes.RCA_RECOVERY_PLAN_BY_CORRELATION_PATH,
     response_model=RecoveryPlanStatusResponse,
-    response_model_exclude_none=True,
 )
 async def recovery_plan_by_correlation(
     correlation_id: str,

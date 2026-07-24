@@ -2195,11 +2195,11 @@ export function IssueDetail({ name, symptom, rawSymptom, cluster, svc, ns, resou
                   <p style={{ margin: 0, fontSize: TYPE.label, color: effectiveFinalJudgment ? UI.ink2 : UI.ink3, lineHeight: 1.6 }}>{effectiveFinalJudgment || "최종 판단 정보가 아직 없습니다."}</p>
                 </ReportNumberedSection>
                 <ReportNumberedSection number="02" title="최종 원인">
-                  {latestReport.status === "loading" && <span style={{ fontSize: TYPE.caption, color: UI.ink2 }}>원인 후보를 불러오는 중…</span>}
-                  {latestReport.status === "unavailable" && <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: TYPE.caption, color: TINT.crit.fg }}><CircleAlert size={14} />원인 후보를 불러오지 못했습니다.</span>}
                   <RcaSelectedCause report={report} fallbackCause={effectiveRootCause} references={evidenceReferences} onEvidenceSelect={openEvidenceDetail} />
                 </ReportNumberedSection>
                 <ReportNumberedSection number="03" title="원인 후보">
+                  {latestReport.status === "loading" && <span style={{ fontSize: TYPE.caption, color: UI.ink2 }}>원인 후보를 불러오는 중…</span>}
+                  {latestReport.status === "unavailable" && <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: TYPE.caption, color: TINT.crit.fg }}><CircleAlert size={14} />원인 후보를 불러오지 못했습니다.</span>}
                   <RcaAlternativeCandidates report={report} references={evidenceReferences} onEvidenceSelect={openEvidenceDetail} />
                 </ReportNumberedSection>
                 <ReportNumberedSection number="04" title="근거 요약" sectionRef={evidenceSummaryRef}>

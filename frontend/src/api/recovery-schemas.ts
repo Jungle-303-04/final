@@ -33,9 +33,9 @@ export const recoveryPlanSchema = z.strictObject({
   recommended_action_id: z.string().min(1),
   execution_route: z.string(),
   selection_required: z.boolean(),
-  selected_action_id: z.string().nullable(),
-  selected_by: z.string().nullable(),
-  selected_action: recoveryActionCandidateSchema.nullable(),
+  selected_action_id: z.string().nullable().optional().default(null),
+  selected_by: z.string().nullable().optional().default(null),
+  selected_action: recoveryActionCandidateSchema.nullable().optional().default(null),
   candidates: z.array(recoveryActionCandidateSchema),
   lifecycle: jsonMapSchema.nullable().optional(),
 });
