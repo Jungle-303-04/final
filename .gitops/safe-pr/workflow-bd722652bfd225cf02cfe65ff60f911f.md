@@ -1,15 +1,15 @@
 # Apply sandbox manifest
 
-deployment/game-room-4: unknown → ghcr.io/jungle-303-04/demo-game/game-server:stable
+service/game-room-metrics: apply rendered manifest
 
 ## GitOps Basis
 
-- approval_ref: `approval-7fed2767876628ee4e3416e88a6cccfc`
-- policy_decision_ref: `policy-decision:approval-7fed2767876628ee4e3416e88a6cccfc:safe_pr`
-- diff_status: `intended_change`
+- approval_ref: `approval-5acd15555f241d17d3ba6c3e0ac62f50`
+- policy_decision_ref: `policy-decision:approval-5acd15555f241d17d3ba6c3e0ac62f50:safe_pr`
+- diff_status: `drift`
 - diff_basis: `managed-field-3way`
-- artifact_digest: `sha256:433347341dc2066cbb914c269fb960c6572758b77f610af8fb166d27cb5d9317`
-- rollback_patch: `.gitops/rollback/workflow-bd722652bfd225cf02cfe65ff60f911f/deployment-game-room-4-base.yaml`
+- artifact_digest: `sha256:9165d969d534a6430631ed828f4f2efe601997b583fdb0ce07e10691264b53b0`
+- rollback_patch: `.gitops/rollback/workflow-bd722652bfd225cf02cfe65ff60f911f/service-game-room-metrics-base.yaml`
 
 
 - manifest_path: `deploy/k8s/base`
@@ -20,14 +20,14 @@ deployment/game-room-4: unknown → ghcr.io/jungle-303-04/demo-game/game-server:
 ## Evidence
 
 - commit_sha: ``
-- patch_sha256: `4f8685801b530b718ffaae7dacb1a32f65493911fd35dd1ae56d67466fc83fe7`
+- patch_sha256: `dbc209b8a3a510af48deaea896d20c6f130b90cd23c9543f3cc87d9f555d665f`
 
 ## Approval
 
-- approval_ref: `approval-7fed2767876628ee4e3416e88a6cccfc`
-- policy_decision_ref: `policy-decision:approval-7fed2767876628ee4e3416e88a6cccfc:safe_pr`
+- approval_ref: `approval-5acd15555f241d17d3ba6c3e0ac62f50`
+- policy_decision_ref: `policy-decision:approval-5acd15555f241d17d3ba6c3e0ac62f50:safe_pr`
 
 ## Files
 
 - `deploy/k8s/base`: rendered Kubernetes manifest
-- `.gitops/rollback/workflow-bd722652bfd225cf02cfe65ff60f911f/deployment-game-room-4-base.yaml`: rollback manifest generated from live/previous values
+- `.gitops/rollback/workflow-bd722652bfd225cf02cfe65ff60f911f/service-game-room-metrics-base.yaml`: rollback manifest generated from live/previous values
