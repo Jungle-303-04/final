@@ -6,13 +6,11 @@ spec:
     targetPort: http
   selector:
     app: game-server
-    opsia.dev/fleet: live
-    opsia.dev/room-id: room-2
+  clusterIP: None
+  publishNotReadyAddresses: true
 metadata:
-  name: game-room-2
+  name: game-room-headless
   labels:
     app: game-server
-    opsia.dev/room-id: room-2
-    game.opsia.dev/room-id: room-2
   namespace: sandbox
 apiVersion: v1
