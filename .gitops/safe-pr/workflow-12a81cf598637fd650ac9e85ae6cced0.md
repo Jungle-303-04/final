@@ -1,15 +1,15 @@
 # Apply sandbox manifest
 
-deployment/api-server: apply rendered manifest
+deployment/game-room-4: unknown → ghcr.io/jungle-303-04/demo-game/game-server:stable
 
 ## GitOps Basis
 
-- approval_ref: `approval-985d8a9b8f32893db2eb708838ddcc3a`
-- policy_decision_ref: `policy-decision:approval-985d8a9b8f32893db2eb708838ddcc3a:safe_pr`
+- approval_ref: `approval-f4da50511e0fa59fb8519a8fc02d4dee`
+- policy_decision_ref: `policy-decision:approval-f4da50511e0fa59fb8519a8fc02d4dee:safe_pr`
 - diff_status: `intended_change`
 - diff_basis: `managed-field-3way`
-- artifact_digest: `sha256:b6b20ae1523daa5616cb3ae5d2d5bce5de04b73b37efc9fa245fe1d3be2a6252`
-- rollback_patch: `.gitops/rollback/workflow-12a81cf598637fd650ac9e85ae6cced0/deployment-api-server-base.yaml`
+- artifact_digest: `sha256:433347341dc2066cbb914c269fb960c6572758b77f610af8fb166d27cb5d9317`
+- rollback_patch: `.gitops/rollback/workflow-12a81cf598637fd650ac9e85ae6cced0/deployment-game-room-4-base.yaml`
 
 
 - manifest_path: `deploy/k8s/base`
@@ -20,14 +20,14 @@ deployment/api-server: apply rendered manifest
 ## Evidence
 
 - commit_sha: ``
-- patch_sha256: `cef2dc214354ad2b1624fa438db84b77e927c5f0a7663db4c1279d2e42ccd365`
+- patch_sha256: `83d42a16411402bd6cccdbd24655935dca2abc667190b13081b77e9535ef68ba`
 
 ## Approval
 
-- approval_ref: `approval-985d8a9b8f32893db2eb708838ddcc3a`
-- policy_decision_ref: `policy-decision:approval-985d8a9b8f32893db2eb708838ddcc3a:safe_pr`
+- approval_ref: `approval-f4da50511e0fa59fb8519a8fc02d4dee`
+- policy_decision_ref: `policy-decision:approval-f4da50511e0fa59fb8519a8fc02d4dee:safe_pr`
 
 ## Files
 
 - `deploy/k8s/base`: rendered Kubernetes manifest
-- `.gitops/rollback/workflow-12a81cf598637fd650ac9e85ae6cced0/deployment-api-server-base.yaml`: rollback manifest generated from live/previous values
+- `.gitops/rollback/workflow-12a81cf598637fd650ac9e85ae6cced0/deployment-game-room-4-base.yaml`: rollback manifest generated from live/previous values
