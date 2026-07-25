@@ -1,15 +1,15 @@
 # Apply sandbox manifest
 
-service/game-room-canary: apply rendered manifest
+service/login-gateway-api: apply rendered manifest
 
 ## GitOps Basis
 
-- approval_ref: `approval-4a2e9bff4b14ac1af4ab77409f7a7411`
-- policy_decision_ref: `policy-decision:approval-4a2e9bff4b14ac1af4ab77409f7a7411:safe_pr`
+- approval_ref: `approval-a265347dbd959513ac2bebae3405b949`
+- policy_decision_ref: `policy-decision:approval-a265347dbd959513ac2bebae3405b949:safe_pr`
 - diff_status: `drift`
 - diff_basis: `managed-field-3way`
-- artifact_digest: `sha256:73dd5d33398cdd18f75d5063314f9ed201073448e417c57e9c0b94d153daaf20`
-- rollback_patch: `.gitops/rollback/workflow-94e3a6f78e5ccb60a8b20dc0be8b5601/service-game-room-canary-base.yaml`
+- artifact_digest: `sha256:dfaac4755b0810331e3a96e059cb744205fc6707042ac7e0fc67a29eee0e2aee`
+- rollback_patch: `.gitops/rollback/workflow-94e3a6f78e5ccb60a8b20dc0be8b5601/service-login-gateway-api-base.yaml`
 
 
 - manifest_path: `deploy/k8s/base`
@@ -20,14 +20,14 @@ service/game-room-canary: apply rendered manifest
 ## Evidence
 
 - commit_sha: ``
-- patch_sha256: `10d8e7dcc678989a8a190c55798b04ffd2637b92a1bea4aa65ffcc844728eb0f`
+- patch_sha256: `235d3c4f72d1080223b2936ca50ce1217491901fe8893be59e7274f05210b754`
 
 ## Approval
 
-- approval_ref: `approval-4a2e9bff4b14ac1af4ab77409f7a7411`
-- policy_decision_ref: `policy-decision:approval-4a2e9bff4b14ac1af4ab77409f7a7411:safe_pr`
+- approval_ref: `approval-a265347dbd959513ac2bebae3405b949`
+- policy_decision_ref: `policy-decision:approval-a265347dbd959513ac2bebae3405b949:safe_pr`
 
 ## Files
 
 - `deploy/k8s/base`: rendered Kubernetes manifest
-- `.gitops/rollback/workflow-94e3a6f78e5ccb60a8b20dc0be8b5601/service-game-room-canary-base.yaml`: rollback manifest generated from live/previous values
+- `.gitops/rollback/workflow-94e3a6f78e5ccb60a8b20dc0be8b5601/service-login-gateway-api-base.yaml`: rollback manifest generated from live/previous values
