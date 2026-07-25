@@ -1,14 +1,18 @@
 kind: Service
 spec:
+  type: LoadBalancer
   ports:
   - name: http
-    port: 8083
+    port: 80
     targetPort: http
+  - name: https
+    port: 443
+    targetPort: https
   selector:
-    app: session-gateway
+    app: demo-game-gateway
 metadata:
-  name: session-gateway
+  name: login-gateway
   labels:
-    app: session-gateway
+    app: demo-game-gateway
   namespace: sandbox
 apiVersion: v1
