@@ -1,60 +1,14 @@
-kind: Deployment
+kind: Service
 spec:
-  replicas: 1
+  ports:
+  - name: http
+    port: 8083
+    targetPort: http
   selector:
-    matchLabels:
-      app: canary-validation-bot
-  template:
-    spec:
-      containers:
-      - env:
-        - name: OPSIA_ROOM_ENDPOINTS
-          value: canary-room=http://game-room-canary:8001
-        - name: OPSIA_MIN_BOTS_PER_ROOM
-          value: '0'
-        - name: OPSIA_BOT_RECONCILE_INTERVAL_MS
-          value: '2000'
-        - name: OPSIA_BOT_RECONCILE_BATCH_SIZE
-          value: '5'
-        - name: OPSIA_VALIDATION_ONLY
-          value: 'true'
-        - name: REQUIRE_CONTROL_TOKEN
-          value: 'true'
-        - name: OPS_CONTROL_TOKEN
-          valueFrom:
-            secretKeyRef:
-              key: token
-              name: demo-game-control
-        name: bot-runner
-        image: ghcr.io/jungle-303-04/demo-game/bot-runner:stable
-        ports:
-        - name: http
-          containerPort: 8084
-        resources:
-          limits:
-            cpu: '1'
-            memory: 1Gi
-          requests:
-            cpu: 250m
-            memory: 256Mi
-        readinessProbe:
-          httpGet:
-            path: /healthz
-            port: http
-          initialDelaySeconds: 2
-        imagePullPolicy: Always
-    metadata:
-      labels:
-        app: canary-validation-bot
-        opsia.dev/fleet: canary
-        app.kubernetes.io/part-of: demo-game
-        opsia.dev/validation-only: 'true'
+    app: session-gateway
 metadata:
-  name: canary-validation-bot
+  name: session-gateway
   labels:
-    app: canary-validation-bot
-    opsia.dev/fleet: canary
-    app.kubernetes.io/part-of: demo-game
-    opsia.dev/validation-only: 'true'
+    app: session-gateway
   namespace: sandbox
-apiVersion: apps/v1
+apiVersion: v1
