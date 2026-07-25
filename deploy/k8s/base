@@ -1,17 +1,16 @@
 kind: Service
 spec:
   ports:
-  - name: registry
-    port: 8082
-    targetPort: registry
-  - name: console
-    port: 8085
-    targetPort: console
+  - name: http
+    port: 8001
+    targetPort: http
   selector:
-    app: management-server
+    app: game-server
+  clusterIP: None
+  publishNotReadyAddresses: true
 metadata:
-  name: login-gateway-management
+  name: game-room-headless
   labels:
-    app: management-server
+    app: game-server
   namespace: sandbox
 apiVersion: v1
