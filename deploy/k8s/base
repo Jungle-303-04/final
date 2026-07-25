@@ -1,17 +1,15 @@
 kind: Service
 spec:
   ports:
-  - name: registry
-    port: 8082
-    targetPort: registry
-  - name: console
-    port: 8085
-    targetPort: console
+  - name: http
+    port: 8081
+    targetPort: http
   selector:
-    app: management-server
+    app: api-server
+  publishNotReadyAddresses: true
 metadata:
-  name: login-gateway-management
+  name: login-gateway-api
   labels:
-    app: management-server
+    app: api-server
   namespace: sandbox
 apiVersion: v1
