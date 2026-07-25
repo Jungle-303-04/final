@@ -2,14 +2,13 @@ kind: Service
 spec:
   ports:
   - name: http
-    port: 8081
+    port: 8083
     targetPort: http
   selector:
-    app: api-server
-  publishNotReadyAddresses: true
+    app: session-gateway
 metadata:
-  name: login-gateway-api
+  name: session-gateway
   labels:
-    app: api-server
+    app: session-gateway
   namespace: sandbox
 apiVersion: v1
