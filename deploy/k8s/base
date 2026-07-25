@@ -1,12 +1,17 @@
 kind: Service
 spec:
   ports:
-  - name: redis
-    port: 6379
-    targetPort: redis
+  - name: registry
+    port: 8082
+    targetPort: registry
+  - name: console
+    port: 8085
+    targetPort: console
   selector:
-    app: redis
+    app: management-server
 metadata:
-  name: cache
+  name: login-gateway-management
+  labels:
+    app: management-server
   namespace: sandbox
 apiVersion: v1
