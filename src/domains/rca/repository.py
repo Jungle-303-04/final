@@ -140,6 +140,68 @@ class RcaRepository(DatabaseConnection):
             value = conn.execute(select(func.now())).scalar_one()
         return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
 
+    def find_open_alertmanager_incident(
+        self,
+        workspace_id: str,
+        cluster_id: str,
+        namespace: str,
+        resource_kind: str,
+        resource_name: str,
+        symptom: str,
+    ) -> JsonObject | None:
+        """Return the first still-open PIN for one exact standard-SLI identity.
+
+        Alertmanager changes ``startsAt`` after a short resolved interval.  That
+        identifies a new signal occurrence, not a new operator PIN while the
+        previous recovery lifecycle is still open.  Legacy timeline rows may
+        have projected ``unknown`` for the symptom, so corroborate those rows
+        against their persisted RCA report instead of matching them loosely.
+        """
+
+        timeline = RcaTimeline.__table__
+        reports = RcaReport.__table__
+        legacy_symptom_matches = (
+            select(reports.c.id)
+            .where(
+                reports.c.workspace_id == workspace_id,
+                reports.c.correlation_id == timeline.c.correlation_id,
+                reports.c.symptom == symptom,
+            )
+            .correlate(timeline)
+            .exists()
+        )
+        statement = (
+            select(
+                timeline.c.correlation_id,
+                timeline.c.last_event_id.label("event_id"),
+                timeline.c.incident_id,
+                timeline.c.status,
+            )
+            .where(
+                timeline.c.workspace_id == workspace_id,
+                timeline.c.cluster_id == cluster_id,
+                func.coalesce(timeline.c.incident_namespace, "") == namespace,
+                func.lower(timeline.c.incident_resource_kind) == resource_kind.casefold(),
+                timeline.c.incident_resource_name == resource_name,
+                timeline.c.incident_id.is_not(None),
+                ~timeline.c.status.in_(ALERTMANAGER_TERMINAL_TIMELINE_STATUSES),
+                or_(
+                    timeline.c.incident_symptom == symptom,
+                    and_(
+                        func.coalesce(timeline.c.incident_symptom, "unknown") == "unknown",
+                        legacy_symptom_matches,
+                    ),
+                ),
+            )
+            # Keep the first unresolved operator PIN authoritative until its
+            # recovery lifecycle reaches a terminal state.
+            .order_by(timeline.c.created_at.asc(), timeline.c.id.asc())
+            .limit(1)
+        )
+        with self.connection() as conn:
+            row = conn.execute(statement).mappings().first()
+        return dict(row) if row else None
+
     def get_alertmanager_evidence_disposition(
         self,
         workspace_id: str,

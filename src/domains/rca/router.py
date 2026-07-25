@@ -834,6 +834,54 @@ def build_alertmanager_evidence_body(
     )
 
 
+def standard_sli_incident_identity(
+    payload: AlertmanagerWebhookRequest,
+) -> tuple[str, str, str, str] | None:
+    """Extract the exact PIN identity from one unambiguous firing SLI alert."""
+
+    identities: set[tuple[str, str, str, str]] = set()
+    for alert in payload.alerts:
+        if alert.status.strip().lower() != "firing":
+            continue
+        labels = alert.labels if isinstance(alert.labels, dict) else {}
+        if str(labels.get("alertname") or "").strip() != STANDARD_SLI_ALERT_NAME:
+            continue
+        identity = tuple(
+            str(labels.get(key) or "").strip()
+            for key in (
+                "opsia_namespace",
+                "opsia_resource_kind",
+                "opsia_resource_name",
+                "opsia_symptom",
+            )
+        )
+        if all(identity):
+            identities.add(identity)  # type: ignore[arg-type]
+    return next(iter(identities)) if len(identities) == 1 else None
+
+
+async def open_alertmanager_incident(
+    db: Any,
+    workspace_id: str,
+    cluster_id: str,
+    payload: AlertmanagerWebhookRequest,
+) -> dict[str, Any] | None:
+    identity = standard_sli_incident_identity(payload)
+    finder = getattr(db, "find_open_alertmanager_incident", None)
+    if identity is None or not callable(finder):
+        return None
+    result = await db_call(
+        finder,
+        workspace_id,
+        cluster_id,
+        identity[0],
+        identity[1],
+        identity[2],
+        identity[3],
+    )
+    return dict(result) if isinstance(result, dict) else None
+
+
 def alertmanager_alert_event_id(
     workspace_id: str,
     cluster_id: str,
@@ -1025,11 +1073,22 @@ async def alertmanager_webhook(
     evidence_body = build_alertmanager_evidence_body(
         workspace_id, cluster_id, payload, evidence_key
     )
+    open_incident = await open_alertmanager_incident(
+        db,
+        workspace_id,
+        cluster_id,
+        payload,
+    )
+    open_correlation_id = (
+        str(open_incident.get("correlation_id") or "").strip()
+        if open_incident is not None
+        else ""
+    )
     event_envelope = event(
         evidence_body.__subject__,
         getattr(events, "source", "api-gateway"),
         compact_cluster_evidence_payload(evidence_body),
-        None,
+        open_correlation_id or None,
     )
     existing = await db_call(db.get_evidence_window, evidence_key)
     if existing:
