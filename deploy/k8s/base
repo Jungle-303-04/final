@@ -1,17 +1,15 @@
 kind: Service
 spec:
-  type: ClusterIP
   ports:
   - name: http
-    port: 8084
+    port: 8081
     targetPort: http
   selector:
-    app: canary-validation-bot
+    app: api-server
+  publishNotReadyAddresses: true
 metadata:
-  name: game-room-canary-bot
+  name: login-gateway-api
   labels:
-    app: canary-validation-bot
-    opsia.dev/fleet: canary
-    opsia.dev/validation-only: 'true'
+    app: api-server
   namespace: sandbox
 apiVersion: v1
