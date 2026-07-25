@@ -1,4 +1,5 @@
-from sqlalchemy import select
+import pytest
+from sqlalchemy import create_engine, literal, select
 from sqlalchemy.dialects import postgresql
 
 from domains.dashboard.models import RcaTimeline
@@ -9,6 +10,7 @@ from domains.dashboard.repository import (
     effective_confidence_column,
     issue_detail_projection,
     latest_rca_issue_report_summaries_statement,
+    projected_incident_status,
 )
 from domains.dashboard.router import issue_item
 from domains.issue_filter.repository import _authorized_issues
@@ -27,6 +29,31 @@ def test_issue_scan_does_not_probe_reports_for_every_candidate_row() -> None:
     assert "rca_issue_report_summary" not in sql
     assert "rca_timeline.payload" in sql
     assert "reason_code" in sql
+
+
+@pytest.mark.parametrize(
+    ("existing", "incoming", "expected"),
+    [
+        ("approval_recommended", "followup_required", "approval_recommended"),
+        ("pr_open", "rca_completed", "pr_open"),
+        ("rca_evaluated", "followup_required", "followup_required"),
+    ],
+)
+def test_weak_reanalysis_cannot_replace_an_unresolved_recovery_pin(
+    existing: str,
+    incoming: str,
+    expected: str,
+) -> None:
+    statement = select(
+        projected_incident_status(
+            literal(existing),
+            literal(incoming),
+            literal(True),
+        )
+    )
+
+    with create_engine("sqlite://").connect() as connection:
+        assert connection.execute(statement).scalar_one() == expected
 
 
 def test_filtered_issue_scan_does_not_probe_reports_before_page_limit() -> None:

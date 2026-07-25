@@ -680,6 +680,26 @@ def test_authority_uses_current_approved_snapshot_when_incident_has_no_recent_ch
     assert authority.changes == ()
 
 
+def test_approved_snapshot_authority_survives_workflow_history_retention() -> None:
+    db = AuthorityDb(evidence={"metadata": {}})
+
+    async def missing_retained_workflow(*args: object) -> None:
+        return None
+
+    async def no_recent_diff(*args: object) -> None:
+        return None
+
+    db.get_workflow_run = missing_retained_workflow  # type: ignore[method-assign]
+    db.get_completed_workload_resource_diff = no_recent_diff  # type: ignore[method-assign]
+
+    authority = load_authority(db, query())
+
+    assert authority is not None
+    assert authority.workflow_run_id == "run-1"
+    assert authority.binding_id == "binding-1"
+    assert authority.desired_manifest == db.desired
+
+
 def test_authority_uses_binding_manifest_path_when_application_default_differs() -> None:
     db = AuthorityDb(evidence={"metadata": {}})
 

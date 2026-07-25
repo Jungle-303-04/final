@@ -155,12 +155,55 @@ TERMINAL_INCIDENT_STATUSES: tuple[str, ...] = (
     "incident_resolved",
     "incident_expired",
 )
+RECOVERY_PIN_STATUSES: tuple[str, ...] = (
+    "recovery_planned",
+    "selection_required",
+    "approval_recommended",
+    "recovery_selected",
+    "pr_requested",
+    "pr_patch_prepared",
+    "pr_diff_explained",
+    "pr_ready_for_creation",
+    "pr_created",
+    "pr_open",
+    "deploy_pending",
+    "verification_pending",
+)
+WEAK_REANALYSIS_STATUSES: tuple[str, ...] = (
+    "incident_detected",
+    "evidence_bundled",
+    "rca_planned",
+    "rca_evaluated",
+    "rca_completed",
+    "followup_required",
+)
 EPHEMERAL_INCIDENT_RESOURCE_KINDS: tuple[str, ...] = ("Pod", "ReplicaSet")
 EPHEMERAL_INCIDENT_RESOURCE_KINDS_NORMALIZED = tuple(
     kind.casefold() for kind in EPHEMERAL_INCIDENT_RESOURCE_KINDS
 )
 MAX_RCA_REPORT_SUMMARY_BATCH = 101
 VALID_CONFIDENCE_PATTERN = r"^(?:0(?:\.[0-9]+)?|1(?:\.0+)?)$"
+
+
+def projected_incident_status(
+    existing_status: Any,
+    incoming_status: Any,
+    newer_event: Any,
+) -> Any:
+    """Keep an unresolved recovery PIN authoritative during weak re-analysis."""
+
+    return case(
+        (existing_status == "incident_resolved", existing_status),
+        (
+            and_(
+                existing_status.in_(RECOVERY_PIN_STATUSES),
+                incoming_status.in_(WEAK_REANALYSIS_STATUSES),
+            ),
+            existing_status,
+        ),
+        (newer_event, incoming_status),
+        else_=existing_status,
+    )
 
 
 def latest_inventory_snapshot_id_for_incident(timeline: Any) -> Any:
@@ -688,10 +731,10 @@ class DashboardRepository(DatabaseConnection):
                 # Inventory recovery is the incident lifecycle authority. A late RCA
                 # completion replay may enrich the verdict, but must not reopen an
                 # already recovered issue in the operator queue.
-                status=case(
-                    (table.c.status == "incident_resolved", table.c.status),
-                    (newer_event, insert.excluded.status),
-                    else_=table.c.status,
+                status=projected_incident_status(
+                    table.c.status,
+                    insert.excluded.status,
+                    newer_event,
                 ),
                 error_reason=case(
                     (newer_event, insert.excluded.error_reason),

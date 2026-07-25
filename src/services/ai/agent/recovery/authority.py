@@ -75,7 +75,25 @@ class DatabaseGitOpsAuthorityReadPort(GitOpsAuthorityReadPort):
         manifest_path = text(identity, "manifest_path")
         run = await self.db.get_workflow_run(workflow_run_id)
         if not isinstance(run, Mapping):
-            return None
+            # Approved resource snapshots are the durable deployment authority;
+            # workflow runs are bounded operational history. Retention of the
+            # latter must not invalidate an otherwise complete snapshot whose
+            # binding, repository and artifact provenance are still verified
+            # below. Exact incident/change evidence continues to fail closed.
+            if text(identity, "authority_source") != "approved_snapshot":
+                return None
+            run = {
+                key: identity.get(key)
+                for key in (
+                    "workspace_id",
+                    "application_id",
+                    "binding_id",
+                    "workflow_run_id",
+                    "environment",
+                    "cluster_id",
+                    "commit_sha",
+                )
+            }
         run = dict(run)
         identity = enriched_identity(identity, run)
         application_id = text(identity, "application_id")
