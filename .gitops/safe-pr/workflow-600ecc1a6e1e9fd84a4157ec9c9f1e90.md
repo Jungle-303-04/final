@@ -1,15 +1,15 @@
 # Apply sandbox manifest
 
-deployment/game-room-2: unknown → ghcr.io/jungle-303-04/demo-game/game-server:stable
+service/game-room-canary: apply rendered manifest
 
 ## GitOps Basis
 
-- approval_ref: `approval-fbaf8fc89e31228344afd0c150fd2aff`
-- policy_decision_ref: `policy-decision:approval-fbaf8fc89e31228344afd0c150fd2aff:safe_pr`
-- diff_status: `intended_change`
+- approval_ref: `approval-6698259f3af90c4b8a84c98a44b3c729`
+- policy_decision_ref: `policy-decision:approval-6698259f3af90c4b8a84c98a44b3c729:safe_pr`
+- diff_status: `drift`
 - diff_basis: `managed-field-3way`
-- artifact_digest: `sha256:b00973563fea8e510ffd1f6e98f7b55ff2c616b02356b775d232c7f13a20380a`
-- rollback_patch: `.gitops/rollback/workflow-600ecc1a6e1e9fd84a4157ec9c9f1e90/deployment-game-room-2-base.yaml`
+- artifact_digest: `sha256:73dd5d33398cdd18f75d5063314f9ed201073448e417c57e9c0b94d153daaf20`
+- rollback_patch: `.gitops/rollback/workflow-600ecc1a6e1e9fd84a4157ec9c9f1e90/service-game-room-canary-base.yaml`
 
 
 - manifest_path: `deploy/k8s/base`
@@ -20,14 +20,14 @@ deployment/game-room-2: unknown → ghcr.io/jungle-303-04/demo-game/game-server:
 ## Evidence
 
 - commit_sha: ``
-- patch_sha256: `bab45db9857a71c8ce2a900f04a81c424bd5f51c4e6584af8325818cbba96798`
+- patch_sha256: `07cdd27b6757c919761329c816fb77cde41d29c39ef59b49405de0ca7a04177b`
 
 ## Approval
 
-- approval_ref: `approval-fbaf8fc89e31228344afd0c150fd2aff`
-- policy_decision_ref: `policy-decision:approval-fbaf8fc89e31228344afd0c150fd2aff:safe_pr`
+- approval_ref: `approval-6698259f3af90c4b8a84c98a44b3c729`
+- policy_decision_ref: `policy-decision:approval-6698259f3af90c4b8a84c98a44b3c729:safe_pr`
 
 ## Files
 
 - `deploy/k8s/base`: rendered Kubernetes manifest
-- `.gitops/rollback/workflow-600ecc1a6e1e9fd84a4157ec9c9f1e90/deployment-game-room-2-base.yaml`: rollback manifest generated from live/previous values
+- `.gitops/rollback/workflow-600ecc1a6e1e9fd84a4157ec9c9f1e90/service-game-room-canary-base.yaml`: rollback manifest generated from live/previous values
