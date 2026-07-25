@@ -621,7 +621,9 @@ def authority_rows_match(
         and text(application, "workspace_id") == query.workspace_id
         and text(application, "repository_id") == exact["repository_id"]
         and text(application, "status") == "active"
-        and text(application, "manifest_path") == exact["manifest_path"]
+        # Application.manifest_path is the repository-wide default. A cluster
+        # binding may intentionally select a different overlay, so source-path
+        # authority comes from the exact binding and artifact provenance below.
         and text(application, "repo_ref") == text(identity, "repo_ref")
         and text(application, "default_branch") == text(identity, "branch")
         and text(binding, "workspace_id") == query.workspace_id
