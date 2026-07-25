@@ -1,15 +1,15 @@
 # Apply sandbox manifest
 
-service/game-room-metrics: apply rendered manifest
+deployment/canary-room: unknown → ghcr.io/jungle-303-04/demo-game/game-server:stable
 
 ## GitOps Basis
 
-- approval_ref: `approval-4071cb0573ca0e4cfc975b9e9548ebc3`
-- policy_decision_ref: `policy-decision:approval-4071cb0573ca0e4cfc975b9e9548ebc3:safe_pr`
-- diff_status: `drift`
+- approval_ref: `approval-4b52b6a9e94b75b971fef164e141ec5f`
+- policy_decision_ref: `policy-decision:approval-4b52b6a9e94b75b971fef164e141ec5f:safe_pr`
+- diff_status: `intended_change`
 - diff_basis: `managed-field-3way`
-- artifact_digest: `sha256:9165d969d534a6430631ed828f4f2efe601997b583fdb0ce07e10691264b53b0`
-- rollback_patch: `.gitops/rollback/workflow-600ecc1a6e1e9fd84a4157ec9c9f1e90/service-game-room-metrics-base.yaml`
+- artifact_digest: `sha256:2b4070970ff06f2aeb538f3848ea3c45043a58da5cd580842f4e09ac05574690`
+- rollback_patch: `.gitops/rollback/workflow-600ecc1a6e1e9fd84a4157ec9c9f1e90/deployment-canary-room-base.yaml`
 
 
 - manifest_path: `deploy/k8s/base`
@@ -20,14 +20,14 @@ service/game-room-metrics: apply rendered manifest
 ## Evidence
 
 - commit_sha: ``
-- patch_sha256: `04317eb1e9cecf33b02c5b1c2cd7902c8a697f989808a198fbaedc0b0f2f2e8f`
+- patch_sha256: `6f1a4bb802e4bd0a76188411f2863c53f7c65f168a87b115e9ac7ab4b9267def`
 
 ## Approval
 
-- approval_ref: `approval-4071cb0573ca0e4cfc975b9e9548ebc3`
-- policy_decision_ref: `policy-decision:approval-4071cb0573ca0e4cfc975b9e9548ebc3:safe_pr`
+- approval_ref: `approval-4b52b6a9e94b75b971fef164e141ec5f`
+- policy_decision_ref: `policy-decision:approval-4b52b6a9e94b75b971fef164e141ec5f:safe_pr`
 
 ## Files
 
 - `deploy/k8s/base`: rendered Kubernetes manifest
-- `.gitops/rollback/workflow-600ecc1a6e1e9fd84a4157ec9c9f1e90/service-game-room-metrics-base.yaml`: rollback manifest generated from live/previous values
+- `.gitops/rollback/workflow-600ecc1a6e1e9fd84a4157ec9c9f1e90/deployment-canary-room-base.yaml`: rollback manifest generated from live/previous values
