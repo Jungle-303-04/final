@@ -1,19 +1,17 @@
 kind: Service
 spec:
-  type: ClusterIP
   ports:
-  - name: http
-    port: 8001
-    targetPort: http
+  - name: registry
+    port: 8082
+    targetPort: registry
+  - name: console
+    port: 8085
+    targetPort: console
   selector:
-    app: game-server
-    opsia.dev/fleet: canary
-    opsia.dev/room-id: canary-room
+    app: management-server
 metadata:
-  name: game-room-canary
+  name: login-gateway-management
   labels:
-    app: game-server
-    opsia.dev/fleet: canary
-    opsia.dev/public: disabled
+    app: management-server
   namespace: sandbox
 apiVersion: v1
