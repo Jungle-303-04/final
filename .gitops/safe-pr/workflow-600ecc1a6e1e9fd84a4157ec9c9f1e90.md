@@ -1,15 +1,15 @@
 # Apply sandbox manifest
 
-deployment/session-gateway: ghcr.io/jungle-303-04/demo-game/session-gateway:276977d3628e8cc5c7ce8c362add3b4111c7883e → ghcr.io/jungle-303-04/demo-game/session-gateway:stable
+service/session-gateway: apply rendered manifest
 
 ## GitOps Basis
 
-- approval_ref: `approval-18bf5c475d39e94a35878a60685b0b95`
-- policy_decision_ref: `policy-decision:approval-18bf5c475d39e94a35878a60685b0b95:safe_pr`
-- diff_status: `intended_change`
+- approval_ref: `approval-edd9fa4f76eaf2efa85eba4814d9904a`
+- policy_decision_ref: `policy-decision:approval-edd9fa4f76eaf2efa85eba4814d9904a:safe_pr`
+- diff_status: `drift`
 - diff_basis: `managed-field-3way`
-- artifact_digest: `sha256:8f60b2e836b46e64524bd0e248c66889a0bfbe02fc37930d3484c0285de2ebb1`
-- rollback_patch: `.gitops/rollback/workflow-600ecc1a6e1e9fd84a4157ec9c9f1e90/deployment-session-gateway-base.yaml`
+- artifact_digest: `sha256:4492ba48c302227bd9867ce39b43c08450e82756500bf7889806ad2c14715ae8`
+- rollback_patch: `.gitops/rollback/workflow-600ecc1a6e1e9fd84a4157ec9c9f1e90/service-session-gateway-base.yaml`
 
 
 - manifest_path: `deploy/k8s/base`
@@ -20,14 +20,14 @@ deployment/session-gateway: ghcr.io/jungle-303-04/demo-game/session-gateway:2769
 ## Evidence
 
 - commit_sha: ``
-- patch_sha256: `527cdd7ffdad82686699ab767a125fe3c1729e95fe013f8e57f818bd405945aa`
+- patch_sha256: `e23de9c85fa9b8ccf0a1fb5f0596a4d991a8a0f8845684f010ec7a637a816289`
 
 ## Approval
 
-- approval_ref: `approval-18bf5c475d39e94a35878a60685b0b95`
-- policy_decision_ref: `policy-decision:approval-18bf5c475d39e94a35878a60685b0b95:safe_pr`
+- approval_ref: `approval-edd9fa4f76eaf2efa85eba4814d9904a`
+- policy_decision_ref: `policy-decision:approval-edd9fa4f76eaf2efa85eba4814d9904a:safe_pr`
 
 ## Files
 
 - `deploy/k8s/base`: rendered Kubernetes manifest
-- `.gitops/rollback/workflow-600ecc1a6e1e9fd84a4157ec9c9f1e90/deployment-session-gateway-base.yaml`: rollback manifest generated from live/previous values
+- `.gitops/rollback/workflow-600ecc1a6e1e9fd84a4157ec9c9f1e90/service-session-gateway-base.yaml`: rollback manifest generated from live/previous values
