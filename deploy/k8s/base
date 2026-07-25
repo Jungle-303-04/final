@@ -3,8 +3,7 @@ spec:
   replicas: 1
   selector:
     matchLabels:
-      app: game-server
-      opsia.dev/room-id: room-3
+      app: api-server
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -14,55 +13,32 @@ spec:
     spec:
       containers:
       - env:
-        - name: ROOM_ID
-          value: room-3
-        - name: OPSIA_MAP_NAME
-          value: main
-        - name: OPSIA_ROOM_PROFILE
-          value: main
-        - name: OPSIA_HANDOFF_ROLE
-          value: active-candidate
-        - name: OPSIA_ROLE
-          value: auto
-        - name: OPSIA_GAME_BUILD_REVISION
-          value: stable
-        - name: ROOM_EPOCH
-          value: '1'
-        - name: OPSIA_WORKLOAD_NAME
-          value: game-room-3
-        - name: OPSIA_RESOURCE_KIND
-          value: Deployment
-        - name: REDIS_URL
-          value: redis://cache:6379/0
-        - name: POD_NAME
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.name
+        - name: ORCHESTRATOR_URL
+          value: http://login-gateway-management:8082
+        - name: MAX_FIND_GAME_PER_SECOND
+          value: '25'
         - name: POD_NAMESPACE
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
-        - name: POD_UID
+        - name: OPSIA_RESOURCE_KIND
+          value: Deployment
+        - name: OPSIA_WORKLOAD_NAME
           valueFrom:
             fieldRef:
-              fieldPath: metadata.uid
-        - name: STRICT_MODE
-          value: 'false'
-        - name: OPSIA_ROOM
-          value: 'true'
-        - name: OPSIA_BOT_STARTER_GUNS
-          value: mp5,mac10,vector,hk416,ak47,scar,mosin,m870,mp220,saiga,spas12,m9
-        - name: OPSIA_INFINITE
-          value: 'true'
-        - name: SURVEV_CLIENT_DIR
-          value: /app/upstream-survev/client/dist
-        - name: REQUIRE_SESSION_GATEWAY
-          value: 'true'
-        - name: SESSION_GATEWAY_SHARED_SECRET
+              fieldPath: metadata.labels['app']
+        - name: OPSIA_SERVICE_NAME
           valueFrom:
-            secretKeyRef:
-              key: shared-secret
-              name: demo-game-session-gateway
+            fieldRef:
+              fieldPath: metadata.labels['opsia.dev/service']
+        - name: OPSIA_SLI_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.labels['opsia.dev/sli']
+        - name: OPSIA_SLI_SYMPTOM
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.labels['opsia.dev/symptom']
         - name: REQUIRE_CONTROL_TOKEN
           value: 'true'
         - name: OPS_CONTROL_TOKEN
@@ -70,61 +46,36 @@ spec:
             secretKeyRef:
               key: token
               name: demo-game-control
-        name: game-server
-        image: ghcr.io/jungle-303-04/demo-game/game-server:stable
+        name: api-server
+        image: ghcr.io/jungle-303-04/demo-game/api-server:stable
         ports:
         - name: http
-          containerPort: 8001
+          containerPort: 8081
         resources:
           limits:
-            cpu: '3'
-            memory: 4Gi
+            cpu: 250m
+            memory: 256Mi
           requests:
-            cpu: 500m
-            memory: 1Gi
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: http
-          periodSeconds: 10
-          initialDelaySeconds: 30
+            cpu: 50m
+            memory: 64Mi
         readinessProbe:
           httpGet:
             path: /healthz
             port: http
-          periodSeconds: 2
-          failureThreshold: 30
-          initialDelaySeconds: 5
+          initialDelaySeconds: 2
         imagePullPolicy: Always
-      terminationGracePeriodSeconds: 30
     metadata:
       labels:
-        app: game-server
-        opsia.dev/fleet: live
-        opsia.dev/room-id: room-3
-        opsia.dev/game-role: active
-        game.opsia.dev/room-id: room-3
-        opsia.dev/rollout-role: active-candidate
-        opsia.dev/room-profile: main
+        app: api-server
+        opsia.dev/sli: admission
+        opsia.dev/service: api-server
+        opsia.dev/symptom: admission_failure
         app.kubernetes.io/part-of: demo-game
-        opsia.dev/recovery-continuity: protected
       annotations:
         prometheus.io/path: /metrics
-        prometheus.io/port: '8001'
-        opsia.dev/room-epoch: '1'
+        prometheus.io/port: '8081'
         prometheus.io/scrape: 'true'
-  minReadySeconds: 15
 metadata:
-  name: game-room-3
-  labels:
-    app: game-server
-    opsia.dev/fleet: live
-    opsia.dev/room-id: room-3
-    opsia.dev/game-role: active
-    game.opsia.dev/room-id: room-3
-    opsia.dev/rollout-role: active-candidate
-    opsia.dev/room-profile: main
-    app.kubernetes.io/part-of: demo-game
-    opsia.dev/recovery-continuity: protected
+  name: api-server
   namespace: sandbox
 apiVersion: apps/v1
