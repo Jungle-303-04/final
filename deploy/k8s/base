@@ -1,25 +1,18 @@
-data:
-  note: No session identifiers or mutable enforcement values are stored here.
-  maxRooms: '20'
-  desiredRooms: '5'
-  roomProfiles: room-0,room-1,room-2,room-3,room-4
-  gameFleet.yaml: "apiVersion: demo.opsia.io/v1alpha1\nkind: GameFleet\nmetadata:\n\
-    \  name: live-rooms\n  namespace: sandbox\nspec:\n  desiredRooms: 5\n  roomProfiles:\n\
-    \    - room-0\n    - room-1\n    - room-2\n    - room-3\n    - room-4\n  workloadNameTemplate:\
-    \ game-room-{ordinal}\n  serviceNameTemplate: game-room-{ordinal}\n  rollout:\n\
-    \    maxConcurrentRooms: 1\n    maxSurge: 1\n    maxUnavailable: 0\n    requireStateChecksum:\
-    \ true\n    requireSessionContinuity: true\n  canary:\n    roomId: canary-room\n\
-    \    public: false\n    matchmaking: false\n    redisKeyPrefix: \"room:canary-room:\"\
-    \n    validationBots: 10\n"
-  opsiaClusterId: game-server
-  accountsEnabled: 'false'
-  recoveryActions: image_rollforward,image_rollback,deployment_scale
-  opsiaWorkspaceId: demo-game
-  opsiaApplicationId: demo-game
-  opsiaEventEndpoint: ''
-  alertmanagerWebhookPath: /api/rca/alertmanager
-kind: ConfigMap
+kind: Service
+spec:
+  ports:
+  - name: http
+    port: 8001
+    targetPort: http
+  selector:
+    app: game-server
+    opsia.dev/fleet: live
+    opsia.dev/room-id: room-0
 metadata:
-  name: ops-policy
+  name: game-room-0
+  labels:
+    app: game-server
+    opsia.dev/room-id: room-0
+    game.opsia.dev/room-id: room-0
   namespace: sandbox
 apiVersion: v1
