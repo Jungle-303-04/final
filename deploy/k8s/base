@@ -1,12 +1,17 @@
 kind: Service
 spec:
+  type: ClusterIP
   ports:
-  - name: redis
-    port: 6379
-    targetPort: redis
+  - name: http
+    port: 8084
+    targetPort: http
   selector:
-    app: redis
+    app: canary-validation-bot
 metadata:
-  name: cache
+  name: game-room-canary-bot
+  labels:
+    app: canary-validation-bot
+    opsia.dev/fleet: canary
+    opsia.dev/validation-only: 'true'
   namespace: sandbox
 apiVersion: v1
