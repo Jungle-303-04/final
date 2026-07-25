@@ -91,6 +91,53 @@ class AlertmanagerLifecycleDb(AgentAuthDb):
         return payload
 
 
+class AlertmanagerOpenIncidentDb(AlertmanagerLifecycleDb):
+    def __init__(self) -> None:
+        super().__init__("active")
+        self.recorded: list[dict[str, object]] = []
+
+    def get_evidence_window(self, _evidence_key: str) -> None:
+        return None
+
+    def find_open_alertmanager_incident(
+        self,
+        workspace_id: str,
+        cluster_id: str,
+        namespace: str,
+        resource_kind: str,
+        resource_name: str,
+        symptom: str,
+    ) -> dict[str, str]:
+        assert (
+            workspace_id,
+            cluster_id,
+            namespace,
+            resource_kind,
+            resource_name,
+            symptom,
+        ) == (
+            "workspace-1",
+            "cluster-1",
+            "sandbox",
+            "Deployment",
+            "api-server",
+            "admission_failure",
+        )
+        return {
+            "correlation_id": "incident-open",
+            "event_id": "event-open",
+        }
+
+    def record_evidence_event_once(self, **values: object) -> dict[str, object]:
+        self.recorded.append(values)
+        envelope = values["event_envelope"]
+        return {
+            "duplicate": False,
+            "event_id": envelope.event_id,
+            "correlation_id": envelope.correlation_id,
+        }
+
+
 class AlertmanagerEvents:
     source = "api-gateway"
 
@@ -309,6 +356,39 @@ def test_alertmanager_webhook_deduplicates_live_lineage(
     assert response.correlation_id == "incident-old"
     assert db.rotations == []
     assert db.alert_events[0]["incident_id"] == "incident-old"
+
+
+def test_new_alert_start_reuses_unresolved_pin_correlation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A fresh Alertmanager startsAt must enrich the unresolved PIN, not replace it."""
+
+    monkeypatch.setenv(ALERTMANAGER_WEBHOOK_TOKEN_ENV, "global-webhook-token")
+    db = AlertmanagerOpenIncidentDb()
+
+    response = asyncio.run(
+        alertmanager_webhook(
+            standard_sli_payload(
+                {
+                    "opsia_namespace": "sandbox",
+                    "opsia_resource_kind": "Deployment",
+                    "opsia_resource_name": "api-server",
+                    "opsia_service": "api-server",
+                    "opsia_sli": "admission",
+                    "opsia_symptom": "admission_failure",
+                }
+            ),
+            webhook_request("Bearer global-webhook-token"),
+            cluster_id="cluster-1",
+            workspace_id="workspace-1",
+            events=AlertmanagerEvents(),
+            db=db,
+        )
+    )
+
+    assert response.correlation_id == "incident-open"
+    assert db.recorded[0]["event_envelope"].correlation_id == "incident-open"
+    assert db.alert_events[0]["incident_id"] == "incident-open"
 
 
 @pytest.mark.parametrize(
