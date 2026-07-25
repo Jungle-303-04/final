@@ -358,4 +358,3 @@ def test_proofs_from_different_alert_identities_never_combine() -> None:
     assert evaluation.score < 1.0
     assert "signal:standard_sli_alert_identity_verified" in evaluation.missing_evidence
     assert "signal:capacity_rejection_identity_verified" in evaluation.missing_evidence
-    assert "signal:replica_reduction_time_aligned" in evaluation.missing_evidence

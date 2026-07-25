@@ -164,7 +164,7 @@ def extract_matchmaking_correlation_attestation(
     changes = matching_replica_changes(collector, alert)
     if require_replica_change and len(changes) != 1:
         return None
-    change = changes[0] if require_replica_change else None
+    change = changes[0] if len(changes) == 1 else None
     return matchmaking_attestation(candidate_id, alert, scoped, change=change)
 
 

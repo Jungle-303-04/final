@@ -327,6 +327,8 @@ class CauseEvaluation(EventBody):
     reason: str
     supporting_evidence_refs: list[EvidenceReference] = field(default_factory=list)
     missing_evidence_checks: list[MissingEvidenceCheck] = field(default_factory=list)
+    matched_signal_count: int = 0
+    required_signal_count: int = 0
 
 
 @dataclass(frozen=True)

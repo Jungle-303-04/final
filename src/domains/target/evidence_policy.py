@@ -275,17 +275,35 @@ def _control_namespace_log_queries(
             continue
         used_names.add(name)
         covered.add(namespace)
-        queries.append(
-            _namespace_query(
-                source="loki",
-                name=name,
-                description=f"Recent RCA-related logs in the {namespace} control namespace.",
-                query=f'{{k8s_namespace_name="{namespace}"}}',
-                namespace=namespace,
-                matcher=f'k8s_namespace_name="{namespace}"',
-                cluster_id=cluster_id,
-                evidence_profile=evidence_profile,
-            )
+        common = {
+            "namespace": namespace,
+            "matcher": f'k8s_namespace_name="{namespace}"',
+            "cluster_id": cluster_id,
+            "evidence_profile": evidence_profile,
+        }
+        queries.extend(
+            [
+                _namespace_query(
+                    source="loki",
+                    name=name,
+                    description=f"Recent RCA-related logs in the {namespace} control namespace.",
+                    query=f'{{k8s_namespace_name="{namespace}"}}',
+                    **common,
+                ),
+                _namespace_query(
+                    source="loki",
+                    name=f"{slug}_namespace_structured_rejections",
+                    description=(
+                        f"Recent structured request rejections in the {namespace} "
+                        "control namespace."
+                    ),
+                    query=(
+                        f'{{k8s_namespace_name="{namespace}"}} '
+                        '| json | outcome="rejected"'
+                    ),
+                    **common,
+                ),
+            ]
         )
     return queries
 

@@ -173,6 +173,8 @@ def evaluate_causes(
                     *missing_evidence_checks(missing_sources, candidate.checks),
                     *missing_signal_checks(unmatched_groups),
                 ],
+                matched_signal_count=len(matched_groups),
+                required_signal_count=len(candidate.signals),
             )
         )
     return evaluations
@@ -279,11 +281,10 @@ def insufficient_evidence_root_cause(evaluations: list[CauseEvaluation]) -> RcaR
     missing_evidence = unique_ordered(
         [evidence for evaluation in evaluations for evidence in evaluation.missing_evidence]
     )
-    selected_candidate_id = evaluations[0].candidate_id if evaluations else "none"
     return RcaReportDetail(
         root_cause="insufficient_evidence",
         confidence=0.0,
-        selected_candidate_id=selected_candidate_id,
+        selected_candidate_id="none",
         supporting_evidence=[],
         missing_evidence=missing_evidence,
         reason="후보는 생성됐지만 매칭된 근거가 없어 최종 원인을 확정하지 않았습니다.",
@@ -308,7 +309,17 @@ def analyze_root_cause(evaluations: list[CauseEvaluation]) -> RcaReportDetail:
     if evaluations[0].candidate_id == UNKNOWN_EVALUATION_ID:
         return unknown_root_cause(evaluations[0])
 
-    supported = [evaluation for evaluation in evaluations if evaluation.supporting_evidence]
+    discriminator_eligible = [
+        evaluation
+        for evaluation in evaluations
+        if evaluation.required_signal_count == 0
+        or evaluation.matched_signal_count == evaluation.required_signal_count
+    ]
+    supported = [
+        evaluation
+        for evaluation in discriminator_eligible
+        if evaluation.supporting_evidence
+    ]
     if not supported:
         return insufficient_evidence_root_cause(evaluations)
 
