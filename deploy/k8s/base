@@ -7,12 +7,12 @@ spec:
   selector:
     app: game-server
     opsia.dev/fleet: live
-    opsia.dev/room-id: room-2
+    opsia.dev/room-id: room-3
 metadata:
-  name: game-room-2
+  name: game-room-3
   labels:
     app: game-server
-    opsia.dev/room-id: room-2
-    game.opsia.dev/room-id: room-2
+    opsia.dev/room-id: room-3
+    game.opsia.dev/room-id: room-3
   namespace: sandbox
 apiVersion: v1
