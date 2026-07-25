@@ -1,17 +1,18 @@
 kind: Service
 spec:
   ports:
-  - name: registry
-    port: 8082
-    targetPort: registry
-  - name: console
-    port: 8085
-    targetPort: console
+  - name: http
+    port: 8001
+    targetPort: http
   selector:
-    app: management-server
+    app: game-server
+    opsia.dev/fleet: live
+    opsia.dev/room-id: room-3
 metadata:
-  name: login-gateway-management
+  name: game-room-3
   labels:
-    app: management-server
+    app: game-server
+    opsia.dev/room-id: room-3
+    game.opsia.dev/room-id: room-3
   namespace: sandbox
 apiVersion: v1
