@@ -6,11 +6,11 @@ spec:
     targetPort: http
   selector:
     app: game-server
-  clusterIP: None
-  publishNotReadyAddresses: true
+    opsia.dev/fleet: live
 metadata:
-  name: game-room-headless
+  name: game-room-metrics
   labels:
     app: game-server
+    opsia.dev/fleet: live
   namespace: sandbox
 apiVersion: v1
