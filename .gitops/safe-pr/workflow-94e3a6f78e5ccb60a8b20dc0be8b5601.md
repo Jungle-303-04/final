@@ -1,15 +1,15 @@
 # Apply sandbox manifest
 
-deployment/session-gateway: ghcr.io/jungle-303-04/demo-game/session-gateway:276977d3628e8cc5c7ce8c362add3b4111c7883e → ghcr.io/jungle-303-04/demo-game/session-gateway:stable
+deployment/game-room-1: unknown → ghcr.io/jungle-303-04/demo-game/game-server:stable
 
 ## GitOps Basis
 
-- approval_ref: `approval-cf7f96ba30de2cabaddd7a15b534ccf1`
-- policy_decision_ref: `policy-decision:approval-cf7f96ba30de2cabaddd7a15b534ccf1:safe_pr`
+- approval_ref: `approval-f14e6865279646391dd2930cac109081`
+- policy_decision_ref: `policy-decision:approval-f14e6865279646391dd2930cac109081:safe_pr`
 - diff_status: `intended_change`
 - diff_basis: `managed-field-3way`
-- artifact_digest: `sha256:8f60b2e836b46e64524bd0e248c66889a0bfbe02fc37930d3484c0285de2ebb1`
-- rollback_patch: `.gitops/rollback/workflow-94e3a6f78e5ccb60a8b20dc0be8b5601/deployment-session-gateway-base.yaml`
+- artifact_digest: `sha256:0a913106998539af2bfd72b1ce18b7a642e5e9d212c7951533bd0a7437e4bc2c`
+- rollback_patch: `.gitops/rollback/workflow-94e3a6f78e5ccb60a8b20dc0be8b5601/deployment-game-room-1-base.yaml`
 
 
 - manifest_path: `deploy/k8s/base`
@@ -20,14 +20,14 @@ deployment/session-gateway: ghcr.io/jungle-303-04/demo-game/session-gateway:2769
 ## Evidence
 
 - commit_sha: ``
-- patch_sha256: `7a28e47b38aff5a515f7eea4cf6de3b8d7de5af84a13e929de3ce6bea7a9c041`
+- patch_sha256: `fc52a748e5f46bd31aa2244415e5c20c0d8d60b82df4563d2f6e155adf7fe11f`
 
 ## Approval
 
-- approval_ref: `approval-cf7f96ba30de2cabaddd7a15b534ccf1`
-- policy_decision_ref: `policy-decision:approval-cf7f96ba30de2cabaddd7a15b534ccf1:safe_pr`
+- approval_ref: `approval-f14e6865279646391dd2930cac109081`
+- policy_decision_ref: `policy-decision:approval-f14e6865279646391dd2930cac109081:safe_pr`
 
 ## Files
 
 - `deploy/k8s/base`: rendered Kubernetes manifest
-- `.gitops/rollback/workflow-94e3a6f78e5ccb60a8b20dc0be8b5601/deployment-session-gateway-base.yaml`: rollback manifest generated from live/previous values
+- `.gitops/rollback/workflow-94e3a6f78e5ccb60a8b20dc0be8b5601/deployment-game-room-1-base.yaml`: rollback manifest generated from live/previous values
