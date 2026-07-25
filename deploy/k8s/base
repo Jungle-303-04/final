@@ -1,18 +1,12 @@
 kind: Service
 spec:
   ports:
-  - name: http
-    port: 8001
-    targetPort: http
+  - name: redis
+    port: 6379
+    targetPort: redis
   selector:
-    app: game-server
-    opsia.dev/fleet: live
-    opsia.dev/room-id: room-0
+    app: redis
 metadata:
-  name: game-room-0
-  labels:
-    app: game-server
-    opsia.dev/room-id: room-0
-    game.opsia.dev/room-id: room-0
+  name: cache
   namespace: sandbox
 apiVersion: v1
