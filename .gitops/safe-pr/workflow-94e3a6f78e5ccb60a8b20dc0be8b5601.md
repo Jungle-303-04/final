@@ -1,15 +1,15 @@
 # Apply sandbox manifest
 
-service/cache: apply rendered manifest
+service/login-gateway-management: apply rendered manifest
 
 ## GitOps Basis
 
-- approval_ref: `approval-f9329f5b4d201ae3eb884e54fa721679`
-- policy_decision_ref: `policy-decision:approval-f9329f5b4d201ae3eb884e54fa721679:safe_pr`
+- approval_ref: `approval-16720d7b5af67e76c850b6f7ef8cffea`
+- policy_decision_ref: `policy-decision:approval-16720d7b5af67e76c850b6f7ef8cffea:safe_pr`
 - diff_status: `drift`
 - diff_basis: `managed-field-3way`
-- artifact_digest: `sha256:7647669d112955dd3da076da0a0983d9e9ad198995760cceafe2126d548ee0c5`
-- rollback_patch: `.gitops/rollback/workflow-94e3a6f78e5ccb60a8b20dc0be8b5601/service-cache-base.yaml`
+- artifact_digest: `sha256:fa95c73135b5958cb5863d58f3927a15881dcdd9ee115d68284bd8d64e57d168`
+- rollback_patch: `.gitops/rollback/workflow-94e3a6f78e5ccb60a8b20dc0be8b5601/service-login-gateway-management-base.yaml`
 
 
 - manifest_path: `deploy/k8s/base`
@@ -20,14 +20,14 @@ service/cache: apply rendered manifest
 ## Evidence
 
 - commit_sha: ``
-- patch_sha256: `f9da8ae1afa31672987f7c9103cca2d852527010df46a7a318b9a74925ea951f`
+- patch_sha256: `23ce59cb8bcb16c6e389f322409f15f3660fb17424621ec79acaa1baf044866e`
 
 ## Approval
 
-- approval_ref: `approval-f9329f5b4d201ae3eb884e54fa721679`
-- policy_decision_ref: `policy-decision:approval-f9329f5b4d201ae3eb884e54fa721679:safe_pr`
+- approval_ref: `approval-16720d7b5af67e76c850b6f7ef8cffea`
+- policy_decision_ref: `policy-decision:approval-16720d7b5af67e76c850b6f7ef8cffea:safe_pr`
 
 ## Files
 
 - `deploy/k8s/base`: rendered Kubernetes manifest
-- `.gitops/rollback/workflow-94e3a6f78e5ccb60a8b20dc0be8b5601/service-cache-base.yaml`: rollback manifest generated from live/previous values
+- `.gitops/rollback/workflow-94e3a6f78e5ccb60a8b20dc0be8b5601/service-login-gateway-management-base.yaml`: rollback manifest generated from live/previous values
