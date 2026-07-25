@@ -180,7 +180,7 @@ function ResultPart({ part, first }: { part: AiResultPart; first?: boolean }) {
     <div className={`grid gap-2.5 ${first ? "" : "border-t border-black/[0.05] pt-3"}`} style={{ animation: `fadeUp 0.5s ${SPRING}` }}>
       <div className="flex items-center gap-2">
         <span className="size-1.5 rounded-full" style={{ background: toneHex[part.tone] }} />
-        <span className="text-body font-semibold tracking-[-0.01em]">{part.title}</span>
+        <span className="text-body font-semibold tracking-[-0.01em] text-heading">{part.title}</span>
         <span className="text-label text-muted-foreground">· {part.summary}</span>
       </div>
       {part.metrics ? (
