@@ -1,15 +1,15 @@
 # Apply sandbox manifest
 
-service/login-gateway: apply rendered manifest
+deployment/canary-room: unknown → ghcr.io/jungle-303-04/demo-game/game-server:stable
 
 ## GitOps Basis
 
-- approval_ref: `approval-8fda47254c6d2fe9fa95d6538c96b26c`
-- policy_decision_ref: `policy-decision:approval-8fda47254c6d2fe9fa95d6538c96b26c:safe_pr`
+- approval_ref: `approval-045c8fc799f1f4cd68e749a2c16b0609`
+- policy_decision_ref: `policy-decision:approval-045c8fc799f1f4cd68e749a2c16b0609:safe_pr`
 - diff_status: `intended_change`
 - diff_basis: `managed-field-3way`
-- artifact_digest: `sha256:2c96ad5755759459b8cc7d593125e843506787578d850f29632dc010eb89455e`
-- rollback_patch: `.gitops/rollback/workflow-12a81cf598637fd650ac9e85ae6cced0/service-login-gateway-base.yaml`
+- artifact_digest: `sha256:2b4070970ff06f2aeb538f3848ea3c45043a58da5cd580842f4e09ac05574690`
+- rollback_patch: `.gitops/rollback/workflow-12a81cf598637fd650ac9e85ae6cced0/deployment-canary-room-base.yaml`
 
 
 - manifest_path: `deploy/k8s/base`
@@ -20,14 +20,14 @@ service/login-gateway: apply rendered manifest
 ## Evidence
 
 - commit_sha: ``
-- patch_sha256: `cb1bc9554c822020cc1e5eab779c23a2520926e115b4acb9e93b2d498347383a`
+- patch_sha256: `09272672301edad21219dc330266d7bf42e253323a64f7f558de723e81137d08`
 
 ## Approval
 
-- approval_ref: `approval-8fda47254c6d2fe9fa95d6538c96b26c`
-- policy_decision_ref: `policy-decision:approval-8fda47254c6d2fe9fa95d6538c96b26c:safe_pr`
+- approval_ref: `approval-045c8fc799f1f4cd68e749a2c16b0609`
+- policy_decision_ref: `policy-decision:approval-045c8fc799f1f4cd68e749a2c16b0609:safe_pr`
 
 ## Files
 
 - `deploy/k8s/base`: rendered Kubernetes manifest
-- `.gitops/rollback/workflow-12a81cf598637fd650ac9e85ae6cced0/service-login-gateway-base.yaml`: rollback manifest generated from live/previous values
+- `.gitops/rollback/workflow-12a81cf598637fd650ac9e85ae6cced0/deployment-canary-room-base.yaml`: rollback manifest generated from live/previous values
