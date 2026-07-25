@@ -212,9 +212,17 @@ def test_demo_log_policy_collects_configured_namespace_without_app_hardcoding() 
     assert related["query"] == '{k8s_namespace_name="sandbox"}'
     assert related["provenance"]["namespaces"] == ["sandbox"]
     assert related["provenance"]["cluster_id"] == "c-1"
+    structured = by_name["sandbox_namespace_structured_rejections"]
+    assert structured["query"] == (
+        '{k8s_namespace_name="sandbox"} | json | outcome="rejected"'
+    )
+    assert structured["provenance"]["namespaces"] == ["sandbox"]
+    assert structured["provenance"]["cluster_id"] == "c-1"
     serialized = "\n".join(str(query["query"]) for query in queries)
     assert "api-server" not in serialized
     assert "find_game_rejected" not in serialized
+    assert "rate_limited" not in serialized
+    assert "no_room" not in serialized
 
 
 def test_default_agent_policy_threads_control_namespaces() -> None:

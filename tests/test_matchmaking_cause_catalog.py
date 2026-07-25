@@ -1,5 +1,5 @@
 from domains.rca.events import EvidenceBundle, EvidenceItem
-from services.ai.agent.causes.engine import evaluate_causes
+from services.ai.agent.causes.engine import analyze_root_cause, evaluate_causes
 from services.ai.agent.causes.loader import load_catalog_profiles
 
 
@@ -24,7 +24,6 @@ def test_matchmaking_catalog_accepts_standardized_admission_failure() -> None:
         "structured_rejection_identity=verified:reason=capacity_exhausted",
         "structured_rejection_identity=verified:reason=over_capacity",
         "structured_rejection_identity=verified:reason=lobby_capacity_exceeded",
-        "replica_reduction_time_aligned=verified",
     }
     assert lobby.title == "로비 처리 용량 부족"
     assert lobby.expected_evidence == (
@@ -184,6 +183,34 @@ def test_lobby_capacity_requires_alert_log_and_time_aligned_replica_reduction() 
     assert generic_reduction.missing_evidence == []
 
 
+def test_lobby_capacity_can_finalize_when_already_scaled_to_one() -> None:
+    evaluation = lobby_evaluation(
+        admission_bundle(
+            replicas_before=1,
+            replicas_after=1,
+        )
+    )
+
+    assert evaluation.score == 1.0
+    assert evaluation.missing_evidence == []
+
+
+def test_zero_signal_room_candidates_never_beat_verified_lobby_capacity() -> None:
+    profile = next(
+        item for item in load_catalog_profiles() if item.rule_id == "matchmaking_join_failure"
+    )
+    bundle = admission_bundle(replicas_before=1, replicas_after=1)
+
+    evaluations = evaluate_causes(
+        [item.to_candidate() for item in profile.candidate_specs],
+        bundle,
+    )
+    detail = analyze_root_cause(evaluations)
+
+    assert detail.root_cause == "lobby_capacity_saturation"
+    assert detail.selected_candidate_id == "lobby_capacity_saturation"
+
+
 def test_repeated_deploy_cycle_uses_nearest_preceding_replica_reduction() -> None:
     bundle = admission_bundle(changed_at="2026-07-24T01:00:30Z")
     metadata = next(item for item in bundle.items if item.source == "metadata")
@@ -205,17 +232,9 @@ def test_repeated_deploy_cycle_uses_nearest_preceding_replica_reduction() -> Non
 
 def test_alert_alone_or_competing_reason_cannot_finalize_lobby_capacity() -> None:
     wrong_reason = lobby_evaluation(admission_bundle(reason="upstream_unavailable"))
-    wrong_diff = lobby_evaluation(admission_bundle(replicas_before=1, replicas_after=2))
-    late_alert = lobby_evaluation(
-        admission_bundle(alert_started_at="2026-07-24T01:20:01Z")
-    )
 
     assert wrong_reason.score < 1.0
     assert "signal:capacity_rejection_identity_verified" in wrong_reason.missing_evidence
-    assert wrong_diff.score < 1.0
-    assert "signal:replica_reduction_time_aligned" in wrong_diff.missing_evidence
-    assert late_alert.score < 1.0
-    assert "signal:replica_reduction_time_aligned" in late_alert.missing_evidence
 
 
 def test_no_room_requires_structured_exact_identity_and_time_correlation() -> None:
