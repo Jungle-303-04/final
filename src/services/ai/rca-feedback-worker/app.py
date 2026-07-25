@@ -1063,12 +1063,37 @@ async def on_recovery_safe_pr_failed(
     if identity is None:
         return
     plan_id, action_id = identity
-    reopened = await ctx.db.reopen_recovery_plan_action(
+    record = await ctx.db.get_recovery_plan_by_correlation(
+        ctx.correlation_id,
+        evt.workspace_id,
+    )
+    if (
+        not isinstance(record, dict)
+        or text_value(record.get("plan_id")) != plan_id
+        or record.get("status") != RECOVERY_STATUS_SELECTED
+        or text_value(record.get("selected_action_id")) != action_id
+    ):
+        return
+    payload = mapping(record.get("payload"))
+    lifecycle = dict(mapping(payload.get("lifecycle")))
+    lifecycle["phase"] = "failed"
+    lifecycle["failure"] = {
+        "stage": "safe_pr",
+        "reason_code": evt.reason_code,
+        "reason": evt.reason,
+        "provider_stage": evt.stage,
+        "approval_ref": text_value(evt.details.get("approval_ref")),
+        "workflow_run_id": evt.workflow_run_id,
+        "commit_sha": evt.commit_sha,
+    }
+    failed = await ctx.db.update_recovery_plan_lifecycle_if_status(
         plan_id,
         evt.workspace_id,
-        action_id,
+        expected_statuses=(RECOVERY_STATUS_SELECTED,),
+        status="failed",
+        lifecycle=lifecycle,
     )
-    if not reopened:
+    if failed is None:
         return
     yield RcaFollowupRequiredBody(
         reason_code=evt.reason_code,
@@ -1079,7 +1104,7 @@ async def on_recovery_safe_pr_failed(
         next_actions=[
             {
                 "action_type": "retry_recovery_action",
-                "description": "차단 원인을 해결한 뒤 같은 복구 후보를 다시 선택합니다.",
+                "description": "차단 원인을 해결한 뒤 저장된 복구 조치를 최신 권위 context로 다시 시도합니다.",
             }
         ],
         diagnostics={

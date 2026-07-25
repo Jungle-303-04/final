@@ -942,7 +942,7 @@ function RecoveryRetryControl({
     <section style={{ display: "grid", gap: 9, border: `1px solid ${TINT.warn.bd}`, borderRadius: RADIUS.card, background: TINT.warn.bg, padding: SPACE.card }}>
       <div style={{ display: "grid", gap: 3 }}>
         <strong style={{ fontSize: ISSUE_DETAIL_TYPE.itemTitle, color: TINT.warn.fg }}>실패한 단계 다시 시도</strong>
-        <span style={{ fontSize: TYPE.caption, color: UI.ink2, lineHeight: 1.5 }}>새 PR을 임의로 만들지 않고, 서버가 저장한 현재 시도의 배포 또는 검증 identity만 이어서 실행합니다.</span>
+        <span style={{ fontSize: TYPE.caption, color: UI.ink2, lineHeight: 1.5 }}>서버가 저장한 현재 시도를 기준으로 PR 생성·배포·검증 중 실패한 단계만 안전하게 다시 실행합니다.</span>
       </div>
       {error && <div role="alert" style={{ fontSize: TYPE.caption, color: TINT.crit.fg, lineHeight: 1.5 }}>{error}</div>}
       <button

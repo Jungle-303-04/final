@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import nullcontext
+from dataclasses import replace
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import Any
@@ -14,6 +15,9 @@ from domains.gitops import router as gitops_router
 from domains.gitops.events import GitWebhookReceivedBody, WorkflowRunCompletedBody
 from domains.rca import router as rca_router
 from domains.rca.events import (
+    HealingActionDraft,
+    RecoveryActionCandidate,
+    RecoveryActionSelectedBody,
     RecoveryPlan,
     RecoveryPrMergedBody,
     RecoveryPrTrackedBody,
@@ -962,6 +966,32 @@ def retry_record(*, reason_code: str) -> dict[str, Any]:
         manifest_path="k8s/api-server.yaml",
         source_type="raw-yaml",
     )
+    candidate = RecoveryActionCandidate(
+        action_id="action-1",
+        title="로비 replicas 복구 PR",
+        description="restore lobby capacity",
+        draft=HealingActionDraft(
+            action_type="replica_scale",
+            namespace="sandbox",
+            resource_kind="Deployment",
+            resource_name="api-server",
+            reason="lobby capacity saturated",
+            risk_level="low",
+            dry_run=True,
+            source_evidence=["evidence-1"],
+            params={"replicas": 2},
+        ),
+        route=ActionRoutes().safe_pr,
+        rank=1,
+        score=0.9,
+        risk_level="low",
+        blast_radius="single deployment",
+        approval_required=True,
+        prerequisites=[],
+        validation_checks=[],
+        rollback_plan="restore previous replicas",
+        evidence_refs=["evidence-1"],
+    )
     plan = RecoveryPlan(
         plan_id="plan-1",
         incident_id="incident-1",
@@ -971,7 +1001,7 @@ def retry_record(*, reason_code: str) -> dict[str, Any]:
         recommended_action_id="action-1",
         execution_route="safe_pr",
         selection_required=True,
-        candidates=[],
+        candidates=[candidate],
     )
     payload = plan.to_body()
     payload["lifecycle"] = {
@@ -1036,6 +1066,7 @@ class RetryRouteDb:
         self.record = retry_record(reason_code=reason_code)
         self.workflow_status = workflow_status
         self.transitions: list[tuple[tuple[str, ...], str, dict[str, Any]]] = []
+        self.approvals: list[dict[str, Any]] = []
 
     def get_recovery_plan_by_correlation(
         self,
@@ -1058,6 +1089,10 @@ class RetryRouteDb:
 
     def current_database_time(self) -> datetime:
         return NOW
+
+    def request_workflow_approval(self, payload: dict[str, Any]) -> dict[str, Any]:
+        self.approvals.append(payload)
+        return payload
 
     def update_recovery_plan_lifecycle_if_status(
         self,
@@ -1094,6 +1129,8 @@ def run_retry(
     db: RetryRouteDb,
     events: RetryEvents,
     monkeypatch: pytest.MonkeyPatch,
+    *,
+    preflight: object | None = None,
 ):
     monkeypatch.setattr(rca_router, "require_cluster_access", lambda *args, **kwargs: None)
     return asyncio.run(
@@ -1106,8 +1143,74 @@ def run_retry(
             current=retry_current_user(),
             db=db,
             events=events,
+            preflight=preflight,
         )
     )
+
+
+class SafePrRetryPreflight:
+    def __init__(self) -> None:
+        self.calls: list[tuple[RecoveryActionSelectedBody, str]] = []
+
+    async def prepare(
+        self,
+        evt: RecoveryActionSelectedBody,
+        correlation_id: str,
+    ) -> RecoveryActionCandidate:
+        self.calls.append((evt, correlation_id))
+        return replace(
+            evt.selected,
+            draft=replace(
+                evt.selected.draft,
+                params={
+                    **evt.selected.draft.params,
+                    "workspace_id": "workspace-1",
+                    "repository_id": "repo-1",
+                    "binding_id": "binding-1",
+                    "application_id": "app-1",
+                    "workflow_run_id": "workflow-latest",
+                    "environment": "sandbox",
+                    "manifest_path": "k8s/api-server.yaml",
+                    "repo_ref": "Jungle-303-04/game-server",
+                    "base_branch": "main",
+                    "commit_sha": "d" * 40,
+                },
+            ),
+        )
+
+
+def test_safe_pr_failure_retry_refreshes_authority_and_redispatches_same_action(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db = RetryRouteDb(reason_code="provider_error", workflow_status="succeeded")
+    lifecycle = db.record["payload"]["lifecycle"]
+    lifecycle["failure"] = {
+        "stage": "safe_pr",
+        "reason_code": "provider_error",
+        "reason": "base advanced",
+    }
+    events = RetryEvents()
+    preflight = SafePrRetryPreflight()
+
+    response = run_retry(db, events, monkeypatch, preflight=preflight)
+
+    assert response.accepted is True
+    assert preflight.calls[0][1] == "correlation-1"
+    assert db.transitions[0][0] == ("failed",)
+    assert db.transitions[0][1] == "selected"
+    lifecycle = db.transitions[0][2]
+    assert lifecycle["retry"]["stage"] == "safe_pr"
+    assert lifecycle["retry"]["previous_failure"]["reason_code"] == "provider_error"
+    assert len(db.approvals) == 1
+    assert db.approvals[0]["workflow_run_id"] == "workflow-latest"
+    assert db.approvals[0]["approval_id"] != rca_router.recovery_approval_id(
+        "plan-1", "action-1"
+    )
+    assert isinstance(events.calls[0][0], RecoveryRetryRequestedBody)
+    assert isinstance(events.calls[1][0], RecoveryActionSelectedBody)
+    selected = events.calls[1][0]
+    assert selected.selected.draft.params["commit_sha"] == "d" * 40
+    assert selected.selected.draft.params["approval_ref"] == db.approvals[0]["approval_id"]
 
 
 def test_deploy_failure_retry_replays_exact_merge_request_with_new_workflow(

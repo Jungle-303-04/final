@@ -26,6 +26,7 @@ class RetryDb:
         self.reopen_calls: list[tuple[str, str, str]] = []
         self.approval_calls: list[tuple[str, str]] = []
         self.correlation_calls: list[tuple[str, str]] = []
+        self.transitions: list[tuple[str, str, tuple[str, ...], str, dict[str, Any]]] = []
 
     async def reopen_recovery_plan_action(
         self,
@@ -51,6 +52,20 @@ class RetryDb:
     ) -> dict[str, Any] | None:
         self.correlation_calls.append((correlation_id, workspace_id))
         return self.recovery_plan
+
+    async def update_recovery_plan_lifecycle_if_status(
+        self,
+        plan_id: str,
+        workspace_id: str,
+        *,
+        expected_statuses: tuple[str, ...],
+        status: str,
+        lifecycle: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        self.transitions.append(
+            (plan_id, workspace_id, expected_statuses, status, lifecycle)
+        )
+        return {"plan_id": plan_id} if self.reopened else None
 
 
 def action_required(reason_code: str) -> RcaActionRequiredBody:
@@ -198,14 +213,20 @@ def test_stale_action_required_cannot_block_a_different_selected_action() -> Non
     assert emitted == []
 
 
-def test_safe_pr_failure_uses_approval_identity_to_reopen_exact_action() -> None:
+def test_safe_pr_failure_uses_approval_identity_to_preserve_retryable_action() -> None:
     db = RetryDb(
         approval={
             "details": {
                 "recovery_plan_id": "plan-from-approval",
                 "recovery_action_id": "action-from-approval",
             }
-        }
+        },
+        recovery_plan={
+            "plan_id": "plan-from-approval",
+            "status": "selected",
+            "selected_action_id": "action-from-approval",
+            "payload": {"lifecycle": {"phase": "selected"}},
+        },
     )
 
     emitted = run_handler(
@@ -216,8 +237,15 @@ def test_safe_pr_failure_uses_approval_identity_to_reopen_exact_action() -> None
     )
 
     assert db.approval_calls == [("approval-1", "workspace-1")]
-    assert db.correlation_calls == []
-    assert db.reopen_calls == [("plan-from-approval", "workspace-1", "action-from-approval")]
+    assert db.correlation_calls == [("correlation-1", "workspace-1")]
+    assert db.reopen_calls == []
+    assert db.transitions[0][0:4] == (
+        "plan-from-approval",
+        "workspace-1",
+        ("selected",),
+        "failed",
+    )
+    assert db.transitions[0][4]["failure"]["stage"] == "safe_pr"
     assert len(emitted) == 1
     assert isinstance(emitted[0], RcaFollowupRequiredBody)
     assert emitted[0].diagnostics["plan_id"] == "plan-from-approval"
@@ -264,7 +292,7 @@ def test_general_safe_pr_failure_without_recovery_identity_is_ignored() -> None:
     assert db.reopen_calls == []
 
 
-def test_stale_safe_pr_failure_does_not_emit_retry_followup_when_cas_reopen_fails() -> None:
+def test_stale_safe_pr_failure_does_not_emit_retry_followup_when_cas_fails() -> None:
     db = RetryDb(
         reopened=False,
         approval={
@@ -272,6 +300,12 @@ def test_stale_safe_pr_failure_does_not_emit_retry_followup_when_cas_reopen_fail
                 "recovery_plan_id": "plan-1",
                 "recovery_action_id": "stale-action",
             }
+        },
+        recovery_plan={
+            "plan_id": "plan-1",
+            "status": "selected",
+            "selected_action_id": "stale-action",
+            "payload": {"lifecycle": {"phase": "selected"}},
         },
     )
 
@@ -282,5 +316,11 @@ def test_stale_safe_pr_failure_does_not_emit_retry_followup_when_cas_reopen_fail
         correlation_id="correlation-1",
     )
 
-    assert db.reopen_calls == [("plan-1", "workspace-1", "stale-action")]
+    assert db.reopen_calls == []
+    assert db.transitions[0][0:4] == (
+        "plan-1",
+        "workspace-1",
+        ("selected",),
+        "failed",
+    )
     assert emitted == []

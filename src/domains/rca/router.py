@@ -120,6 +120,7 @@ RECOVERY_STATUS_VERIFICATION_PENDING = "verification_pending"
 RECOVERY_STATUS_FAILED = "failed"
 RECOVERY_DEPLOY_FAILED_REASON = "recovery_deploy_failed"
 RECOVERY_VERIFICATION_EXPIRED_REASON = "verification_window_expired"
+RECOVERY_SAFE_PR_FAILED_STAGE = "safe_pr"
 
 
 class RcaRuleCandidateView(Protocol):
@@ -1392,6 +1393,17 @@ def recovery_retry_number(container: dict[str, Any]) -> int:
     return value + 1 if type(value) is int and value >= 0 else 1
 
 
+def recovery_selection_attempt_number(lifecycle: dict[str, Any]) -> int:
+    attempt = recovery_object(lifecycle.get("attempt"))
+    value = attempt.get("number")
+    return value + 1 if type(value) is int and value >= 0 else 1
+
+
+def recovery_retry_approval_id(plan_id: str, action_id: str, attempt: int) -> str:
+    raw = f"{plan_id}|{action_id}|safe-pr-retry|{attempt}"
+    return f"approval-{hashlib.sha256(raw.encode()).hexdigest()[:32]}"
+
+
 def recovery_workflow_matches(
     workflow: object,
     *,
@@ -1557,6 +1569,7 @@ async def retry_recovery_by_correlation(
     current: Any = Depends(require_session),
     db: Any = Depends(get_db),
     events: Any = Depends(get_events),
+    preflight: RecoveryActionPreflightPort | None = Depends(get_recovery_action_preflight),
 ) -> AcceptedResponse:
     workspace_id = current.workspace_id
     record = await db_call(
@@ -1588,17 +1601,132 @@ async def retry_recovery_by_correlation(
         verification = recovery_object(lifecycle.get("verification"))
         reason_code = recovery_text(verification.get("last_reason_code"))
     merge = recovery_object(lifecycle.get("merge"))
-    old_workflow_run_id = recovery_text(merge.get("workflow_run_id"))
-    if not old_workflow_run_id:
-        raise HTTPException(status_code=HTTP_CONFLICT, detail=RECOVERY_RETRY_IDENTITY_INVALID)
-    workflow = await db_call(db.get_workflow_run, old_workflow_run_id)
     now = normalized_utc(await db_call(db.current_database_time))
     retry_reason = payload.reason or f"operator retried {reason_code}"
     action_id = recovery_text(record.get("selected_action_id"))
     if not action_id:
         raise HTTPException(status_code=HTTP_CONFLICT, detail=RECOVERY_RETRY_IDENTITY_INVALID)
 
+    if recovery_text(failure.get("stage")) == RECOVERY_SAFE_PR_FAILED_STAGE:
+        if preflight is None:
+            raise HTTPException(status_code=HTTP_CONFLICT, detail=RECOVERY_RETRY_UNAVAILABLE)
+        selected = candidate_by_action_id(plan, action_id)
+        if selected.route not in SAFE_PR_ROUTES:
+            raise HTTPException(status_code=HTTP_CONFLICT, detail=RECOVERY_RETRY_IDENTITY_INVALID)
+        proposed = RecoveryActionSelectedBody(
+            plan=plan,
+            selected=selected,
+            selected_by=current.user_id,
+            auto_selected=False,
+            reason=retry_reason,
+            workspace_id=workspace_id,
+        )
+        prepared = await preflight.prepare(proposed, correlation_id)
+        if isinstance(prepared, RcaActionRequiredBody):
+            await events.accept_body(
+                prepared,
+                correlation_id=correlation_id,
+                actor=Actor(current.user_id, tuple(current.roles)),
+            )
+            raise HTTPException(
+                status_code=HTTP_CONFLICT,
+                detail={
+                    "code": prepared.reason_code,
+                    "detail": prepared.reason,
+                    "missing_evidence": prepared.missing_evidence,
+                    "next_actions": prepared.next_actions,
+                    "retryable": True,
+                },
+            )
+        attempt = recovery_selection_attempt_number(lifecycle)
+        approval_ref = recovery_retry_approval_id(plan.plan_id, action_id, attempt)
+        policy_decision_ref = recovery_policy_decision_ref(approval_ref)
+        selected = candidate_with_approval(
+            prepared,
+            approval_ref=approval_ref,
+            policy_decision_ref=policy_decision_ref,
+        )
+        approval_record = db.request_workflow_approval(
+            recovery_approval_payload(
+                plan,
+                selected,
+                workspace_id=workspace_id,
+                approval_ref=approval_ref,
+                policy_decision_ref=policy_decision_ref,
+                selected_by=current.user_id,
+                reason=retry_reason,
+            )
+        )
+        selected = candidate_with_approval_identity(selected, approval_record)
+        next_lifecycle = {
+            "phase": "selected",
+            "attempt": {
+                "id": f"recovery-attempt-{uuid.uuid4()}",
+                "number": attempt,
+                "action_id": action_id,
+                "selected_by": current.user_id,
+                "selected_at": now.isoformat(),
+            },
+            "retry": {
+                "stage": RECOVERY_SAFE_PR_FAILED_STAGE,
+                "attempt": attempt,
+                "requested_by": current.user_id,
+                "requested_at": now.isoformat(),
+                "reason": retry_reason,
+                "previous_failure": dict(failure),
+            },
+        }
+        retry_body = RecoveryRetryRequestedBody(
+            plan_id=payload.expected_plan_id,
+            incident_id=recovery_text(record.get("incident_id")),
+            action_id=action_id,
+            retry_stage=RECOVERY_SAFE_PR_FAILED_STAGE,
+            attempt=attempt,
+            requested_by=current.user_id,
+            reason=retry_reason,
+            workflow_run_id=recovery_text(selected.draft.params.get("workflow_run_id")) or None,
+            workspace_id=workspace_id,
+        )
+        selected_body = RecoveryActionSelectedBody(
+            plan=plan,
+            selected=selected,
+            selected_by=current.user_id,
+            auto_selected=False,
+            reason=retry_reason,
+            workspace_id=workspace_id,
+        )
+        with unit_of_work_or_null(db):
+            saved = db.update_recovery_plan_lifecycle_if_status(
+                payload.expected_plan_id,
+                workspace_id,
+                expected_statuses=(RECOVERY_STATUS_FAILED,),
+                status="selected",
+                lifecycle=next_lifecycle,
+            )
+            if saved is None:
+                raise HTTPException(status_code=HTTP_CONFLICT, detail=RECOVERY_RETRY_UNAVAILABLE)
+            accepted = await events.accept_body(
+                retry_body,
+                correlation_id=correlation_id,
+                actor=Actor(current.user_id, tuple(current.roles)),
+            )
+            await events.accept_body(
+                selected_body,
+                correlation_id=correlation_id,
+                causation_id=accepted.event.event_id,
+                actor=Actor(current.user_id, tuple(current.roles)),
+            )
+        return AcceptedResponse(
+            accepted=True,
+            event_id=accepted.event.event_id,
+            correlation_id=accepted.event.correlation_id,
+        )
+
     deploy_body: GitWebhookReceivedBody | None = None
+    old_workflow_run_id = recovery_text(merge.get("workflow_run_id"))
+    if not old_workflow_run_id:
+        raise HTTPException(status_code=HTTP_CONFLICT, detail=RECOVERY_RETRY_IDENTITY_INVALID)
+    workflow = await db_call(db.get_workflow_run, old_workflow_run_id)
     if reason_code == RECOVERY_DEPLOY_FAILED_REASON:
         prepared = deploy_retry_body(
             record=record,
