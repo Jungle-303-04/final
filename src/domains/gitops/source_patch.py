@@ -577,8 +577,19 @@ def declared_image_patch(
     return declared_scalar_patch(scalar_plan, contract)
 
 
-def materialize_declared_scalar_patch(source: str, patch: DeclaredScalarPatch) -> str:
-    """Change only the exact scalar selected by a parsed repository contract."""
+def materialize_declared_scalar_patch(
+    source: str,
+    patch: DeclaredScalarPatch,
+    *,
+    allow_already_applied: bool = False,
+) -> str:
+    """Change only the exact scalar selected by a parsed repository contract.
+
+    Recovery PR creation may be retried after a newer commit has already moved
+    the target scalar to the approved desired value.  In that case the source is
+    left unchanged so the caller can create an audit-only change document.  Any
+    third value remains a real concurrency conflict and fails closed.
+    """
 
     if patch.source_type not in {"raw-yaml", "helm-values", "kustomize"}:
         raise _unsupported("declared source adapter is unsupported")
@@ -618,6 +629,9 @@ def materialize_declared_scalar_patch(source: str, patch: DeclaredScalarPatch) -
     for replacement in patch.replacements:
         segments = field_path_segments(replacement.field_path)
         current = object_value_at(original, segments)
+        if allow_already_applied and same_scalar(current, replacement.desired_value):
+            set_object_value(expected, segments, replacement.desired_value)
+            continue
         if not same_scalar(current, replacement.current_value):
             raise ManifestSourcePatchError(DECLARED_SOURCE_STALE_VALUE_MESSAGE)
         node = node_value_at(node_root, segments)

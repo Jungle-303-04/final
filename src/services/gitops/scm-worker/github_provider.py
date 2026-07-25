@@ -729,8 +729,16 @@ class GithubScmProvider:
                     declared.source_path,
                     context,
                 )
-                content = materialize_declared_scalar_patch(source, declared)
-                contents.append((declared.source_path, content))
+                content = materialize_declared_scalar_patch(
+                    source,
+                    declared,
+                    allow_already_applied=True,
+                )
+                # The desired scalar may already be present on an advanced base.
+                # Keep the evidence/change document PR, but do not ask GitHub to
+                # rewrite an identical manifest blob.
+                if content != source:
+                    contents.append((declared.source_path, content))
             except ManifestSourcePatchError as exc:
                 raise RuntimeError(str(exc)) from exc
         return contents
@@ -818,9 +826,9 @@ class GithubScmProvider:
                 )
             ):
                 raise RuntimeError(STALE_TARGET_MESSAGE)
-            # Materialization parses the current source and verifies each selected
-            # scalar still equals the approval's currentValue without rewriting
-            # unrelated fields.
+            # Materialization parses the current source and accepts only the
+            # approval's currentValue or desiredValue.  The latter produces a
+            # document-only audit PR; any third value remains a stale conflict.
             return await self.materialize_patch_contents(
                 client,
                 repo,
@@ -1507,37 +1515,37 @@ class GithubScmProvider:
                 )
         except RuntimeError:
             return False
-        if len(pr_base_contents) != 1:
+        if len(pr_base_contents) > 1:
             return False
-        target_path = pr_base_contents[0][0]
-        expected_paths = {change_document_path(request), target_path}
+        target_path = pr_base_contents[0][0] if pr_base_contents else None
+        expected_paths = {change_document_path(request)}
+        if target_path is not None:
+            expected_paths.add(target_path)
         file_by_name = {
             str(item.get("filename") or ""): item
             for item in files or []
             if isinstance(item, Mapping)
         }
-        manifest_file = file_by_name.get(target_path)
+        manifest_file = file_by_name.get(target_path) if target_path is not None else None
         change_file = file_by_name.get(change_document_path(request))
         if (
             not isinstance(files, list)
             or not isinstance(merge_base, Mapping)
             or comparison.get("status") not in {"ahead", "diverged"}
             or set(file_by_name) != expected_paths
-            or not isinstance(manifest_file, Mapping)
-            or manifest_file.get("status") != "modified"
-            or manifest_file.get("previous_filename") is not None
+            or (
+                target_path is not None
+                and (
+                    not isinstance(manifest_file, Mapping)
+                    or manifest_file.get("status") != "modified"
+                    or manifest_file.get("previous_filename") is not None
+                )
+            )
             or not isinstance(change_file, Mapping)
             or change_file.get("status") not in {"added", "modified"}
             or change_file.get("previous_filename") is not None
         ):
             return False
-        actual_manifest = await self.source_file_content(
-            client,
-            repo,
-            head_sha,
-            target_path,
-            context,
-        )
         actual_change_document = await self.source_file_content(
             client,
             repo,
@@ -1545,6 +1553,15 @@ class GithubScmProvider:
             change_document_path(request),
             context,
         )
-        return actual_manifest == pr_base_contents[0][1] and actual_change_document == (
-            change_document(request)
+        if actual_change_document != change_document(request):
+            return False
+        if target_path is None:
+            return True
+        actual_manifest = await self.source_file_content(
+            client,
+            repo,
+            head_sha,
+            target_path,
+            context,
         )
+        return actual_manifest == pr_base_contents[0][1]
