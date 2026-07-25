@@ -1,15 +1,15 @@
 # Apply sandbox manifest
 
-deployment/canary-room: unknown → ghcr.io/jungle-303-04/demo-game/game-server:stable
+deployment/game-room-1: unknown → ghcr.io/jungle-303-04/demo-game/game-server:stable
 
 ## GitOps Basis
 
-- approval_ref: `approval-4b52b6a9e94b75b971fef164e141ec5f`
-- policy_decision_ref: `policy-decision:approval-4b52b6a9e94b75b971fef164e141ec5f:safe_pr`
+- approval_ref: `approval-417dcb2a97ef2b4ea692c62080a8721b`
+- policy_decision_ref: `policy-decision:approval-417dcb2a97ef2b4ea692c62080a8721b:safe_pr`
 - diff_status: `intended_change`
 - diff_basis: `managed-field-3way`
-- artifact_digest: `sha256:2b4070970ff06f2aeb538f3848ea3c45043a58da5cd580842f4e09ac05574690`
-- rollback_patch: `.gitops/rollback/workflow-600ecc1a6e1e9fd84a4157ec9c9f1e90/deployment-canary-room-base.yaml`
+- artifact_digest: `sha256:0a913106998539af2bfd72b1ce18b7a642e5e9d212c7951533bd0a7437e4bc2c`
+- rollback_patch: `.gitops/rollback/workflow-600ecc1a6e1e9fd84a4157ec9c9f1e90/deployment-game-room-1-base.yaml`
 
 
 - manifest_path: `deploy/k8s/base`
@@ -20,14 +20,14 @@ deployment/canary-room: unknown → ghcr.io/jungle-303-04/demo-game/game-server:
 ## Evidence
 
 - commit_sha: ``
-- patch_sha256: `6f1a4bb802e4bd0a76188411f2863c53f7c65f168a87b115e9ac7ab4b9267def`
+- patch_sha256: `9e5dcdc5e4d2983005e84f599a5c1f67855cd494e7f3c44886282734db498301`
 
 ## Approval
 
-- approval_ref: `approval-4b52b6a9e94b75b971fef164e141ec5f`
-- policy_decision_ref: `policy-decision:approval-4b52b6a9e94b75b971fef164e141ec5f:safe_pr`
+- approval_ref: `approval-417dcb2a97ef2b4ea692c62080a8721b`
+- policy_decision_ref: `policy-decision:approval-417dcb2a97ef2b4ea692c62080a8721b:safe_pr`
 
 ## Files
 
 - `deploy/k8s/base`: rendered Kubernetes manifest
-- `.gitops/rollback/workflow-600ecc1a6e1e9fd84a4157ec9c9f1e90/deployment-canary-room-base.yaml`: rollback manifest generated from live/previous values
+- `.gitops/rollback/workflow-600ecc1a6e1e9fd84a4157ec9c9f1e90/deployment-game-room-1-base.yaml`: rollback manifest generated from live/previous values
