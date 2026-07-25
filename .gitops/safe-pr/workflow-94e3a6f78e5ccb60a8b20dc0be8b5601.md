@@ -1,15 +1,15 @@
 # Apply sandbox manifest
 
-deployment/canary-validation-bot: unknown → ghcr.io/jungle-303-04/demo-game/bot-runner:stable
+deployment/session-gateway: ghcr.io/jungle-303-04/demo-game/session-gateway:276977d3628e8cc5c7ce8c362add3b4111c7883e → ghcr.io/jungle-303-04/demo-game/session-gateway:stable
 
 ## GitOps Basis
 
-- approval_ref: `approval-3bb1282058a3ef7f05c9e1b5d06ba00a`
-- policy_decision_ref: `policy-decision:approval-3bb1282058a3ef7f05c9e1b5d06ba00a:safe_pr`
+- approval_ref: `approval-cf7f96ba30de2cabaddd7a15b534ccf1`
+- policy_decision_ref: `policy-decision:approval-cf7f96ba30de2cabaddd7a15b534ccf1:safe_pr`
 - diff_status: `intended_change`
 - diff_basis: `managed-field-3way`
-- artifact_digest: `sha256:fe2847ae232932a8d493bd34ae363d1e5910bcf43f33ea2483f5953cebb2b993`
-- rollback_patch: `.gitops/rollback/workflow-94e3a6f78e5ccb60a8b20dc0be8b5601/deployment-canary-validation-bot-base.yaml`
+- artifact_digest: `sha256:8f60b2e836b46e64524bd0e248c66889a0bfbe02fc37930d3484c0285de2ebb1`
+- rollback_patch: `.gitops/rollback/workflow-94e3a6f78e5ccb60a8b20dc0be8b5601/deployment-session-gateway-base.yaml`
 
 
 - manifest_path: `deploy/k8s/base`
@@ -20,14 +20,14 @@ deployment/canary-validation-bot: unknown → ghcr.io/jungle-303-04/demo-game/bo
 ## Evidence
 
 - commit_sha: ``
-- patch_sha256: `8d12943ddab93d523e567d8052304c02f0ec7f2ecf92e66797200c6cadf8b6fb`
+- patch_sha256: `7a28e47b38aff5a515f7eea4cf6de3b8d7de5af84a13e929de3ce6bea7a9c041`
 
 ## Approval
 
-- approval_ref: `approval-3bb1282058a3ef7f05c9e1b5d06ba00a`
-- policy_decision_ref: `policy-decision:approval-3bb1282058a3ef7f05c9e1b5d06ba00a:safe_pr`
+- approval_ref: `approval-cf7f96ba30de2cabaddd7a15b534ccf1`
+- policy_decision_ref: `policy-decision:approval-cf7f96ba30de2cabaddd7a15b534ccf1:safe_pr`
 
 ## Files
 
 - `deploy/k8s/base`: rendered Kubernetes manifest
-- `.gitops/rollback/workflow-94e3a6f78e5ccb60a8b20dc0be8b5601/deployment-canary-validation-bot-base.yaml`: rollback manifest generated from live/previous values
+- `.gitops/rollback/workflow-94e3a6f78e5ccb60a8b20dc0be8b5601/deployment-session-gateway-base.yaml`: rollback manifest generated from live/previous values
