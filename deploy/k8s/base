@@ -2,13 +2,15 @@ kind: Service
 spec:
   ports:
   - name: http
-    port: 8083
+    port: 8001
     targetPort: http
   selector:
-    app: session-gateway
+    app: game-server
+  clusterIP: None
+  publishNotReadyAddresses: true
 metadata:
-  name: session-gateway
+  name: game-room-headless
   labels:
-    app: session-gateway
+    app: game-server
   namespace: sandbox
 apiVersion: v1
