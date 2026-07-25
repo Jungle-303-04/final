@@ -4,7 +4,7 @@ spec:
   selector:
     matchLabels:
       app: game-server
-      opsia.dev/room-id: room-2
+      opsia.dev/room-id: room-4
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -15,11 +15,11 @@ spec:
       containers:
       - env:
         - name: ROOM_ID
-          value: room-2
+          value: room-4
         - name: OPSIA_MAP_NAME
-          value: snow
+          value: woods
         - name: OPSIA_ROOM_PROFILE
-          value: snow
+          value: woods
         - name: OPSIA_HANDOFF_ROLE
           value: active-candidate
         - name: OPSIA_ROLE
@@ -29,7 +29,7 @@ spec:
         - name: ROOM_EPOCH
           value: '1'
         - name: OPSIA_WORKLOAD_NAME
-          value: game-room-2
+          value: game-room-4
         - name: OPSIA_RESOURCE_KIND
           value: Deployment
         - name: REDIS_URL
@@ -101,11 +101,11 @@ spec:
       labels:
         app: game-server
         opsia.dev/fleet: live
-        opsia.dev/room-id: room-2
+        opsia.dev/room-id: room-4
         opsia.dev/game-role: active
-        game.opsia.dev/room-id: room-2
+        game.opsia.dev/room-id: room-4
         opsia.dev/rollout-role: active-candidate
-        opsia.dev/room-profile: snow
+        opsia.dev/room-profile: woods
         app.kubernetes.io/part-of: demo-game
         opsia.dev/recovery-continuity: protected
       annotations:
@@ -115,15 +115,15 @@ spec:
         prometheus.io/scrape: 'true'
   minReadySeconds: 15
 metadata:
-  name: game-room-2
+  name: game-room-4
   labels:
     app: game-server
     opsia.dev/fleet: live
-    opsia.dev/room-id: room-2
+    opsia.dev/room-id: room-4
     opsia.dev/game-role: active
-    game.opsia.dev/room-id: room-2
+    game.opsia.dev/room-id: room-4
     opsia.dev/rollout-role: active-candidate
-    opsia.dev/room-profile: snow
+    opsia.dev/room-profile: woods
     app.kubernetes.io/part-of: demo-game
     opsia.dev/recovery-continuity: protected
   namespace: sandbox
