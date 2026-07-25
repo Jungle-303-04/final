@@ -422,7 +422,12 @@ export function LiveResourceManifestEditor({
         expectedDesiredSha256: preview.desired_sha256,
         confirmation: true,
         reason: reason.trim(),
-        idempotencyKey: manifestIdempotencyKey(resourceId, preview.desired_sha256),
+        idempotencyKey: manifestIdempotencyKey(
+          resourceId,
+          preview.desired_sha256,
+          preview.base_sha,
+          preview.source_sha256,
+        ),
       }));
       setPhase("ready");
     } catch (cause) {

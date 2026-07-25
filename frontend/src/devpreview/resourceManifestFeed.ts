@@ -34,9 +34,17 @@ const STALE_SOURCE_CODES = new Set([
   "manifest_source_revision_invalid",
 ]);
 
-export function manifestIdempotencyKey(resourceId: string, desiredSha256: string): string {
+export function manifestIdempotencyKey(
+  resourceId: string,
+  desiredSha256: string,
+  baseSha: string,
+  sourceSha256: string,
+): string {
   const safeResource = resourceId.replace(/[^A-Za-z0-9._:-]/g, "-").slice(-40);
-  return `manifest-${safeResource}-${desiredSha256.slice(-16)}`;
+  const revision = [baseSha, sourceSha256, desiredSha256]
+    .map((value) => value.replace(/[^A-Za-z0-9]/g, "").slice(-16))
+    .join("-");
+  return `manifest-${safeResource}-${revision}`;
 }
 
 export function resourceManifestFailureText(cause: unknown): string {
