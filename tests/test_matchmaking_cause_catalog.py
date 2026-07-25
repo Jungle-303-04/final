@@ -211,6 +211,26 @@ def test_zero_signal_room_candidates_never_beat_verified_lobby_capacity() -> Non
     assert detail.selected_candidate_id == "lobby_capacity_saturation"
 
 
+def test_generic_sources_without_a_verified_reason_do_not_select_a_room_cause() -> None:
+    profile = next(
+        item for item in load_catalog_profiles() if item.rule_id == "matchmaking_join_failure"
+    )
+    bundle = admission_bundle(
+        reason="unclassified",
+        replicas_before=1,
+        replicas_after=1,
+    )
+
+    evaluations = evaluate_causes(
+        [item.to_candidate() for item in profile.candidate_specs],
+        bundle,
+    )
+    detail = analyze_root_cause(evaluations)
+
+    assert detail.root_cause == "insufficient_evidence"
+    assert detail.selected_candidate_id == "none"
+
+
 def test_repeated_deploy_cycle_uses_nearest_preceding_replica_reduction() -> None:
     bundle = admission_bundle(changed_at="2026-07-24T01:00:30Z")
     metadata = next(item for item in bundle.items if item.source == "metadata")
