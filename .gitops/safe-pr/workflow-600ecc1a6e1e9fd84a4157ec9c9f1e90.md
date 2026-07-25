@@ -1,15 +1,15 @@
 # Apply sandbox manifest
 
-service/game-room-0: apply rendered manifest
+service/cache: apply rendered manifest
 
 ## GitOps Basis
 
-- approval_ref: `approval-fc247f197d58098cf6bd97b5c0ae650d`
-- policy_decision_ref: `policy-decision:approval-fc247f197d58098cf6bd97b5c0ae650d:safe_pr`
+- approval_ref: `approval-4da238ac9cd752d3c1c8fc70507f845a`
+- policy_decision_ref: `policy-decision:approval-4da238ac9cd752d3c1c8fc70507f845a:safe_pr`
 - diff_status: `drift`
 - diff_basis: `managed-field-3way`
-- artifact_digest: `sha256:e49f3c183cac3fa6b61766ceab5b3eaf819b9543e479ec425dfe742922663407`
-- rollback_patch: `.gitops/rollback/workflow-600ecc1a6e1e9fd84a4157ec9c9f1e90/service-game-room-0-base.yaml`
+- artifact_digest: `sha256:7647669d112955dd3da076da0a0983d9e9ad198995760cceafe2126d548ee0c5`
+- rollback_patch: `.gitops/rollback/workflow-600ecc1a6e1e9fd84a4157ec9c9f1e90/service-cache-base.yaml`
 
 
 - manifest_path: `deploy/k8s/base`
@@ -20,14 +20,14 @@ service/game-room-0: apply rendered manifest
 ## Evidence
 
 - commit_sha: ``
-- patch_sha256: `88a0f4c243c7502e7a4c3dcbf8adde2fba5d19a19381fa8fe04ffcf2564b4ed4`
+- patch_sha256: `cbdf37e4f4da3800431691a315503f8bcf7b4adf4003bdf6890dabaae550baa3`
 
 ## Approval
 
-- approval_ref: `approval-fc247f197d58098cf6bd97b5c0ae650d`
-- policy_decision_ref: `policy-decision:approval-fc247f197d58098cf6bd97b5c0ae650d:safe_pr`
+- approval_ref: `approval-4da238ac9cd752d3c1c8fc70507f845a`
+- policy_decision_ref: `policy-decision:approval-4da238ac9cd752d3c1c8fc70507f845a:safe_pr`
 
 ## Files
 
 - `deploy/k8s/base`: rendered Kubernetes manifest
-- `.gitops/rollback/workflow-600ecc1a6e1e9fd84a4157ec9c9f1e90/service-game-room-0-base.yaml`: rollback manifest generated from live/previous values
+- `.gitops/rollback/workflow-600ecc1a6e1e9fd84a4157ec9c9f1e90/service-cache-base.yaml`: rollback manifest generated from live/previous values
