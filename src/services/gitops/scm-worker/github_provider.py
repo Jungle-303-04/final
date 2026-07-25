@@ -275,6 +275,18 @@ def normalize_branch_ref(branch: str) -> str:
 
 
 def branch_name(request: SafePrRequestedBody) -> str:
+    # A workflow identifies the approved deployment authority, but a failed Safe PR
+    # may be retried with a new approval.  Reusing only the workflow id makes every
+    # retry target the abandoned branch from the first attempt and GitHub rejects
+    # branch creation with 422 ("Reference already exists").  Scope the branch to
+    # the approval attempt while keeping redelivery of the same approved request
+    # idempotent.  Legacy requests without an approval keep their existing name.
+    approval_ref = str(request.approval_ref or "").strip()
+    if approval_ref:
+        attempt = hashlib.sha256(approval_ref.encode("utf-8")).hexdigest()[:12]
+        return normalize_branch_ref(
+            f"{BRANCH_PREFIX}/{request.workflow_run_id}-{attempt}"
+        )
     return normalize_branch_ref(f"{BRANCH_PREFIX}/{request.workflow_run_id}")
 
 
@@ -542,7 +554,13 @@ class GithubScmProvider:
                         branch,
                         base_sha,
                         context,
-                        allow_existing=False,
+                        # Approval-scoped branches belong to exactly one Safe PR
+                        # attempt.  If the same event is redelivered after a partial
+                        # failure, resume that branch instead of failing on GitHub's
+                        # 422 "Reference already exists" response.  Legacy branch
+                        # names remain fail-closed because they are only workflow-
+                        # scoped and could contain another attempt's changes.
+                        allow_existing=bool(request.approval_ref),
                     )
                     await self.put_change_document(client, repo, branch, request, context)
                     await self.put_manifest_patches(

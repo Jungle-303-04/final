@@ -4,6 +4,7 @@ import asyncio
 import base64
 import json
 import re
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -70,6 +71,22 @@ def _request(plan: ManifestScalarPatchPlan) -> SafePrRequestedBody:
         commit_sha=APPROVED_SHA,
         delivery="pull_request",
     )
+
+
+def test_branch_name_is_stable_per_approval_and_changes_for_retry(
+    provider_module,
+) -> None:
+    request = _request(_plan())
+    first = replace(request, approval_ref="approval-attempt-1")
+    redelivery = replace(request, approval_ref="approval-attempt-1")
+    retry = replace(request, approval_ref="approval-attempt-2")
+
+    first_branch = provider_module.branch_name(first)
+
+    assert first_branch == provider_module.branch_name(redelivery)
+    assert first_branch != provider_module.branch_name(retry)
+    assert first_branch.startswith("gitops/workflow-safe-pr-rebase-")
+    assert provider_module.branch_name(request) == "gitops/workflow-safe-pr-rebase"
 
 
 def _declared(
