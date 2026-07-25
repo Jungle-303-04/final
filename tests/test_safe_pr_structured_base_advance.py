@@ -257,6 +257,44 @@ def test_advanced_base_with_changed_target_scalar_fails_closed(provider_module) 
         asyncio.run(validate())
 
 
+def test_advanced_base_already_at_desired_scalar_creates_document_only_change(
+    provider_module,
+) -> None:
+    """A completed target change keeps its audit PR without rewriting the manifest."""
+
+    plan = _plan()
+    request = _request(plan)
+    declared = _declared(plan)
+
+    def handler(raw_request: httpx.Request) -> httpx.Response:
+        if "/compare/" in raw_request.url.path:
+            return httpx.Response(200, json=_compare_payload())
+        if raw_request.url.path.endswith(f"/contents/{SOURCE_PATH}"):
+            assert raw_request.url.params["ref"] == CURRENT_SHA
+            return httpx.Response(200, json=_encoded_content(_deployment(2)))
+        return httpx.Response(404, json={"message": "unexpected request"})
+
+    provider = provider_module.GithubScmProvider()
+    provider.resolve_declared_patches = AsyncMock(return_value=[declared])
+
+    async def validate() -> list[tuple[str, str]]:
+        async with httpx.AsyncClient(
+            base_url="https://api.github.test",
+            transport=httpx.MockTransport(handler),
+        ) as client:
+            return await provider.validate_structured_base_advance(
+                client,
+                "org/repo",
+                APPROVED_SHA,
+                CURRENT_SHA,
+                request,
+                [plan],
+                authority={},
+            )
+
+    assert asyncio.run(validate()) == []
+
+
 def test_advanced_base_preserves_unrelated_documents_in_selected_source(
     provider_module,
 ) -> None:

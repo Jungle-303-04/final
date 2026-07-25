@@ -358,10 +358,10 @@ def test_alertmanager_webhook_deduplicates_live_lineage(
     assert db.alert_events[0]["incident_id"] == "incident-old"
 
 
-def test_new_alert_start_reuses_unresolved_pin_correlation(
+def test_new_alert_start_creates_a_new_attempt_under_the_unresolved_pin(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A fresh Alertmanager startsAt must enrich the unresolved PIN, not replace it."""
+    """A fresh Alertmanager startsAt is a new attempt, not the PIN identity itself."""
 
     monkeypatch.setenv(ALERTMANAGER_WEBHOOK_TOKEN_ENV, "global-webhook-token")
     db = AlertmanagerOpenIncidentDb()
@@ -386,9 +386,10 @@ def test_new_alert_start_reuses_unresolved_pin_correlation(
         )
     )
 
-    assert response.correlation_id == "incident-open"
-    assert db.recorded[0]["event_envelope"].correlation_id == "incident-open"
-    assert db.alert_events[0]["incident_id"] == "incident-open"
+    recorded_correlation = db.recorded[0]["event_envelope"].correlation_id
+    assert recorded_correlation != "incident-open"
+    assert response.correlation_id == recorded_correlation
+    assert db.alert_events[0]["incident_id"] == recorded_correlation
 
 
 @pytest.mark.parametrize(
