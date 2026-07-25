@@ -2,14 +2,17 @@ kind: Service
 spec:
   ports:
   - name: http
-    port: 8081
+    port: 8001
     targetPort: http
   selector:
-    app: api-server
-  publishNotReadyAddresses: true
+    app: game-server
+    opsia.dev/fleet: live
+    opsia.dev/room-id: room-4
 metadata:
-  name: login-gateway-api
+  name: game-room-4
   labels:
-    app: api-server
+    app: game-server
+    opsia.dev/room-id: room-4
+    game.opsia.dev/room-id: room-4
   namespace: sandbox
 apiVersion: v1
