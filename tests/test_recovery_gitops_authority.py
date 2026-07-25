@@ -680,6 +680,36 @@ def test_authority_uses_current_approved_snapshot_when_incident_has_no_recent_ch
     assert authority.changes == ()
 
 
+def test_authority_uses_binding_manifest_path_when_application_default_differs() -> None:
+    db = AuthorityDb(evidence={"metadata": {}})
+
+    async def no_recent_diff(*args: object) -> None:
+        return None
+
+    async def application_with_repository_default_path(
+        workspace_id: str,
+        application_id: str,
+    ) -> dict[str, object]:
+        return {
+            "workspace_id": workspace_id,
+            "application_id": application_id,
+            "repository_id": "repo-1",
+            "manifest_path": "deploy/base",
+            "repo_ref": "org/repo",
+            "default_branch": "dev",
+            "status": "active",
+        }
+
+    db.get_completed_workload_resource_diff = no_recent_diff  # type: ignore[method-assign]
+    db.get_application = application_with_repository_default_path  # type: ignore[method-assign]
+
+    authority = load_authority(db, query())
+
+    assert authority is not None
+    assert authority.binding_id == "binding-1"
+    assert authority.manifest_path == "deploy/app.yaml"
+
+
 def test_authority_enriches_approved_snapshot_with_latest_replica_change() -> None:
     db = AuthorityDb(evidence={"metadata": {}})
 
