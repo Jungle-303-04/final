@@ -78,7 +78,7 @@ flowchart LR
 | `config/env` | KEEP | 설정 예시 필요 | 개인 domain과 외부-console variant를 없애고 `.env.example` 하나로 축소 |
 | `.github/CODEOWNERS` | LATER | 현재 handle과 경로가 예시/과거 구조 | 실제 maintainer가 생기면 다시 작성 |
 | `.github/workflows/dev-deploy.yml` | DELETE | 개인 AWS dev 배포 workflow | 일반 PR CI로 대체 |
-| `.github/workflows/cloudflare-*.yml` | DELETE | 개인 domain/tunnel 자동화 | 개인 운영 저장소로 이동 |
+| 개인 edge/tunnel workflow | DELETE | 개인 domain/tunnel 자동화 | 개인 운영 저장소로 이동 |
 | 새 PR CI workflow | KEEP | 공개 품질 gate에 필수 | Ruff, pytest, frontend 제거 전 검사, Helm lint/template 실행 |
 | `Makefile` | KEEP | 개발자 진입점 | 삭제 경로 target 제거, `make test`가 실제 pytest를 실행하도록 수정 |
 | `pyproject.toml`, `uv.lock`, `.python-version` | KEEP | 재현 가능한 backend build | 누락 `README.md`를 만들고 불필요 dependency 제거 |
@@ -275,7 +275,7 @@ terminal, topology, cost, traffic, 전체 resource explorer, 범용 chat은 넣�
 | `oss-demo.sh` | EXPERIMENT | 현재 삭제된 `references/ui-layer-lab/Dockerfile` 참조를 제거하기 전까지 공식 demo로 표기 금지 |
 | frontend/live smoke | DELETE | `dev-live-frontend.sh`, console smoke와 UI gate script; current frontend 제거와 함께 정리 |
 | 개인 AWS | DELETE | `aws-up.sh`, `aws-down.sh`, `status.sh`, `restore-pgbouncer.sh` 등 개인 cluster 운영 script |
-| 개인 edge | DELETE | `scripts/cloudflare/*`, `lib/public-edge.sh`; 개인 domain 운영 저장소로 이동 |
+| 개인 edge | DELETE | 개인 edge/tunnel script와 `lib/public-edge.sh`; 개인 domain 운영 저장소로 이동 |
 | reference UI parity | DELETE | `reference-*`, `verify-product-brand-boundary.mjs`, 과거 upstream ledger/gate |
 | manual scaling/crash demo | EXPERIMENT | `scale.sh`, `kill-pod.sh`, `crash_test.sh`; event runtime test fixture와 분리 |
 
