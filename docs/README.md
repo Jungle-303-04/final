@@ -37,6 +37,7 @@
 - [Project Map](./PROJECT-MAP.md): 현재 runtime, 디렉터리, domain, service, event architecture 지도.
 - [Golden Path](./GOLDEN-PATH.md): image pull 장애에서 Safe PR과 후속 evidence 검증까지의 좁은 성공 경로.
 - [Cleanup Matrix](./CLEANUP-MATRIX.md): KEEP/LATER/EXPERIMENT/DELETE 분류와 삭제 전 gate.
+- [Advanced Course Plan](./advanced-course-plan/README.md): 심화과정 팀 프로젝트·학습 계획과 개인별 제출 문서.
 
 ## 아직 없는 문서 표면
 
