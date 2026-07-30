@@ -1,38 +1,11 @@
 <!doctype html>
-<html lang="en">
+<html lang="ko">
   <head>
     <meta charset="UTF-8" />
-    <script>
-      (() => {
-        let storedTheme = null;
-        let locale = navigator.language?.toLowerCase().startsWith("ko") ? "ko" : "en";
-        try {
-          storedTheme = window.localStorage.getItem("opsia-theme");
-          const storedLocale = window.localStorage.getItem("opsia.locale");
-          if (storedLocale === "en" || storedLocale === "ko") locale = storedLocale;
-        } catch {
-          storedTheme = null;
-        }
-        const selectedTheme = storedTheme === "dark" || storedTheme === "light"
-          ? storedTheme
-          : storedTheme === "system"
-            ? storedTheme
-            : "system";
-        const systemDark = window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false;
-        const isDark = selectedTheme === "dark" || (selectedTheme === "system" && systemDark);
-        document.documentElement.classList.toggle("dark", isDark);
-        document.documentElement.style.colorScheme = isDark ? "dark" : "light";
-        document.documentElement.lang = locale;
-      })();
-    </script>
     <style>
       :root {
-        --background: oklch(1 0 0);
-        --foreground: oklch(0.145 0 0);
-      }
-      :root.dark {
-        --background: oklch(0.145 0 0);
-        --foreground: oklch(0.985 0 0);
+        --background: #0a0d0b;
+        --foreground: #eef2ea;
       }
       html,
       body,
@@ -48,13 +21,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="Kyro — provider-neutral Kubernetes operations and GitOps control plane."
+      content="Opsia — Kubernetes 장애 증거를 보존하고 제한된 변경안을 GitOps Draft PR로 제안한 뒤 배포 결과를 다시 검증하는 운영 제어면."
     />
-    <meta name="application-name" content="Kyro" />
+    <meta name="application-name" content="Opsia" />
     <meta name="theme-color" content="#0a0a0a" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="manifest" href="/site.webmanifest" />
-    <title>Kyro</title>
+    <title>Opsia · Evidence to verified recovery</title>
   </head>
   <body>
     <div id="root"></div>

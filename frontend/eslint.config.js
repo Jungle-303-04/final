@@ -55,21 +55,4 @@ export default tseslint.config(
       ],
     },
   },
-  {
-    name: 'design-guard',
-    files: ['scripts/product-design-guard.mjs'],
-    extends: [js.configs.recommended],
-    languageOptions: {
-      ecmaVersion: 'latest',
-      sourceType: 'module',
-      globals: {
-        ...globals.browser,
-        ...globals.node,
-      },
-    },
-    linterOptions: {
-      reportUnusedDisableDirectives: 'error',
-      reportUnusedInlineConfigs: 'error',
-    },
-  },
 )
