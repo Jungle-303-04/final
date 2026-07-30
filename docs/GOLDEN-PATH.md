@@ -1,194 +1,71 @@
-# Golden Path: 이미지 장애에서 검증된 복구까지
+# Golden Path
 
-> 기준 시점: 2026-07-27
-> 범위: `ImagePullBackOff` 또는 `ErrImagePull` → 안전한 GitOps PR → 외부 배포 → 새 증거로 복구 확인
-> 이 문서는 현재 코드에서 연결되는 경로와 아직 운영 계약이 필요한 경계를 함께 표시한다.
+Opsia는 Kubernetes 장애 증거를 보존하고 제한된 변경안을 GitOps Draft PR로 제안한 뒤 배포 결과를 다시 검증하는 운영 제어면입니다.
 
-## 1. 이 경로가 사용자에게 주는 가치
+## ImagePullBackOff 완결 흐름
 
-사용자가 얻는 결과는 “AI가 장애를 설명했다”가 아니다.
+| 단계 | 입력 | 결정 또는 산출물 | 실패 시 |
+|---|---|---|---|
+| 1. 증거 수집 | read-only agent의 Pod, container state, Event | correlation ID가 붙은 불변 evidence bundle | 불완전 증거로 기록 |
+| 2. 사건 탐지 | `ImagePullBackOff`, `ErrImagePull` | 대상 cluster/namespace/workload가 고정된 incident | 대상이 모호하면 중단 |
+| 3. 결정론적 RCA | Event message와 catalog signal | `wrong_image_tag`, `missing_image_pull_secret`, `registry_unavailable` 등의 근거별 후보 | signal이 부족하면 `insufficient_evidence` |
+| 4. 수정안 제한 | GitOps manifest, source digest, 현재 base SHA | 허용된 image scalar의 forward/inverse patch | 경로·SHA·단일 대상이 불명확하면 중단 |
+| 5. Draft PR | GitHub repository와 base branch | base SHA가 고정된 Draft PR | base가 전진하면 stale 처리 후 재계산 |
+| 6. 재검증 | merge/deploy 이벤트와 새 evidence window | ImagePullBackOff 소멸, Pod Ready 회복, 대상 동일성 기록 | deadline 내 회복하지 않으면 verification failed |
 
-> 잘못된 container image 때문에 Pod가 올라오지 않을 때, 현재 배포와 Git source의 관계를 증명하고, 허용된 image 필드 하나만 수정한 검토 가능한 PR을 만든 뒤, 배포 후 같은 증상이 사라졌는지 확인한다.
+`wrong_image_tag`만 자동 제안 가능한 대표 경로입니다. Secret 생성, registry mirror 전환, 클러스터 명령은 정책으로 추론하지 않고 운영자 검토 항목으로 남깁니다.
 
-이 범위를 벗어나는 장애는 자동으로 해결하려 하지 않는다. 정보가 부족하거나 source가 모호하면 PR을 만들지 않고 사람이 해야 할 다음 행동을 반환한다.
+## 불변 조건
 
-## 2. 명시적인 범위
+- 증거는 수집 당시 cluster, namespace, resource identity와 함께 저장합니다.
+- RCA는 LLM 출력이 아니라 versioned YAML rule과 정확한 signal match로 결정합니다.
+- patch는 repository, branch, manifest path, base SHA, source SHA-256을 모두 가져야 합니다.
+- PR 생성 전에 원본 scalar가 예상값과 같은지 다시 확인합니다.
+- merge는 제품 권한 밖입니다. Opsia는 Draft PR을 만들고 lifecycle event만 관측합니다.
+- 검증은 변경 전 evidence와 변경 후 evidence를 같은 대상 identity로 비교합니다.
 
-### 포함
-
-- Kubernetes evidence에서 `ImagePullBackOff`/`ErrImagePull` 감지
-- 알려진 규칙으로 image 관련 원인 후보 평가
-- `image_rollback` 또는 `image_tag_fix` 후보 생성
-- 사용자 선택 또는 안전한 단일 후보 선택
-- raw YAML, 명시된 Helm values, 해석 가능한 Kustomize source의 정확한 필드 patch
-- base commit에 고정된 SCM PR 생성
-- signed webhook/정확한 workflow binding으로 merge 또는 배포 완료 연계
-- 후속 evidence로 incident 해결 또는 검증 실패 판정
-
-### 제외
-
-- 임의 장애에 대한 범용 AI 추론
-- cluster workload 직접 patch
-- PR 자동 merge
-- CI/CD runner 또는 외부 GitOps reconciler 대체
-- source ownership을 증명할 수 없는 Helm/Kustomize 자동 수정
-- node-level 자동 복구
-
-OSS Helm profile은 `AGENT_ACCESS_MODE=read_only`, `AGENT_DIRECT_COMMANDS_ENABLED=false`, `REMEDIATION_DELIVERY_MODE=pull_request`, `PRODUCTION_AUTO_MERGE_ENABLED=false`를 사용한다. 이 문서의 Golden Path도 그 계약만 다룬다.
-
-## 3. 시작 전 조건
-
-| 조건 | 왜 필요한가 | 없을 때의 결과 |
-|---|---|---|
-| target cluster와 agent가 등록·연결됨 | 장애 증거와 후속 검증 증거를 수집 | 분석 시작 불가 |
-| agent 권한이 실제 read-only policy와 일치 | 개인 도구라도 cluster mutation을 차단 | 설치 차단 |
-| Kubernetes snapshot provider 사용 가능 | Pod 상태, event, workload/image 확인 | evidence 불충분 |
-| repository, application, binding, manifest path 등록 | runtime resource와 Git source를 연결 | `rca.action_required` |
-| base branch와 immutable commit SHA 확인 | stale source에 PR을 만드는 것을 방지 | Safe PR 실패 |
-| source 편집 위치가 유일함 | 정확한 scalar만 수정 | 모호하면 실패 |
-| raw/Helm source는 `.remediation.yaml` 계약 제공 | image/replica/probe 경로를 명시 | 자동 patch 금지 |
-| Kustomize는 local resource와 field ownership 해석 가능 | render 결과가 아니라 실제 source 수정 | 모호/remote reference면 실패 |
-| SCM credential과 signed webhook 설정 | PR 생성·merge 신뢰 | 추적/검증 시작 불가 |
-| 외부 GitOps reconciler가 repository를 reconcile | PR merge를 cluster에 적용 | 배포되지 않음 |
-| evidence 수집 주기와 target identity 유지 | 전후 상태를 같은 대상에서 비교 | 검증 불가 |
-
-## 4. 전체 이벤트 흐름
+## 주요 이벤트
 
 ```mermaid
-flowchart TD
-    A["cluster.evidence.received"] --> B["evidence.built"]
-    B --> C{"incident 확정?"}
-    C -- "아니오/중복" --> Stop["종료: 변경 없음"]
-    C -- "예" --> D["incident.detected + evidence.bundle.built"]
-    D --> E["rca.candidates.planned"]
-    E --> F["rca.candidates.evaluated"]
-    F --> G{"근거 충분?"}
-    G -- "아니오" --> Block["rca.analysis_blocked / followup"]
-    G -- "예" --> H["rca.completed"]
-    H --> I["recovery.planned"]
-    I --> J{"복구 후보 선택"}
-    J -- "사용자 필요" --> K["recovery.selection_requested"]
-    K --> L["recovery.action_selected"]
-    J -- "안전한 단일 후보" --> L
-    L --> M{"GitOps 권한·source 증명"}
-    M -- "실패" --> Action["rca.action_required"]
-    M -- "성공" --> N["safe_pr.requested"]
-    N --> O["safe_pr.patch_prepared"]
-    O --> P{"diff policy 통과?"}
-    P -- "아니오" --> Failed["safe_pr.failed"]
-    P -- "예" --> Q["safe_pr.ready_for_creation"]
-    Q --> R["safe_pr.created"]
-    R --> Review["사람의 PR 검토·merge"]
-    Review --> CD["외부 GitOps reconciler"]
-    CD --> Verify["recovery.verification.started"]
-    Verify --> New["새 cluster.evidence.received"]
-    New --> Result{"증상 해소?"}
-    Result -- "예" --> Resolved["incident.resolved"]
-    Result -- "아니오/기한 초과" --> VFailed["recovery.verification.failed"]
+sequenceDiagram
+  participant Agent as Read-only agent
+  participant RCA as RCA pipeline
+  participant PR as Safe PR pipeline
+  participant GitHub
+  participant Verify as Verification worker
+  Agent->>RCA: evidence bundle
+  RCA->>RCA: incident + deterministic cause
+  RCA->>PR: bounded patch + expected base SHA
+  PR->>GitHub: create Draft PR
+  GitHub-->>Verify: merge/deploy lifecycle
+  Agent-->>Verify: next periodic post-deploy evidence window
+  Verify->>Verify: resolved or verification failed
 ```
 
-## 5. 단계별 코드 경로
+agent는 제어면의 변경 명령을 받지 않고 설정된 cadence로 계속 수집합니다. verification은
+배포 성공 뒤 시작 시각보다 오래된 window를 거부하고 이후에 수집된 evidence만 변경 전
+기준선과 비교합니다.
 
-| # | event/행동 | 담당 | 핵심 처리와 안전 경계 |
-|---:|---|---|---|
-| 1 | 증거 job 수행 | `cluster-agent` | Kubernetes snapshot, Prometheus metrics, Loki logs, Tempo traces, metadata provider를 호출하고 결과를 관리면으로 전달한다. 이미지 경로의 최소 필수 증거는 Kubernetes 상태다. |
-| 2 | `cluster.evidence.received` | target router → `evidence-worker` | target/agent identity를 포함한 evidence를 저장하고 RCA용 compact evidence를 만든다. |
-| 3 | `evidence.built` | `incident-worker` | 관리 cluster evidence를 제외하고, incident signal을 claim해 중복 처리를 막는다. 확인되면 `incident.detected`와 `evidence.bundle.built`를 낸다. |
-| 4 | `evidence.bundle.built` | `plan-worker` | cause catalog에서 증상과 맞는 원인 후보를 계획한다. image cause catalog는 `ImagePullBackOff`와 `ErrImagePull`을 다룬다. |
-| 5 | `rca.candidates.planned` | `analyze-worker` | 각 후보가 요구하는 증거와 실제 evidence를 대조하고 평가한다. |
-| 6 | `rca.candidates.evaluated` | `rca-worker` | 충분한 증거가 있으면 결정적 RCA를 저장하고 `rca.completed`를 낸다. LLM은 설명을 보강할 수 있지만 core decision을 대신하지 않는다. |
-| 7 | `rca.completed` | `recovery-worker` | `image_rollback`, `image_tag_fix` 등 허용된 복구 후보를 `recovery.planned`로 만든다. |
-| 8 | `recovery.planned` | `select-worker` | 안전한 단일 후보면 선택하고, 여러 후보거나 판단이 필요하면 `recovery.selection_requested`를 낸다. |
-| 9 | 선택 UI/API | RCA domain router | 사용자의 선택을 저장한 뒤 `recovery.action_selected`를 낸다. `approval-worker`의 권고는 보조 정보일 뿐 자동 승인권이 아니다. |
-| 10 | `recovery.action_selected` | `dispatch-worker` | image action이고 delivery route가 `draft_pr`인지 확인한다. 직접 command 대신 GitOps authority를 검증하고 `safe_pr.requested`를 만든다. |
-| 11 | source authority 검사 | recovery dispatcher / GitOps domain | repository, binding, target resource, manifest source, commit SHA, 수정 field를 검증한다. 누락·모호·stale이면 `rca.action_required`로 종료한다. |
-| 12 | `safe_pr.requested` | `safe-pr-worker` | provider와 patch preflight를 검사해 구조화된 `safe_pr.patch_prepared`를 만든다. |
-| 13 | `safe_pr.patch_prepared` | `ai-diff-worker` | 허용 field, 변경 범위, 위험을 결정적 policy로 검사해 `diff.explained`를 만든다. 허용되면 `safe_pr.ready_for_creation`, 아니면 `safe_pr.failed`다. |
-| 14 | `safe_pr.ready_for_creation` | `scm-worker` | SCM base SHA를 다시 확인하고 branch/commit/PR을 만든다. 현재 adapter는 `github_provider.py`다. 성공하면 `safe_pr.created`다. |
-| 15 | `safe_pr.created` | `rca-feedback-worker` | PR과 recovery plan/incident를 연결해 `recovery.pr.tracked`를 기록한다. 이 시점은 “제안 완료”이지 “복구 완료”가 아니다. |
-| 16 | 사람의 review/merge | SCM provider | 사용자가 실제 diff와 근거를 검토한다. production auto merge는 금지한다. |
-| 17 | 배포 | 외부 GitOps reconciler | merge commit을 cluster에 reconcile한다. CI/CD의 책임 영역이다. Opsia는 이 시스템을 대체하지 않는다. |
-| 18 | merge/deploy 신뢰 | signed SCM webhook 또는 exact workflow binding | `recovery.pr.merged`나 신뢰 가능한 `workflow.run.completed`를 받아 `recovery.verification.started`를 만든다. 단순 URL/이름 일치만으로 신뢰하지 않는다. |
-| 19 | 후속 evidence | `rca-feedback-worker` | 같은 cluster/workload의 새 window를 before 상태와 비교해 `recovery.verification.updated`를 낸다. |
-| 20 | 해결 또는 실패 | `rca-feedback-worker` → `alert-worker` | image 증상이 사라지고 기대 상태가 충족되면 `incident.resolved`; 회귀, 증거 누락, 기한 초과면 `recovery.verification.failed`다. |
+## 안전장치 구현 감사
 
-## 6. 이미지 source를 실제로 어떻게 바꾸는가
+| # | 상태 | 코드 강제 | 회귀 테스트 |
+|---|---|---|---|
+| 1. evidence Kubernetes 권한 read-only | 구현됨 | [`agent-rbac.yaml`](../charts/opsia/templates/agent-rbac.yaml)은 `get/list/watch`만 부여하고 [`kubernetes_providers.py`](../src/services/target/cluster-agent/providers/kubernetes_providers.py)는 Kubernetes API read만 수행. [`manifest-check.sh`](../scripts/manifest-check.sh)는 mutation verb, wildcard, exec/attach/port-forward/proxy를 거부 | [`test_agent_kubernetes_surface_is_read_only`](../tests/test_golden_path_safety_contracts.py), `make manifest-check` |
+| 2. 전 구간 Correlation ID | 구현됨 | [`envelope.py`](../src/packages/events/envelope.py)가 root correlation을 만들고 [`dispatch.py`](../src/packages/runtime/dispatch.py)가 모든 child event에 같은 correlation과 parent causation을 강제. PR·merge·verification lifecycle은 저장된 correlation으로 발행 | [`test_worker_child_event_inherits_correlation_and_causation`](../tests/test_golden_path_safety_contracts.py), [`test_signed_exact_merge_moves_only_tracked_pr_to_deploy_pending`](../tests/test_recovery_pr_lifecycle.py) |
+| 3. incident·PR 멱등성 | 구현됨 | [`worker.py`](../src/packages/runtime/worker.py)의 `(event_id, consumer)` 처리 ledger, [`IncidentSignalClaim`](../src/domains/rca/models.py)의 workspace/cluster/signal unique 제약, [`github_provider.py`](../src/services/gitops/scm-worker/github_provider.py)의 approval-scoped branch와 exact open Draft PR 재사용 | [`test_incident_claim_has_a_durable_unique_identity`](../tests/test_golden_path_safety_contracts.py), [`test_same_active_alert_reuses_claim_across_enriched_evidence_windows`](../tests/test_incident_signal_identity.py), [`test_existing_pr_remains_idempotent_after_base_advances`](../tests/test_safe_pr_structured_base_advance.py) |
+| 4. resource/path/field allowlist | 구현됨 | [`source_patch.py`](../src/domains/gitops/source_patch.py)가 Deployment, 안전한 repository path, 지원 action과 exact scalar field/value/inverse rollback만 허용. [`dispatch.py`](../src/services/ai/agent/recovery/dispatch.py)가 GitOps 권위 snapshot에서만 patch를 구성 | [`test_patch_allowlist_rejects_non_deployment_and_unapproved_field`](../tests/test_golden_path_safety_contracts.py), [`test_extra_actionable_change_in_target_workload_fails_closed`](../tests/test_recovery_merge_scope.py), [`test_same_target_overlay_replica_patch_blocks_base_edit`](../tests/test_recovery_kustomize_edit_source.py) |
+| 5. PR 직전 base SHA 재확인 | 구현됨 | [`GithubScmProvider.create_or_reuse_pr`](../src/services/gitops/scm-worker/github_provider.py)가 branch/file 준비 뒤 base ref를 다시 읽고 처음 검증한 SHA와 다르면 PR POST 전에 중단 | [`test_base_sha_is_rechecked_immediately_before_draft_pr_creation`](../tests/test_safe_pr_structured_base_advance.py), [`test_advanced_base_with_changed_target_scalar_fails_closed`](../tests/test_safe_pr_structured_base_advance.py) |
+| 6. 클러스터 직접 변경 차단 | 구현됨 | active `TargetClusterAgent`에는 command/mutation channel이 wire되지 않고, Safe PR policy는 `pull_request` 외 delivery를 거부. SCM provider의 base branch direct commit 경로를 제거 | [`test_safe_pr_rejects_direct_delivery_and_provider_has_no_merge_path`](../tests/test_golden_path_safety_contracts.py), [`test_recovery_safe_pr_always_uses_pull_request_delivery`](../tests/test_recovery_safe_pr_copy.py), `make manifest-check` |
+| 7. 자동 merge 불가 | 구현됨 | [`github_provider.py`](../src/services/gitops/scm-worker/github_provider.py)는 GitHub PR 생성 시 `draft: true`를 강제하고 non-Draft 응답·기존 PR을 거부하며 merge API를 호출하지 않음. [`router.py`](../src/domains/gitops/router.py)는 서명된 외부 merge webhook만 관측 | [`test_unrelated_descendant_change_creates_pr_from_current_base`](../tests/test_safe_pr_structured_base_advance.py), [`test_safe_pr_rejects_direct_delivery_and_provider_has_no_merge_path`](../tests/test_golden_path_safety_contracts.py), [`test_signed_exact_merge_moves_only_tracked_pr_to_deploy_pending`](../tests/test_recovery_pr_lifecycle.py) |
+| 8. 배포 후 evidence 재수집·기준선 비교 | 구현됨 | [`rca-feedback-worker`](../src/services/ai/rca-feedback-worker/app.py)가 성공한 exact merge workflow 뒤 verification을 시작하고 다음 주기 evidence window를 소비. [`recovery_verification.py`](../src/domains/rca/recovery_verification.py)가 시작 시각, 대상 identity, pre-recovery SLI/workload/session 기준선을 비교 | [`test_completes_only_after_distinct_continuous_five_minute_windows`](../tests/test_recovery_verification.py), [`test_duplicate_and_stale_windows_do_not_advance_stability_clock`](../tests/test_recovery_verification.py), [`test_missing_pre_recovery_protected_baseline_fails_closed`](../tests/test_recovery_verification.py) |
+| 9. 실패 원인·원본 증거 보존 | 구현됨 | [`SafePrFailedBody`](../src/domains/scm/events.py)와 recovery lifecycle이 reason code·stage·evidence ref를 보존. [`dead_letter.py`](../src/packages/storage/repositories/dead_letter.py)는 원본 event payload/correlation/error를 보존하고 evidence 원문은 correlation별로 저장 | [`test_safe_pr_failure_preserves_original_evidence_reference`](../tests/test_golden_path_safety_contracts.py), [`test_safe_pr_failure_uses_approval_identity_to_preserve_retryable_action`](../tests/test_recovery_retry_state.py), [`test_evidence_expiry_persists_retryable_failure_identity`](../tests/test_recovery_verification.py) |
 
-### Raw YAML
+## 검증
 
-`.remediation.yaml`이 workload file과 정확한 image scalar 경로를 선언해야 한다. source digest와 base SHA를 확인한 뒤 그 scalar만 바꾼다.
-
-### Helm values
-
-Helm chart 전체를 임의로 해석하지 않는다. `.remediation.yaml`에 다음 정보가 있어야 한다.
-
-- `sourceType: helm-values`
-- 편집할 values file
-- `imageTagPath` 또는 허용된 다른 scalar 경로
-- 대상 repository/application/binding과 일치하는 source identity
-
-즉 Helm은 지원하지만 **명시적 source mapping이 있을 때만 자동 수정**한다.
-
-### Kustomize
-
-Kustomize root에서 local resource reference를 따라 실제 편집 파일을 하나로 좁힌다. remote reference, 순환/범위 초과, 여러 field owner, 불완전 provenance는 거절한다. render 결과를 그대로 source file이라고 가정하지 않는다.
-
-## 7. 반드시 실패해야 하는 경우
-
-| 상황 | 기대 결과 | 잘못된 행동 |
-|---|---|---|
-| incident가 아니거나 중복 evidence | 조용히 종료/기존 incident 연결 | 새 PR 생성 |
-| RCA 규칙 또는 증거 부족 | `rca.analysis_blocked`, follow-up 제시 | LLM 추측으로 patch |
-| 안전한 후보가 여러 개 | 사용자 선택 요청 | 임의 자동 선택 |
-| repository/binding/target authority 없음 | `rca.action_required` | cluster 상태만 보고 repo 추측 |
-| image field source가 여러 곳 | 실패 및 후보 위치 표시 | 첫 번째 검색 결과 수정 |
-| base SHA가 변경됨 | stale-base 실패 후 재분석 | 이전 commit 기준 patch push |
-| 허용 field 외 diff 발생 | `safe_pr.failed` | 넓은 YAML 재직렬화 PR |
-| SCM provider/credential 실패 | `safe_pr.failed` | local 성공으로 위장 |
-| merge 신호 서명/identity 불일치 | 검증 시작 금지 | 이름이 비슷한 workflow 수용 |
-| 배포 후 evidence 없음 | 검증 pending 후 timeout 실패 | 성공 처리 |
-| 같은 image 증상 지속/회귀 | `recovery.verification.failed` | incident close |
-
-## 8. 이벤트 처리 보장
-
-Golden Path는 단순 message chain이 아니라 다음 제약에 의존한다.
-
-- incident claim과 idempotency key로 같은 evidence의 중복 incident/PR을 억제한다.
-- 상태 저장과 후속 event는 DB transaction/outbox 경계를 사용한다.
-- consumer 처리 ledger가 재전달을 견딘다.
-- retry 한계를 넘은 event는 dead letter로 보내야 한다.
-- 각 event는 correlation/causation 정보를 유지해야 한다.
-- in-process와 NATS mode에서 동일한 domain result가 나와야 한다.
-
-이 보장 때문에 event-driven core는 정리 후에도 남길 가치가 있다. 반대로 dashboard와 과거 CD 기능까지 모든 event를 한 runtime에 넣을 이유는 없다.
-
-## 9. Golden Path 완료 기준
-
-아래가 자동화된 integration test로 모두 증명될 때에만 이 경로를 “작동한다”고 부른다.
-
-1. Kind target에 존재하지 않는 image tag를 배포해 `ImagePullBackOff`를 만든다.
-2. 동일 evidence를 두 번 보내도 incident와 Safe PR은 하나만 생긴다.
-3. 생성된 PR은 허용된 image scalar 한 곳만 바꾸고 base SHA/source digest를 포함한다.
-4. 모호한 source, stale SHA, 허용 범위 밖 diff는 PR을 만들지 않는다.
-5. 사용자가 PR을 merge하기 전 cluster에는 mutation이 없다.
-6. 외부 GitOps reconciler가 merge commit을 반영한다.
-7. 새 evidence에서 정상 image pull과 workload ready를 확인한다.
-8. 그 후에만 `incident.resolved`가 기록된다.
-9. 후속 evidence가 없거나 증상이 계속되면 명시적으로 검증 실패가 된다.
-10. 전체 흐름을 하나의 correlation ID로 조회할 수 있다.
-
-현재 `scripts/oss-demo.sh`는 삭제된 `references/ui-layer-lab/Dockerfile`을 참조하므로 이 완료 기준의 증거로 사용할 수 없다. 정리 과정에서 frontend와 무관한 독립 fixture로 다시 만들어야 한다.
-
-## 10. 이 경로 이후에만 확장할 것
-
-Golden Path가 안정되기 전에는 다음을 기본 제품 경로에 추가하지 않는다.
-
-- 범용 AI chat/diagnose
-- 직접 cluster command와 자동 revert
-- 전체 CD workflow orchestration
-- node collector
-- 비용/traffic/topology/terminal
-- 대형 dashboard
-- MCP를 통한 mutation
-
-향후 CLI나 MCP를 제공하더라도 먼저 이 좁은 상태 기계를 감싸야 한다. 예를 들어 `incident list`, `incident explain`, `recovery plan`, `recovery select`, `pr show`, `verification status`는 적절하지만, 자유 형식 “클러스터를 고쳐줘”를 바로 mutation으로 연결하면 이 문서의 안전 경계를 깨뜨린다.
+```bash
+make demo
+uv run pytest -q tests/test_golden_path_safety_contracts.py
+uv run pytest -q tests/test_recovery_gitops_authority.py
+uv run pytest -q tests/test_safe_pr_structured_base_advance.py
+uv run pytest -q tests/test_recovery_verification.py
+```

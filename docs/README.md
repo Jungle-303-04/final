@@ -1,46 +1,38 @@
-# Docs
+# Opsia 문서
 
-> 기준: 현재 저장소 코드와 반복 점검에서 통과한 `make manifest-check`, `make check` 결과를 문서의 source of truth로 둔다.
+Opsia는 Kubernetes 장애 증거를 보존하고 제한된 변경안을 GitOps Draft PR로 제안한 뒤 배포 결과를 다시 검증하는 운영 제어면입니다.
 
-이 문서는 문서 루트이자 위키형 진입점이다. 새 문서를 추가하면 이 파일의 문서 목록과 키워드 표에 함께 연결한다.
+## 역할별 시작점
 
-## 역할별 진입점
-
-- 민정: [Golden Path](./GOLDEN-PATH.md)에서 image pull 장애가 evidence, RCA, Safe PR, verification으로 이어지는 순서를 따라간다.
-- 가인: [Project Map](./PROJECT-MAP.md)에서 현재 runtime, route surface, worker composition, provider 경계를 먼저 확인한다.
+- 민정: [Golden Path](./GOLDEN-PATH.md)에서 evidence 수집, RCA, Safe PR, verification이 이어지는 순서를 따라간다.
+- 가인: [Project Map](./PROJECT-MAP.md)에서 현재 target, route surface, worker composition, provider 경계를 먼저 확인한다.
 - 찬빈: [Cleanup Matrix](./CLEANUP-MATRIX.md)에서 command, dashboard, permission, GitOps 정리 우선순위와 삭제 gate를 확인한다.
 
-현재 별도 민정/가인/찬빈 onboarding 문서는 없다. 따라서 전용 onboarding을 추가하기 전까지는 위 세 문서가 역할별 시작점이다.
+현재 별도 민정/가인/찬빈 구현 온보딩 문서는 없다. 전용 onboarding을 추가하기 전까지는 위 세 문서가 역할별 시작점이다.
 
-## 키워드 진입점
+## 문서 입구
 
-| 키워드 | 시작 문서 | 현재 기준 |
-|---|---|---|
-| command | [Cleanup Matrix](./CLEANUP-MATRIX.md) | 직접 cluster command는 PR-only 방향과 충돌하므로 default 경로에서 제거 대상으로 본다. |
-| target | [Project Map](./PROJECT-MAP.md) | `cluster-agent`와 target identity가 evidence 수집의 시작점이다. |
-| evidence | [Golden Path](./GOLDEN-PATH.md) | `cluster.evidence.received`에서 RCA 입력이 만들어진다. |
-| RCA | [Golden Path](./GOLDEN-PATH.md) | 규칙 기반 후보 계획, 평가, blocked/completed 판정을 source of truth로 둔다. |
-| Safe PR | [Golden Path](./GOLDEN-PATH.md) | `safe_pr.requested`부터 `safe_pr.created`까지 source authority와 diff policy를 통과해야 한다. |
-| dashboard | [Cleanup Matrix](./CLEANUP-MATRIX.md) | 대형 dashboard projection은 core Golden Path 밖으로 분리한다. |
-| permission | [Golden Path](./GOLDEN-PATH.md) | read-only agent, PR-only delivery, source authority 실패 처리가 안전 경계다. |
-| Bruno | 이 문서 | 현재 `docs/api` Bruno collection은 없다. 추가되면 `tests/test_bruno_collection.py`가 `.bru` 문법을 검사한다. |
-| AWS | [Cleanup Matrix](./CLEANUP-MATRIX.md) | 개인 AWS 배포·운영 경로는 공개 core에서 제거 대상으로 본다. |
-| event | [Project Map](./PROJECT-MAP.md) | event body와 subject registry, outbox/ledger/retry/DLQ 구조는 유지 대상이다. |
-| provider | [Project Map](./PROJECT-MAP.md) | telemetry와 SCM provider는 실제 adapter와 설정 경계를 문서화한다. |
-| worker | [Project Map](./PROJECT-MAP.md) | `src/services/**/app.py`의 handler가 현재 worker 설명의 기준이다. |
-| test | [Project Map](./PROJECT-MAP.md) | 반복 점검에서 확인한 gate는 `make manifest-check`와 `make check`다. |
-| GitOps | [Golden Path](./GOLDEN-PATH.md) | Opsia는 GitOps reconciler를 대체하지 않고 검토 가능한 source 변경 제안을 만든다. |
-| realtime | [Project Map](./PROJECT-MAP.md) | `realtime-gateway`는 browser/agent WebSocket 연결 표면이다. |
+- [Golden Path](./GOLDEN-PATH.md): ImagePullBackOff 증거부터 배포 후 검증까지의 event·안전 계약
+- [Project Map](./PROJECT-MAP.md): runtime, route, 저장소 디렉터리의 현재 책임
+- [Cleanup Matrix](./CLEANUP-MATRIX.md): 남아 있는 넓은 제품 표면의 유지·격리·삭제 판단
+- [Advanced Course Plan](./advanced-course-plan/README.md): 심화과정 팀 계획과 개인별 학습 계획
 
-## 문서 목록
+빠른 실행과 전체 검증 명령은 저장소 루트 [README](../README.md)를 기준으로 합니다.
 
-- [Project Map](./PROJECT-MAP.md): 현재 runtime, 디렉터리, domain, service, event architecture 지도.
-- [Golden Path](./GOLDEN-PATH.md): image pull 장애에서 Safe PR과 후속 evidence 검증까지의 좁은 성공 경로.
-- [Cleanup Matrix](./CLEANUP-MATRIX.md): KEEP/LATER/EXPERIMENT/DELETE 분류와 삭제 전 gate.
-- [Advanced Course Plan](./advanced-course-plan/README.md): 심화과정 팀 프로젝트·학습 계획과 개인별 제출 문서.
+## 키워드 입구
 
-## 아직 없는 문서 표면
-
-- `docs/api`: Bruno collection이 아직 없다.
-- `docs/events.md`: 별도 event 문서는 아직 없으며 현재는 [Project Map](./PROJECT-MAP.md)과 [Golden Path](./GOLDEN-PATH.md)에 분산되어 있다.
-- 민정/가인/찬빈 전용 onboarding 문서: 아직 없다.
+- command: `domains.command`, command worker, command API router, target-agent command adapter가 아직 코드에 남아 있으며 [Cleanup Matrix](./CLEANUP-MATRIX.md)의 삭제 후보로 다룬다.
+- target: active `TargetClusterAgent`는 read-only evidence scheduler와 Kubernetes snapshot provider만 wire하며, 남은 command adapter와 reconcile/drift 표면은 [Project Map](./PROJECT-MAP.md)에서 분리해 설명한다.
+- evidence: Kubernetes 증거 수집과 불변 조건은 [Golden Path](./GOLDEN-PATH.md)의 첫 단계다.
+- RCA: 결정론적 YAML rule 기반 RCA와 실패 보존 계약은 [Golden Path](./GOLDEN-PATH.md)를 기준으로 한다.
+- Safe PR: GitOps Draft PR, base SHA, source digest, verification 흐름은 [Golden Path](./GOLDEN-PATH.md)에 고정돼 있다.
+- dashboard: dashboard API, dashboard worker, timeline stream code가 아직 남아 있으며 Golden Path 밖 read model 또는 삭제 후보로 [Cleanup Matrix](./CLEANUP-MATRIX.md)에서 추적한다.
+- permission: merge, 직접 cluster mutation, 쓰기 권한 경계는 [Golden Path](./GOLDEN-PATH.md)의 안전장치 표를 따른다.
+- Bruno: 현재 `docs/api` Bruno collection은 없다. 추가하면 `tests {}`, `body:json {}`, `bru.setVar()` 문법을 import 기준으로 검증한다.
+- AWS: 개인 AWS 배포 경로와 외부 터널 배포 경로 정리는 [Cleanup Matrix](./CLEANUP-MATRIX.md)의 삭제 항목으로만 설명한다.
+- event: 실제 subject와 event body는 `src/packages/contracts/event_bus/subjects.py`와 `src/domains/*/events.py`를 source of truth로 삼고, 문서 요약은 [Golden Path](./GOLDEN-PATH.md)를 따른다.
+- provider: `@telemetry.source(...)` module은 Kubernetes, Prometheus, Loki, Tempo, Metadata가 존재하지만 active agent 기본 provider는 Kubernetes snapshot 하나다.
+- worker: 현재 worker/service 구성은 [Project Map](./PROJECT-MAP.md), `src/services/**/app.py` decorator, `scripts/services.py` 출력이 기준이다.
+- test: 문서/Bruno 회귀는 `uv run pytest tests/test_docs_index.py tests/test_bruno_collection.py -q`, Golden Path 회귀는 [Golden Path](./GOLDEN-PATH.md)의 pytest 묶음과 `make manifest-check`를 기준으로 한다. 현재 `make check` target은 없다.
+- GitOps: repository, manifest path, base SHA, Draft PR 경계는 [Golden Path](./GOLDEN-PATH.md)의 핵심 계약이다.
+- realtime: `realtime-gateway`, browser/agent WebSocket, terminal/port-forward broker code가 아직 존재하며 [Project Map](./PROJECT-MAP.md)과 [Cleanup Matrix](./CLEANUP-MATRIX.md)에 현재 상태를 둔다.
