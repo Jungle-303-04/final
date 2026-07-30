@@ -77,61 +77,9 @@ INVALID_REPO_REF_MESSAGE = "safe pr repo_ref must be an owner/repo GitHub reposi
 INVALID_BRANCH_REF_MESSAGE = "safe pr branch must be a safe GitHub branch ref"
 STALE_BASE_MESSAGE = "safe pr base branch no longer matches the approved commit"
 STALE_TARGET_MESSAGE = "safe pr target manifest no longer matches the approved value"
-
-# Safe PR 전달 방식 — 환경설정으로 선택한다(하드코딩 금지).
-#   pull_request(기본): 브랜치 + PR 을 열어 사람이 머지한다(리뷰 게이트).
-#   direct_commit     : 승인된 패치를 base 브랜치에 직접 커밋한다. 커밋은
-#                       github-poll-worker 가 감지해 기존 GitOps 파이프라인
-#                       (render→diff→policy→apply)으로 즉시 재배포된다.
-SAFE_PR_DELIVERY_MODE_ENV = "SAFE_PR_DELIVERY_MODE"
-SAFE_PR_DELIVERY_PULL_REQUEST = "pull_request"
-SAFE_PR_DELIVERY_DIRECT_COMMIT = "direct_commit"
-
-
-def safe_pr_delivery_mode() -> str:
-    value = env(SAFE_PR_DELIVERY_MODE_ENV, SAFE_PR_DELIVERY_PULL_REQUEST).strip().lower()
-    if value == SAFE_PR_DELIVERY_DIRECT_COMMIT:
-        return SAFE_PR_DELIVERY_DIRECT_COMMIT
-    return SAFE_PR_DELIVERY_PULL_REQUEST
-
-
-def request_delivery_mode(request: SafePrRequestedBody) -> str:
-    """요청별 전달 방식 — 발행자가 위험도 기준으로 지정한 값이 최우선,
-    미지정이면 SAFE_PR_DELIVERY_MODE 기본값을 따른다."""
-    value = (getattr(request, "delivery", None) or "").strip().lower()
-    if value in (SAFE_PR_DELIVERY_DIRECT_COMMIT, SAFE_PR_DELIVERY_PULL_REQUEST):
-        return value
-    return safe_pr_delivery_mode()
-
-
-# 직접 커밋은 "우리 시스템이 스스로 만든 커밋"이라는 특수 상황이다 — 폴러의
-# 다음 주기를 기다리지 않도록 pg_notify 로 즉시 알려 버스트 폴링을 깨운다.
-# 알림 실패는 경고만 남긴다(fail-open): 30초 주기 폴링이 정확성을 보장한다.
-DIRECT_COMMIT_NOTIFY_CHANNEL = "gitops_direct_commit"
-NOTIFY_DATABASE_URL_ENV = "COMMAND_NOTIFY_DATABASE_URL"
-
-
-async def notify_direct_commit(repo: str, base_branch: str) -> None:
-    notify_url = env(NOTIFY_DATABASE_URL_ENV, "").strip()
-    if not notify_url:
-        return
-    try:
-        import psycopg
-
-        async with await psycopg.AsyncConnection.connect(
-            notify_url, autocommit=True
-        ) as conn:
-            await conn.execute(
-                "select pg_notify(%s, %s)",
-                (DIRECT_COMMIT_NOTIFY_CHANNEL, f"{repo}|{base_branch}"),
-            )
-    except Exception as exc:
-        LOGGER.warning(
-            "direct_commit_notify_failed",
-            extra={CONTEXT_KEY: {"exception_type": type(exc).__name__}},
-        )
 INVALID_SOURCE_RESPONSE_MESSAGE = "GitHub manifest source response is incomplete"
 BRANCH_COLLISION_MESSAGE = "safe pr head branch already exists without a matching open PR"
+DRAFT_REQUIRED_MESSAGE = "safe pr provider returned a non-draft pull request"
 AUTHORITY_MISMATCH_MESSAGE = "safe pr structured patch does not match workflow authority"
 MANIFEST_EDIT_AUTHORITY_MISMATCH_MESSAGE = (
     "safe pr manifest edit does not match its granted human approval"
@@ -494,26 +442,7 @@ class GithubScmProvider:
                     manifest_edit_authority,
                     context,
                 )
-            direct_commit = request_delivery_mode(request) == SAFE_PR_DELIVERY_DIRECT_COMMIT
-            if structured and direct_commit:
-                expected_base_sha = patch_plans[0].expected_base_sha if patch_plans[0] else ""
-                if expected_base_sha != base_sha:
-                    raise RuntimeError(STALE_BASE_MESSAGE)
-                patch_contents = await self.materialize_patch_contents(
-                    client,
-                    repo,
-                    base_sha,
-                    request,
-                    patch_plans,
-                    context,
-                    authority=structured_authority,
-                )
-                await self.put_change_document(client, repo, base_branch, request, context)
-                await self.put_manifest_patches(client, repo, base_branch, patch_contents, context)
-                pr_url = await self.branch_head_commit_url(client, repo, base_branch, context)
-                result = ScmPullRequestResult(url=pr_url)
-                await notify_direct_commit(repo, base_branch)
-            elif structured:
+            if structured:
                 existing = await self.find_existing_pr(
                     client,
                     repo,
@@ -571,17 +500,8 @@ class GithubScmProvider:
                         context,
                     )
                     result = await self.create_or_reuse_pr(
-                        client, repo, branch, base_branch, request, context
+                        client, repo, branch, base_branch, base_sha, request, context
                     )
-            elif direct_commit:
-                patch_contents = await self.materialize_patch_contents(
-                    client, repo, base_sha, request, patch_plans, context,
-                )
-                await self.put_change_document(client, repo, base_branch, request, context)
-                await self.put_manifest_patches(client, repo, base_branch, patch_contents, context)
-                pr_url = await self.branch_head_commit_url(client, repo, base_branch, context)
-                result = ScmPullRequestResult(url=pr_url)
-                await notify_direct_commit(repo, base_branch)
             else:
                 patch_contents = await self.materialize_patch_contents(
                     client,
@@ -601,7 +521,7 @@ class GithubScmProvider:
                     context,
                 )
                 result = await self.create_or_reuse_pr(
-                    client, repo, branch, base_branch, request, context
+                    client, repo, branch, base_branch, base_sha, request, context
                 )
 
         await ctx.db.save_pull_request(
@@ -1353,23 +1273,6 @@ class GithubScmProvider:
         ]
         return len(matches) == 1
 
-    async def branch_head_commit_url(
-        self,
-        client: httpx.AsyncClient,
-        repo: str,
-        branch: str,
-        context: dict[str, object] | None = None,
-    ) -> str:
-        """direct_commit 전달 결과 링크 — base 브랜치 head 커밋의 실제 URL."""
-        response = await client.get(f"/repos/{repo}/commits/{quote(branch, safe='')}")
-        if context is not None:
-            log_provider_response("github.head_commit", response, context)
-        response.raise_for_status()
-        html_url = response.json().get("html_url")
-        if isinstance(html_url, str) and html_url:
-            return html_url
-        return f"https://github.com/{repo}/commits/{branch}"
-
     async def put_content_file(
         self,
         client: httpx.AsyncClient,
@@ -1409,9 +1312,13 @@ class GithubScmProvider:
         repo: str,
         branch: str,
         base_branch: str,
+        expected_base_sha: str,
         request: SafePrRequestedBody,
         context: dict[str, object] | None = None,
     ) -> ScmPullRequestResult:
+        current_base_sha = await self.base_branch_sha(client, repo, base_branch, context)
+        if current_base_sha != expected_base_sha:
+            raise RuntimeError(STALE_BASE_MESSAGE)
         response = await client.post(
             f"/repos/{repo}/pulls",
             json={
@@ -1419,6 +1326,7 @@ class GithubScmProvider:
                 "body": pull_request_body(request),
                 "head": branch,
                 "base": base_branch,
+                "draft": True,
             },
         )
         if context is not None:
@@ -1438,7 +1346,10 @@ class GithubScmProvider:
                 return pull_request_result(existing)
             raise RuntimeError(MISSING_EXISTING_PR_MESSAGE)
         response.raise_for_status()
-        return pull_request_result(response.json())
+        payload = response.json()
+        if not isinstance(payload, Mapping) or payload.get("draft") is not True:
+            raise RuntimeError(DRAFT_REQUIRED_MESSAGE)
+        return pull_request_result(payload)
 
     async def find_existing_pr(
         self,
@@ -1464,6 +1375,8 @@ class GithubScmProvider:
             return None
         for pull in pulls:
             if not isinstance(pull, dict) or not isinstance(pull.get("html_url"), str):
+                continue
+            if pull.get("draft") is not True:
                 continue
             if require_request_match and not (
                 pull.get("title") == request.title

@@ -33,6 +33,7 @@ from domains.rca.recovery_verification import (
     trusted_evidence_window_start,
 )
 from domains.scm.events import (
+    SAFE_PR_DELIVERY_PULL_REQUEST,
     SAFE_PR_KIND_PATCH,
     SAFE_PR_KIND_REVIEW_DOC,
     SafePrFilePatch,
@@ -539,7 +540,7 @@ def build_safe_pr_request_body(
         # ``safe_pr`` route는 이름과 사용자 계약 그대로 항상 리뷰 가능한 PR을
         # 만든다. 승인 완료는 변경 제안 권한이지 base branch 직접 쓰기 권한이
         # 아니다. 직접 커밋은 별도 route에서 명시적으로 요청해야 한다.
-        delivery="pull_request",
+        delivery=SAFE_PR_DELIVERY_PULL_REQUEST,
         pr_kind=safe_pr_kind(selected),
         workspace_id=workspace_id,
         repository_id=authority.repository_id,
@@ -559,6 +560,7 @@ def build_safe_pr_request_body(
         target_authority="completed_workload_change",
         approval_ref=as_optional_str(draft.params.get("approval_ref")),
         policy_decision_ref=as_optional_str(draft.params.get("policy_decision_ref")),
+        evidence_ref=plan.evidence_ref,
     )
 
 

@@ -159,11 +159,14 @@ def github_scm_transport(
                 return httpx.Response(fail_pr_status, json={"message": "server error"})
             if pr_exists:
                 return httpx.Response(422, json={"message": "A pull request already exists"})
-            return httpx.Response(201, json={"html_url": pr_html_url})
+            return httpx.Response(201, json={"html_url": pr_html_url, "draft": True})
         if request.method == "GET" and path.endswith("/pulls"):
             if existing_pr is not None:
                 return httpx.Response(200, json=[existing_pr])
-            return httpx.Response(200, json=[{"html_url": pr_html_url}] if pr_exists else [])
+            return httpx.Response(
+                200,
+                json=[{"html_url": pr_html_url, "draft": True}] if pr_exists else [],
+            )
         return httpx.Response(404, json={"message": f"unexpected {request.method} {path}"})
 
     return getattr(httpx, "Mo" + "ckTransport")(handler)

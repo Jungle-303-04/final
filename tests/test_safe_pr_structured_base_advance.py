@@ -183,6 +183,7 @@ def test_unrelated_descendant_change_creates_pr_from_current_base(provider_modul
                 json={
                     "html_url": "https://github.test/org/repo/pull/7",
                     "number": 7,
+                    "draft": True,
                     "head": {
                         "ref": "gitops/workflow-safe-pr-rebase",
                         "sha": "d" * 40,
@@ -224,6 +225,17 @@ def test_unrelated_descendant_change_creates_pr_from_current_base(provider_modul
     )
     assert branch_call is not None
     assert branch_call["sha"] == CURRENT_SHA
+    create_pr_call = next(
+        body
+        for method, path, body in calls
+        if method == "POST" and path.endswith("/pulls")
+    )
+    assert create_pr_call is not None
+    assert create_pr_call["draft"] is True
+    assert sum(
+        method == "GET" and path.endswith("/git/ref/heads/main")
+        for method, path, _body in calls
+    ) == 2
     assert result.url == "https://github.test/org/repo/pull/7"
     assert db.saved
     patched_source = next(
@@ -272,6 +284,78 @@ def test_advanced_base_with_changed_target_scalar_fails_closed(provider_module) 
         match=re.escape(provider_module.STALE_TARGET_MESSAGE),
     ):
         asyncio.run(validate())
+
+
+def test_base_sha_is_rechecked_immediately_before_draft_pr_creation(
+    provider_module,
+) -> None:
+    request = _request(_plan())
+    calls: list[tuple[str, str]] = []
+
+    def handler(raw_request: httpx.Request) -> httpx.Response:
+        calls.append((raw_request.method, raw_request.url.path))
+        if raw_request.method == "GET" and raw_request.url.path.endswith(
+            "/git/ref/heads/main"
+        ):
+            return httpx.Response(200, json={"object": {"sha": "f" * 40}})
+        return httpx.Response(500, json={"message": "PR creation must not run"})
+
+    async def create() -> None:
+        async with httpx.AsyncClient(
+            base_url="https://api.github.test",
+            transport=httpx.MockTransport(handler),
+        ) as client:
+            await provider_module.GithubScmProvider().create_or_reuse_pr(
+                client,
+                "org/repo",
+                "gitops/workflow-safe-pr-rebase",
+                "main",
+                CURRENT_SHA,
+                request,
+            )
+
+    with pytest.raises(RuntimeError, match=re.escape(provider_module.STALE_BASE_MESSAGE)):
+        asyncio.run(create())
+    assert calls == [("GET", "/repos/org/repo/git/ref/heads/main")]
+
+
+def test_non_draft_provider_response_is_rejected(provider_module) -> None:
+    request = _request(_plan())
+
+    def handler(raw_request: httpx.Request) -> httpx.Response:
+        if raw_request.method == "GET":
+            return httpx.Response(200, json={"object": {"sha": CURRENT_SHA}})
+        if raw_request.method == "POST" and raw_request.url.path.endswith("/pulls"):
+            body = json.loads(raw_request.content)
+            assert body["draft"] is True
+            return httpx.Response(
+                201,
+                json={
+                    "html_url": "https://github.test/org/repo/pull/8",
+                    "draft": False,
+                },
+            )
+        return httpx.Response(404, json={"message": "unexpected request"})
+
+    async def create() -> None:
+        async with httpx.AsyncClient(
+            base_url="https://api.github.test",
+            transport=httpx.MockTransport(handler),
+        ) as client:
+            await provider_module.GithubScmProvider().create_or_reuse_pr(
+                client,
+                "org/repo",
+                "gitops/workflow-safe-pr-rebase",
+                "main",
+                CURRENT_SHA,
+                request,
+            )
+
+    with pytest.raises(
+        RuntimeError,
+        match=re.escape(provider_module.DRAFT_REQUIRED_MESSAGE),
+    ):
+        asyncio.run(create())
 
 
 def test_advanced_base_already_at_desired_scalar_creates_document_only_change(

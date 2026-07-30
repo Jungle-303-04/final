@@ -42,8 +42,11 @@ for index, item in enumerate(objects, start=1):
 
 forbidden = {
     ("", "pods/exec"),
+    ("", "pods/attach"),
+    ("", "pods/portforward"),
     ("", "nodes/proxy"),
 }
+read_only_verbs = {"get", "list", "watch"}
 for item in objects:
     if item.get("kind") not in {"Role", "ClusterRole"}:
         continue
@@ -54,8 +57,13 @@ for item in objects:
             raise SystemExit(
                 f"{item['metadata']['name']}: forbidden direct-execution RBAC resource"
             )
-        if "patch" in (rule.get("verbs") or []):
-            raise SystemExit(f"{item['metadata']['name']}: agent mutation verb is forbidden")
+        verbs = set(rule.get("verbs") or [])
+        if not verbs or not verbs <= read_only_verbs:
+            raise SystemExit(
+                f"{item['metadata']['name']}: only get/list/watch RBAC verbs are allowed"
+            )
+        if "*" in groups or "*" in resources or "*" in verbs:
+            raise SystemExit(f"{item['metadata']['name']}: wildcard RBAC is forbidden")
 
 print(f"rendered Kubernetes objects: {len(objects)}")
 PY

@@ -21,6 +21,7 @@ from packages.contracts.identity import DEFAULT_WORKSPACE_ID
 
 SAFE_PR_KIND_PATCH = "safe_pr_patch"
 SAFE_PR_KIND_REVIEW_DOC = "safe_pr_review_doc"
+SAFE_PR_DELIVERY_PULL_REQUEST = "pull_request"
 
 
 @dataclass(frozen=True)
@@ -60,11 +61,9 @@ class SafePrRequestedBody(EventBody):
     approval_ref: str | None = None
     policy_decision_ref: str | None = None
     next_alert: AlertRequestedBody | None = None
-    # 요청별 전달 방식 — 발행자가 위험도에 따라 지정한다.
-    #   "direct_commit"  : 승인 완료된 안전 변경 → base 브랜치 직접 커밋
-    #   "pull_request"   : 위험(high risk)·무인 자동 변경 → 리뷰 게이트 유지
-    #   None             : scm-worker 의 SAFE_PR_DELIVERY_MODE 기본값을 따름
-    delivery: str | None = None
+    evidence_ref: str = ""
+    # Safe PR은 제안 경계다. base branch 쓰기나 다른 전달 모드는 허용하지 않는다.
+    delivery: str = SAFE_PR_DELIVERY_PULL_REQUEST
 
 
 @event(EventSubject.SAFE_PR_CREATED)
@@ -125,4 +124,5 @@ class SafePrFailedBody(EventBody):
     patch_sha256: str = ""
     reason_code: str = "safe_pr_failed"
     stage: str = "scm"
+    evidence_ref: str = ""
     details: dict[str, object] = field(default_factory=dict)

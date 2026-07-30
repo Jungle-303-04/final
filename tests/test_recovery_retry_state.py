@@ -88,6 +88,7 @@ def safe_pr_failed(*, approval_ref: str | None = "approval-1") -> SafePrFailedBo
         reason="GitHub rejected the request",
         workspace_id="workspace-1",
         reason_code="github_api_error",
+        evidence_ref="object://evidence/correlation-1.json",
         details=details,
     )
 
@@ -197,10 +198,14 @@ def test_safe_pr_failure_uses_approval_identity_to_preserve_retryable_action() -
         "failed",
     )
     assert db.transitions[0][4]["failure"]["stage"] == "safe_pr"
+    assert db.transitions[0][4]["failure"]["evidence_ref"] == (
+        "object://evidence/correlation-1.json"
+    )
     assert len(emitted) == 1
     assert isinstance(emitted[0], RcaFollowupRequiredBody)
     assert emitted[0].diagnostics["plan_id"] == "plan-from-approval"
     assert emitted[0].diagnostics["action_id"] == "action-from-approval"
+    assert emitted[0].evidence_ref == "object://evidence/correlation-1.json"
 
 
 def test_legacy_safe_pr_failure_falls_back_to_selected_same_correlation_plan() -> None:

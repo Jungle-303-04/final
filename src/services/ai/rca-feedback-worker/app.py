@@ -1052,6 +1052,7 @@ async def on_recovery_safe_pr_failed(
         "approval_ref": text_value(evt.details.get("approval_ref")),
         "workflow_run_id": evt.workflow_run_id,
         "commit_sha": evt.commit_sha,
+        "evidence_ref": evt.evidence_ref,
     }
     failed = await ctx.db.update_recovery_plan_lifecycle_if_status(
         plan_id,
@@ -1065,7 +1066,7 @@ async def on_recovery_safe_pr_failed(
     yield RcaFollowupRequiredBody(
         reason_code=evt.reason_code,
         summary=followup_summary(evt.reason_code, evt.reason),
-        evidence_ref=str(evt.details.get("evidence_ref") or "unknown"),
+        evidence_ref=evt.evidence_ref or "unknown",
         workspace_id=evt.workspace_id,
         severity=SEVERITY_WARNING,
         next_actions=[

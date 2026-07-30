@@ -6,7 +6,11 @@ from dataclasses import dataclass, field
 from pathlib import PurePosixPath
 from typing import Protocol
 
-from domains.scm.events import SafePrFailedBody, SafePrRequestedBody
+from domains.scm.events import (
+    SAFE_PR_DELIVERY_PULL_REQUEST,
+    SafePrFailedBody,
+    SafePrRequestedBody,
+)
 
 STAGE_PREPARE = "prepare"
 STAGE_DIFF = "diff"
@@ -19,12 +23,14 @@ REASON_MISSING_PATCHES = "missing_patches"
 REASON_UNSAFE_PATH = "unsafe_repository_path"
 REASON_PROVIDER_MISMATCH = "provider_mismatch"
 REASON_PROVIDER_ERROR = "provider_error"
+REASON_UNSAFE_DELIVERY = "unsafe_delivery"
 CHANGE_DOCUMENT_DIR = ".gitops/safe-pr"
 
 MESSAGE_MISSING_PATCHES = "safe pr requires at least one file patch"
 MESSAGE_UNSAFE_PATH = "safe pr contains an unsafe repository path"
 MESSAGE_PROVIDER_MISMATCH = "safe pr provider does not match worker provider"
 MESSAGE_PROVIDER_ERROR = "safe pr provider failed before PR creation completed"
+MESSAGE_UNSAFE_DELIVERY = "safe pr delivery must be a reviewable pull request"
 
 
 @dataclass(frozen=True)
@@ -70,6 +76,12 @@ class DefaultSafePrPreflightPolicy:
     """구체적인 저장소 변경을 만들 수 없는 요청 거부."""
 
     def evaluate(self, request: SafePrRequestedBody) -> SafePrPolicyResult:
+        if request.delivery != SAFE_PR_DELIVERY_PULL_REQUEST:
+            return SafePrPolicyResult.reject(
+                reason_code=REASON_UNSAFE_DELIVERY,
+                message=MESSAGE_UNSAFE_DELIVERY,
+                details={"delivery": request.delivery},
+            )
         if not request.patches:
             return SafePrPolicyResult.reject(
                 reason_code=REASON_MISSING_PATCHES,
@@ -164,9 +176,11 @@ def safe_pr_failed_body(
         patch_sha256=request.patch_sha256,
         reason_code=result.reason_code,
         stage=stage,
+        evidence_ref=request.evidence_ref,
         details={
             **result.details,
             "approval_ref": request.approval_ref,
             "policy_decision_ref": request.policy_decision_ref,
+            "evidence_ref": request.evidence_ref,
         },
     )
