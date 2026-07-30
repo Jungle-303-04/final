@@ -12,7 +12,6 @@ from fastapi import Request
 
 if TYPE_CHECKING:
     from packages.runtime.gateway import ApiEventGateway
-    from packages.runtime.operation_events import OperationEventBroker
     from packages.storage.database import Database
 
 
@@ -24,10 +23,6 @@ def get_events(request: Request) -> ApiEventGateway:
     return request.app.state.events
 
 
-def get_operation_events(request: Request) -> OperationEventBroker:
-    return request.app.state.operation_events
-
-
 def get_timeline_fanout(request: Request) -> Any:
     """Return the app-owned Timeline wake-up provider without a package→domain edge.
 
@@ -36,9 +31,3 @@ def get_timeline_fanout(request: Request) -> Any:
     Domain routers validate the protocol they require at their own boundary.
     """
     return request.app.state.timeline_fanout
-
-
-def get_dashboard_ready_fanout(request: Request) -> Any:
-    """Return the app-owned Home snapshot-completion wake-up provider."""
-
-    return request.app.state.dashboard_ready_fanout

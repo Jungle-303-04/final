@@ -1,7 +1,7 @@
 """도메인 합성 루트 — 코어 repo + 자동 발견된 도메인 repo 로 Database 구성.
 
 팀원이 domains/<새도메인>/{tables,repo}.py 를 추가하면 자동 포함됨(packages/ 0 수정).
-아직 domains/ 로 이전 전인 도메인(rca·command·auth·projection)은 임시로 명시 —
+아직 domains/ 로 이전 전인 도메인(rca·auth·projection)은 임시로 명시 —
 이전되면 _PENDING 에서 빠지고 자동 발견으로 흡수됨.
 """
 
@@ -14,7 +14,6 @@ from typing import TYPE_CHECKING
 
 import domains
 from domains.audit.repository import AuditLogRepository
-from domains.command.repository import AgentCommandRepository
 from domains.identity.repository import IdentityAccessRepository
 from domains.rca.repository import RcaRepository
 from domains.scm.repository import PullRequestRepository
@@ -89,7 +88,6 @@ if TYPE_CHECKING:
         DeadLetterRepository,
         OutboxRepository,
         IdentityAccessRepository,
-        AgentCommandRepository,
         RcaRepository,
         PullRequestRepository,
         AuditLogRepository,

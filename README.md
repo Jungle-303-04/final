@@ -64,4 +64,4 @@ flowchart LR
 - GitHub만 Draft PR provider로 지원합니다.
 - 대표 완료 시나리오는 ImagePullBackOff이며 다른 Kubernetes 원인 규칙은 동일한 증거 품질을 보장하지 않습니다.
 - 로컬 검증은 계약·빌드·manifest 수준입니다. 실제 cluster와 GitHub App을 잇는 end-to-end 검증은 배포 환경에서 별도로 수행해야 합니다.
-- 과거 command와 dashboard DB 스키마 일부는 migration 호환을 위해 비실행 상태로 남아 있습니다.
+- 과거 command와 dashboard DB 모델 일부는 migration·과거 행 조회 호환을 위해 비실행 상태로 남아 있습니다.

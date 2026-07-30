@@ -9,7 +9,7 @@
 | 감사 항목 | 상태 | 처리와 근거 |
 |---|---|---|
 | 1. 범용 AI 채팅 | 삭제 | frontend chat route/components, AI router/domain, chat·fallback workers, LLM 서술 보강과 conversation API types를 제거. RCA는 YAML rule과 evidence signal만 사용 |
-| 2. 직접 클러스터 명령 실행 | 격리 | command worker/janitor, gateway router/handler/action catalog, agent executor, `pods/exec` RBAC를 제거. `AgentCommand` models/events/repository/lifecycle만 migration, GitOps 과거 workflow 조회, retention 때문에 유지하며 cancel/retry는 fail-closed |
+| 2. 직접 클러스터 명령 실행 | 격리 | command worker/janitor, gateway router/handler/action catalog/repository, operation broker, agent executor, `pods/exec` RBAC를 제거. `AgentCommand` models/events만 migration과 GitOps·retention의 과거 행 join 때문에 유지하며 호출 가능한 실행 메서드는 없음 |
 | 3. 비용·트래픽·웹 터미널 | 삭제 | frontend, domains, contracts, evidence query, route, terminal/port-forward agent·realtime 구현을 제거 |
 | 4. node collector | 삭제 | service, manager/spec, provider, chart values/env/RBAC, 관련 test와 install flag를 제거 |
 | 5. 광범위한 CD orchestration | 격리 | release-flow, auto-revert, poll/diff/render/workflow controller와 direct deploy API를 제거. GitOps repository/model은 base SHA 고정, webhook lifecycle, Draft PR, 사후 검증의 권위 원장이라 유지 |
