@@ -38,15 +38,33 @@ sequenceDiagram
   RCA->>PR: bounded patch + expected base SHA
   PR->>GitHub: create Draft PR
   GitHub-->>Verify: merge/deploy lifecycle
-  Verify->>Agent: schedule fresh evidence
-  Agent-->>Verify: post-deploy evidence
+  Agent-->>Verify: next periodic post-deploy evidence window
   Verify->>Verify: resolved or verification failed
 ```
+
+agent는 제어면의 변경 명령을 받지 않고 설정된 cadence로 계속 수집합니다. verification은
+배포 성공 뒤 시작 시각보다 오래된 window를 거부하고 이후에 수집된 evidence만 변경 전
+기준선과 비교합니다.
+
+## 안전장치 구현 감사
+
+| # | 상태 | 코드 강제 | 회귀 테스트 |
+|---|---|---|---|
+| 1. evidence Kubernetes 권한 read-only | 구현됨 | [`agent-rbac.yaml`](../charts/opsia/templates/agent-rbac.yaml)은 `get/list/watch`만 부여하고 [`kubernetes_providers.py`](../src/services/target/cluster-agent/providers/kubernetes_providers.py)는 Kubernetes API read만 수행. [`manifest-check.sh`](../scripts/manifest-check.sh)는 mutation verb, wildcard, exec/attach/port-forward/proxy를 거부 | [`test_agent_kubernetes_surface_is_read_only`](../tests/test_golden_path_safety_contracts.py), `make manifest-check` |
+| 2. 전 구간 Correlation ID | 구현됨 | [`envelope.py`](../src/packages/events/envelope.py)가 root correlation을 만들고 [`dispatch.py`](../src/packages/runtime/dispatch.py)가 모든 child event에 같은 correlation과 parent causation을 강제. PR·merge·verification lifecycle은 저장된 correlation으로 발행 | [`test_worker_child_event_inherits_correlation_and_causation`](../tests/test_golden_path_safety_contracts.py), [`test_signed_exact_merge_moves_only_tracked_pr_to_deploy_pending`](../tests/test_recovery_pr_lifecycle.py) |
+| 3. incident·PR 멱등성 | 구현됨 | [`worker.py`](../src/packages/runtime/worker.py)의 `(event_id, consumer)` 처리 ledger, [`IncidentSignalClaim`](../src/domains/rca/models.py)의 workspace/cluster/signal unique 제약, [`github_provider.py`](../src/services/gitops/scm-worker/github_provider.py)의 approval-scoped branch와 exact open Draft PR 재사용 | [`test_incident_claim_has_a_durable_unique_identity`](../tests/test_golden_path_safety_contracts.py), [`test_same_active_alert_reuses_claim_across_enriched_evidence_windows`](../tests/test_incident_signal_identity.py), [`test_existing_pr_remains_idempotent_after_base_advances`](../tests/test_safe_pr_structured_base_advance.py) |
+| 4. resource/path/field allowlist | 구현됨 | [`source_patch.py`](../src/domains/gitops/source_patch.py)가 Deployment, 안전한 repository path, 지원 action과 exact scalar field/value/inverse rollback만 허용. [`dispatch.py`](../src/services/ai/agent/recovery/dispatch.py)가 GitOps 권위 snapshot에서만 patch를 구성 | [`test_patch_allowlist_rejects_non_deployment_and_unapproved_field`](../tests/test_golden_path_safety_contracts.py), [`test_extra_actionable_change_in_target_workload_fails_closed`](../tests/test_recovery_merge_scope.py), [`test_same_target_overlay_replica_patch_blocks_base_edit`](../tests/test_recovery_kustomize_edit_source.py) |
+| 5. PR 직전 base SHA 재확인 | 구현됨 | [`GithubScmProvider.create_or_reuse_pr`](../src/services/gitops/scm-worker/github_provider.py)가 branch/file 준비 뒤 base ref를 다시 읽고 처음 검증한 SHA와 다르면 PR POST 전에 중단 | [`test_base_sha_is_rechecked_immediately_before_draft_pr_creation`](../tests/test_safe_pr_structured_base_advance.py), [`test_advanced_base_with_changed_target_scalar_fails_closed`](../tests/test_safe_pr_structured_base_advance.py) |
+| 6. 클러스터 직접 변경 차단 | 구현됨 | cluster-agent에는 command/mutation channel이 없고, Safe PR policy는 `pull_request` 외 delivery를 거부. SCM provider의 base branch direct commit 경로를 제거 | [`test_safe_pr_rejects_direct_delivery_and_provider_has_no_merge_path`](../tests/test_golden_path_safety_contracts.py), [`test_recovery_safe_pr_always_uses_pull_request_delivery`](../tests/test_recovery_safe_pr_copy.py), `make manifest-check` |
+| 7. 자동 merge 불가 | 구현됨 | [`github_provider.py`](../src/services/gitops/scm-worker/github_provider.py)는 GitHub PR 생성 시 `draft: true`를 강제하고 non-Draft 응답·기존 PR을 거부하며 merge API를 호출하지 않음. [`router.py`](../src/domains/gitops/router.py)는 서명된 외부 merge webhook만 관측 | [`test_unrelated_descendant_change_creates_pr_from_current_base`](../tests/test_safe_pr_structured_base_advance.py), [`test_safe_pr_rejects_direct_delivery_and_provider_has_no_merge_path`](../tests/test_golden_path_safety_contracts.py), [`test_signed_exact_merge_moves_only_tracked_pr_to_deploy_pending`](../tests/test_recovery_pr_lifecycle.py) |
+| 8. 배포 후 evidence 재수집·기준선 비교 | 구현됨 | [`rca-feedback-worker`](../src/services/ai/rca-feedback-worker/app.py)가 성공한 exact merge workflow 뒤 verification을 시작하고 다음 주기 evidence window를 소비. [`recovery_verification.py`](../src/domains/rca/recovery_verification.py)가 시작 시각, 대상 identity, pre-recovery SLI/workload/session 기준선을 비교 | [`test_completes_only_after_distinct_continuous_five_minute_windows`](../tests/test_recovery_verification.py), [`test_duplicate_and_stale_windows_do_not_advance_stability_clock`](../tests/test_recovery_verification.py), [`test_missing_pre_recovery_protected_baseline_fails_closed`](../tests/test_recovery_verification.py) |
+| 9. 실패 원인·원본 증거 보존 | 구현됨 | [`SafePrFailedBody`](../src/domains/scm/events.py)와 recovery lifecycle이 reason code·stage·evidence ref를 보존. [`dead_letter.py`](../src/packages/storage/repositories/dead_letter.py)는 원본 event payload/correlation/error를 보존하고 evidence 원문은 correlation별로 저장 | [`test_safe_pr_failure_preserves_original_evidence_reference`](../tests/test_golden_path_safety_contracts.py), [`test_safe_pr_failure_uses_approval_identity_to_preserve_retryable_action`](../tests/test_recovery_retry_state.py), [`test_evidence_expiry_persists_retryable_failure_identity`](../tests/test_recovery_verification.py) |
 
 ## 검증
 
 ```bash
 make demo
+uv run pytest -q tests/test_golden_path_safety_contracts.py
 uv run pytest -q tests/test_recovery_gitops_authority.py
 uv run pytest -q tests/test_safe_pr_structured_base_advance.py
 uv run pytest -q tests/test_recovery_verification.py
