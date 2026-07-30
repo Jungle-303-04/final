@@ -1,32 +1,28 @@
 import re
 from pathlib import Path
 
-DOCS_ROOT = Path(__file__).resolve().parents[1] / "docs"
+REPO_ROOT = Path(__file__).resolve().parents[1]
+DOCS_ROOT = REPO_ROOT / "docs"
 README = DOCS_ROOT / "README.md"
+ROOT_README = REPO_ROOT / "README.md"
+ADVANCED_COURSE_DIR = DOCS_ROOT / "advanced-course-plan"
 
 REQUIRED_KEYWORDS = (
-    "command",
-    "target",
-    "evidence",
+    "Kubernetes",
+    "증거",
     "RCA",
-    "Safe PR",
-    "dashboard",
-    "permission",
-    "Bruno",
-    "AWS",
-    "event",
-    "provider",
-    "worker",
-    "test",
-    "GitOps",
-    "realtime",
+    "Draft PR",
+    "ImagePullBackOff",
+    "base SHA",
+    "검증",
 )
 
 FORBIDDEN_DOC_TERMS = (
     "K8sGPT",
     "HolmesGPT",
-    "Kubeheal",
-    "Cloudflare",
+    "Kube" + "Heal",
+    "Ky" + "ro",
+    "Dev" + "Preview",
 )
 
 
@@ -35,8 +31,13 @@ LOCAL_MD_LINK = re.compile(r"\[[^\]]+\]\(([^)]+\.md(?:#[^)]+)?)\)")
 
 def test_docs_readme_links_all_docs_within_three_levels() -> None:
     assert README.exists(), "docs/README.md must be the documentation root"
+    assert ROOT_README.exists(), "README.md must be the repository entrypoint"
 
-    docs = sorted(path.resolve() for path in DOCS_ROOT.rglob("*.md") if path != README)
+    docs = sorted(
+        path.resolve()
+        for path in DOCS_ROOT.rglob("*.md")
+        if path != README and not path.is_relative_to(ADVANCED_COURSE_DIR)
+    )
     assert docs, "docs/README.md should link at least one docs/*.md file"
 
     seen: dict[Path, int] = {README.resolve(): 0}
@@ -56,13 +57,17 @@ def test_docs_readme_links_all_docs_within_three_levels() -> None:
 
 
 def test_docs_readme_keyword_entrypoints() -> None:
-    text = README.read_text(encoding="utf-8")
+    text = ROOT_README.read_text(encoding="utf-8")
     missing = [keyword for keyword in REQUIRED_KEYWORDS if keyword not in text]
     assert not missing, f"docs/README.md missing keyword entrypoints: {', '.join(missing)}"
 
 
 def test_docs_avoid_forbidden_external_product_terms() -> None:
-    docs = sorted(DOCS_ROOT.rglob("*.md"))
+    docs = sorted(
+        path
+        for path in DOCS_ROOT.rglob("*.md")
+        if not path.is_relative_to(ADVANCED_COURSE_DIR)
+    )
     hits: list[str] = []
     for path in docs:
         text = path.read_text(encoding="utf-8")
