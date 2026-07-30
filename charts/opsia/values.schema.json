@@ -8,13 +8,9 @@
       "properties": {
         "clusterId": {"type": "string", "minLength": 1},
         "token": {"type": "string"},
-        "realtimeGatewayUrl": {
-          "type": "string",
-          "pattern": "^(|wss?://[^/]+/?)$"
-        },
         "resources": {"type": "object"}
       },
-      "required": ["clusterId", "token", "realtimeGatewayUrl", "resources"]
+      "required": ["clusterId", "token", "resources"]
     },
     "access": {
       "type": "object",

@@ -6,7 +6,7 @@ from collections.abc import Collection
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Select, and_, func, or_, select
+from sqlalchemy import Select, and_, or_, select
 
 from domains.identity.models import ClusterRegistration
 from domains.rca.models import Evidence
@@ -116,70 +116,6 @@ class EvidenceQueryRepository(DatabaseConnection):
             .order_by(table.c.updated_at.desc(), table.c.evidence_key.desc())
             .limit(limit)
             .offset(offset)
-        )
-        with self.connection() as conn:
-            rows = conn.execute(statement).mappings().all()
-        return [dict(row) for row in rows]
-
-    def list_latest_traffic_evidence_windows(
-        self,
-        workspace_id: str,
-        allowed_cluster_ids: Collection[str] | None,
-        *,
-        since: datetime,
-        until: datetime | None = None,
-    ) -> list[JsonObject]:
-        """Read at most one persisted Agent metrics window per authorized cluster."""
-
-        cluster_ids = _cluster_ids(allowed_cluster_ids)
-        if not workspace_id or not cluster_ids:
-            return []
-        table = EvidenceWindow.__table__
-        rank = (
-            func.row_number()
-            .over(
-                partition_by=table.c.cluster_id,
-                order_by=(table.c.updated_at.desc(), table.c.evidence_key.desc()),
-            )
-            .label("traffic_window_rank")
-        )
-        ranked = select(
-            table.c.evidence_key,
-            table.c.workspace_id,
-            table.c.cluster_id,
-            table.c.source_id,
-            table.c.window_start,
-            table.c.agent_id,
-            table.c.correlation_id,
-            table.c.payload,
-            table.c.created_at,
-            table.c.updated_at,
-            rank,
-        ).where(
-            table.c.workspace_id == workspace_id,
-            table.c.cluster_id.in_(cluster_ids),
-            table.c.source_id == "cluster-snapshot",
-            table.c.updated_at >= since,
-        )
-        if until is not None:
-            ranked = ranked.where(table.c.updated_at <= until)
-        ranked_rows = ranked.subquery()
-        statement = (
-            select(
-                ranked_rows.c.evidence_key,
-                ranked_rows.c.workspace_id,
-                ranked_rows.c.cluster_id,
-                ranked_rows.c.source_id,
-                ranked_rows.c.window_start,
-                ranked_rows.c.agent_id,
-                ranked_rows.c.correlation_id,
-                ranked_rows.c.payload,
-                ranked_rows.c.created_at,
-                ranked_rows.c.updated_at,
-            )
-            .where(ranked_rows.c.traffic_window_rank == 1)
-            .order_by(ranked_rows.c.cluster_id)
-            .limit(len(cluster_ids))
         )
         with self.connection() as conn:
             rows = conn.execute(statement).mappings().all()

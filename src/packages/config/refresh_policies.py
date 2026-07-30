@@ -59,23 +59,6 @@ _DEFAULT_POLICIES: dict[RefreshPolicyKey, dict[str, Any]] = {
         "retry_limit": 4,
     },
     "gitops_counts": {"stale_after_seconds": 10, "refresh_after_seconds": 60},
-    "helm_list": {
-        "stale_after_seconds": 30,
-        "refresh_after_seconds": 30,
-        "post_mutation_refresh_after_seconds": 1.2,
-    },
-    "helm_detail": {
-        "stale_after_seconds": 30,
-        "refresh_after_seconds": 10,
-        "post_mutation_refresh_after_seconds": 1.2,
-    },
-    "cost_summary": {"stale_after_seconds": 30, "refresh_after_seconds": 60},
-    "cost_trend": {"stale_after_seconds": 30, "refresh_after_seconds": 120},
-    "cost_nodes": {"stale_after_seconds": 30, "refresh_after_seconds": 120},
-    "port_sessions": {
-        "refresh_after_seconds": 10,
-        "post_mutation_refresh_after_seconds": 0.5,
-    },
 }
 
 

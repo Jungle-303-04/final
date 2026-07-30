@@ -144,8 +144,6 @@ def merge_evidence_provider_payload(payload: JsonObject, provider_payload: JsonO
         current_metadata = payload.get("metadata")
         merged_metadata = dict(current_metadata) if isinstance(current_metadata, dict) else {}
         merged_metadata.update(provider_metadata)
-        if isinstance(current_metadata, dict) and "rca_test" in current_metadata:
-            merged_metadata["rca_test"] = current_metadata["rca_test"]
         payload["metadata"] = merged_metadata
         provider_payload = {
             key: value for key, value in provider_payload.items() if key != "metadata"
@@ -184,16 +182,6 @@ def aggregate_evidence_payload(rows: list[JsonObject]) -> JsonObject | None:
         correlation_id = release_context.get("correlation_id")
         if isinstance(correlation_id, str) and correlation_id:
             payload["correlation_id"] = correlation_id
-        run_id = release_context.get("rca_test_run_id")
-        scenario_id = release_context.get("scenario_id")
-        if isinstance(run_id, str) and run_id and isinstance(scenario_id, str) and scenario_id:
-            rca_test_metadata: JsonObject = {"run_id": run_id, "scenario_id": scenario_id}
-            pod_names = release_context.get("pod_names")
-            if isinstance(pod_names, list):
-                normalized_names = [str(name).strip() for name in pod_names if str(name).strip()]
-                if normalized_names:
-                    rca_test_metadata["pod_names"] = list(dict.fromkeys(normalized_names))[:32]
-            payload["metadata"] = {"rca_test": rca_test_metadata}
     provider_statuses: dict[str, JsonObject] = {}
     for row in rows:
         provider_key = str(row["provider_key"])
@@ -220,7 +208,6 @@ def aggregate_evidence_payload(rows: list[JsonObject]) -> JsonObject | None:
                 "reason_codes": [PROVIDER_JOB_FAILED_REASON],
             }
     payload[COLLECTION_STATUS_KEY] = aggregate_collection_status(provider_statuses)
-    promote_release_target(payload, release_context)
     return payload
 
 
@@ -319,22 +306,3 @@ def common_release_context(rows: list[JsonObject]) -> JsonObject:
         return {}
     first = contexts[0]
     return first if all(context == first for context in contexts[1:]) else {}
-
-
-def promote_release_target(payload: JsonObject, release_context: JsonObject) -> None:
-    """Keep the server-owned Deployment target instead of the Pod's ReplicaSet owner."""
-    if release_context.get("evidence_scope") != "rca_test_run":
-        return
-    kind = release_context.get("resource_kind")
-    name = release_context.get("resource_name")
-    namespace = release_context.get("namespace")
-    kubernetes = payload.get("kubernetes")
-    if not isinstance(kubernetes, dict) or not isinstance(kind, str) or not isinstance(name, str):
-        return
-    if not kind or not name:
-        return
-    kubernetes["resource"] = {
-        "kind": kind,
-        "name": name,
-        "namespace": namespace if isinstance(namespace, str) and namespace else None,
-    }

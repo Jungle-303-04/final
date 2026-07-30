@@ -5,7 +5,6 @@ from dataclasses import dataclass, field
 from domains.rca.events import (
     EvidenceBundleBuiltBody,
     RcaActionRequiredBody,
-    RcaAiFallbackRequestedBody,
     RcaAnalysisBlockedBody,
     RcaBacklogItemCreatedBody,
     RcaCandidatesEvaluatedBody,
@@ -29,8 +28,6 @@ BACKLOG_STATUS_OPEN = "open"
 
 @dataclass(frozen=True)
 class CausePlanner:
-    ai_fallback_enabled: bool = True
-
     def plan_body(self, evt: EvidenceBundleBuiltBody) -> RcaCandidatesPlannedBody:
         plan = plan_causes(evt.incident, evt.evidence_bundle, evt.evidence.object_ref)
         return RcaCandidatesPlannedBody(
@@ -52,8 +49,6 @@ class CausePlanner:
             RcaRuleMissingBody(rule_missing=planned.rule_missing, incident=evt.incident),
             build_backlog_item_created_body(planned.rule_missing, evt),
         ]
-        if self.ai_fallback_enabled:
-            bodies.append(build_ai_fallback_requested_body(planned.rule_missing, evt))
         bodies.append(planned)
         return tuple(bodies)
 
@@ -165,19 +160,4 @@ def build_backlog_item_created_body(
             "rule_missing": rule_missing.to_body(),
         },
         workspace_id=rule_missing.workspace_id,
-    )
-
-
-def build_ai_fallback_requested_body(
-    rule_missing: RcaRuleMissing,
-    evt: EvidenceBundleBuiltBody,
-) -> RcaAiFallbackRequestedBody:
-    return RcaAiFallbackRequestedBody(
-        reason=NO_MATCHING_RULE_MESSAGE,
-        evidence_ref=rule_missing.evidence_ref,
-        incident=evt.incident,
-        evidence_bundle=evt.evidence_bundle,
-        missing_evidence=rule_missing.missing_evidence,
-        workspace_id=rule_missing.workspace_id,
-        evidence=evt.evidence,
     )

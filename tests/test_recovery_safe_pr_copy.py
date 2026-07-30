@@ -116,7 +116,7 @@ def test_recovery_safe_pr_body_contains_operator_review_sections() -> None:
     assert "- [ ] 새 Pod가 Ready 상태인지 확인" in body
     assert "## 실패 시 복원" in body
     assert "<summary>추적 정보</summary>" in body
-    assert "Kyro 복구 파이프라인에서 생성된 PR입니다." in body
+    assert "Opsia 복구 파이프라인에서 생성된 PR입니다." in body
 
 
 def test_recovery_safe_pr_title_collapses_whitespace_and_limits_length() -> None:

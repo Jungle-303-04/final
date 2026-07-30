@@ -29,12 +29,6 @@ RefreshPolicyKey = Literal[
     "metrics_rightsizing",
     "gitops_rows",
     "gitops_counts",
-    "helm_list",
-    "helm_detail",
-    "cost_summary",
-    "cost_trend",
-    "cost_nodes",
-    "port_sessions",
 ]
 
 

@@ -7,7 +7,6 @@ import base64
 import importlib.util
 import inspect
 import json
-import os
 import sys
 from collections.abc import AsyncIterator, Callable
 from pathlib import Path
@@ -17,50 +16,17 @@ from packages.runtime.app import EventContext
 
 ROOT = Path(__file__).resolve().parents[1]
 
-# 기존 RCA 골든 시나리오는 자동 복구 명령까지 실행하는 명시적 테스트 환경이다.
-# 운영 기본은 handler의 fail-closed(미설정=False)를 유지하고, kill-switch 테스트는
-# monkeypatch.delenv로 이 값을 제거해 미설정 차단을 별도로 검증한다.
-os.environ.setdefault("AUTO_COMMANDS_ENABLED", "1")
-
 SERVICE_LOCAL_MODULES = (
     "settings",
     "config",
     "github_provider",
-    "repo_cache",
-    "tools",
-    "hub",
-    "agent_connections",
-    "port_forward_sessions",
-    "terminal_sessions",
     "kubernetes_api",
-    "live_resource_metrics",
-    "live_summary",
-    "metric_collectors",
-    "prometheus_metrics",
-    "node_collector",
-    "node_collector_manager",
-    "node_collector_spec",
-    "commands",
-    "commands.context",
-    "commands.exec_transport",
-    "commands.kubernetes",
-    "commands.outbox",
-    "commands.registry",
-    "control",
-    "control.policy",
-    "control.reconciler",
-    "control.store",
     "evidence",
     "evidence.collector",
     "evidence.jobs",
     "providers",
     "providers.base",
     "providers.collection_limits",
-    "providers.loki_providers",
-    "providers.prometheus_analysis",
-    "providers.prometheus_providers",
-    "providers.tempo_analysis",
-    "providers.tempo_providers",
     "queries",
     "queries.payloads",
     "queries.registry",

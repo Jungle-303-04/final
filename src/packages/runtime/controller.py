@@ -34,30 +34,30 @@ from packages.storage.sessions import (
 )
 
 CONTROLLER_EVENT_BUS_MODE_ENV = "CONTROLLER_EVENT_BUS_MODE"
-AGENT_ACCESS_MODE_ENV = "AGENT_ACCESS_MODE"
-AGENT_DIRECT_COMMANDS_ENABLED_ENV = "AGENT_DIRECT_COMMANDS_ENABLED"
-REMEDIATION_DELIVERY_MODE_ENV = "REMEDIATION_DELIVERY_MODE"
-PRODUCTION_AUTO_MERGE_ENABLED_ENV = "PRODUCTION_AUTO_MERGE_ENABLED"
-
 EVENT_BUS_MODES = frozenset({"inprocess", "nats"})
-AGENT_ACCESS_MODES = frozenset({"read_only", "read_write"})
-REMEDIATION_DELIVERY_MODES = frozenset({"pull_request", "direct"})
-AGENT_SERVICE_NAMES = frozenset({"cluster-agent", "node-collector"})
+AGENT_SERVICE_NAMES = frozenset({"cluster-agent"})
+CORE_CONTROLLER_SERVICE_NAMES = frozenset(
+    {
+        "analyze-worker",
+        "api-gateway",
+        "ai-diff-worker",
+        "dispatch-worker",
+        "evidence-worker",
+        "incident-worker",
+        "outbox-relay",
+        "plan-worker",
+        "rca-feedback-worker",
+        "rca-worker",
+        "recovery-worker",
+        "safe-pr-worker",
+        "scm-worker",
+        "select-worker",
+        "dead-letter-monitor",
+    }
+)
 API_GATEWAY_SERVICE_NAME = "api-gateway"
-REALTIME_GATEWAY_SERVICE_NAME = "realtime-gateway"
-BUS_INJECTABLE_ASYNC_SERVICES = frozenset({"command-janitor", "outbox-relay"})
-REALTIME_GATEWAY_PORT_ENV = "REALTIME_GATEWAY_PORT"
-DEFAULT_REALTIME_GATEWAY_PORT = "8001"
+BUS_INJECTABLE_ASYNC_SERVICES = frozenset({"outbox-relay"})
 HTTP_SHUTDOWN_TIMEOUT_SECONDS = 10.0
-
-
-def _bool_env(name: str, default: str) -> bool:
-    value = os.getenv(name, default).strip().lower()
-    if value in {"1", "true", "yes", "on"}:
-        return True
-    if value in {"0", "false", "no", "off"}:
-        return False
-    raise ValueError(f"{name} must be a boolean: {value!r}")
 
 
 def _choice_env(name: str, default: str, allowed: frozenset[str]) -> str:
@@ -70,22 +70,10 @@ def _choice_env(name: str, default: str, allowed: frozenset[str]) -> str:
 @dataclass(frozen=True)
 class ControllerProfile:
     event_bus_mode: str = "inprocess"
-    agent_access_mode: str = "read_only"
-    direct_commands_enabled: bool = False
-    remediation_delivery_mode: str = "pull_request"
-    production_auto_merge_enabled: bool = False
 
     def __post_init__(self) -> None:
         if self.event_bus_mode not in EVENT_BUS_MODES:
             raise ValueError(f"invalid controller event bus mode: {self.event_bus_mode!r}")
-        if self.agent_access_mode not in AGENT_ACCESS_MODES:
-            raise ValueError(f"invalid agent access mode: {self.agent_access_mode!r}")
-        if self.remediation_delivery_mode not in REMEDIATION_DELIVERY_MODES:
-            raise ValueError(
-                f"invalid remediation delivery mode: {self.remediation_delivery_mode!r}"
-            )
-        if self.production_auto_merge_enabled:
-            raise ValueError("production auto-merge is forbidden by the OSS profile")
 
     @classmethod
     def from_env(cls) -> ControllerProfile:
@@ -94,21 +82,6 @@ class ControllerProfile:
                 CONTROLLER_EVENT_BUS_MODE_ENV,
                 "inprocess",
                 EVENT_BUS_MODES,
-            ),
-            agent_access_mode=_choice_env(
-                AGENT_ACCESS_MODE_ENV,
-                "read_only",
-                AGENT_ACCESS_MODES,
-            ),
-            direct_commands_enabled=_bool_env(AGENT_DIRECT_COMMANDS_ENABLED_ENV, "false"),
-            remediation_delivery_mode=_choice_env(
-                REMEDIATION_DELIVERY_MODE_ENV,
-                "pull_request",
-                REMEDIATION_DELIVERY_MODES,
-            ),
-            production_auto_merge_enabled=_bool_env(
-                PRODUCTION_AUTO_MERGE_ENABLED_ENV,
-                "false",
             ),
         )
 
@@ -152,12 +125,19 @@ def build_composition_plan(
     event_bus_for_mode(mode)
     services = discover_services(root)
     agent = tuple(service for service in services if service.name in AGENT_SERVICE_NAMES)
-    controller = tuple(service for service in services if service.name not in AGENT_SERVICE_NAMES)
+    controller = tuple(service for service in services if service.name in CORE_CONTROLLER_SERVICE_NAMES)
     found_agent_names = {service.name for service in agent}
     if found_agent_names != AGENT_SERVICE_NAMES:
         raise ValueError(
             f"agent composition mismatch: expected={sorted(AGENT_SERVICE_NAMES)}, "
             f"actual={sorted(found_agent_names)}"
+        )
+    found_controller_names = {service.name for service in controller}
+    if found_controller_names != CORE_CONTROLLER_SERVICE_NAMES:
+        raise ValueError(
+            "controller composition mismatch: "
+            f"expected={sorted(CORE_CONTROLLER_SERVICE_NAMES)}, "
+            f"actual={sorted(found_controller_names)}"
         )
     return CompositionPlan(mode, controller, agent)
 
@@ -366,16 +346,13 @@ class ControllerRuntime:
     def _http_server(
         loaded: LoadedControllerService,
         bus: BorrowedEventBus,
-        sessions: MemorySessionStore,
+        _sessions: MemorySessionStore,
     ) -> Server:
         if loaded.service.name == API_GATEWAY_SERVICE_NAME:
             # API 세션 권한은 RedisSessionStore의 fail-closed lifecycle만 사용한다.
             # controller의 process-local session dict는 realtime test/dev 경로에만 남긴다.
             app = loaded.module.create_app(event_bus=bus)
             port = int(env("PORT", "8000"))
-        elif loaded.service.name == REALTIME_GATEWAY_SERVICE_NAME:
-            app = loaded.module.create_app(authenticate_browser=sessions.get_session)
-            port = int(env(REALTIME_GATEWAY_PORT_ENV, DEFAULT_REALTIME_GATEWAY_PORT))
         else:
             raise ValueError(f"unsupported controller HTTP service: {loaded.service.name}")
         # API gateway가 경로를 redaction한 구조화 요청 로그를 남긴다. Uvicorn의 원문

@@ -2015,12 +2015,7 @@ def namespace_group_key(item: object) -> str:
     return "<cluster>"
 
 
-RCA_TEST_LABEL = "kubeheal.io/rca-test"
-RCA_TEST_RUN_LABEL = "kubeheal.io/rca-test-run"
-RCA_TEST_RESOURCE_PREFIX = "rca-test-"
 EVIDENCE_IDENTITY_LABELS = (
-    RCA_TEST_RUN_LABEL,
-    RCA_TEST_LABEL,
     "node.kubernetes.io/instance-type",
     "beta.kubernetes.io/instance-type",
     "topology.kubernetes.io/zone",
@@ -2037,12 +2032,7 @@ def scoped_items(payload: Any, label_selector: str | None) -> list[JsonObject]:
         if not separator:
             return []
         return [row for row in rows if resource_labels(row).get(key) == value]
-    return [
-        row
-        for row in rows
-        if resource_labels(row).get(RCA_TEST_LABEL) != "true"
-        and RCA_TEST_RUN_LABEL not in resource_labels(row)
-    ]
+    return rows
 
 
 def active_replicasets(rows: list[JsonObject]) -> list[JsonObject]:
@@ -2086,9 +2076,7 @@ def scoped_events(
         if label_selector:
             if matches_current_resource:
                 scoped.append(row)
-        elif not name.startswith(RCA_TEST_RESOURCE_PREFIX) and (
-            kind not in LIVE_SCOPED_EVENT_KINDS or matches_current_resource
-        ):
+        elif kind not in LIVE_SCOPED_EVENT_KINDS or matches_current_resource:
             scoped.append(row)
     return scoped
 
@@ -2109,11 +2097,7 @@ def scoped_endpoint_slices(
                 for service_name in service_names
             )
         ]
-    return [
-        row
-        for row in rows
-        if not str(metadata(row).get("name") or "").startswith(RCA_TEST_RESOURCE_PREFIX)
-    ]
+    return rows
 
 
 def resource_labels(item: JsonObject) -> JsonObject:

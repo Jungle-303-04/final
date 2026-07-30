@@ -486,7 +486,6 @@ def stream_matches_incident_scope(
     namespace: str | None,
     pod_names: set[str] | None,
 ) -> bool:
-    """일반 incident는 기존 규칙, RCA test는 namespace와 Pod를 모두 엄격히 확인한다."""
     if pod_names is None:
         return not namespace or stream_matches_namespace(stream, namespace)
     if not namespace or not pod_names:
@@ -514,17 +513,6 @@ def stream_matches_namespace(stream: dict, namespace: str) -> bool:
         if value is not None:
             return str(value) == namespace
     return True
-
-
-def rca_test_pod_names(metadata: dict) -> set[str] | None:
-    """RCA test metadata가 있으면 Pod 귀속을 필수화하고, 일반 incident면 None을 반환한다."""
-    test_context = metadata.get("rca_test")
-    if not isinstance(test_context, dict):
-        return None
-    raw_names = test_context.get("pod_names")
-    if not isinstance(raw_names, list):
-        return set()
-    return {str(name).strip() for name in raw_names if str(name).strip()}
 
 
 def change_context_payload(metadata: dict) -> dict:
@@ -700,7 +688,7 @@ def collect_evidence_items(evt: EvidenceSource) -> list[EvidenceItem]:
         select_incident_log_entries(
             evt.logs,
             namespace,
-            pod_names=rca_test_pod_names(evt.metadata),
+            pod_names=None,
         )
         if source_evidence_available(evt, "logs")
         else []

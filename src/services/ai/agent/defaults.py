@@ -32,7 +32,6 @@ class ActionRoutes:
     safe_pr: str = "draft_pr"
     approval_required: str = "approval_required"
     forbidden: str = "forbidden"
-    auto: str = "auto"
 
 
 @dataclass(frozen=True)

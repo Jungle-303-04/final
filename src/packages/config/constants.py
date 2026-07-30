@@ -45,8 +45,6 @@ class Command:
     CATALOG_HELM_INSTALL_CAPABILITY: Final[str] = "catalog_helm_install"
     CATALOG_HELM_UPGRADE_CAS_CAPABILITY: Final[str] = "catalog_helm_upgrade_cas.v1"
     DELETE_WORKLOAD_ACTION: Final[str] = "delete_workload"
-    RCA_TEST_SCENARIO_INJECT_ACTION: Final[str] = "rca.test.inject"
-    RCA_TEST_SCENARIO_CLEANUP_ACTION: Final[str] = "rca.test.cleanup"
     KUBERNETES_DEPLOYMENT_SCALE_ACTION: Final[str] = "k8s.apps.v1.deployments.scale"
     KUBERNETES_STATEFULSET_SCALE_ACTION: Final[str] = "k8s.apps.v1.statefulsets.scale"
     KUBERNETES_STATEFULSET_RESTART_ACTION: Final[str] = "k8s.apps.v1.statefulsets.restart"
@@ -72,20 +70,7 @@ class Command:
     GITOPS_RESOURCE_CONTROL_ACTION: Final[str] = "gitops.resource.control"
     GITOPS_RESOURCE_CONTROL_CAPABILITY: Final[str] = "gitops_control.v1"
     TELEMETRY_QUERY_RUN_ACTION: Final[str] = "telemetry.query.run"
-    TRAFFIC_SOURCE_SELECT_ACTION: Final[str] = "traffic.source.select"
-    TRAFFIC_SOURCE_CONNECT_ACTION: Final[str] = "traffic.source.connect"
-    TRAFFIC_SOURCE_OBSERVER_CAPABILITY: Final[str] = "traffic_source_observer.v1"
-    TRAFFIC_SOURCE_SELECT_CAPABILITY: Final[str] = "traffic_source_select.v1"
-    TRAFFIC_SOURCE_CONNECT_CAPABILITY: Final[str] = "traffic_source_connect.v1"
     CLUSTER_AGENT_UNINSTALL_ACTION: Final[str] = "cluster.agent.uninstall"
-
-
-RCA_TEST_COMMAND_ACTIONS: Final[frozenset[str]] = frozenset(
-    {
-        Command.RCA_TEST_SCENARIO_INJECT_ACTION,
-        Command.RCA_TEST_SCENARIO_CLEANUP_ACTION,
-    }
-)
 
 
 class CommandStatus:

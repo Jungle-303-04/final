@@ -15,4 +15,4 @@ spec:
     spec:
       containers:
         - name: checkout-api
-          image: ghcr.io/kubeheal/smoke-checkout:1.0.0
+          image: ghcr.io/opsia/smoke-checkout:1.0.0

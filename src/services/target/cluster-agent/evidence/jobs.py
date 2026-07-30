@@ -19,7 +19,6 @@ DEFAULT_JOB_POLL_SECONDS = 1.0
 DEFAULT_JOB_POLL_TIMEOUT_SECONDS = 10
 ALLOW_PARTIAL_FAILURE_POLICY = "allow_partial"
 STRICT_FAILURE_POLICY = "strict"
-RCA_TEST_EVIDENCE_SCOPE = "rca_test_run"
 LOGGER = get_logger(__name__)
 
 
@@ -200,7 +199,6 @@ class EvidenceJobScheduler:
             )
         else:
             result = await self.collector.collect(provider_key)
-        require_run_scoped_provider_evidence(job, provider_key, result)
         return result
 
     def job_query_definitions(
@@ -399,23 +397,6 @@ class EvidenceJobScheduler:
         current = int(now)
         window_start = current - (current % interval)
         return datetime.fromtimestamp(window_start, UTC).isoformat()
-
-
-def require_run_scoped_provider_evidence(
-    job: JsonObject,
-    provider_key: str,
-    result: JsonObject,
-) -> None:
-    """Reject empty strict RCA test results without manufacturing evidence."""
-    release_context = job_release_context(job)
-    if (
-        job.get(Gateway.FAILURE_POLICY) != STRICT_FAILURE_POLICY
-        or release_context.get("evidence_scope") != RCA_TEST_EVIDENCE_SCOPE
-    ):
-        return
-    if provider_has_actual_evidence(provider_key, result.get(provider_key), release_context):
-        return
-    raise RuntimeError(f"{provider_key} provider returned no evidence for strict run-scoped job")
 
 
 def job_release_context(job: JsonObject) -> Mapping[str, object]:

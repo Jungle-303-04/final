@@ -86,7 +86,7 @@ def test_standard_sli_alert_uses_opsia_workload_identity() -> None:
             "opsia_namespace": "sandbox",
             "opsia_resource_kind": "Deployment",
             "opsia_resource_name": "api-server",
-            "opsia_service": "matchmaking",
+            "opsia_service": "checkout",
             "opsia_sli": "admission",
             "opsia_symptom": "admission_failure",
         },
@@ -117,7 +117,7 @@ def test_standard_sli_alert_uses_opsia_workload_identity() -> None:
         "namespace": "sandbox",
         "resource_kind": "Deployment",
         "resource_name": "api-server",
-        "service": "matchmaking",
+        "service": "checkout",
         "sli": "admission",
         "symptom": "admission_failure",
     }

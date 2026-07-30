@@ -23,7 +23,7 @@ SLI_IDENTITY = {
     "namespace": TARGET["namespace"],
     "resource_kind": TARGET["resource_kind"],
     "resource_name": TARGET["resource_name"],
-    "service": "matchmaking",
+    "service": "checkout",
     "sli": "admission",
     "symptom": "admission_failure",
 }

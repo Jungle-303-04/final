@@ -1,7 +1,7 @@
 [project]
-name = "services"
+name = "opsia-control-plane"
 version = "0.1.0"
-description = "Event-driven Kubernetes operations platform"
+description = "Kubernetes evidence, deterministic RCA, bounded GitOps Draft PRs, and post-deploy verification"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
@@ -19,18 +19,11 @@ dependencies = [
     "redis>=6.4.0",
     "sqlalchemy>=2.0.0",
     "uvicorn[standard]>=0.34.0",
-    "websockets>=16.0",
-]
-
-[project.optional-dependencies]
-aws = [
-    "boto3>=1.34.0",
 ]
 
 [dependency-groups]
 dev = [
     "alembic>=1.16.0",
-    "httpx2>=2.5.0",
     "import-linter>=2.0",
     "pre-commit>=4.6.0",
     "pytest>=8.4.0",

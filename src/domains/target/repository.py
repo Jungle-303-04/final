@@ -276,11 +276,7 @@ class TargetAgentRepository(DatabaseConnection):
                 [
                     item
                     for item in plan.desired_states
-                    if item.get("component")
-                    in {
-                        TargetComponent.CLUSTER_AGENT.value,
-                        TargetComponent.NODE_COLLECTOR.value,
-                    }
+                    if item.get("component") == TargetComponent.CLUSTER_AGENT.value
                 ],
                 UPGRADE_ACTOR,
                 preserve_spec=True,

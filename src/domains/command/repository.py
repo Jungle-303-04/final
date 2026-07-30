@@ -8,10 +8,9 @@ from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import DateTime, and_, case, cast, func, or_, select, text, update
+from sqlalchemy import and_, case, func, or_, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from domains.command.actions import command_action_spec
 from domains.command.events import CommandCompletedBody
 from domains.command.lifecycle import command_impact_identity, command_terminal_event_kind
 from domains.command.models import (
@@ -21,8 +20,7 @@ from domains.command.models import (
     CommandOperationEvent,
     CommandOperationEventCursor,
 )
-from domains.command.policy import DEFAULT_COMMAND_LEASE_SECONDS
-from packages.config.constants import Command, CommandStatus
+from packages.config.constants import CommandStatus
 from packages.contracts.event_bus.interfaces import EventEnvelope, JsonObject
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID
 from packages.contracts.interfaces import CommandRecord
@@ -47,6 +45,18 @@ CANCELLING_COMMAND_FAILURE_MESSAGE = (
     "command lease expired during cancellation; agent did not confirm"
 )
 COMMAND_PRIORITY_HIGH = 100
+DEFAULT_COMMAND_LEASE_SECONDS = 60
+
+
+@dataclass(frozen=True)
+class _LegacyCommandSpec:
+    supports_cancel: bool = False
+    supports_manual_retry: bool = False
+
+
+def command_action_spec(_action: str) -> _LegacyCommandSpec:
+    """Historical command rows are readable but cannot be cancelled or retried."""
+    return _LegacyCommandSpec()
 
 
 @dataclass(frozen=True)
@@ -116,21 +126,6 @@ class DuplicateCommandControl(CommandControlError):
 
 class AgentCommandCapacityExceeded(RuntimeError):
     """A transaction-scoped command capacity gate rejected a new logical row."""
-
-
-def rca_test_guard_lock_key(
-    workspace_id: str,
-    cluster_id: str,
-    resource_kind: str,
-    namespace: str,
-    resource_name: str,
-) -> int:
-    """동일 테스트 대상만 직렬화하는 PostgreSQL signed bigint advisory key."""
-    canonical = "\x1f".join(
-        (workspace_id, cluster_id, resource_kind.casefold(), namespace, resource_name)
-    )
-    digest = hashlib.sha256(canonical.encode("utf-8")).digest()
-    return int.from_bytes(digest[:8], byteorder="big", signed=True)
 
 
 def command_capacity_lock_key(workspace_id: str, cluster_id: str, action: str) -> int:
@@ -989,100 +984,10 @@ class AgentCommandRepository(DatabaseConnection):
         return row_dict(row) if row else None
 
     def queue_agent_command(self, correlation_id: str, plan: JsonObject, status: str) -> bool:
-        if plan.get("action") == Command.RCA_TEST_SCENARIO_INJECT_ACTION:
-            raise ValueError("RCA test inject commands require the atomic reservation guard")
         workspace_id = str(plan.get("workspace_id", DEFAULT_WORKSPACE_ID))
         cluster_id = str(plan["cluster_id"])
         attempt_id = f"attempt-{uuid.uuid4()}"
         with self.connection() as conn:
-            inserted = conn.execute(
-                agent_command_queue_upsert(
-                    correlation_id=correlation_id,
-                    plan=plan,
-                    status=status,
-                    attempt_id=attempt_id,
-                )
-            ).scalar_one_or_none()
-            if inserted is None:
-                return False
-            conn.execute(
-                agent_command_attempt_insert(
-                    attempt_id=attempt_id,
-                    command_id=str(plan["command_id"]),
-                    workspace_id=workspace_id,
-                    cluster_id=cluster_id,
-                    attempt_no=1,
-                )
-            )
-            notify_agent_command(conn, workspace_id, cluster_id)
-            return True
-
-    def queue_rca_test_command_if_available(
-        self,
-        correlation_id: str,
-        plan: JsonObject,
-        status: str,
-        *,
-        resource_kind: str,
-        namespace: str,
-        resource_name: str,
-        max_concurrent_runs: int,
-        ttl_seconds: int,
-    ) -> bool:
-        """같은 fixture 예약 확인과 inject enqueue를 한 DB 트랜잭션으로 처리한다."""
-        if plan.get("action") != Command.RCA_TEST_SCENARIO_INJECT_ACTION:
-            raise ValueError("atomic RCA test reservation accepts inject commands only")
-        if max_concurrent_runs < 1 or ttl_seconds < 1:
-            raise ValueError("RCA test concurrency and TTL must be positive")
-
-        table = AgentCommand.__table__
-        cleanup = table.alias("finished_rca_test_cleanup")
-        workspace_id = str(plan.get("workspace_id", DEFAULT_WORKSPACE_ID))
-        cluster_id = str(plan["cluster_id"])
-        normalized_resource_kind = resource_kind.strip().casefold()
-        inject_payload = table.c.payload["payload"]
-        cleanup_payload = cleanup.c.payload["payload"]
-        cleanup_finished = (
-            select(1)
-            .select_from(cleanup)
-            .where(
-                cleanup.c.workspace_id == table.c.workspace_id,
-                cleanup.c.cluster_id == table.c.cluster_id,
-                cleanup.c.action == Command.RCA_TEST_SCENARIO_CLEANUP_ACTION,
-                cleanup.c.status == CommandStatus.COMPLETED,
-                cleanup_payload["run_id"].astext == inject_payload["run_id"].astext,
-            )
-            .correlate(table)
-            .exists()
-        )
-        active_count = (
-            select(func.count())
-            .select_from(table)
-            .where(
-                table.c.workspace_id == workspace_id,
-                table.c.cluster_id == cluster_id,
-                table.c.action == Command.RCA_TEST_SCENARIO_INJECT_ACTION,
-                func.lower(func.coalesce(inject_payload["resource_kind"].astext, "Deployment"))
-                == normalized_resource_kind,
-                inject_payload["namespace"].astext == namespace,
-                inject_payload["resource_name"].astext == resource_name,
-                cast(inject_payload["expires_at"].astext, DateTime(timezone=True)) > func.now(),
-                ~cleanup_finished,
-            )
-        )
-        lock_key = rca_test_guard_lock_key(
-            workspace_id,
-            cluster_id,
-            resource_kind,
-            namespace,
-            resource_name,
-        )
-
-        with self.connection() as conn:
-            conn.execute(text("select pg_advisory_xact_lock(:lock_key)"), {"lock_key": lock_key})
-            if int(conn.execute(active_count).scalar_one()) >= max_concurrent_runs:
-                return False
-            attempt_id = f"attempt-{uuid.uuid4()}"
             inserted = conn.execute(
                 agent_command_queue_upsert(
                     correlation_id=correlation_id,

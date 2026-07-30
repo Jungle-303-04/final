@@ -7,9 +7,6 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from typing import Any, Protocol
 
-from domains.command.actions import command_action_for_recovery, command_action_spec
-from domains.command.events import CommandRequestedBody
-from domains.gitops.events import Diff
 from domains.gitops.source_patch import (
     ManifestScalarPatchPlan,
     ManifestSourcePatchError,
@@ -41,12 +38,7 @@ from domains.scm.events import (
     SafePrFilePatch,
     SafePrRequestedBody,
 )
-from packages.config.constants import Command, GitHub, Sandbox
-from packages.config.control import (
-    CONTROL_NAMESPACE_DENIED_CODE,
-    control_allowed_namespaces,
-    control_namespace_allowed,
-)
+from packages.config.constants import GitHub
 from packages.contracts.event_bus.bodies import EventBody, JsonObject
 from packages.contracts.gitops_authority import (
     GitOpsAuthorityContext,
@@ -57,7 +49,6 @@ from services.ai.agent.defaults import ActionRoutes
 from services.ai.agent.workload_target import resolved_target_from_metadata
 
 UNKNOWN_ROUTE_REASON = "선택된 복구 후보의 route를 처리할 수 없습니다."
-UNSUPPORTED_AUTO_ACTION_REASON = "자동 실행 대상 command action으로 변환할 수 없습니다."
 MISSING_SAFE_PR_PATCH_REASON = "Safe PR에 적용할 구체적인 파일 패치가 없습니다."
 SAFE_PR_FALLBACK_PATCH_DIR = ".gitops/recovery"
 SAFE_PR_STRUCTURED_PATCH_DIR = ".gitops/safe-pr/patches"
@@ -212,20 +203,6 @@ class RecoveryDispatcher:
         correlation_id: str = "",
     ) -> EventBody:
         selected = evt.selected
-        if selected.route == self.routes.auto:
-            command = build_command_request_body(
-                evt.plan,
-                selected,
-                selected_by=evt.selected_by,
-                auto_selected=evt.auto_selected,
-            )
-            if command is None:
-                return RcaActionRequiredBody(
-                    reason=f"{UNSUPPORTED_AUTO_ACTION_REASON}: {selected.draft.action_type}",
-                    evidence_ref=evt.plan.evidence_ref,
-                    workspace_id=evt.workspace_id,
-                )
-            return command
         if selected.route == self.routes.safe_pr:
             return await dispatch_safe_pr_body(evt, authority, correlation_id)
         if selected.route == self.routes.approval_required:
@@ -256,8 +233,6 @@ class RecoveryActionPreflight:
         evt: RecoveryActionSelectedBody,
         correlation_id: str,
     ) -> RecoveryActionCandidate | RcaActionRequiredBody:
-        if evt.selected.route == self.routes.auto:
-            return auto_action_preflight(evt)
         if evt.selected.route != self.routes.safe_pr:
             return evt.selected
         outcome = await dispatch_safe_pr_body(evt, self.authority, correlation_id)
@@ -277,9 +252,8 @@ class RecoveryActionPreflight:
         if self.authority is not None:
             query = authority_query(evt, correlation_id)
             resolved_authority = await self.authority.load_authority(query)
-            if (
-                resolved_authority is not None
-                and authority_matches_query(resolved_authority, query)
+            if resolved_authority is not None and authority_matches_query(
+                resolved_authority, query
             ):
                 replacements = scalar_replacements_for(
                     evt.selected.draft.action_type,
@@ -304,15 +278,10 @@ class RecoveryActionPreflight:
                     and replacements[0].desired_value > 0
                 ):
                     expected_replicas = replacements[0].desired_value
-        if (
-            draft.params.get("verification_contract")
-            == PROTECTED_WORKLOAD_CONTINUITY_CONTRACT
-        ):
+        if draft.params.get("verification_contract") == PROTECTED_WORKLOAD_CONTINUITY_CONTRACT:
             evidence: dict[str, object] = {}
             if self.evidence is None:
-                verification_blockers.append(
-                    "metadata:current_workload_snapshots"
-                )
+                verification_blockers.append("metadata:current_workload_snapshots")
             else:
                 loaded_evidence = await self.evidence.get_evidence_payload(
                     evt.workspace_id,
@@ -329,35 +298,23 @@ class RecoveryActionPreflight:
                     or ""
                 ),
                 "namespace": str(
-                    draft.params.get("namespace")
-                    or evt.plan.target.get("namespace")
-                    or ""
+                    draft.params.get("namespace") or evt.plan.target.get("namespace") or ""
                 ),
                 "resource_kind": str(
-                    draft.params.get("resource_kind")
-                    or evt.plan.target.get("resource_kind")
-                    or ""
+                    draft.params.get("resource_kind") or evt.plan.target.get("resource_kind") or ""
                 ),
                 "resource_name": str(
-                    draft.params.get("resource_name")
-                    or evt.plan.target.get("resource_name")
-                    or ""
+                    draft.params.get("resource_name") or evt.plan.target.get("resource_name") or ""
                 ),
             }
-            observed = (
-                protected_workloads(evidence, target)
-                if evidence
-                else None
-            )
+            observed = protected_workloads(evidence, target) if evidence else None
             baseline = protected_workload_baseline(observed or [])
             if (
                 not observed
                 or any(workload.get("healthy") is not True for workload in observed)
                 or len(baseline) != len(observed)
             ):
-                verification_blockers.append(
-                    "metadata:current_workload_snapshots"
-                )
+                verification_blockers.append("metadata:current_workload_snapshots")
                 baseline = []
             evidence_observed_at = (
                 trusted_evidence_window_start(
@@ -379,9 +336,7 @@ class RecoveryActionPreflight:
                 else []
             )
             if not session_baseline:
-                verification_blockers.append(
-                    "metrics:opsia_continuity_active_sessions"
-                )
+                verification_blockers.append("metrics:opsia_continuity_active_sessions")
             failure_ratio_before, failure_ratio_identity = metric_sample_with_identity(
                 evidence,
                 "opsia_sli_failure_ratio",
@@ -449,42 +404,26 @@ class RecoveryActionPreflight:
                 and isinstance(registration.get("settings"), Mapping)
                 else {}
             )
-            evidence_cadence_seconds = nonnegative_int(
-                settings.get("evidence_interval_seconds")
-            )
+            evidence_cadence_seconds = nonnegative_int(settings.get("evidence_interval_seconds"))
             if alert_before.get("available") is not True or threshold is None:
-                verification_blockers.append(
-                    "alertmanager:original_exact_alert"
-                )
+                verification_blockers.append("alertmanager:original_exact_alert")
             if evidence_cadence_seconds is None or evidence_cadence_seconds <= 0:
                 verification_blockers.append("cluster:evidence_cadence")
             if expected_replicas is None:
-                verification_blockers.append(
-                    "gitops:approved_replica_baseline"
-                )
+                verification_blockers.append("gitops:approved_replica_baseline")
             verification_params["protected_baseline"] = baseline
             verification_params["protected_session_baseline"] = session_baseline
-            verification_params["verification_failure_ratio_before"] = (
-                failure_ratio_before
-            )
+            verification_params["verification_failure_ratio_before"] = failure_ratio_before
             verification_params["verification_failure_ratio_metric_identity"] = (
                 failure_ratio_identity
             )
-            verification_params["verification_request_rate_baseline"] = (
-                request_rate_baseline
-            )
-            verification_params["verification_request_rate_metric_identity"] = (
-                request_rate_identity
-            )
+            verification_params["verification_request_rate_baseline"] = request_rate_baseline
+            verification_params["verification_request_rate_metric_identity"] = request_rate_identity
             verification_params["verification_alert_before"] = alert_before
-            verification_params["verification_evidence_cadence_seconds"] = (
-                evidence_cadence_seconds
-            )
+            verification_params["verification_evidence_cadence_seconds"] = evidence_cadence_seconds
             verification_params["expected_replicas"] = expected_replicas
             if verification_blockers:
-                verification_params["verification_blockers"] = sorted(
-                    set(verification_blockers)
-                )
+                verification_params["verification_blockers"] = sorted(set(verification_blockers))
                 verification_params["verification_merge_blocked"] = True
         return replace(
             evt.selected,
@@ -647,7 +586,9 @@ def recovery_safe_pr_body(
         if part
     )
     reason = selected.recommendation_reason or draft.reason or selected.description
-    expected_outcome = selected.expected_outcome or "적용 후 검증 항목을 기준으로 정상화를 확인합니다."
+    expected_outcome = (
+        selected.expected_outcome or "적용 후 검증 항목을 기준으로 정상화를 확인합니다."
+    )
     sections = [
         "## 복구 개요",
         "",
@@ -689,7 +630,7 @@ def recovery_safe_pr_body(
         "",
         "---",
         "",
-        "> Kyro 복구 파이프라인에서 생성된 PR입니다. 적용 전 변경 내용과 검증 계획을 확인해 주세요.",
+        "> Opsia 복구 파이프라인에서 생성된 PR입니다. 적용 전 변경 내용과 검증 계획을 확인해 주세요.",
     ]
     return "\n".join(sections).strip()
 
@@ -872,282 +813,6 @@ def authority_required_body(
     )
 
 
-def auto_action_preflight(
-    evt: RecoveryActionSelectedBody,
-) -> RecoveryActionCandidate | RcaActionRequiredBody:
-    """Reject an impossible command before the recovery selection is persisted."""
-
-    selected = evt.selected
-    if not selected.executable:
-        return command_policy_required_body(
-            evt,
-            selected.blocked_reason_code or "recovery_candidate_not_executable",
-            selected.blocked_reason or "선택한 복구 후보는 현재 정책에서 실행할 수 없습니다.",
-        )
-    action = command_action_for(selected)
-    if action is None:
-        return command_policy_required_body(
-            evt,
-            "unsupported_auto_action",
-            UNSUPPORTED_AUTO_ACTION_REASON,
-            missing=["command_action"],
-        )
-    spec = command_action_spec(action)
-    if spec is None:
-        return command_policy_required_body(
-            evt,
-            "unsupported_auto_action",
-            UNSUPPORTED_AUTO_ACTION_REASON,
-            missing=["command_action_spec"],
-            diagnostics={"command_action": action},
-        )
-    namespace = exact_nonempty_value(
-        evt.plan.target.get("namespace"),
-        selected.draft.namespace,
-        selected.draft.params.get("namespace"),
-    )
-    if not namespace:
-        return command_policy_required_body(
-            evt,
-            "recovery_target_identity_invalid",
-            "복구 대상 네임스페이스를 하나의 값으로 확인할 수 없습니다.",
-            missing=["target:namespace"],
-            diagnostics={"command_action": action},
-        )
-    diagnostics: JsonObject = {
-        "command_action": action,
-        "namespace": namespace,
-        "control_allowed_namespaces": list(control_allowed_namespaces()),
-        "action_allowed_namespaces": list(spec.allowed_namespaces),
-    }
-    if spec.enforce_control_namespace and not control_namespace_allowed(namespace):
-        return command_policy_required_body(
-            evt,
-            CONTROL_NAMESPACE_DENIED_CODE,
-            (
-                f"{namespace} 네임스페이스는 현재 클러스터 제어 허용 범위에 "
-                "포함되지 않아 복구 명령을 제출할 수 없습니다."
-            ),
-            diagnostics=diagnostics,
-        )
-    if not spec.allows_namespace(namespace):
-        return command_policy_required_body(
-            evt,
-            "command_action_namespace_not_allowed",
-            (
-                f"{action} 액션은 {namespace} 네임스페이스에서 허용되지 않아 "
-                "복구 명령을 제출할 수 없습니다."
-            ),
-            diagnostics=diagnostics,
-        )
-    return selected
-
-
-def command_policy_required_body(
-    evt: RecoveryActionSelectedBody,
-    reason_code: str,
-    reason: str,
-    *,
-    missing: list[str] | None = None,
-    diagnostics: JsonObject | None = None,
-) -> RcaActionRequiredBody:
-    return RcaActionRequiredBody(
-        reason=reason,
-        evidence_ref=evt.plan.evidence_ref,
-        workspace_id=evt.workspace_id,
-        reason_code=reason_code,
-        missing_evidence=missing or [],
-        next_actions=[
-            {
-                "action_type": "review_control_namespace_policy",
-                "reason": (
-                    "클러스터 연결의 제어 허용 범위와 명령 액션 정책을 확인한 뒤 "
-                    "허용되는 복구 후보를 선택하세요."
-                ),
-                "target": evt.plan.target,
-            }
-        ],
-        diagnostics={
-            "plan_id": evt.plan.plan_id,
-            "action_id": evt.selected.action_id,
-            "action_type": evt.selected.draft.action_type,
-            **(diagnostics or {}),
-        },
-    )
-
-
-def build_command_request_body(
-    plan: RecoveryPlan,
-    selected: RecoveryActionCandidate,
-    *,
-    selected_by: str,
-    auto_selected: bool,
-) -> CommandRequestedBody | None:
-    draft = selected.draft
-    action = command_action_for(selected)
-    if action is None:
-        return None
-    workspace_id = exact_nonempty_value(
-        plan.target.get("workspace_id"),
-        draft.params.get("workspace_id"),
-    )
-    cluster_id = exact_nonempty_value(
-        plan.target.get("cluster_id"),
-        draft.params.get("cluster_id"),
-    )
-    environment = exact_nonempty_value(
-        plan.target.get("environment"),
-        draft.params.get("environment"),
-    )
-    namespace = exact_nonempty_value(
-        plan.target.get("namespace"),
-        draft.namespace,
-        draft.params.get("namespace"),
-    )
-    resource_kind = exact_nonempty_value(
-        plan.target.get("resource_kind"),
-        draft.resource_kind,
-    )
-    resource_name = exact_nonempty_value(
-        plan.target.get("resource_name"),
-        draft.resource_name,
-    )
-    if not all(
-        (
-            workspace_id,
-            cluster_id,
-            environment,
-            namespace,
-            resource_kind,
-            resource_name,
-        )
-    ):
-        return None
-    resolved = resolved_target_from_metadata(
-        namespace,
-        resource_kind,
-        resource_name,
-        plan.target,
-        draft.params,
-    )
-    if not all((resolved.namespace, resolved.resource_kind, resolved.resource_name)):
-        return None
-    payload = command_payload_for(
-        action,
-        resolved.resource_name,
-        resolved.namespace,
-        draft.params,
-    )
-    if payload is None:
-        return None
-    return CommandRequestedBody(
-        cluster_id=cluster_id,
-        action=action,
-        namespace=resolved.namespace,
-        reason=selected.description,
-        diff=Diff(
-            resource=command_diff_resource(
-                action,
-                resolved.resource_name,
-                resolved.resource_kind,
-                resolved.resource_name,
-            ),
-            namespace=resolved.namespace,
-            desired_image="",
-            actual_image="",
-            risk=Sandbox.RISK_TAG,
-            workspace_id=workspace_id,
-            status="recovery_action",
-            has_changes=True,
-            basis={
-                "source": "rca_recovery",
-                "plan_id": plan.plan_id,
-                "action_id": selected.action_id,
-                "root_cause": draft.params.get("root_cause"),
-            },
-        ),
-        workspace_id=workspace_id,
-        application_id=str(draft.params.get("application_id") or ""),
-        workflow_run_id=str(draft.params.get("workflow_run_id") or ""),
-        binding_id=str(draft.params.get("binding_id") or ""),
-        environment=environment,
-        requested_by=selected_by,
-        approval_ref=as_optional_str(selected.draft.params.get("approval_ref")),
-        policy_decision_ref=as_optional_str(selected.draft.params.get("policy_decision_ref")),
-        actor={
-            "plan_id": plan.plan_id,
-            "action_id": selected.action_id,
-            "auto_selected": auto_selected,
-        },
-        payload=payload,
-    )
-
-
-def command_action_for(selected: RecoveryActionCandidate) -> str | None:
-    requested = str(selected.draft.params.get("command") or selected.draft.action_type)
-    return command_action_for_recovery(requested)
-
-
-def command_payload_for(
-    action: str,
-    resource_name: str,
-    namespace: str,
-    params: JsonObject,
-) -> JsonObject | None:
-    if action != Command.KUBERNETES_DEPLOYMENT_SCALE_ACTION:
-        return {}
-    replicas = params.get("replicas")
-    if type(replicas) is not int or replicas <= 0:
-        return None
-    return {
-        "namespace": namespace,
-        "name": resource_name,
-        "replicas": replicas,
-    }
-
-
-def exact_nonempty_value(*values: object) -> str:
-    """Resolve one authoritative scalar, rejecting missing or conflicting values."""
-
-    normalized = {
-        value.strip()
-        for value in values
-        if isinstance(value, str) and value.strip()
-    }
-    return next(iter(normalized)) if len(normalized) == 1 else ""
-
-
-def command_diff_resource(
-    action: str,
-    command_target: str,
-    source_kind: str,
-    source_name: str,
-) -> str:
-    if action in {Command.DEFAULT_ACTION, Command.KUBERNETES_DEPLOYMENT_SCALE_ACTION}:
-        return f"deployment/{command_target}"
-    return f"{source_kind}/{source_name}"
-
-
-def command_target_name(kind: str, name: str, params: JsonObject) -> str:
-    explicit = first_str(
-        params.get("deployment"),
-        params.get("deployment_name"),
-        params.get("workload_name"),
-        params.get("target_deployment"),
-    )
-    if explicit:
-        return explicit
-    normalized_kind = kind.strip().lower()
-    normalized_name = name.strip()
-    if normalized_kind in {"deployment", "deployments"}:
-        return normalized_name
-    if normalized_kind in {"replicaset", "replicasets"}:
-        return deployment_from_replicaset_name(normalized_name) or normalized_name
-    if normalized_kind in {"pod", "pods"}:
-        return deployment_from_pod_name(normalized_name) or normalized_name
-    return normalized_name
-
-
 def first_str(*values: object) -> str:
     for value in values:
         if isinstance(value, str) and value.strip():
@@ -1217,19 +882,8 @@ def scalar_replacements_for(
         # 허용한 경우에만 이력이 없거나 모호할 때 제한된 +1 증설로 전환한다.
         previous = previous_replicas_from_changes(authority, replicas)
         strategy = first_str(selected.draft.params.get("strategy"))
-        root_cause = first_str(selected.draft.params.get("root_cause"))
-        allow_scale_out = (
-            selected.draft.params.get("allow_bounded_scale_out") is True
-            or (
-                strategy == "last_approved_snapshot"
-                and root_cause == "lobby_capacity_saturation"
-            )
-        )
-        if (
-            strategy == "last_approved_snapshot"
-            and previous is None
-            and not allow_scale_out
-        ):
+        allow_scale_out = selected.draft.params.get("allow_bounded_scale_out") is True
+        if strategy == "last_approved_snapshot" and previous is None and not allow_scale_out:
             return []
         desired = previous if previous is not None else replicas + 1
         if desired == replicas or not 1 <= desired < 10:
@@ -1254,6 +908,7 @@ def previous_replicas_from_changes(
     일치하며, 이전 값(old_desired)이 현재보다 큰 단 하나의 변경일 때만 신뢰한다.
     (여러 이력이 겹치면 특정 불가 → None → 호출부가 +1 증설로 폴백)
     """
+
     def as_int(value: object) -> int | None:
         if type(value) is int:
             return value
@@ -1281,7 +936,11 @@ def target_container(manifest: JsonObject, resource_name: str) -> dict[str, Any]
     values = [dict(item) for item in containers if isinstance(item, dict)]
     if len(values) == 1:
         return values[0]
-    deployment = command_target_name("Deployment", resource_name, {})
+    deployment = (
+        deployment_from_pod_name(resource_name)
+        or deployment_from_replicaset_name(resource_name)
+        or resource_name
+    )
     matches = [item for item in values if item.get("name") == deployment]
     return matches[0] if len(matches) == 1 else None
 

@@ -5,7 +5,6 @@ from typing import Any
 
 from conftest import load_service, run_handler
 
-from domains.command.events import CommandRejectedBody
 from domains.rca.events import RcaActionRequiredBody, RcaFollowupRequiredBody
 from domains.scm.events import SafePrFailedBody
 
@@ -62,9 +61,7 @@ class RetryDb:
         status: str,
         lifecycle: dict[str, Any],
     ) -> dict[str, Any] | None:
-        self.transitions.append(
-            (plan_id, workspace_id, expected_statuses, status, lifecycle)
-        )
+        self.transitions.append((plan_id, workspace_id, expected_statuses, status, lifecycle))
         return {"plan_id": plan_id} if self.reopened else None
 
 
@@ -93,52 +90,6 @@ def safe_pr_failed(*, approval_ref: str | None = "approval-1") -> SafePrFailedBo
         reason_code="github_api_error",
         details=details,
     )
-
-
-def command_rejected() -> CommandRejectedBody:
-    return CommandRejectedBody(
-        reason="namespace is not allowed",
-        reason_code="namespace_not_allowed",
-        requested={"workspace_id": "workspace-1"},
-    )
-
-
-def test_command_rejection_reopens_selected_recovery_action() -> None:
-    db = RetryDb(
-        recovery_plan={
-            "plan_id": "plan-1",
-            "evidence_ref": "evidence-1",
-            "status": "selected",
-            "selected_action_id": "action-1",
-        }
-    )
-
-    emitted = run_handler(
-        feedback_worker.on_recovery_command_rejected,
-        command_rejected(),
-        db=db,
-        correlation_id="correlation-1",
-    )
-
-    assert db.reopen_calls == [("plan-1", "workspace-1", "action-1")]
-    assert len(emitted) == 1
-    assert isinstance(emitted[0], RcaFollowupRequiredBody)
-    assert emitted[0].reason_code == "namespace_not_allowed"
-    assert emitted[0].next_actions[0]["action_type"] == "review_recovery_action"
-
-
-def test_unrelated_command_rejection_does_not_change_recovery_selection() -> None:
-    db = RetryDb(recovery_plan=None)
-
-    emitted = run_handler(
-        feedback_worker.on_recovery_command_rejected,
-        command_rejected(),
-        db=db,
-        correlation_id="correlation-1",
-    )
-
-    assert emitted == []
-    assert db.reopen_calls == []
 
 
 def test_retryable_action_required_reopens_only_the_selected_action() -> None:

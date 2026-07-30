@@ -10,7 +10,6 @@ from sqlalchemy import and_, delete, exists, func, or_, select, tuple_, update
 from sqlalchemy.engine import Connection
 from sqlalchemy.sql.schema import Table
 
-from domains.ai.models import AiLlmInvocationMetric
 from domains.command.models import (
     AgentCommand,
     AgentCommandAttempt,
@@ -358,7 +357,6 @@ class DemoRetentionRepository(DatabaseConnection):
             ),
         )
         for table, column in (
-            (AiLlmInvocationMetric.__table__, AiLlmInvocationMetric.__table__.c.created_at),
             (WorkloadChange.__table__, WorkloadChange.__table__.c.changed_at),
             (TargetReconcileRecord.__table__, TargetReconcileRecord.__table__.c.updated_at),
         ):

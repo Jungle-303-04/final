@@ -8,10 +8,10 @@ import math
 import secrets
 import uuid
 from dataclasses import replace
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Any, Protocol, cast
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from domains.gitops.events import GitWebhookReceivedBody
 from domains.identity.dependencies import (
@@ -36,21 +36,7 @@ from domains.rca.recovery_verification import (
     standard_sli_series_identity,
     verification_deadline,
 )
-from domains.rca.test_runtime import (
-    RCA_TEST_FIXTURE_RESOURCE_KIND,
-    build_rca_test_cleanup_plan,
-    build_rca_test_inject_plan,
-    rca_test_command_fixture_target,
-    rca_test_run_identity,
-    rca_test_scenario_fixture_target,
-    synthesize_rca_test_run_status,
-)
-from domains.rca.test_scenarios import test_scenario_by_id, test_scenario_catalog_body
-from domains.target.management_guard import is_management_registration
 from packages.ai.rule_catalog import validate_catalog_yaml
-from packages.config.constants import Command, CommandStatus
-from packages.config.environments import normalize_environment
-from packages.config.security import RCA_TEST_TARGET_ENVIRONMENTS, rca_test_runs_enabled
 from packages.config.settings import env
 from packages.contracts.auth import Actor
 from packages.contracts.gateway import routes as gateway_routes
@@ -59,7 +45,6 @@ from packages.contracts.gateway.requests import (
     AlertmanagerAlert,
     AlertmanagerWebhookRequest,
     RcaRuleValidateRequest,
-    RcaTestRunCreateRequest,
     RecoveryActionSelectByCorrelationRequest,
     RecoveryActionSelectRequest,
     RecoveryRetryRequest,
@@ -70,8 +55,6 @@ from packages.contracts.gateway.responses import (
     RcaRuleCatalogItem,
     RcaRuleCatalogResponse,
     RcaRuleValidateResponse,
-    RcaTestRunResponse,
-    RcaTestScenarioListResponse,
     RecoveryActionCandidateItem,
     RecoveryPlanStatusResponse,
     ValidationErrorItem,
@@ -83,7 +66,7 @@ from packages.contracts.gitops import (
     DEFAULT_WORKFLOW_RUN_ID,
     ApprovalStatus,
 )
-from packages.contracts.identity import DEFAULT_WORKSPACE_ID, Permission, ResourceRole, ServiceRole
+from packages.contracts.identity import DEFAULT_WORKSPACE_ID, Permission, ResourceRole
 from packages.events.envelope import event
 from packages.runtime.dependencies import get_db, get_events
 from packages.storage.engine import unit_of_work_or_null
@@ -102,17 +85,6 @@ RECOVERY_RETRY_IDENTITY_INVALID = "recovery retry identity is invalid"
 HTTP_NOT_FOUND = 404
 HTTP_CONFLICT = 409
 HTTP_UNAUTHORIZED = 401
-RCA_TEST_RUNS_TOKEN_ENV = "RCA_TEST_RUNS_TOKEN"
-RCA_TEST_RUNS_TOKEN_HEADER = "x-rca-test-token"
-RCA_TEST_VERIFICATION_HEADER = "x-rca-test-verification"
-RCA_TEST_API_NOT_FOUND = "RCA test API is disabled"
-RCA_TEST_TOKEN_INVALID = "invalid RCA test token"
-RCA_TEST_SCENARIO_NOT_FOUND = "RCA test scenario not found"
-RCA_TEST_SCENARIO_UNAVAILABLE = "RCA test scenario is not ready"
-RCA_TEST_MANAGEMENT_CLUSTER_DENIED = "RCA test runs cannot target a management cluster"
-RCA_TEST_TARGET_NOT_FOUND = "RCA test target cluster is not registered"
-RCA_TEST_TARGET_ENVIRONMENT_DENIED = "RCA test runs require a test or aws-test target"
-RCA_TEST_RUN_CONFLICT = "RCA test target already has an active run"
 SAFE_PR_ROUTES = frozenset({"draft_pr", "safe_pr"})
 PREFLIGHT_REQUIRED_ROUTES = SAFE_PR_ROUTES | {"auto"}
 RECOVERY_STATUS_DEPLOY_PENDING = "deploy_pending"
@@ -156,366 +128,6 @@ def get_rca_rule_profiles(request: Request) -> tuple[RcaRuleProfileView, ...]:
 def get_recovery_action_preflight(request: Request) -> RecoveryActionPreflightPort | None:
     configured = getattr(request.app.state, "recovery_action_preflight", None)
     return configured
-
-
-def require_rca_test_api(
-    supplied: str = Header(
-        default="",
-        alias=RCA_TEST_RUNS_TOKEN_HEADER,
-        description="RCA 테스트 실행 전용 토큰",
-    ),
-) -> None:
-    """Fail closed: test 환경, 명시 플래그, 별도 secret이 모두 있어야 노출한다."""
-    if not rca_test_runs_enabled():
-        raise HTTPException(status_code=HTTP_NOT_FOUND, detail=RCA_TEST_API_NOT_FOUND)
-    configured = env(RCA_TEST_RUNS_TOKEN_ENV, "").strip()
-    normalized = supplied.strip()
-    if not configured or not normalized or not secrets.compare_digest(normalized, configured):
-        raise HTTPException(status_code=HTTP_UNAUTHORIZED, detail=RCA_TEST_TOKEN_INVALID)
-
-
-@router.get(
-    gateway_routes.RCA_TEST_SCENARIOS_PATH,
-    response_model=RcaTestScenarioListResponse,
-)
-async def list_test_scenarios(
-    _current: Any = Depends(require_session),
-    _test_api: None = Depends(require_rca_test_api),
-) -> RcaTestScenarioListResponse:
-    return RcaTestScenarioListResponse(items=test_scenario_catalog_body())
-
-
-@router.post(
-    gateway_routes.RCA_TEST_RUNS_PATH,
-    response_model=RcaTestRunResponse,
-    status_code=202,
-)
-async def create_test_run(
-    payload: RcaTestRunCreateRequest,
-    verification_header: str = Header(
-        default="",
-        alias=RCA_TEST_VERIFICATION_HEADER,
-        description="미검증 RCA 시나리오의 관리자 전용 live 검증 실행",
-    ),
-    current: Any = Depends(require_session),
-    db: Any = Depends(get_db),
-    _test_api: None = Depends(require_rca_test_api),
-) -> RcaTestRunResponse:
-    scenario = test_scenario_by_id(payload.scenario_id)
-    if scenario is None:
-        raise HTTPException(status_code=HTTP_NOT_FOUND, detail=RCA_TEST_SCENARIO_NOT_FOUND)
-    verification_requested = verification_header.strip().casefold() in {"1", "true"}
-    verification_mode = scenario.availability == "verification_pending"
-    if verification_mode and not verification_requested:
-        raise HTTPException(
-            status_code=HTTP_CONFLICT,
-            detail={
-                "message": RCA_TEST_SCENARIO_UNAVAILABLE,
-                "availability": scenario.availability,
-                "reason": scenario.availability_reason,
-            },
-        )
-    if verification_mode and ServiceRole.SERVICE_ADMIN.value not in current.roles:
-        raise HTTPException(status_code=403, detail="service admin role required")
-    if scenario.availability not in {"ready", "verification_pending"}:
-        raise HTTPException(
-            status_code=HTTP_CONFLICT,
-            detail={
-                "message": RCA_TEST_SCENARIO_UNAVAILABLE,
-                "availability": scenario.availability,
-                "reason": scenario.availability_reason,
-            },
-        )
-
-    workspace_id = current.workspace_id
-    require_cluster_access(
-        db,
-        current,
-        workspace_id,
-        payload.cluster_id,
-        Permission.DEPLOY_RUN.value,
-        detail=RECOVERY_SELECTION_ACCESS_DENIED,
-    )
-    registration_getter = getattr(db, "get_cluster_registration", None)
-    registration = (
-        registration_getter(workspace_id, payload.cluster_id)
-        if callable(registration_getter)
-        else None
-    )
-    if registration is None:
-        raise HTTPException(status_code=HTTP_NOT_FOUND, detail=RCA_TEST_TARGET_NOT_FOUND)
-    if is_management_registration(registration):
-        raise HTTPException(status_code=400, detail=RCA_TEST_MANAGEMENT_CLUSTER_DENIED)
-    registration_environment = normalize_environment(str(registration.get("environment") or ""))
-    if registration_environment not in RCA_TEST_TARGET_ENVIRONMENTS:
-        raise HTTPException(status_code=HTTP_CONFLICT, detail=RCA_TEST_TARGET_ENVIRONMENT_DENIED)
-
-    run_id = str(uuid.uuid4())
-    identity = rca_test_run_identity(run_id)
-    fixture_target = rca_test_scenario_fixture_target(scenario)
-    cleanup_at = (datetime.now(UTC) + timedelta(seconds=scenario.safety.ttl_seconds)).isoformat()
-    plan = build_rca_test_inject_plan(
-        run_id=run_id,
-        scenario_id=scenario.scenario_id,
-        scenario_version=scenario.version,
-        namespace=fixture_target.namespace,
-        resource_name=fixture_target.resource_name,
-        workspace_id=workspace_id,
-        cluster_id=payload.cluster_id,
-        requested_by=current.user_id,
-        expected_root_cause=scenario.expected.root_cause,
-        expected_symptom=scenario.expected.symptom,
-        expires_at=cleanup_at,
-        cleanup_adapter=scenario.cleanup.adapter,
-        verification_mode=verification_mode,
-    )
-    reserved = await db_call(
-        db.queue_rca_test_command_if_available,
-        identity.correlation_id,
-        plan,
-        CommandStatus.QUEUED,
-        resource_kind=RCA_TEST_FIXTURE_RESOURCE_KIND,
-        namespace=fixture_target.namespace,
-        resource_name=fixture_target.resource_name,
-        max_concurrent_runs=scenario.safety.max_concurrent_runs,
-        ttl_seconds=scenario.safety.ttl_seconds,
-    )
-    if not reserved:
-        raise HTTPException(
-            status_code=HTTP_CONFLICT,
-            detail={
-                "code": "rca_test_run_conflict",
-                "message": RCA_TEST_RUN_CONFLICT,
-                "cluster_id": payload.cluster_id,
-                "scenario_id": scenario.scenario_id,
-                "resource_name": fixture_target.resource_name,
-            },
-        )
-    return RcaTestRunResponse(
-        run_id=run_id,
-        scenario_id=scenario.scenario_id,
-        scenario_version=scenario.version,
-        cluster_id=payload.cluster_id,
-        correlation_id=identity.correlation_id,
-        command_id=identity.inject_command_id,
-        evidence_key=(
-            f"{workspace_id}:{payload.cluster_id}:"
-            f"{identity.evidence_source_id}:{identity.evidence_window_start}"
-        ),
-        status="queued",
-        cleanup_at=cleanup_at,
-        verification_mode=verification_mode,
-        steps=[
-            {"step": "fault_injection", "status": "queued"},
-            {"step": "fault_observation", "status": "waiting"},
-            {"step": "evidence_collection", "status": "waiting"},
-            {"step": "root_cause_analysis", "status": "waiting"},
-            {"step": "recovery_plan", "status": "waiting"},
-            {"step": "action_selection", "status": "waiting"},
-            {"step": "cleanup", "status": "scheduled"},
-        ],
-    )
-
-
-def parse_rca_test_run_id(run_id: str) -> str:
-    try:
-        return str(uuid.UUID(run_id))
-    except ValueError as exc:
-        raise HTTPException(status_code=HTTP_NOT_FOUND, detail="RCA test run not found") from exc
-
-
-async def rca_test_run_records(
-    *,
-    run_id: str,
-    current: Any,
-    db: Any,
-) -> tuple[dict[str, Any], Any, str, list[dict[str, Any]], Any, Any, Any, Any, Any]:
-    normalized_run_id = parse_rca_test_run_id(run_id)
-    identity = rca_test_run_identity(normalized_run_id)
-    inject_command = await db.get_agent_command(identity.inject_command_id, current.workspace_id)
-    if (
-        inject_command is None
-        or inject_command.get("action") != Command.RCA_TEST_SCENARIO_INJECT_ACTION
-    ):
-        raise HTTPException(status_code=HTTP_NOT_FOUND, detail="RCA test run not found")
-    cluster_id = str(inject_command["cluster_id"])
-    require_cluster_access(
-        db,
-        current,
-        current.workspace_id,
-        cluster_id,
-        Permission.EVIDENCE_READ.value,
-        detail=RECOVERY_SELECTION_ACCESS_DENIED,
-    )
-    evidence_key = (
-        f"{current.workspace_id}:{cluster_id}:"
-        f"{identity.evidence_source_id}:{identity.evidence_window_start}"
-    )
-    evidence_jobs = await db_call(
-        db.list_evidence_jobs_for_window,
-        evidence_key,
-        current.workspace_id,
-    )
-    evidence_window = await db_call(db.get_evidence_window, evidence_key)
-    reports = await db_call(
-        db.list_rca_report_records,
-        current.workspace_id,
-        correlation_id=identity.correlation_id,
-        limit=1,
-    )
-    recovery_plan = await db_call(
-        db.get_recovery_plan_by_correlation,
-        identity.correlation_id,
-        current.workspace_id,
-    )
-    analysis_outcome_getter = getattr(db, "get_rca_test_analysis_outcome", None)
-    analysis_outcome = (
-        await db_call(
-            analysis_outcome_getter,
-            identity.correlation_id,
-            current.workspace_id,
-        )
-        if callable(analysis_outcome_getter)
-        else None
-    )
-    cleanup_command = await db.get_agent_command(identity.cleanup_command_id, current.workspace_id)
-    return (
-        inject_command,
-        identity,
-        evidence_key,
-        evidence_jobs,
-        evidence_window,
-        reports[0] if reports else None,
-        recovery_plan,
-        analysis_outcome,
-        cleanup_command,
-    )
-
-
-@router.get(
-    gateway_routes.RCA_TEST_RUN_PATH,
-    response_model=RcaTestRunResponse,
-)
-async def get_test_run(
-    run_id: str,
-    current: Any = Depends(require_session),
-    db: Any = Depends(get_db),
-    _test_api: None = Depends(require_rca_test_api),
-) -> RcaTestRunResponse:
-    (
-        command,
-        identity,
-        evidence_key,
-        evidence_jobs,
-        evidence_window,
-        report,
-        recovery_plan,
-        analysis_outcome,
-        cleanup_command,
-    ) = await rca_test_run_records(run_id=run_id, current=current, db=db)
-    plan = command.get("payload") if isinstance(command.get("payload"), dict) else {}
-    command_payload = plan.get("payload") if isinstance(plan.get("payload"), dict) else {}
-    scenario_id = str(command_payload.get("scenario_id") or "")
-    scenario_version = int(command_payload.get("scenario_version") or 0)
-    status = synthesize_rca_test_run_status(
-        run_id=identity.run_id,
-        inject_command=command,
-        evidence_jobs=evidence_jobs,
-        evidence_window=evidence_window,
-        rca_report=report,
-        recovery_plan=recovery_plan,
-        cleanup_command=cleanup_command,
-        analysis_outcome=analysis_outcome,
-    )
-    return RcaTestRunResponse(
-        run_id=identity.run_id,
-        scenario_id=scenario_id,
-        scenario_version=scenario_version,
-        cluster_id=str(command["cluster_id"]),
-        correlation_id=identity.correlation_id,
-        command_id=identity.inject_command_id,
-        evidence_key=evidence_key,
-        status=str(status["status"]),
-        cleanup_at=str(command_payload.get("expires_at") or plan.get("expires_at") or ""),
-        verification_mode=command_payload.get("verification_mode") is True,
-        failure=status.get("failure"),
-        steps=list(status["steps"]),
-    )
-
-
-@router.delete(
-    gateway_routes.RCA_TEST_RUN_PATH,
-    response_model=RcaTestRunResponse,
-    status_code=202,
-)
-async def cleanup_test_run(
-    run_id: str,
-    current: Any = Depends(require_session),
-    db: Any = Depends(get_db),
-    _test_api: None = Depends(require_rca_test_api),
-) -> RcaTestRunResponse:
-    response = await get_test_run(run_id, current=current, db=db)
-    require_cluster_access(
-        db,
-        current,
-        current.workspace_id,
-        response.cluster_id,
-        Permission.DEPLOY_RUN.value,
-        detail=RECOVERY_SELECTION_ACCESS_DENIED,
-    )
-    inject_command = await db.get_agent_command(response.command_id, current.workspace_id)
-    if inject_command is None:
-        raise HTTPException(status_code=HTTP_NOT_FOUND, detail="RCA test run not found")
-    inject_plan = (
-        inject_command.get("payload") if isinstance(inject_command.get("payload"), dict) else {}
-    )
-    command_payload = (
-        inject_plan.get("payload") if isinstance(inject_plan.get("payload"), dict) else {}
-    )
-    identity = rca_test_run_identity(response.run_id)
-    existing_cleanup = await db.get_agent_command(
-        identity.cleanup_command_id,
-        current.workspace_id,
-    )
-    if existing_cleanup is not None:
-        return response
-    try:
-        fixture_target = rca_test_command_fixture_target(inject_command)
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=HTTP_CONFLICT,
-            detail="RCA test cleanup target is unavailable",
-        ) from exc
-    cleanup_plan = build_rca_test_cleanup_plan(
-        run_id=response.run_id,
-        scenario_id=response.scenario_id,
-        scenario_version=response.scenario_version,
-        namespace=fixture_target.namespace,
-        resource_name=fixture_target.resource_name,
-        cluster_id=response.cluster_id,
-        workspace_id=current.workspace_id,
-        requested_by=current.user_id,
-        cleanup_adapter=str(command_payload.get("cleanup_adapter") or "kubernetes.manifest_delete"),
-    )
-    cleanup_correlation_id = f"corr-rca-test-cleanup-{response.run_id}"
-    cleanup_plan["correlation_id"] = cleanup_correlation_id
-    inserted = await db_call(
-        db.queue_agent_command,
-        cleanup_correlation_id,
-        cleanup_plan,
-        CommandStatus.QUEUED,
-    )
-    if inserted is False:
-        return await get_test_run(run_id, current=current, db=db)
-    return response.model_copy(
-        update={
-            "status": "cleanup_queued",
-            "steps": [
-                *[item for item in response.steps if item.get("step") != "cleanup"],
-                {"step": "cleanup", "status": "queued"},
-            ],
-        }
-    )
 
 
 @router.post(gateway_routes.RCA_RULES_VALIDATE_PATH, response_model=RcaRuleValidateResponse)

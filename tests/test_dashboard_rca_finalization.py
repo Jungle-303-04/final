@@ -39,7 +39,7 @@ def test_rca_report_storage_projection_drops_payload_only_first_seen_at() -> Non
                 "severity": "medium",
                 "first_seen_at": "2026-07-23T20:27:24Z",
                 "resource_kind": "ReplicaSet",
-                "resource_name": "game-room-0-774544b4fb",
+                "resource_name": "checkout-api-0-774544b4fb",
                 "namespace": "sandbox",
             },
             "rca_detail": {
@@ -206,7 +206,7 @@ def test_completed_payload_projects_narrative_copy_for_issue_detail() -> None:
     detail = issue_detail_projection(
         {
             "incident": {"summary": "room-0 authority handoff is stalled"},
-            "root_cause": "handoff_authority_stalled",
+            "root_cause": "wrong_image_tag",
             "action": "approval_required",
             "narrative": {
                 "executive_summary": "커밋된 Candidate 권위가 Ready로 확정되지 않았습니다.",
@@ -230,7 +230,7 @@ def test_completed_payload_projects_narrative_copy_for_issue_detail() -> None:
 def test_resolved_historical_issue_gets_human_situation_summary_at_query_time() -> None:
     payload = {
         "incident": {
-            "summary": "ReplicaSet game-room-0의 readiness 응답이 실패했습니다.",
+            "summary": "ReplicaSet checkout-api-0의 readiness 응답이 실패했습니다.",
         },
         "evaluations": [
             {
@@ -250,7 +250,7 @@ def test_resolved_historical_issue_gets_human_situation_summary_at_query_time() 
         "evidence_bundle_summary",
     }.issubset(columns)
     assert issue_detail_projection(payload)["situation_summary"] == (
-        "ReplicaSet game-room-0의 readiness 응답이 실패했습니다."
+        "ReplicaSet checkout-api-0의 readiness 응답이 실패했습니다."
     )
 
 

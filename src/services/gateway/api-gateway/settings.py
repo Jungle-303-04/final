@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from packages.config.constants import CommandStatus
 from packages.config.settings import env
 from packages.contracts.gateway import limits as gateway_limits
 
@@ -14,24 +13,16 @@ class Settings:
     CONSOLE_ORIGIN_ENV = "CONSOLE_ORIGIN"
     DEFAULT_CONSOLE_ORIGIN = "http://console.management.svc.cluster.local:80"
     FRONTEND_PROXY_TIMEOUT_SECONDS = 10.0
-    REALTIME_ORIGIN_ENV = "REALTIME_ORIGIN"
-    DEFAULT_REALTIME_ORIGIN = "ws://realtime-gateway.management.svc.cluster.local:8000"
-
-    COMMAND_NOT_FOUND_STATUS_CODE = 404
+    NOT_FOUND_STATUS_CODE = 404
     CONFLICT_STATUS_CODE = 409
     GATEWAY_ERROR_STATUS_CODE = 500
     SESSION_STORAGE_UNAVAILABLE_STATUS_CODE = 503
 
-    COMMAND_NOT_FOUND_MESSAGE = "command not found"
     DEAD_LETTER_NOT_FOUND_MESSAGE = "dead letter not found"
     DEAD_LETTER_NOT_OPEN_MESSAGE = "dead letter is not open"
     DEAD_LETTER_REPLAYED_MESSAGE = "dead letter already replayed"
     GATEWAY_ERROR_MESSAGE = "internal server error"
 
-    COMMAND_STATUS_QUEUED = CommandStatus.QUEUED
-    COMMAND_STATUS_LEASED = CommandStatus.LEASED
-    COMMAND_STATUS_RUNNING = CommandStatus.RUNNING
-    EVENT_STREAM_MEDIA_TYPE = "text/event-stream"
     DEFAULT_DEAD_LETTER_LIMIT = gateway_limits.DEAD_LETTER_DEFAULT_LIMIT
     MAX_DEAD_LETTER_LIMIT = gateway_limits.DEAD_LETTER_MAX_LIMIT
     # 브라우저 SPA CORS — 쿠키 인증 요청 허용 origin(콤마 구분). 로컬 개발 origin 기본 포함.

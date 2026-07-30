@@ -60,7 +60,7 @@ def selected_record() -> dict[str, Any]:
                     "route": ActionRoutes().safe_pr,
                     "draft": {
                         "params": {
-                            "root_cause": "lobby_capacity_saturation",
+                            "root_cause": "wrong_image_tag",
                         }
                     },
                 }
@@ -91,7 +91,7 @@ def approved_params() -> dict[str, object]:
             "namespace": "sandbox",
             "resource_kind": "Deployment",
             "resource_name": "api-server",
-            "service": "matchmaking",
+            "service": "checkout",
             "sli": "admission",
             "symptom": "admission_failure",
         },
@@ -100,7 +100,7 @@ def approved_params() -> dict[str, object]:
             "namespace": "sandbox",
             "resource_kind": "Deployment",
             "resource_name": "api-server",
-            "service": "matchmaking",
+            "service": "checkout",
             "sli": "admission",
             "symptom": "admission_failure",
         },
@@ -116,7 +116,7 @@ def approved_params() -> dict[str, object]:
                 "namespace": "sandbox",
                 "resource_kind": "Deployment",
                 "resource_name": "api-server",
-                "service": "matchmaking",
+                "service": "checkout",
                 "sli": "admission",
                 "symptom": "admission_failure",
             },
@@ -130,7 +130,7 @@ def approved_params() -> dict[str, object]:
                 "name": "api-server",
             },
         },
-        "root_cause": "lobby_capacity_saturation",
+        "root_cause": "wrong_image_tag",
         "verification_contract": "protected_workload_continuity",
         "protected_baseline": [
             {
@@ -278,7 +278,7 @@ class SafePrDb:
                     "namespace": "sandbox",
                     "resource_kind": "Deployment",
                     "resource_name": "api-server",
-                    "service": "matchmaking",
+                    "service": "checkout",
                     "sli": "admission",
                     "symptom": "admission_failure",
                 },
@@ -311,7 +311,7 @@ class SafePrDb:
             "namespace": "sandbox",
             "resource_kind": "Deployment",
             "resource_name": "api-server",
-            "service": "matchmaking",
+            "service": "checkout",
             "sli": "admission",
             "symptom": "admission_failure",
         }
@@ -446,7 +446,7 @@ def test_real_draft_pr_route_enters_pr_open_with_immutable_identity() -> None:
             "namespace": "sandbox",
             "resource_kind": "Deployment",
             "resource_name": "api-server",
-            "service": "matchmaking",
+            "service": "checkout",
             "sli": "admission",
             "symptom": "admission_failure",
         },
@@ -454,7 +454,7 @@ def test_real_draft_pr_route_enters_pr_open_with_immutable_identity() -> None:
             "namespace": "sandbox",
             "resource_kind": "Deployment",
             "resource_name": "api-server",
-            "service": "matchmaking",
+            "service": "checkout",
             "sli": "admission",
             "symptom": "admission_failure",
         },

@@ -6,7 +6,6 @@ from enum import StrEnum
 
 class TargetComponent(StrEnum):
     CLUSTER_AGENT = "cluster-agent"
-    NODE_COLLECTOR = "node-collector"
 
 
 class TargetDesiredStateStatus(StrEnum):
@@ -22,9 +21,6 @@ class TargetReconcileStatus(StrEnum):
 
 TARGET_NAMESPACE = "target"
 SANDBOX_NAMESPACE = "sandbox"
-NODE_COLLECTOR_SERVICE_ACCOUNT_NAME = "cluster-agent-node-collector"
-NODE_COLLECTOR_READ_CLUSTER_ROLE_NAME = "cluster-agent-node-collector-read"
-NODE_COLLECTOR_READ_CLUSTER_ROLE_BINDING_NAME = NODE_COLLECTOR_READ_CLUSTER_ROLE_NAME
 CONTROL_PRIORITY_CLASS_NAME = "gitops-control-critical"
 FAST_LANE_PRIORITY_CLASS_NAME = "gitops-fast-lane"
 FAST_LANE_NODE_LABEL_KEY = "workload-tier"
@@ -33,7 +29,6 @@ TARGET_RBAC_MANIFEST_VERSION = "2026-07-18.2"
 TARGET_RBAC_VERSION_ANNOTATION = "opsia.dev/target-rbac-version"
 TARGET_RUNTIME_CONFIG_NAME = "target-runtime-config"
 TARGET_AGENT_IMAGE_KEY = "TARGET_AGENT_IMAGE"
-NODE_COLLECTOR_IMAGE_KEY = "NODE_COLLECTOR_IMAGE"
 TARGET_OTEL_TRACES_ENDPOINT = "http://opentelemetry-collector.target.svc:4318/v1/traces"
 TARGET_RUNTIME_IMAGE_ANNOTATION = "opsia.dev/runtime-image"
 TARGET_IMAGE_DIGEST_PATTERN = re.compile(r"^[A-Za-z0-9._:/-]+@sha256:[0-9a-f]{64}$")

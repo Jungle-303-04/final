@@ -6,11 +6,7 @@ from dataclasses import dataclass
 import httpx
 from providers import (
     KubernetesSnapshotProvider,
-    LokiLogsProvider,
-    MetadataProvider,
-    PrometheusMetricsProvider,
     TelemetryProvider,
-    TempoTracesProvider,
 )
 from providers.base import ProviderResult
 from queries import (
@@ -39,11 +35,7 @@ NO_QUERIES_CONFIGURED_REASON = "no_queries_configured"
 __all__ = [
     "EvidenceCollector",
     "KubernetesSnapshotProvider",
-    "LokiLogsProvider",
-    "MetadataProvider",
-    "PrometheusMetricsProvider",
     "TelemetryProvider",
-    "TempoTracesProvider",
 ]
 
 

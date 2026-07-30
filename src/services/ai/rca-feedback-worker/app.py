@@ -7,7 +7,6 @@ import re
 from collections.abc import AsyncIterator, Mapping
 from dataclasses import replace
 
-from domains.command.events import CommandRejectedBody
 from domains.gitops.events import WorkflowRunCompletedBody, WorkflowRunFailedBody
 from domains.rca.events import (
     ClusterEvidenceReceivedBody,
@@ -336,26 +335,18 @@ async def on_recovery_safe_pr_created(
         ctx.correlation_id,
         "rca_bundle",
     )
-    original_evidence = (
-        original_evidence if isinstance(original_evidence, dict) else {}
+    original_evidence = original_evidence if isinstance(original_evidence, dict) else {}
+    collected_failure_ratio, collected_failure_ratio_identity = metric_sample_with_identity(
+        original_evidence,
+        "opsia_sli_failure_ratio",
+        target,
     )
-    collected_failure_ratio, collected_failure_ratio_identity = (
-        metric_sample_with_identity(
-            original_evidence,
-            "opsia_sli_failure_ratio",
-            target,
-        )
+    collected_request_rate, collected_request_rate_identity = metric_sample_with_identity(
+        original_evidence,
+        "opsia_sli_request_rate",
+        target,
     )
-    collected_request_rate, collected_request_rate_identity = (
-        metric_sample_with_identity(
-            original_evidence,
-            "opsia_sli_request_rate",
-            target,
-        )
-    )
-    failure_ratio_before = finite_float(
-        params.get("verification_failure_ratio_before")
-    )
+    failure_ratio_before = finite_float(params.get("verification_failure_ratio_before"))
     if failure_ratio_before is None:
         failure_ratio_before = collected_failure_ratio
     approved_failure_ratio_identity = mapping(
@@ -366,9 +357,7 @@ async def on_recovery_safe_pr_created(
         if approved_failure_ratio_identity
         else collected_failure_ratio_identity
     )
-    request_rate_baseline = finite_float(
-        params.get("verification_request_rate_baseline")
-    )
+    request_rate_baseline = finite_float(params.get("verification_request_rate_baseline"))
     if request_rate_baseline is None:
         request_rate_baseline = collected_request_rate
     approved_request_rate_identity = mapping(
@@ -397,16 +386,13 @@ async def on_recovery_safe_pr_created(
         else []
     )
     requires_protected_continuity = (
-        text_value(params.get("verification_contract"))
-        == "protected_workload_continuity"
+        text_value(params.get("verification_contract")) == "protected_workload_continuity"
     )
     # Preflight blockers are advisory. Re-evaluate from the latest persisted
     # evidence when the PR is created so a newly collected baseline can unlock
     # the lifecycle instead of leaving a stale blocker attached forever.
     missing_prerequisites: list[str] = []
-    if requires_protected_continuity and (
-        not protected_baseline or not protected_session_baseline
-    ):
+    if requires_protected_continuity and (not protected_baseline or not protected_session_baseline):
         missing_prerequisites.extend(
             [
                 "metadata:current_workload_snapshots",
@@ -454,9 +440,7 @@ async def on_recovery_safe_pr_created(
     )
     minimum_seconds, maximum_seconds = verification_window_seconds()
     expected_replicas = nonnegative_int(params.get("expected_replicas"))
-    evidence_cadence_seconds = nonnegative_int(
-        params.get("verification_evidence_cadence_seconds")
-    )
+    evidence_cadence_seconds = nonnegative_int(params.get("verification_evidence_cadence_seconds"))
     if evidence_cadence_seconds is None:
         registration = await ctx.db.get_cluster_registration(
             evt.workspace_id,
@@ -531,11 +515,7 @@ async def on_recovery_safe_pr_created(
             "protected_baseline": protected_baseline,
             "protected_session_baseline": protected_session_baseline,
             "target": target,
-            "status": (
-                "merge_blocked"
-                if missing_prerequisites
-                else "waiting_for_merge"
-            ),
+            "status": ("merge_blocked" if missing_prerequisites else "waiting_for_merge"),
             "blockers": missing_prerequisites,
         },
         "authorization": {
@@ -631,8 +611,7 @@ async def start_recovery_verification(
         or text_value(merge.get("workflow_run_id")) != workflow_run_id
         or text_value(merge.get("binding_id")) != binding_id
         or text_value(merge.get("application_id")) != application_id
-        or text_value(merge.get("merge_commit_sha"))
-        != text_value(workflow.get("commit_sha"))
+        or text_value(merge.get("merge_commit_sha")) != text_value(workflow.get("commit_sha"))
         or text_value(merge.get("cluster_id")) != text_value(workflow.get("cluster_id"))
         or text_value(workflow.get("workspace_id")) != workspace_id
         or text_value(workflow.get("binding_id")) != binding_id
@@ -642,9 +621,7 @@ async def start_recovery_verification(
         return None
     now = normalized_utc(await ctx.db.current_database_time())
     verification = dict(mapping(lifecycle.get("verification")))
-    maximum_seconds = int(
-        verification.get("maximum_seconds") or DEFAULT_MAXIMUM_SECONDS
-    )
+    maximum_seconds = int(verification.get("maximum_seconds") or DEFAULT_MAXIMUM_SECONDS)
     verification.update(
         {
             "status": RECOVERY_STATUS_VERIFICATION_PENDING,
@@ -814,9 +791,7 @@ async def on_recovery_verification_evidence(
         current_session_samples = decision.after.get("protected_active_sessions")
         if isinstance(current_session_samples, list):
             verification["last_session_samples"] = [
-                dict(item)
-                for item in current_session_samples
-                if isinstance(item, Mapping)
+                dict(item) for item in current_session_samples if isinstance(item, Mapping)
             ]
         lifecycle["verification"] = verification
         target_status = (
@@ -959,24 +934,16 @@ def selected_recovery_target(
     params = mapping(draft.get("params"))
     return {
         "cluster_id": text_value(
-            params.get("cluster_id")
-            or draft.get("cluster_id")
-            or target.get("cluster_id")
+            params.get("cluster_id") or draft.get("cluster_id") or target.get("cluster_id")
         ),
         "namespace": text_value(
-            params.get("namespace")
-            or draft.get("namespace")
-            or target.get("namespace")
+            params.get("namespace") or draft.get("namespace") or target.get("namespace")
         ),
         "resource_kind": text_value(
-            params.get("resource_kind")
-            or draft.get("resource_kind")
-            or target.get("resource_kind")
+            params.get("resource_kind") or draft.get("resource_kind") or target.get("resource_kind")
         ),
         "resource_name": text_value(
-            params.get("resource_name")
-            or draft.get("resource_name")
-            or target.get("resource_name")
+            params.get("resource_name") or draft.get("resource_name") or target.get("resource_name")
         ),
     }
 
@@ -1114,54 +1081,6 @@ async def on_recovery_safe_pr_failed(
             "source_event": evt.__subject__,
             "agent_safe": True,
             "retryable": True,
-        },
-    )
-
-
-@app.on(CommandRejectedBody)
-async def on_recovery_command_rejected(
-    evt: CommandRejectedBody,
-    ctx: EventContext[RecoveryPlanStore],
-) -> AsyncIterator[EventBody]:
-    workspace_id = text_value(evt.requested.get("workspace_id"))
-    if not workspace_id:
-        return
-    record = await ctx.db.get_recovery_plan_by_correlation(
-        ctx.correlation_id,
-        workspace_id,
-    )
-    if not isinstance(record, dict) or record.get("status") != RECOVERY_STATUS_SELECTED:
-        return
-    plan_id = text_value(record.get("plan_id"))
-    action_id = text_value(record.get("selected_action_id"))
-    if not plan_id or not action_id:
-        return
-    reopened = await ctx.db.reopen_recovery_plan_action(
-        plan_id,
-        workspace_id,
-        action_id,
-    )
-    if not reopened:
-        return
-    reason_code = text_value(evt.reason_code) or "command_rejected"
-    yield RcaFollowupRequiredBody(
-        reason_code=reason_code,
-        summary=evt.reason,
-        evidence_ref=text_value(record.get("evidence_ref")) or "unknown",
-        workspace_id=workspace_id,
-        severity=SEVERITY_WARNING,
-        next_actions=[
-            {
-                "action_type": "review_recovery_action",
-                "description": "거부 원인을 확인한 뒤 같은 조치를 다시 검토하거나 다른 복구 후보를 선택합니다.",
-            }
-        ],
-        diagnostics={
-            "plan_id": plan_id,
-            "action_id": action_id,
-            "source_event": evt.__subject__,
-            "agent_safe": True,
-            "retryable": False,
         },
     )
 

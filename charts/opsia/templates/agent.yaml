@@ -35,8 +35,6 @@ spec:
           env:
             - name: MANAGEMENT_BASE_URL
               value: http://{{ include "opsia.fullname" . }}.{{ .Release.Namespace }}.svc/api
-            - name: REALTIME_GATEWAY_URL
-              value: {{ default (printf "ws://%s.%s.svc" (include "opsia.fullname" .) .Release.Namespace) .Values.agent.realtimeGatewayUrl | trimSuffix "/" | quote }}
             - name: AGENT_TOKEN
               valueFrom:
                 secretKeyRef:
@@ -46,13 +44,5 @@ spec:
               value: {{ .Values.agent.clusterId | quote }}
             - name: WORKSPACE_ID
               value: default
-            - name: AGENT_ACCESS_MODE
-              value: read_only
-            - name: AGENT_DIRECT_COMMANDS_ENABLED
-              value: "false"
-            - name: RECONCILER_MODE
-              value: argocd
-            - name: NODE_COLLECTOR_ENABLED
-              value: "false"
           resources:
             {{- toYaml .Values.agent.resources | nindent 12 }}

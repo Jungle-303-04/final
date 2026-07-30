@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from packages.security.vault import (
-    AwsSecretsManagerSecretVault,
     EnvSecretVault,
     EnvTokenVault,
     KubernetesSecretVault,
@@ -13,7 +12,6 @@ from packages.security.vault import (
 )
 
 __all__ = [
-    "AwsSecretsManagerSecretVault",
     "EnvSecretVault",
     "EnvTokenVault",
     "KubernetesSecretVault",

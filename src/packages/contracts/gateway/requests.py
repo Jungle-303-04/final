@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
-from typing import Annotated, Any, Literal
+from typing import Any, Literal
 
 from pydantic import ConfigDict, Field, SecretStr, field_validator, model_validator
 
-from packages.config.constants import Command, CommandStatus, Sandbox, Target
+from packages.config.constants import CommandStatus, Sandbox, Target
 from packages.contracts.demo_seed import (
     DEMO_SEED_MARKER_KEY,
     DEMO_SEED_MARKER_RESERVED_MESSAGE,
@@ -30,7 +29,6 @@ from packages.contracts.kubernetes_discovery import (
     is_kubernetes_dns_label,
 )
 from packages.contracts.parity import ResourceRef
-from packages.contracts.resource_files import ResourceFileResult
 from packages.contracts.target import FAST_LANE_PRIORITY_CLASS_NAME
 
 DEFAULT_WEBHOOK_REPLICAS = 2
@@ -102,22 +100,6 @@ class LoginRequest(StrictModel):
         pattern=r"^[^@\s]+(?:@[^@\s]+\.[^@\s]+)?$",
     )
     password: str = Field(min_length=8)
-
-
-class SignupRequest(StrictModel):
-    # 가입도 권한 필드 입력 금지. 최초 role/session 정책은 서버 결정
-    email: str = Field(min_length=1, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
-    password: str = Field(min_length=8)
-    password_confirm: str = Field(min_length=8)
-
-
-class ResendEmailVerificationRequest(StrictModel):
-    email: str = Field(min_length=1, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
-    password: str = Field(min_length=8)
-
-
-class EmailCheckRequest(StrictModel):
-    email: str = Field(min_length=1, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 class WorkspaceSwitchRequest(StrictModel):
@@ -300,13 +282,6 @@ class RecoveryRetryRequest(StrictModel):
     reason: str | None = Field(default=None, max_length=500)
 
 
-class RcaTestRunCreateRequest(StrictModel):
-    """등록된 RCA 장애 시나리오 실행 요청 — manifest/evidence는 서버 카탈로그 소유."""
-
-    cluster_id: str = Field(min_length=1, max_length=253)
-    scenario_id: str = Field(min_length=1, max_length=120)
-
-
 class InventoryResource(StrictModel):
     resource_type: str = Field(min_length=1, max_length=80)
     api_version: str = Field(default="", max_length=MAX_KUBERNETES_API_VERSION_LENGTH)
@@ -378,7 +353,6 @@ class TargetRegisterRequest(TargetProviderSelectionRequest):
     # 제어(쓰기) 허용 네임스페이스 CSV — 빈 값이면 agent 기본(sandbox)만 허용.
     # 설치 manifest ConfigMap 의 CONTROL_ALLOWED_NAMESPACES 로 주입되어 클러스터별로 다르게 줄 수 있다.
     control_namespaces: str = Field(default="", max_length=2_047)
-    install_node_collector: bool = True
     install_sample_workload: bool = False
     sample_workload_name: str | None = Field(
         default=None,
@@ -405,121 +379,10 @@ class TargetRegisterRequest(TargetProviderSelectionRequest):
         return self
 
 
-class ClusterConnectRequest(StrictModel):
-    name: str = Field(min_length=1, max_length=120, pattern=r"\S")
-    # The lightweight connect flow only needs the user-facing name.  Provider
-    # selection is retained as a backwards-compatible hint for older clients.
-    provider: Literal["aws", "gcp", "azure", "onprem"] = "aws"
-    environment: Literal["development", "staging", "production"] = "development"
-
-
 class TargetPreflightRequest(TargetProviderSelectionRequest):
     cluster_id: str = Field(default="", max_length=253)
     name: str | None = Field(default=None, max_length=120)
     environment: str | None = Field(default=None, max_length=80)
-
-
-class CommandRequest(StrictModel):
-    cluster_id: str = Target.DEFAULT_CLUSTER_ID
-    action: str = Command.DEFAULT_ACTION
-    namespace: str = Sandbox.NAMESPACE
-    reason: str | None = None
-    diff: dict[str, Any] | None = None
-    approval_ref: str | None = None
-    policy_decision_ref: str | None = None
-    # 사용자가 대상·영향을 확인했다는 입력. 서버만 이 값을 direct execution
-    # 정책으로 승격한다. 아래 legacy 플래그는 실행 권한을 부여하지 않는다.
-    confirmation: Literal[True] | None = None
-    direct_execution: bool = False
-    direct_execution_confirmed: bool = False
-
-
-class DeploymentScaleRequest(StrictModel):
-    replicas: int = Field(ge=0, le=MAX_DEPLOYMENT_REPLICAS)
-    reason: str | None = Field(default=None, max_length=500)
-    approval_ref: str | None = None
-    policy_decision_ref: str | None = None
-    confirmation: Literal[True] | None = None
-    direct_execution: bool = False
-    direct_execution_confirmed: bool = False
-
-
-class DeploymentRestartRequest(StrictModel):
-    reason: str | None = Field(default=None, max_length=500)
-    approval_ref: str | None = None
-    policy_decision_ref: str | None = None
-    confirmation: Literal[True] | None = None
-    direct_execution: bool = False
-    direct_execution_confirmed: bool = False
-
-
-class ConfirmedResourceActionRequest(StrictModel):
-    """One server-discovered resource action acknowledged by the operator."""
-
-    reason: str | None = Field(default=None, max_length=500)
-    confirmation: Literal[True] | None = None
-    direct_execution: bool = False
-    direct_execution_confirmed: bool = False
-
-
-class ExactResourceActionRequest(ConfirmedResourceActionRequest):
-    """Capability-bound mutation against one exact inventory observation."""
-
-    resource_id: str = Field(min_length=1, max_length=255)
-    snapshot_id: str = Field(min_length=1, max_length=255)
-    capability_revision: str = Field(pattern=r"^[0-9a-f]{64}$")
-    resource: ResourceRef
-
-
-class NodeDrainRequest(ExactResourceActionRequest):
-    timeout_seconds: int = Field(default=60, ge=10, le=600)
-    max_parallel: int = Field(default=8, ge=1, le=32)
-    max_pods: int = Field(default=1000, ge=1, le=5000)
-    force: bool = False
-    delete_empty_dir_data: bool = False
-
-
-class PodDebugRequest(ExactResourceActionRequest):
-    target_container: str = Field(min_length=1, max_length=253)
-    image: str = Field(
-        min_length=1,
-        max_length=1024,
-        pattern=r"^\S+@sha256:[0-9a-f]{64}$",
-    )
-
-
-class NodeDebugRequest(ExactResourceActionRequest):
-    namespace: str = Field(min_length=1, max_length=253)
-    image: str = Field(
-        min_length=1,
-        max_length=1024,
-        pattern=r"^\S+@sha256:[0-9a-f]{64}$",
-    )
-
-
-class NodeDebugCleanupRequest(ExactResourceActionRequest):
-    namespace: str = Field(min_length=1, max_length=253)
-    session_id: str = Field(min_length=8, max_length=128, pattern=r"^[a-z0-9-]+$")
-
-
-class CronJobControlRequest(ConfirmedResourceActionRequest):
-    """One capability-bound CronJob mutation against an exact observed UID."""
-
-    resource_id: str = Field(min_length=1, max_length=255)
-    snapshot_id: str = Field(min_length=1, max_length=255)
-    capability_revision: str = Field(pattern=r"^[0-9a-f]{64}$")
-    resource: ResourceRef
-
-    @model_validator(mode="after")
-    def validate_cronjob_resource(self) -> CronJobControlRequest:
-        if (
-            self.resource.api_group != "batch"
-            or self.resource.version != "v1"
-            or self.resource.kind.casefold() != "cronjob"
-            or self.resource.namespace is None
-        ):
-            raise ValueError("CronJob control requires an exact batch/v1 ResourceRef")
-        return self
 
 
 class AgentDebugQueryRequest(StrictModel):
@@ -584,60 +447,6 @@ def _ensure_metric_json_bound(value: dict[str, Any]) -> None:
     size = len(json.dumps(value, sort_keys=True, default=str).encode())
     if size > MAX_METRIC_DEFINITION_JSON_BYTES:
         raise ValueError("metric definition JSON exceeds size limit")
-
-
-class AiConversationCreateRequest(StrictModel):
-    message: str = Field(min_length=1, max_length=MAX_AI_MESSAGE_LENGTH)
-    title: str | None = Field(default=None, max_length=120)
-    agent: str = Field(default=DEFAULT_AI_AGENT, min_length=1, max_length=80)
-    context: dict[str, Any] = Field(default_factory=dict)
-
-
-class AiMessageCreateRequest(StrictModel):
-    message: str = Field(min_length=1, max_length=MAX_AI_MESSAGE_LENGTH)
-    agent: str | None = Field(default=None, min_length=1, max_length=80)
-    context: dict[str, Any] = Field(default_factory=dict)
-
-
-AiAssistantFilterValue = Annotated[str, Field(min_length=1, max_length=512)]
-
-
-class AiAssistantFilters(StrictModel):
-    """Canonical product filters that are safe to bind to AI evidence queries."""
-
-    clusters: list[AiAssistantFilterValue] = Field(default_factory=list, max_length=50)
-    namespaces: list[AiAssistantFilterValue] = Field(default_factory=list, max_length=100)
-    applications: list[AiAssistantFilterValue] = Field(default_factory=list, max_length=100)
-    labels: list[AiAssistantFilterValue] = Field(default_factory=list, max_length=100)
-    resource_types: list[AiAssistantFilterValue] = Field(default_factory=list, max_length=50)
-    health: list[AiAssistantFilterValue] = Field(default_factory=list, max_length=50)
-    query: str = Field(default="", max_length=253)
-
-
-class AiAssistantSelection(StrictModel):
-    type: Literal["resource"]
-    identity: str = Field(min_length=1, max_length=1024)
-
-
-class AiAssistantContext(StrictModel):
-    screen: str = Field(min_length=1, max_length=80)
-    filters: AiAssistantFilters
-    selection: AiAssistantSelection | None = None
-    time: datetime | None = None
-    # Opaque handle for a persisted, server-authorized browser log query. Raw
-    # log text is never accepted in assistant context.
-    log_stream_id: str | None = Field(default=None, min_length=1, max_length=255)
-
-    @model_validator(mode="after")
-    def require_offset_time(self) -> AiAssistantContext:
-        if self.time is not None and self.time.utcoffset() is None:
-            raise ValueError("AI context time must include a UTC offset")
-        return self
-
-
-class AiChatRequest(StrictModel):
-    context: AiAssistantContext
-    message: str = Field(min_length=1, max_length=MAX_AI_MESSAGE_LENGTH)
 
 
 class ApplicationUpsertRequest(StrictModel):
@@ -819,53 +628,6 @@ class ApprovalDecisionRequest(StrictModel):
     reason: str | None = None
 
 
-class CommandStartRequest(StrictModel):
-    cluster_id: str = Target.DEFAULT_CLUSTER_ID
-    workspace_id: str = DEFAULT_WORKSPACE_ID
-    agent_id: str
-    lease_id: str
-    attempt_id: str | None = Field(default=None, min_length=1, max_length=200)
-
-
-class NodeDrainProgressResource(StrictModel):
-    namespace: str = Field(min_length=1, max_length=63)
-    name: str = Field(min_length=1, max_length=253)
-    uid: str = Field(min_length=1, max_length=253)
-    resource_version: str = Field(min_length=1, max_length=253)
-    status: Literal["evicted", "failed", "cancelled"]
-    error_code: str | None = Field(default=None, min_length=1, max_length=200)
-
-
-class NodeDrainProgress(StrictModel):
-    progress_id: str = Field(
-        min_length=1,
-        max_length=200,
-        pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]*$",
-    )
-    phase: Literal["node_drain_evictions"]
-    completed: int = Field(ge=0, le=5_000)
-    total: int = Field(ge=0, le=5_000)
-    resources: list[NodeDrainProgressResource] = Field(min_length=1, max_length=64)
-
-    @model_validator(mode="after")
-    def validate_progress_counts(self) -> NodeDrainProgress:
-        if self.completed > self.total:
-            raise ValueError("node drain completed count cannot exceed total")
-        return self
-
-
-class CommandHeartbeatRequest(CommandStartRequest):
-    attempt_id: str | None = Field(default=None, min_length=1, max_length=200)
-    # Agent only acknowledges a generation it actually observed.  The gateway
-    # never treats a browser request as an agent cancellation acknowledgement.
-    observed_cancel_generation: int | None = Field(default=None, ge=1)
-    progress: NodeDrainProgress | None = None
-
-
-class CommandControlRequest(StrictModel):
-    reason: str | None = Field(default=None, max_length=500)
-
-
 class AlertChannelUpsertRequest(StrictModel):
     """알림 채널 생성/수정 — min_severity 이상의 알림만 이 채널로 발송된다."""
 
@@ -914,29 +676,6 @@ class AlertmanagerWebhookRequest(StrictModel):
     status: str = "firing"
     receiver: str = ""
     alerts: list[AlertmanagerAlert] = Field(default_factory=list)
-
-
-class CommandResultRequest(StrictModel):
-    model_config = ConfigDict(extra="allow")
-
-    status: Literal["completed", "failed", "cancelled"] = DEFAULT_COMMAND_STATUS
-    cluster_id: str = Target.DEFAULT_CLUSTER_ID
-    workspace_id: str = DEFAULT_WORKSPACE_ID
-    agent_id: str
-    lease_id: str
-    attempt_id: str | None = Field(default=None, min_length=1, max_length=200)
-    applied: bool = False
-    message: str = EMPTY_COMMAND_MESSAGE
-    retryable: bool = False
-    resources: list[dict[str, Any]] = Field(default_factory=list)
-    stdout: str = ""
-    stderr: str = ""
-    # cluster.agent.uninstall 전용 완료 증적. 단순 ACK/예약과 구분해 서버가
-    # 실제 allowlist 정리 완료에만 등록 토큰을 폐기한다.
-    cleanup_completed: bool = False
-    cleanup_resources: list[str] = Field(default_factory=list)
-    residual_resources: list[str] = Field(default_factory=list)
-    resource_file: ResourceFileResult | None = None
 
 
 class EvidenceJobScheduleRequest(StrictModel):

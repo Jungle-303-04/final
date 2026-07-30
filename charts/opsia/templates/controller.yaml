@@ -122,8 +122,6 @@ spec:
               value: "0"
             - name: CONSOLE_ORIGIN
               value: http://127.0.0.1:8080
-            - name: REALTIME_ORIGIN
-              value: ws://127.0.0.1:8001
             - name: PUBLIC_MANAGEMENT_BASE_URL
               value: {{ include "opsia.managementBaseUrl" . | trim | quote }}
             - name: OPSIA_ACCESS_MODE
@@ -132,16 +130,6 @@ spec:
               value: {{ include "opsia.externalUrl" . | trim | quote }}
             - name: TARGET_AGENT_IMAGE
               value: {{ include "opsia.image" . | quote }}
-            - name: AGENT_ACCESS_MODE
-              value: read_only
-            - name: AGENT_DIRECT_COMMANDS_ENABLED
-              value: "false"
-            - name: REMEDIATION_DELIVERY_MODE
-              value: pull_request
-            - name: PRODUCTION_AUTO_MERGE_ENABLED
-              value: "false"
-            - name: RECOVERY_ENABLE_AUTO_REVERT_PR
-              value: "false"
             - name: SCM_PROVIDER
               value: {{ .Values.scm.provider | quote }}
             - name: SCM_REPO
@@ -173,8 +161,6 @@ spec:
           ports:
             - name: http
               containerPort: 8000
-            - name: realtime
-              containerPort: 8001
           readinessProbe:
             httpGet:
               path: /readyz

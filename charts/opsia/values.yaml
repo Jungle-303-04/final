@@ -29,8 +29,6 @@ postgresql:
 agent:
   clusterId: opsia-self
   token: ""
-  # 비우면 현재 release의 console Service 루트(/live/agent proxy)를 사용한다.
-  realtimeGatewayUrl: ""
   resources: {}
 
 initialAdmin:

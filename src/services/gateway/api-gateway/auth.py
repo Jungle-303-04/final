@@ -1,43 +1,19 @@
 from __future__ import annotations
 
-import uuid
-from dataclasses import dataclass
-
 from fastapi import HTTPException, Request
-from passwords import default_display_name, hash_password, normalize_email, verify_password
+from passwords import normalize_email, verify_password
 from rate_limits import (
     AuthenticatedRequestRateLimiter,
     AuthRateLimiter,
-    check_email_rate_limit_policy,
     login_rate_limit_policy,
-    resend_verification_cooldown_policy,
-    resend_verification_rate_limit_policy,
-    signup_rate_limit_policy,
 )
 from settings import Settings
 
 from packages.config.constants import Auth
-from packages.contracts.identity import DEFAULT_WORKSPACE_ID, ServiceRole, UserStatus
+from packages.contracts.identity import ServiceRole, UserStatus
 from packages.contracts.interfaces import SessionStore, UserStore
 from packages.security.trusted_proxy import TRUSTED_PROXY_SESSION_TOKEN, trusted_proxy_identity
 from packages.storage.sessions import AuthSession
-
-
-@dataclass(frozen=True)
-class EmailVerificationChallenge:
-    user_id: str
-    email: str
-    token: str
-    expires_in_seconds: int
-
-
-@dataclass(frozen=True)
-class EmailVerificationResult:
-    user_id: str
-    status: str
-    roles: list[str]
-    workspace_id: str | None
-    session: AuthSession | None
 
 
 def extract_session_token(request: Request) -> str | None:
@@ -90,40 +66,6 @@ class PasswordAuthService:
         self.sessions = sessions
         self.rate_limiter = AuthRateLimiter(sessions)
 
-    async def signup(
-        self, email: str, password: str, password_confirm: str, client_key: str
-    ) -> EmailVerificationChallenge:
-        await self.rate_limiter.check(signup_rate_limit_policy(), email, client_key)
-        if password != password_confirm:
-            raise HTTPException(
-                status_code=400, detail=Settings.PASSWORD_CONFIRMATION_MISMATCH_MESSAGE
-            )
-        normalized_email = normalize_email(email)
-        if self.db.get_user_by_email(normalized_email) is not None:
-            raise HTTPException(status_code=409, detail=Settings.USER_ALREADY_EXISTS_MESSAGE)
-        user = self.db.create_user(
-            user_id=f"user-{uuid.uuid4()}",
-            email=normalized_email,
-            password_hash=hash_password(password),
-            display_name=default_display_name(normalized_email),
-            status=UserStatus.PENDING_EMAIL_VERIFICATION.value,
-            role=ServiceRole.USER.value,
-        )
-        if user is None:
-            raise HTTPException(status_code=409, detail=Settings.USER_ALREADY_EXISTS_MESSAGE)
-        user_id = user_id_from_record(user)
-        token = await self.sessions.create_email_verification_token(user_id, normalized_email)
-        return EmailVerificationChallenge(
-            user_id=user_id,
-            email=normalized_email,
-            token=token,
-            expires_in_seconds=Settings.EMAIL_VERIFICATION_TTL_SECONDS,
-        )
-
-    async def check_email_available(self, email: str, client_key: str) -> bool:
-        await self.rate_limiter.check(check_email_rate_limit_policy(), email, client_key)
-        return self.db.get_user_by_email(normalize_email(email)) is None
-
     async def login(self, email: str, password: str, client_key: str) -> AuthSession:
         await self.rate_limiter.check(login_rate_limit_policy(), email, client_key)
         user = self.db.get_user_by_email(normalize_email(email))
@@ -151,76 +93,6 @@ class PasswordAuthService:
             workspace_id_from_record(user) or self.db.get_default_workspace_id_for_user(user_id),
             display_name=str(user["display_name"]),
             email=str(user["email"]),
-        )
-
-    async def resend_email_verification(
-        self, email: str, password: str, client_key: str
-    ) -> EmailVerificationChallenge | None:
-        await self.rate_limiter.check(resend_verification_rate_limit_policy(), email, client_key)
-        normalized_email = normalize_email(email)
-        user = self.db.get_user_by_email(normalized_email)
-        if user is None or not verify_password(password, str(user.get("password_hash"))):
-            raise HTTPException(status_code=401, detail=Settings.INVALID_CREDENTIALS_MESSAGE)
-        status = str(user["status"])
-        if status == UserStatus.ACTIVE.value:
-            return None
-        if status != UserStatus.PENDING_EMAIL_VERIFICATION.value:
-            raise HTTPException(status_code=401, detail=Settings.INVALID_CREDENTIALS_MESSAGE)
-
-        user_id = user_id_from_record(user)
-        try:
-            await self.rate_limiter.check(
-                resend_verification_cooldown_policy(), normalized_email, client_key
-            )
-        except HTTPException as exc:
-            detail = exc.detail if isinstance(exc.detail, dict) else {}
-            retry_after = detail.get("retry_after") or Settings.RESEND_EMAIL_COOLDOWN_SECONDS
-            raise HTTPException(
-                status_code=429,
-                detail={
-                    "code": "resend_cooldown",
-                    "detail": "인증 메일은 잠시 후 다시 보낼 수 있습니다.",
-                    "retry_after": retry_after,
-                },
-            ) from None
-        token = await self.sessions.create_email_verification_token(user_id, normalized_email)
-        return EmailVerificationChallenge(
-            user_id=user_id,
-            email=normalized_email,
-            token=token,
-            expires_in_seconds=Settings.EMAIL_VERIFICATION_TTL_SECONDS,
-        )
-
-    async def verify_email(self, token: str) -> EmailVerificationResult:
-        payload = await self.sessions.consume_email_verification_token(token)
-        if payload is None:
-            raise HTTPException(status_code=400, detail=Settings.EMAIL_VERIFICATION_INVALID_MESSAGE)
-        user = self.db.complete_email_verification(str(payload["user_id"]))
-        if user is None:
-            raise HTTPException(status_code=400, detail=Settings.EMAIL_VERIFICATION_INVALID_MESSAGE)
-        user_id = user_id_from_record(user)
-        roles = roles_from_record(user)
-        status = str(user["status"])
-        workspace_id = (
-            workspace_id_from_record(user)
-            or self.db.get_default_workspace_id_for_user(user_id)
-            or DEFAULT_WORKSPACE_ID
-        )
-        session = None
-        if status == UserStatus.ACTIVE.value:
-            session = await self.sessions.create_session(
-                user_id,
-                roles,
-                workspace_id,
-                display_name=str(user["display_name"]),
-                email=str(user["email"]),
-            )
-        return EmailVerificationResult(
-            user_id=user_id,
-            status=status,
-            roles=roles,
-            workspace_id=workspace_id,
-            session=session,
         )
 
     async def approve_user(self, user_id: str, workspace_id: str) -> dict[str, object]:

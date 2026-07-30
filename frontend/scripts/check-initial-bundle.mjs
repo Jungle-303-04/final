@@ -4,9 +4,9 @@ import { resolve } from "node:path";
 
 const distributionDirectory = resolve(process.cwd(), "dist");
 const documentSource = await readFile(resolve(distributionDirectory, "index.html"), "utf8");
-const assetUrls = [...documentSource.matchAll(/(?:href|src)="\/assets\/([^"]+)"/gu)]
-  .map((match) => match[1]);
 const preloadUrls = [...documentSource.matchAll(/<link[^>]+rel="modulepreload"[^>]+href="\/assets\/([^"]+)"/gu)]
+  .map((match) => match[1]);
+const stylesheetUrls = [...documentSource.matchAll(/<link[^>]+rel="stylesheet"[^>]+href="\/assets\/([^"]+)"/gu)]
   .map((match) => match[1]);
 const entryUrl = documentSource.match(/<script[^>]+type="module"[^>]+src="\/assets\/([^"]+)"/u)?.[1];
 
@@ -41,11 +41,10 @@ if (initialGzipBytes > initialGzipBudgetBytes) {
   );
 }
 
-const unreferencedAssets = assetUrls.filter((url) => !initialUrls.includes(url));
 console.log(JSON.stringify({
   entry: entryUrl,
   initialGzipBytes,
   initialGzipBudgetBytes,
   modulepreloads: preloadUrls,
-  unreferencedAssetCount: unreferencedAssets.length,
+  initialStylesheets: stylesheetUrls,
 }, null, 2));

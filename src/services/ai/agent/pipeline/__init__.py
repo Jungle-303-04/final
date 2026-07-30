@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from services.ai.agent.pipeline.ai_fallback import AiFallbackPlanner
 from services.ai.agent.pipeline.causes import CauseEvaluator, CausePlanner, RootCauseAnalyzer
 from services.ai.agent.pipeline.evidence import EvidenceBuilder
 from services.ai.agent.pipeline.incident import EvidenceBundler, IncidentDetector
@@ -15,7 +14,6 @@ from services.ai.agent.pipeline.pipeline import (
 )
 
 __all__ = [
-    "AiFallbackPlanner",
     "CauseEvaluationPipeline",
     "CauseEvaluator",
     "CausePlanner",

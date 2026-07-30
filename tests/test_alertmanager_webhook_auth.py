@@ -252,7 +252,7 @@ def standard_sli_payload(
     annotations: dict[str, str] | None = None,
 ) -> AlertmanagerWebhookRequest:
     return AlertmanagerWebhookRequest(
-        receiver="kyro-rca",
+        receiver="opsia-rca",
         status="firing",
         alerts=[
             AlertmanagerAlert(
@@ -283,8 +283,8 @@ def test_standard_sli_alert_requires_complete_resource_identity() -> None:
             {
                 "opsia_namespace": "sandbox",
                 "opsia_resource_kind": "Deployment",
-                "opsia_resource_name": "matchmaking-api",
-                "opsia_service": "matchmaking",
+                "opsia_resource_name": "checkout-api",
+                "opsia_service": "checkout",
                 "opsia_sli": "admission",
                 "opsia_symptom": "admission_failure",
             }
@@ -409,8 +409,8 @@ def test_standard_sli_alert_rejects_blank_resource_identity(
     labels = {
         "opsia_namespace": "sandbox",
         "opsia_resource_kind": "Deployment",
-        "opsia_resource_name": "matchmaking-api",
-        "opsia_service": "matchmaking",
+        "opsia_resource_name": "checkout-api",
+        "opsia_service": "checkout",
         "opsia_sli": "admission",
         "opsia_symptom": "admission_failure",
     }
@@ -440,8 +440,8 @@ def test_standard_sli_alert_rejects_missing_or_unbounded_measurements(
     labels = {
         "opsia_namespace": "sandbox",
         "opsia_resource_kind": "Deployment",
-        "opsia_resource_name": "matchmaking-api",
-        "opsia_service": "matchmaking",
+        "opsia_resource_name": "checkout-api",
+        "opsia_service": "checkout",
         "opsia_sli": "admission",
         "opsia_symptom": "admission_failure",
     }

@@ -16,8 +16,6 @@ from domains.rca.events import (
     RecoveryActionSelectedBody,
     RecoveryPlan,
 )
-from services.ai.agent.recovery.dispatch import RecoveryActionPreflight
-from services.ai.agent.recovery.engine import with_execution_eligibility
 
 
 def recovery_candidate(
@@ -286,92 +284,6 @@ def test_missing_preflight_fails_closed_without_selecting_plan(
 
     assert raised.value.status_code == 409
     assert raised.value.detail["code"] == "safe_pr_preflight_unavailable"
-    assert trace == ["event:rca.action_required"]
-    assert db.selection_calls == []
-    assert db.approval_payloads == []
-
-
-def test_auto_preflight_rejects_disallowed_namespace_before_selection(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    trace: list[str] = []
-    db = SelectionDb(trace)
-    events = RecordingEvents(trace)
-    candidate = recovery_candidate(
-        route="auto",
-        namespace="target",
-        action_type="rollout_restart",
-        params={"command": "rollout_restart"},
-    )
-    monkeypatch.setenv("CONTROL_ALLOWED_NAMESPACES", "sandbox,color-turf")
-    monkeypatch.setattr(rca_router, "require_cluster_access", lambda *args, **kwargs: None)
-
-    with pytest.raises(HTTPException) as raised:
-        run_selection(
-            db=db,
-            events=events,
-            preflight=RecoveryActionPreflight(authority=None),
-            candidate=candidate,
-        )
-
-    assert raised.value.status_code == 409
-    assert raised.value.detail["code"] == "control_namespace_not_allowed"
-    assert "target 네임스페이스" in raised.value.detail["detail"]
-    assert raised.value.detail["retryable"] is True
-    assert trace == ["event:rca.action_required"]
-    assert db.selection_calls == []
-    assert db.approval_payloads == []
-    blocker = events.bodies[0]
-    assert isinstance(blocker, RcaActionRequiredBody)
-    assert blocker.diagnostics["namespace"] == "target"
-    assert blocker.diagnostics["control_allowed_namespaces"] == [
-        "sandbox",
-        "color-turf",
-    ]
-
-
-def test_planner_marks_disallowed_auto_candidate_before_operator_selection(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setenv("CONTROL_ALLOWED_NAMESPACES", "sandbox,color-turf")
-    candidate = recovery_candidate(
-        route="auto",
-        namespace="target",
-        action_type="rollout_restart",
-        params={"command": "rollout_restart"},
-    )
-
-    evaluated = with_execution_eligibility(candidate)
-
-    assert evaluated.executable is False
-    assert evaluated.blocked_reason_code == "control_namespace_not_allowed"
-    assert "target 네임스페이스" in str(evaluated.blocked_reason)
-
-
-def test_missing_auto_preflight_fails_closed_without_selecting_plan(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    trace: list[str] = []
-    db = SelectionDb(trace)
-    events = RecordingEvents(trace)
-    candidate = recovery_candidate(
-        route="auto",
-        namespace="sandbox",
-        action_type="rollout_restart",
-        params={"command": "rollout_restart"},
-    )
-    monkeypatch.setattr(rca_router, "require_cluster_access", lambda *args, **kwargs: None)
-
-    with pytest.raises(HTTPException) as raised:
-        run_selection(
-            db=db,
-            events=events,
-            preflight=None,
-            candidate=candidate,
-        )
-
-    assert raised.value.status_code == 409
-    assert raised.value.detail["code"] == "recovery_action_preflight_unavailable"
     assert trace == ["event:rca.action_required"]
     assert db.selection_calls == []
     assert db.approval_payloads == []
