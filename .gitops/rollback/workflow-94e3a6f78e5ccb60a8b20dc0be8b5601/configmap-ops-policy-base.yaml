@@ -1,5 +1,0 @@
-kind: ConfigMap
-metadata:
-  name: ops-policy
-  namespace: sandbox
-apiVersion: v1

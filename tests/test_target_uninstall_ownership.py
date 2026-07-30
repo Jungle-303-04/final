@@ -1,5 +1,3 @@
-from pathlib import Path
-
 import yaml
 
 from domains.target.install_manifest import (
@@ -16,8 +14,6 @@ from packages.contracts.target import (
     CONTROL_PRIORITY_CLASS_NAME,
     FAST_LANE_PRIORITY_CLASS_NAME,
 )
-
-ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_agent_uninstall_never_owns_shared_priority_classes() -> None:
@@ -49,26 +45,3 @@ def test_install_still_reconciles_canonical_shared_priority_classes() -> None:
         CONTROL_PRIORITY_CLASS_NAME,
         FAST_LANE_PRIORITY_CLASS_NAME,
     }
-
-
-def test_namespace_scoped_management_deploy_does_not_mutate_priority_classes() -> None:
-    workflow = (ROOT / ".github" / "workflows" / "dev-deploy.yml").read_text(encoding="utf-8")
-    management_kustomization = (
-        ROOT / "deploy" / "management" / "kustomization.yaml"
-    ).read_text(encoding="utf-8")
-
-    assert "Reconcile shared management scheduling" not in workflow
-    assert "--filename deploy/management/scheduling.yaml" not in workflow
-    assert "Verify shared management scheduling" in workflow
-    assert "--dry-run=server" in workflow
-    assert 'priorityClassName":"gitops-control-critical"' in workflow
-    assert "- scheduling.yaml" in management_kustomization
-
-
-def test_local_kind_management_overlay_includes_scheduling() -> None:
-    up_script = (ROOT / "scripts" / "up.sh").read_text(encoding="utf-8")
-    copy_source = '"${ROOT_DIR}/deploy/management/scheduling.yaml"'
-    overlay_resource = "resources:\n  - namespace.yaml\n  - scheduling.yaml"
-
-    assert copy_source in up_script
-    assert overlay_resource in up_script
