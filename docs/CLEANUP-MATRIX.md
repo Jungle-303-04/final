@@ -7,15 +7,16 @@
 - `유지`: Golden Path에 직접 필요하며 대체 불가 근거가 있음
 - `격리 후보`: 기본 경로에서는 호출하지 않도록 경계를 세우고, migration이나 기존 read model 때문에 임시 보존
 - `삭제 후보`: 코드, route, service, 문서, 설정을 함께 제거해야 하는 표면
+- `삭제 완료`: 현재 코드에서 해당 route/service/domain 표면이 빠졌으며 남은 표현은 계약·read model naming 정도로만 확인
 - `실험 후보`: core 밖 plugin이나 연구 경로로 분리해야 하는 표면
 
 | 감사 항목 | 상태 | 현재 코드 기준 처리 |
 |---|---|---|
 | 1. ImagePullBackOff Golden Path | 유지 | evidence, incident, RCA, Safe PR, SCM, verification worker와 관련 tests가 존재한다. |
-| 2. 직접 클러스터 명령 실행 | 삭제 후보 | `domains.command`, command router, `command-worker`, `command-janitor`, agent command lease/result endpoint, target-agent `commands/` adapter가 아직 존재한다. active `TargetClusterAgent`는 이 command adapter를 wire하지 않지만, repository 표면은 제거 완료가 아니다. |
+| 2. 직접 클러스터 명령 실행 | 삭제 후보 | `domains.command`, command router, `command-worker`, `command-janitor`가 아직 존재한다. target-agent `commands/` adapter와 `src/services/target` service 표면은 현재 코드에 없다. |
 | 3. dashboard와 timeline projection | 격리 후보 | `domains.dashboard`, `projection/dashboard-worker`, timeline stream/query code가 존재한다. Golden Path core 밖 read model로 둘지 삭제할지 별도 변경이 필요하다. |
 | 4. realtime, terminal, port-forward | 삭제 후보 | `realtime-gateway`와 terminal/port-forward broker code가 존재한다. evidence live stream 외 표면은 PR-only 안전 경계와 별도로 검토한다. |
-| 5. node collector와 target reconcile/drift | 삭제 후보 | `node-collector`, `target-drift-worker`, `target-reconcile-worker`가 존재한다. chart 기본 활성 여부와 별개로 코드 표면은 남아 있다. |
+| 5. node collector와 target reconcile/drift | 삭제 완료 | `src/services/target/node-collector`, `target-drift-worker`, `target-reconcile-worker`, `src/domains/target`은 현재 코드에 없다. 남은 target 문자열은 계약·read model naming인지 별도로 확인한다. |
 | 6. 광범위한 CD orchestration | 격리 후보 | release-flow, workflow-controller, diff/render/poll, auto-revert worker가 존재한다. Safe PR source authority와 webhook lifecycle에 필요한 최소 계약만 분리해야 한다. |
 | 7. AI chat과 fallback | 실험 후보 | `chat-worker`, `ai-fallback-worker`, `domains.ai`가 존재한다. 결정론적 RCA의 source of truth로 쓰지 않는다. |
 | 8. Mail, cost, catalog, filter 계열 | 삭제 후보 | mail worker/domain, cost, catalog, 여러 filter/explorer router가 존재한다. core evidence → RCA → PR → verification 흐름 밖이다. |
@@ -29,13 +30,13 @@
 
 - route 상수, router include, request/response DTO, worker `@app.on(...)` 또는 `@app.on_any`가 함께 정리된다.
 - event subject/body가 남는다면 migration, retention, replay 이유를 문서에 쓴다.
-- target-agent provider 또는 command adapter가 남는다면 active agent wiring 여부를 분리해서 설명한다.
+- target-agent provider 또는 command adapter가 다시 추가된다면 active agent wiring 여부를 분리해서 설명한다.
 - Bruno collection이 추가된 경우 `tests {}`, `body:json {}`, `bru.setVar()` import 문법을 통과한다.
 - `uv run pytest tests/test_docs_index.py tests/test_bruno_collection.py -q`와 가능한 manifest/test gate를 통과한다.
 
 ## 보존 판단
 
-- read-only Kubernetes snapshot provider: Golden Path evidence 수집의 기본 provider
+- read-only Kubernetes RBAC와 manifest gate: Golden Path evidence 수집 권한의 최소선
 - deterministic cause catalog: evidence signal과 RCA 결론을 재현 가능하게 연결
 - GitOps authority/source patch: repository, manifest path, base SHA, source digest를 고정하는 안전 경계
 - GitHub SCM worker: 직접 변경 대신 검토 가능한 Draft PR을 만드는 쓰기 경계

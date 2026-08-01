@@ -4,7 +4,7 @@
 
 ## Runtime
 
-`uv run python scripts/services.py` 기준 현재 서비스 카탈로그는 41개다. 파일 시스템에는 `src/services/mcp/internal_control/app.py`까지 포함해 `src/services/**/app.py`가 42개 있다.
+`uv run python scripts/services.py` 기준 현재 서비스 카탈로그는 37개다. 파일 시스템에는 catalog 밖 `src/services/mcp/internal_control/app.py`까지 포함해 `src/services/**/app.py`가 38개 있다.
 
 | 구간 | 서비스 |
 |---|---|
@@ -16,9 +16,8 @@
 | Mail | `mail-worker` |
 | Projection | `audit-worker`, `change-correlation-worker`, `dashboard-worker`, `dead-letter-monitor`, `rca-timeline-janitor`, `release-flow-worker` |
 | Realtime | `realtime-gateway` |
-| Target | `cluster-agent`, `node-collector`, `target-drift-worker`, `target-reconcile-worker` |
 
-Golden Path에서 직접 필요한 핵심은 evidence → incident/RCA → Safe PR → verification 흐름이다. 다만 현재 저장소에는 command, dashboard, realtime, node collector, release-flow, auto-revert, chat, mail 같은 넓은 기능 표면이 아직 코드로 남아 있다.
+Golden Path에서 직접 필요한 핵심은 evidence → incident/RCA → Safe PR → verification 흐름이다. 다만 현재 저장소에는 command, dashboard, realtime, release-flow, auto-revert, chat, mail 같은 넓은 기능 표면이 아직 코드로 남아 있다. `src/domains/target`과 `src/services/target` service 표면은 현재 작업트리에서 삭제된 상태다.
 
 ## HTTP와 UI
 
@@ -37,30 +36,19 @@ Golden Path에서 직접 필요한 핵심은 evidence → incident/RCA → Safe 
 - release-flow 계열: `release-flow-worker`와 `workflow-controller`가 command, approval, workflow, Safe PR 이벤트를 넓게 구독한다.
 - Golden Path 계열: evidence, incident, plan, analyze, RCA, recovery, select, dispatch, diff, safe-pr, scm, feedback worker가 evidence/RCA/Safe PR/verification 이벤트를 구독한다.
 
-## Target Agent와 Provider
+## Target와 Provider
 
-활성 `TargetClusterAgent`는 `agent.py`에서 evidence scheduler만 실행하고 기본 capability는 `collector`, `evidence.kubernetes.snapshot.v1`이다. 기본 provider tuple은 `KubernetesSnapshotProvider` 하나다.
+현재 작업트리에는 `src/domains/target`과 `src/services/target` 아래의 cluster-agent, node-collector, drift/reconcile worker가 없다. 따라서 활성 `TargetClusterAgent`, target-agent command adapter, target-agent provider module을 구현된 표면처럼 설명하지 않는다.
 
-동시에 repository에는 target-agent command adapter 파일이 남아 있다.
+`src/services/target/cluster-agent/telemetry_registry.py`와 `providers/*_providers.py`도 현재 없다. target-agent `@telemetry.source(...)` decorator는 source of truth로 사용할 수 없다.
 
-- `src/services/target/cluster-agent/commands/{context,exec_transport,gitops,helm,kubernetes,outbox,registry,resource_files,service_access}.py`
-- 이 파일들은 현재 활성 `TargetClusterAgent` 생성자에서 wire되지 않는다.
-
-`@telemetry.source(...)` decorator는 provider module 다섯 곳에 있다.
-
-| source | file | 비고 |
-|---|---|---|
-| Kubernetes snapshot | `providers/kubernetes_providers.py` | 기본 agent provider |
-| Prometheus | `providers/prometheus_providers.py` | module에 source 계약 존재 |
-| Loki | `providers/loki_providers.py` | module에 source 계약 존재 |
-| Tempo | `providers/tempo_providers.py` | module에 source 계약 존재 |
-| Metadata | `providers/metadata_providers.py` | module에 source 계약 존재 |
+Kubernetes read-only 근거는 현재 chart RBAC와 manifest gate에 있다. [`agent-rbac.yaml`](../charts/opsia/templates/agent-rbac.yaml)은 `get/list/watch`만 부여하고, [`manifest-check.sh`](../scripts/manifest-check.sh)는 mutation verb, wildcard, exec/attach/port-forward/proxy RBAC를 거부한다.
 
 ## Event와 Domain
 
-현재 `src/domains/*/events.py`는 13개다.
+현재 `src/domains/*/events.py`는 12개다.
 
-`ai`, `alert`, `checks`, `command`, `gitops`, `helm`, `integrations`, `inventory`, `mail`, `rca`, `scm`, `shell_state`, `target`
+`ai`, `alert`, `checks`, `command`, `gitops`, `helm`, `integrations`, `inventory`, `mail`, `rca`, `scm`, `shell_state`
 
 event subject와 body는 `src/packages/contracts/event_bus/subjects.py`, `src/packages/contracts/event_bus/bodies`, `src/domains/*/events.py`를 기준으로 확인한다.
 
@@ -72,7 +60,7 @@ event subject와 body는 `src/packages/contracts/event_bus/subjects.py`, `src/pa
 | `src/packages/contracts` | route, request/response DTO, event body 공통 계약 |
 | `src/packages/runtime` | App decorator, worker 실행, event/outbox/ledger runtime |
 | `src/domains` | REST router, domain model/repository/event |
-| `src/services` | worker/app entrypoint, gateway, target agent |
+| `src/services` | worker/app entrypoint, gateway |
 | `frontend` | React/Vite console |
 | `charts/opsia` | Helm install surface와 RBAC |
 | `tests` | docs, Bruno, Golden Path safety, recovery lifecycle 검증 |
