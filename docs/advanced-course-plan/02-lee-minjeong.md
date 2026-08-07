@@ -11,7 +11,7 @@ Java/Spring 기반 서비스와 크로스 플랫폼 클라이언트 통합 역�
 
 ## 2. 기존 경험과 보완점
 
-Opsia에서 Kubernetes metadata와 evidence, Prometheus/Loki/Tempo,
+Opsia에서 Kubernetes metadata와 evidence, metrics/logs/traces 수집,
 내부 MCP의 권한·필터 경계, inventory API, React 화면과 상태 흐름을
 구현했습니다. 백엔드와 프론트 사이의 계약 문제를 실제 기능으로 연결한 것이
 강점입니다.

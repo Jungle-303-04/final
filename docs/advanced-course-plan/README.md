@@ -75,7 +75,7 @@ Opsia는 Kubernetes에서 수집한 증거를 장애 규칙과 대조하고, 사
 
 핵심 흐름은 다음과 같다.
 
-`Kubernetes/Prometheus/Loki/Tempo 증거 → 사건 및 RCA → 안전한 소스 변경 제안
+`Kubernetes metrics/logs/traces evidence → 사건 및 RCA → 안전한 소스 변경 제안
 → SCM PR → 외부 GitOps 배포 → 후속 증거 검증`
 
 Python 3.13, FastAPI, SQLAlchemy/PostgreSQL, React/Vite, Kubernetes, Helm을
@@ -100,7 +100,7 @@ retry와 dead letter 경계를 갖는다.
   장애 복구를 학습하기 좋다.
 - read-only agent, source authority, patch 허용 범위, 감사 이력 등 운영
   시스템의 실패 방식을 제품 계약으로 다룬다.
-- 이민정은 Kubernetes evidence, Loki/Tempo/Prometheus, MCP 권한 경계,
+- 이민정은 Kubernetes evidence, metrics/logs/traces 수집, MCP 권한 경계,
   API·프론트 연결을 폭넓게 구현했다.
 - 최우녕은 RCA, Safe PR, 실시간 전송, 배포·복구, 인프라와 제품 통합을
   장기간 주도했다.
